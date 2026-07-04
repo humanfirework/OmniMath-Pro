@@ -20,7 +20,7 @@ export const metadata: Metadata = {
   keywords: ["OmniMath", "calculator", "math", "LaTeX", "KaTeX", "VSCode", "plotting"],
   authors: [{ name: "OmniMath Team" }],
   icons: {
-    icon: "https://z-cdn.chatglm.cn/z-ai/static/logo.svg",
+    icon: "/logo.svg",
   },
 };
 
