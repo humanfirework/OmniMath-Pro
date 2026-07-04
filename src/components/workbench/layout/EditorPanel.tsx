@@ -45,7 +45,7 @@ import {
   TooltipContent,
   TooltipTrigger,
 } from '@/components/ui/tooltip';
-import { useWorkbenchStore } from '@/lib/store/workbench';
+import { useWorkbenchStore, STORAGE_KEY } from '@/lib/store/workbench';
 import {
   evaluateExpression,
   getScope,
@@ -53,6 +53,7 @@ import {
   inputToLatex,
   type InputMode,
 } from '@/lib/engine';
+import { DEFAULT_CARTESIAN_RANGE } from '@/lib/engine/types';
 import { t } from '@/lib/i18n';
 import { cn } from '@/lib/utils';
 import { toast } from 'sonner';
@@ -65,7 +66,7 @@ sin(pi/4)
 log(100)
 A = [1, 2; 3, 4]
 det(A)
-plot(sin(x))
+sin(x)
 solve(x^2 - 5*x + 6, x)`;
 
 const MODES: Array<{ id: InputMode; labelKey: 'editorModeSimple' | 'editorModePython' | 'editorModeMatlab' }> = [
@@ -101,13 +102,15 @@ export function EditorPanel() {
   const [isRunning, setIsRunning] = useState(false);
   const defaultScriptSetRef = useRef(false);
 
-  // Initialize default script on first mount if empty.
-  // Use a ref guard so clearing the editor to empty string later does not
-  // restore the default script.
+  // Initialize default script only on the very first app launch (no persisted
+  // storage). Once storage exists, an empty editor is intentional — do not
+  // restore the default script, even if this component remounts (e.g. after
+  // switching from the pipeline view).
   useEffect(() => {
     if (!defaultScriptSetRef.current && typeof window !== 'undefined') {
       defaultScriptSetRef.current = true;
-      if (!editorContent) {
+      const hasStorage = localStorage.getItem(STORAGE_KEY) !== null;
+      if (!editorContent && !hasStorage) {
         setEditorContent(DEFAULT_SCRIPT);
       }
     }
@@ -180,8 +183,8 @@ export function EditorPanel() {
             plotColorIdx++;
             const newPlot: Omit<PlotConfig, 'id'> = {
               expression: result.plotExpression,
-              xRange: result.plotRange ?? [-10, 10],
-              yRange: [-6, 6],
+              xRange: result.plotRange ?? DEFAULT_CARTESIAN_RANGE,
+              yRange: [-50, 50],
               color,
               plotType: result.plotType,
               visible: true,

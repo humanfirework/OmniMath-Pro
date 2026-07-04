@@ -425,10 +425,18 @@ function handlePlot(
   }
 
   const latexExpr = inputToLatex(expr, mode);
-  const label =
-    plotType === 'polar' ? `r = ${latexExpr}` : `y = ${latexExpr}`;
-  const resultStr =
-    plotType === 'polar' ? `r = ${expr}` : `y = ${expr}`;
+  // Explicit `plot(...)` keeps the equation label; auto-plot in simple mode
+  // is intentionally minimal so the output doesn't feel like it has a prefix.
+  const label = auto
+    ? latexExpr
+    : plotType === 'polar'
+      ? `r = ${latexExpr}`
+      : `y = ${latexExpr}`;
+  const resultStr = auto
+    ? expr
+    : plotType === 'polar'
+      ? `r = ${expr}`
+      : `y = ${expr}`;
 
   return ok({
     result: resultStr,

@@ -76,7 +76,7 @@ const templateTrigPlot: PipelineTemplate = {
   description: 'sin(x) 表达式 → 绘图节点，演示函数绘图',
   nodes: [
     { id: 't2_expr', type: 'expression-input', position: { x: 80, y: 200 }, config: { expr: 'sin(x)' } },
-    { id: 't2_plot', type: 'plot-output', position: { x: 380, y: 200 }, config: { xMin: -10, xMax: 10 } },
+    { id: 't2_plot', type: 'plot-output', position: { x: 380, y: 200 }, config: { xMin: -100, xMax: 100 } },
   ],
   edges: [
     edge('t2_e1', 't2_expr', 'value', 't2_plot', 'expr'),

@@ -27,8 +27,8 @@ import { toast } from 'sonner';
 
 /* ----------------------- Defaults ---------------------------- */
 
-const DEFAULT_X: [number, number] = [-30, 30];
-const DEFAULT_Y: [number, number] = [-15, 15];
+const DEFAULT_X: [number, number] = [-100, 100];
+const DEFAULT_Y: [number, number] = [-50, 50];
 
 interface ViewBox {
   x: [number, number];

@@ -111,7 +111,7 @@ interface WorkbenchState {
   loadFromStorage: () => void;
 }
 
-const STORAGE_KEY = 'omnimath-pro-v2';
+export const STORAGE_KEY = 'omnimath-pro-v2';
 
 function loadInitial(): Partial<WorkbenchState> {
   if (typeof window === 'undefined') return {};

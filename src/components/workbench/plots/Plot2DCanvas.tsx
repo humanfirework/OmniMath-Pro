@@ -26,6 +26,7 @@ import {
   useEffect,
   useMemo,
   useRef,
+  useState,
   type PointerEvent as ReactPointerEvent,
   type WheelEvent as ReactWheelEvent,
 } from 'react';
@@ -134,6 +135,7 @@ export function Plot2DCanvas({
   } | null>(null);
   const pinchRef = useRef<{ d: number; cx: number; cy: number } | null>(null);
   const redrawScheduledRef = useRef(false);
+  const [canvasSize, setCanvasSize] = useState({ w: 0, h: 0 });
 
   /* ----------------------- Schedule redraw -------------------------- */
   // We keep a ref to the latest `drawNow` so the rAF callback always invokes
@@ -155,9 +157,14 @@ export function Plot2DCanvas({
   }, [xRange, yRange, scheduleRedraw]);
 
   /* ----------------------- Sample computation ----------------------- */
+  // Sample over the *visible* X range so panning/zooming feels like an
+  // infinite canvas: the curve is re-evaluated for whatever region the user
+  // is currently looking at. Sample density scales with canvas width (up to
+  // the sampler's own cap) to keep curves smooth.
   const computed = useMemo<ComputedPlot[]>(() => {
+    const plotW = Math.max(1, canvasSize.w - PADDING.left - PADDING.right);
+    const sampleCount = Math.min(2000, Math.max(400, Math.floor(plotW * 2)));
     return plots.map((p, idx) => {
-      const range: [number, number] = p.xRange ?? [-10, 10];
       // surface3d plots can't render in 2D — coerce to cartesian so the
       // sampler still produces something (the engine shouldn't normally
       // send surface3d plots here, but be defensive).
@@ -165,9 +172,9 @@ export function Plot2DCanvas({
         | 'cartesian' | 'polar' | 'parametric';
       const samples = sampleFunction(
         p.expression,
-        range,
+        xRange,
         plotType2d,
-        900,
+        sampleCount,
       );
       const extrema = findExtrema(samples);
       return {
@@ -177,7 +184,7 @@ export function Plot2DCanvas({
         visible: p.visible !== false,
       };
     });
-  }, [plots]);
+  }, [plots, xRange, canvasSize.w]);
 
   /* ----------------------- Coordinate mapping ----------------------- */
   const PADDING = { left: 48, right: 16, top: 16, bottom: 32 };
@@ -559,27 +566,23 @@ export function Plot2DCanvas({
     const container = containerRef.current;
     if (!container) return;
     let resizeTimer: ReturnType<typeof setTimeout> | null = null;
+    const updateSize = () => {
+      const rect = container.getBoundingClientRect();
+      sizeRef.current = {
+        w: rect.width,
+        h: rect.height,
+        dpr: window.devicePixelRatio || 1,
+      };
+      setCanvasSize({ w: rect.width, h: rect.height });
+      scheduleRedraw();
+    };
     const ro = new ResizeObserver(() => {
       if (resizeTimer) clearTimeout(resizeTimer);
-      resizeTimer = setTimeout(() => {
-        const rect = container.getBoundingClientRect();
-        sizeRef.current = {
-          w: rect.width,
-          h: rect.height,
-          dpr: window.devicePixelRatio || 1,
-        };
-        scheduleRedraw();
-      }, 60);
+      resizeTimer = setTimeout(updateSize, 60);
     });
     ro.observe(container);
     // Initial measurement.
-    const rect = container.getBoundingClientRect();
-    sizeRef.current = {
-      w: rect.width,
-      h: rect.height,
-      dpr: window.devicePixelRatio || 1,
-    };
-    scheduleRedraw();
+    updateSize();
     return () => {
       ro.disconnect();
       if (resizeTimer) clearTimeout(resizeTimer);

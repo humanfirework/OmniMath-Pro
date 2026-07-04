@@ -1141,7 +1141,7 @@ const zhCN: TranslationDict = {
 
   /* Plot */
   plotEmpty: "暂无图像",
-  plotEmptyHint: "使用 plot(expr) 生成图像",
+  plotEmptyHint: "简单模式直接输入 sin(x) 即可绘图，或使用 plot(expr)",
   plotZoom: "缩放",
   plotPan: "平移",
   plotLegend: "图例",
@@ -1760,7 +1760,7 @@ const en: TranslationDict = {
 
   /* Plot */
   plotEmpty: "No plots yet",
-  plotEmptyHint: "Use plot(expr) to generate a plot",
+  plotEmptyHint: "In simple mode just type sin(x), or use plot(expr)",
   plotZoom: "Zoom",
   plotPan: "Pan",
   plotLegend: "Legend",

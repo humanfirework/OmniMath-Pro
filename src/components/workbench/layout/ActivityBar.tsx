@@ -69,12 +69,14 @@ export function ActivityBar() {
       setViewMode('pipeline');
       return;
     }
-    // If currently in pipeline view, switch back to workbench first so the
-    // side panel becomes visible again.
-    if (viewMode === 'pipeline') {
+    // When in pipeline/focus view, switch back to workbench and explicitly
+    // open the requested side panel so navigation always works.
+    if (viewMode !== 'workbench') {
       setViewMode('workbench');
+      setActiveSidePanel(id);
+      return;
     }
-    // If the panel is already active and visible, toggle collapse instead.
+    // Normal workbench toggle behavior.
     if (activeSidePanel === id && !sidePanelCollapsed) {
       toggleSidePanel();
     } else {
