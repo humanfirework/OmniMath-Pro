@@ -68,8 +68,10 @@ export interface ScopeEntry {
   latex?: string;
 }
 
-/** Default evaluation range for cartesian plots (matches Desmos default). */
-export const DEFAULT_CARTESIAN_RANGE: [number, number] = [-10, 10];
+/** Default evaluation range for cartesian plots. Wider than Desmos so users
+ *  can pan/zoom freely; the canvas itself supports effectively infinite
+ *  exploration via wheel zoom and drag pan. */
+export const DEFAULT_CARTESIAN_RANGE: [number, number] = [-30, 30];
 
 /** Default range for polar plots — a full revolution. */
 export const DEFAULT_POLAR_RANGE: [number, number] = [0, 2 * Math.PI];

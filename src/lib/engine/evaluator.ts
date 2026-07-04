@@ -427,11 +427,8 @@ function handlePlot(
   const latexExpr = inputToLatex(expr, mode);
   const label =
     plotType === 'polar' ? `r = ${latexExpr}` : `y = ${latexExpr}`;
-  const resultStr = auto
-    ? `Auto-plot: ${plotType === 'polar' ? 'r' : 'y'} = ${expr}`
-    : `${plotType === 'polar' ? 'Polar' : 'Plot'} of ${
-        plotType === 'polar' ? 'r' : 'y'
-      } = ${expr}`;
+  const resultStr =
+    plotType === 'polar' ? `r = ${expr}` : `y = ${expr}`;
 
   return ok({
     result: resultStr,

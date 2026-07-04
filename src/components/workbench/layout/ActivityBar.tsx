@@ -69,6 +69,11 @@ export function ActivityBar() {
       setViewMode('pipeline');
       return;
     }
+    // If currently in pipeline view, switch back to workbench first so the
+    // side panel becomes visible again.
+    if (viewMode === 'pipeline') {
+      setViewMode('workbench');
+    }
     // If the panel is already active and visible, toggle collapse instead.
     if (activeSidePanel === id && !sidePanelCollapsed) {
       toggleSidePanel();

@@ -56,7 +56,7 @@ import {
 import { t } from '@/lib/i18n';
 import { cn } from '@/lib/utils';
 import { toast } from 'sonner';
-import type { PlotConfig } from '@/lib/store/workbench';
+import type { CalculationResult, PlotConfig } from '@/lib/store/workbench';
 
 const DEFAULT_SCRIPT = `# OmniMath Pro — 示例脚本
 # 按 Enter 运行当前行，Shift+Enter 换行
@@ -99,11 +99,17 @@ export function EditorPanel() {
   const gutterRef = useRef<HTMLDivElement>(null);
   const [cursor, setCursor] = useState({ line: 1, col: 1 });
   const [isRunning, setIsRunning] = useState(false);
+  const defaultScriptSetRef = useRef(false);
 
-  // Initialize default script on first mount if empty
+  // Initialize default script on first mount if empty.
+  // Use a ref guard so clearing the editor to empty string later does not
+  // restore the default script.
   useEffect(() => {
-    if (!editorContent && typeof window !== 'undefined') {
-      setEditorContent(DEFAULT_SCRIPT);
+    if (!defaultScriptSetRef.current && typeof window !== 'undefined') {
+      defaultScriptSetRef.current = true;
+      if (!editorContent) {
+        setEditorContent(DEFAULT_SCRIPT);
+      }
     }
   }, [editorContent, setEditorContent]);
 
@@ -128,7 +134,7 @@ export function EditorPanel() {
     setTimeout(() => {
       try {
         const lines = editorContent.split('\n');
-        let lastResult = null;
+        let lastResult: CalculationResult | null = null;
         let plotAdded = false;
         let surface3dAdded = false;
         let matrixSeen = false;
@@ -248,7 +254,7 @@ export function EditorPanel() {
         const lines = selectedLines.split('\n');
         const allCommented = lines.every((l) => l.trimStart().startsWith('#'));
         const newLines = lines.map((l) =>
-          allCommented ? l.replace(/^(\s*)#\s?/, '$1') : l.startsWith(/\s/) ? l.replace(/^(\s*)/, '$1# ') : '# ' + l,
+          allCommented ? l.replace(/^(\s*)#\s?/, '$1') : /^\s/.test(l) ? l.replace(/^(\s*)/, '$1# ') : '# ' + l,
         );
         const nextValue = value.slice(0, lineStart) + newLines.join('\n') + value.slice(lineEnd);
         setEditorContent(nextValue);
