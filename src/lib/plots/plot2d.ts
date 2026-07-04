@@ -51,33 +51,49 @@ export type Plot2DType = 'cartesian' | 'polar' | 'parametric';
  *
  * Used by the grid + axis renderer: `niceNumber(vx, 10)` returns the
  * major tick step and tick positions for the X axis.
+ *
+ * The step is chosen so that the number of ticks is close to
+ * `targetTickCount` but never exceeds ~10, preventing overly dense grids
+ * (e.g. 0.1-unit ticks) that make the graph look blurry.
  */
 export function niceNumber(
   range: [number, number],
-  tickCount: number,
+  targetTickCount: number,
 ): { tickStep: number; ticks: number[] } {
   const [lo, hi] = range;
   const span = hi - lo;
   if (!Number.isFinite(span) || span <= 0) {
     return { tickStep: 1, ticks: [0] };
   }
-  const rawStep = span / Math.max(1, Math.floor(tickCount));
-  const mag = Math.pow(10, Math.floor(Math.log10(rawStep)));
-  const norm = rawStep / mag;
-  let step: number;
-  if (norm < 1.5) step = 1;
-  else if (norm < 3) step = 2;
-  else if (norm < 7) step = 5;
-  else step = 10;
-  step *= mag;
+
+  const target = Math.max(2, Math.floor(targetTickCount));
+  const roughStep = span / target;
+  const exponent = Math.floor(Math.log10(roughStep));
+  const fraction = roughStep / Math.pow(10, exponent);
+
+  let normalizedStep: number;
+  if (fraction <= 1) normalizedStep = 1;
+  else if (fraction <= 2) normalizedStep = 2;
+  else if (fraction <= 5) normalizedStep = 5;
+  else normalizedStep = 10;
+
+  let step = normalizedStep * Math.pow(10, exponent);
+
+  // Hard cap to avoid dense/blurry ticks (e.g. 0.1-unit grids).
+  while (span / step > 10) {
+    if (normalizedStep === 1) normalizedStep = 2;
+    else if (normalizedStep === 2) normalizedStep = 5;
+    else normalizedStep = 10;
+    step = normalizedStep * Math.pow(10, exponent);
+  }
 
   const ticks: number[] = [];
-  // Start at the first multiple of `step` >= lo.
-  const start = Math.ceil(lo / step) * step;
-  // +step*1e-6 guard against floating-point drift at the upper bound.
-  for (let v = start; v <= hi + step * 1e-6; v += step) {
-    // Snap to the nearest multiple of step to avoid drift accumulation.
-    ticks.push(Math.round(v / step) * step);
+  const start = Math.ceil((lo - 1e-12) / step) * step;
+  for (let v = start; v <= hi + step * 1e-12; v += step) {
+    const snapped = Math.round(v / step) * step;
+    if (snapped >= lo - 1e-12 && snapped <= hi + 1e-12) {
+      ticks.push(snapped);
+    }
   }
   return { tickStep: step, ticks };
 }

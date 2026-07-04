@@ -27,15 +27,21 @@ import { toast } from 'sonner';
 
 /* ----------------------- Defaults ---------------------------- */
 
-const DEFAULT_X: [number, number] = [-100, 100];
-const DEFAULT_Y: [number, number] = [-50, 50];
+/** Default viewport matches a calculator-like "standard" window:
+ *  x ∈ [-10, 10], y ∈ [-10, 10]. Wide ranges like [-100, 100] make
+ *  periodic functions (sin, cos, tan) look like dense vertical lines. */
+const DEFAULT_X: [number, number] = [-10, 10];
+const DEFAULT_Y: [number, number] = [-10, 10];
 
 interface ViewBox {
   x: [number, number];
   y: [number, number];
 }
 
-/** Auto-derive a sensible Y range from the current plots (median of all autoYRange results). */
+/** Auto-derive a sensible Y range from the current plots.
+ *  We take the union of all autoYRange results (min of mins, max of maxs)
+ *  plus a little extra vertical padding so the curve never touches the
+ *  top/bottom edge. This matches the calculator-style "fit to data" look. */
 function deriveDefaultY(plots: ReturnType<typeof useWorkbenchStore.getState>['plots']): [number, number] {
   if (plots.length === 0) return DEFAULT_Y;
   const ranges: [number, number][] = [];
@@ -50,13 +56,15 @@ function deriveDefaultY(plots: ReturnType<typeof useWorkbenchStore.getState>['pl
     );
     ranges.push(autoYRange(samples));
   }
-  const mins = ranges.map((r) => r[0]).sort((a, b) => a - b);
-  const maxs = ranges.map((r) => r[1]).sort((a, b) => a - b);
-  const med = (arr: number[]) => {
-    const n = arr.length;
-    return n % 2 === 0 ? (arr[n / 2 - 1] + arr[n / 2]) / 2 : arr[Math.floor(n / 2)];
-  };
-  return [med(mins), med(maxs)];
+  let min = Infinity;
+  let max = -Infinity;
+  for (const [lo, hi] of ranges) {
+    if (Number.isFinite(lo) && lo < min) min = lo;
+    if (Number.isFinite(hi) && hi > max) max = hi;
+  }
+  if (!Number.isFinite(min) || !Number.isFinite(max)) return DEFAULT_Y;
+  const pad = Math.max(0.5, (max - min) * 0.12);
+  return [min - pad, max + pad];
 }
 
 /* =================================================================== */

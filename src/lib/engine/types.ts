@@ -70,10 +70,10 @@ export interface ScopeEntry {
 
 /** Default evaluation range for cartesian plots.
  *
- *  A wide initial viewport ([-100, 100]) gives users an "infinite canvas"
- *  feel; the renderer re-samples for the visible region as they pan/zoom,
- *  so exploration is effectively unbounded. */
-export const DEFAULT_CARTESIAN_RANGE: [number, number] = [-100, 100];
+ *  A calculator-style initial viewport ([-10, 10]) keeps periodic
+ *  functions (sin, cos, tan) readable instead of collapsing into dense
+ *  vertical lines. Users can still pan/zoom to explore beyond this window. */
+export const DEFAULT_CARTESIAN_RANGE: [number, number] = [-10, 10];
 
 /** Default range for polar plots — a full revolution. */
 export const DEFAULT_POLAR_RANGE: [number, number] = [0, 2 * Math.PI];

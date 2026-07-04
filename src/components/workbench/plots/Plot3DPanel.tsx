@@ -19,6 +19,7 @@
  */
 
 import { useCallback, useMemo, useRef, useState } from 'react';
+import { createPortal } from 'react-dom';
 import dynamic from 'next/dynamic';
 import {
   Box,
@@ -524,6 +525,9 @@ export function Plot3DPanel() {
         >
           {surfaces.length === 0 ? (
             <EmptyState3D />
+          ) : expandOpen ? (
+            /* Avoid double WebGL context while the expand dialog is open. */
+            <div className="h-full w-full" />
           ) : (
             <Plot3DScene
               surfaces={surfaces}
@@ -562,68 +566,74 @@ export function Plot3DPanel() {
         </div>
       </div>
 
-      {/* ---------- Expand dialog (full-screen 3D) ---------- */}
-      {expandOpen && (
-        <div
-          className="fixed inset-0 z-[200] flex flex-col bg-background/95 backdrop-blur-md"
-          role="dialog"
-          aria-modal="true"
-          aria-label="放大查看 3D 绘图"
-        >
-          <div className="flex items-center justify-between border-b border-border/60 bg-background/80 px-4 py-2.5 backdrop-blur">
-            <div className="flex items-center gap-3">
-              <h2 className="text-sm font-semibold text-foreground">3D 曲面大图查看</h2>
-              <span className="text-xs text-muted-foreground">
-                {surfaces.length} 个曲面 · 拖拽旋转 · 滚轮缩放 · 右键平移
-              </span>
-            </div>
-            <div className="flex items-center gap-1">
-              <button
-                onClick={handleResetCamera}
-                className="grid place-items-center size-8 rounded-md text-muted-foreground hover:bg-muted hover:text-foreground transition-colors"
-                aria-label="重置相机"
-              >
-                <RotateCcw className="size-4" />
-              </button>
-              <button
-                onClick={exportPNG}
-                className="flex items-center gap-1.5 h-8 px-2.5 rounded-md text-xs text-muted-foreground hover:bg-muted hover:text-foreground transition-colors"
-              >
-                <Box className="size-3.5" />
-                <span className="hidden sm:inline">导出 PNG</span>
-              </button>
-              <div className="mx-1 h-5 w-px bg-border/60" />
-              <button
-                onClick={() => setExpandOpen(false)}
-                className="grid place-items-center size-8 rounded-md text-muted-foreground hover:bg-destructive/10 hover:text-destructive transition-colors"
-                aria-label="关闭"
-              >
-                <X className="size-4" />
-              </button>
-            </div>
-          </div>
+      {/* ---------- Expand dialog (full-screen 3D) ----------
+          Rendered via Portal to <body> so that ancestor `transform`
+          (from framer-motion) and `overflow-hidden` don't trap the
+          `fixed inset-0` dialog inside the preview panel area. */}
+      {expandOpen && typeof document !== 'undefined' && createPortal(
+        (
           <div
-            className="relative flex-1 min-h-0"
-            style={{
-              background:
-                theme === 'dark'
-                  ? 'radial-gradient(circle at 50% 50%, #34343a 0%, #2a2a2e 100%)'
-                  : 'radial-gradient(circle at 50% 50%, #ffffff 0%, #f4f4f5 100%)',
-            }}
+            className="fixed inset-0 z-[200] flex flex-col bg-background/95 backdrop-blur-md"
+            role="dialog"
+            aria-modal="true"
+            aria-label="放大查看 3D 绘图"
           >
-            <Plot3DScene
-              surfaces={surfaces}
-              theme={theme}
-              showAxes={showAxes}
-              showGrid={showGrid}
-              wireframe={wireframe}
-              autoRotate={autoRotate}
-              colorMode={colorMode}
-              upAxis={upAxis}
-              resetSignal={resetSignal}
-            />
+            <div className="flex items-center justify-between border-b border-border/60 bg-background/80 px-4 py-2.5 backdrop-blur">
+              <div className="flex items-center gap-3">
+                <h2 className="text-sm font-semibold text-foreground">3D 曲面大图查看</h2>
+                <span className="text-xs text-muted-foreground">
+                  {surfaces.length} 个曲面 · 拖拽旋转 · 滚轮缩放 · 右键平移
+                </span>
+              </div>
+              <div className="flex items-center gap-1">
+                <button
+                  onClick={handleResetCamera}
+                  className="grid place-items-center size-8 rounded-md text-muted-foreground hover:bg-muted hover:text-foreground transition-colors"
+                  aria-label="重置相机"
+                >
+                  <RotateCcw className="size-4" />
+                </button>
+                <button
+                  onClick={exportPNG}
+                  className="flex items-center gap-1.5 h-8 px-2.5 rounded-md text-xs text-muted-foreground hover:bg-muted hover:text-foreground transition-colors"
+                >
+                  <Box className="size-3.5" />
+                  <span className="hidden sm:inline">导出 PNG</span>
+                </button>
+                <div className="mx-1 h-5 w-px bg-border/60" />
+                <button
+                  onClick={() => setExpandOpen(false)}
+                  className="grid place-items-center size-8 rounded-md text-muted-foreground hover:bg-destructive/10 hover:text-destructive transition-colors"
+                  aria-label="关闭"
+                >
+                  <X className="size-4" />
+                </button>
+              </div>
+            </div>
+            <div
+              className="relative flex-1 min-h-0"
+              style={{
+                background:
+                  theme === 'dark'
+                    ? 'radial-gradient(circle at 50% 50%, #34343a 0%, #2a2a2e 100%)'
+                    : 'radial-gradient(circle at 50% 50%, #ffffff 0%, #f4f4f5 100%)',
+              }}
+            >
+              <Plot3DScene
+                surfaces={surfaces}
+                theme={theme}
+                showAxes={showAxes}
+                showGrid={showGrid}
+                wireframe={wireframe}
+                autoRotate={autoRotate}
+                colorMode={colorMode}
+                upAxis={upAxis}
+                resetSignal={resetSignal}
+              />
+            </div>
           </div>
-        </div>
+        ),
+        document.body,
       )}
     </TooltipProvider>
   );

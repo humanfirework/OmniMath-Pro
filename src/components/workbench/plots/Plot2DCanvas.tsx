@@ -73,6 +73,10 @@ const PLOT_COLORS = [
   '#fb923c', // orange
 ];
 
+/** Canvas padding (screen pixels). Declared at module level to avoid TDZ
+ *  issues — the `computed` useMemo reads this during first render. */
+const PADDING = { left: 48, right: 16, top: 16, bottom: 32 };
+
 const EXAMPLES = [
   { expr: 'sin x', label: 'sin x' },
   { expr: 'x^2', label: 'x²' },
@@ -189,7 +193,6 @@ export function Plot2DCanvas({
   }, [plots, xRange, canvasSize.w]);
 
   /* ----------------------- Coordinate mapping ----------------------- */
-  const PADDING = { left: 48, right: 16, top: 16, bottom: 32 };
 
   const dataToScreen = useCallback(
     (wx: number, wy: number): [number, number] => {
@@ -235,181 +238,187 @@ export function Plot2DCanvas({
       if (w === 0 || h === 0) return;
       if (!Number.isFinite(dpr) || dpr <= 0) return;
 
-    // Reset & DPI scale.
-    canvas.width = Math.floor(w * dpr);
-    canvas.height = Math.floor(h * dpr);
-    canvas.style.width = `${w}px`;
-    canvas.style.height = `${h}px`;
-    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
-    ctx.clearRect(0, 0, w, h);
+      // Reset & DPI scale.
+      canvas.width = Math.floor(w * dpr);
+      canvas.height = Math.floor(h * dpr);
+      canvas.style.width = `${w}px`;
+      canvas.style.height = `${h}px`;
+      ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+      ctx.clearRect(0, 0, w, h);
 
-    const dark = theme === 'dark';
-    const bg = getCssVar('--background', dark ? '#2e2e32' : '#ffffff');
-    const fg = getCssVar('--foreground', dark ? '#f0f2f5' : '#1f1f1f');
-    const axisColor = getCssVar('--muted-foreground', dark ? '#c4cad4' : '#555560');
-    const gridMajor = dark ? 'rgba(255,255,255,0.16)' : 'rgba(0,0,0,0.10)';
-    const gridMinor = dark ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.05)';
-    const tickLabelColor = getCssVar('--muted-foreground', dark ? '#d0d4dc' : '#404048');
-    const axisLabelColor = getCssVar('--muted-foreground', dark ? '#c4cad4' : '#606068');
-    const crosshairColor = getCssVar('--primary', '#2dd4bf');
+      const dark = theme === 'dark';
+      const bg = getCssVar('--background', dark ? '#2e2e32' : '#ffffff');
+      const fg = getCssVar('--foreground', dark ? '#f0f2f5' : '#1f1f1f');
+      const axisColor = fg;
+      const gridMajor = dark ? 'rgba(255,255,255,0.12)' : 'rgba(0,0,0,0.08)';
+      const gridMinor = dark ? 'rgba(255,255,255,0.06)' : 'rgba(0,0,0,0.04)';
+      const tickLabelColor = getCssVar('--muted-foreground', dark ? '#b0b5bf' : '#4a4a52');
+      const axisLabelColor = getCssVar('--muted-foreground', dark ? '#a0a5af' : '#5a5a62');
+      const crosshairColor = getCssVar('--primary', '#2dd4bf');
 
-    // Semantic marker / overlay colors for high contrast in both themes.
-    const markerStroke = getCssVar('--background', dark ? '#18181b' : '#ffffff');
-    const zeroFill = dark ? '#93c5fd' : '#2563eb';
-    const tooltipBg = dark ? 'rgba(39,39,42,0.92)' : 'rgba(255,255,255,0.92)';
-    const tooltipBorder = dark ? 'rgba(255,255,255,0.20)' : 'rgba(0,0,0,0.10)';
-    const legendBg = dark ? 'rgba(39,39,42,0.80)' : 'rgba(255,255,255,0.80)';
-    const legendBorder = dark ? 'rgba(255,255,255,0.10)' : 'rgba(0,0,0,0.08)';
+      // Semantic marker / overlay colors for high contrast in both themes.
+      const markerStroke = getCssVar('--background', dark ? '#18181b' : '#ffffff');
+      const zeroFill = dark ? '#93c5fd' : '#2563eb';
+      const tooltipBg = getCssVar('--popover', dark ? '#18181b' : '#ffffff');
+      const tooltipFg = getCssVar('--popover-foreground', dark ? '#fafafa' : '#171717');
+      const tooltipBorder = getCssVar('--border', dark ? 'rgba(255,255,255,0.15)' : 'rgba(0,0,0,0.10)');
 
-    // Background.
-    ctx.fillStyle = bg;
-    ctx.fillRect(0, 0, w, h);
+      // Background.
+      ctx.fillStyle = bg;
+      ctx.fillRect(0, 0, w, h);
 
-    const { x: vx, y: vy } = viewRef.current;
+      const { x: vx, y: vy } = viewRef.current;
 
-    /* ---------- Grid ---------- */
-    if (showGrid) {
-      const xNice = niceNumber(vx, 10);
-      const yNice = niceNumber(vy, 8);
-      // Minor grid: half-step.
-      const minorX = xNice.tickStep / 2;
-      const minorY = yNice.tickStep / 2;
-      ctx.lineWidth = 1;
-      ctx.strokeStyle = gridMinor;
-      ctx.beginPath();
-      const xMinTick = Math.floor(vx[0] / minorX) * minorX;
-      for (let xv = xMinTick; xv <= vx[1] + minorX * 0.5; xv += minorX) {
-        const [sx] = dataToScreen(xv, 0);
-        ctx.moveTo(sx, PADDING.top);
-        ctx.lineTo(sx, h - PADDING.bottom);
-      }
-      const yMinTick = Math.floor(vy[0] / minorY) * minorY;
-      for (let yv = yMinTick; yv <= vy[1] + minorY * 0.5; yv += minorY) {
-        const [, sy] = dataToScreen(0, yv);
-        ctx.moveTo(PADDING.left, sy);
-        ctx.lineTo(w - PADDING.right, sy);
-      }
-      ctx.stroke();
-
-      // Major grid.
-      ctx.strokeStyle = gridMajor;
-      ctx.beginPath();
-      for (const xv of xNice.ticks) {
-        const [sx] = dataToScreen(xv, 0);
-        ctx.moveTo(sx, PADDING.top);
-        ctx.lineTo(sx, h - PADDING.bottom);
-      }
-      for (const yv of yNice.ticks) {
-        const [, sy] = dataToScreen(0, yv);
-        ctx.moveTo(PADDING.left, sy);
-        ctx.lineTo(w - PADDING.right, sy);
-      }
-      ctx.stroke();
-
-      /* ---------- Axes (x=0, y=0) with arrowheads ---------- */
-      ctx.strokeStyle = axisColor;
-      ctx.lineWidth = 1.4;
-      ctx.fillStyle = axisColor;
-      const [, axisYScreen] = dataToScreen(0, 0);
-      const [axisXScreen] = dataToScreen(0, 0);
-
-      // X axis (horizontal line at y=0 if visible, else at top/bottom edge).
-      let yAxisScreen = axisYScreen;
-      if (yAxisScreen < PADDING.top) yAxisScreen = PADDING.top;
-      if (yAxisScreen > h - PADDING.bottom) yAxisScreen = h - PADDING.bottom;
-      ctx.beginPath();
-      ctx.moveTo(PADDING.left, yAxisScreen);
-      ctx.lineTo(w - PADDING.right, yAxisScreen);
-      ctx.stroke();
-      // Arrowhead at right.
-      ctx.beginPath();
-      ctx.moveTo(w - PADDING.right, yAxisScreen);
-      ctx.lineTo(w - PADDING.right - 6, yAxisScreen - 4);
-      ctx.lineTo(w - PADDING.right - 6, yAxisScreen + 4);
-      ctx.closePath();
-      ctx.fill();
-
-      // Y axis (vertical line at x=0 if visible, else at left edge).
-      let xAxisScreen = axisXScreen;
-      if (xAxisScreen < PADDING.left) xAxisScreen = PADDING.left;
-      if (xAxisScreen > w - PADDING.right) xAxisScreen = w - PADDING.right;
-      ctx.beginPath();
-      ctx.moveTo(xAxisScreen, PADDING.top);
-      ctx.lineTo(xAxisScreen, h - PADDING.bottom);
-      ctx.stroke();
-      // Arrowhead at top.
-      ctx.beginPath();
-      ctx.moveTo(xAxisScreen, PADDING.top);
-      ctx.lineTo(xAxisScreen - 4, PADDING.top + 6);
-      ctx.lineTo(xAxisScreen + 4, PADDING.top + 6);
-      ctx.closePath();
-      ctx.fill();
-
-      /* ---------- Tick labels ---------- */
-      ctx.font = '11px ui-monospace, "Geist Mono", monospace';
-      ctx.fillStyle = tickLabelColor;
-      ctx.textAlign = 'center';
-      ctx.textBaseline = 'top';
-      for (const xv of xNice.ticks) {
-        if (Math.abs(xv) < xNice.tickStep * 0.01) continue; // skip 0 on x
-        const [sx] = dataToScreen(xv, 0);
-        const label = formatTickLabel(xv);
-        // Place below the x-axis (or near the bottom edge).
-        const ty = Math.min(Math.max(yAxisScreen + 4, PADDING.top), h - PADDING.bottom - 14);
-        ctx.fillText(label, sx, ty);
-      }
-      ctx.textAlign = 'right';
-      ctx.textBaseline = 'middle';
-      for (const yv of yNice.ticks) {
-        if (Math.abs(yv) < yNice.tickStep * 0.01) continue;
-        const [, sy] = dataToScreen(0, yv);
-        const label = formatTickLabel(yv);
-        const tx = Math.min(Math.max(xAxisScreen - 6, PADDING.left + 14), w - PADDING.right);
-        ctx.fillText(label, tx, sy);
-      }
-
-      // Origin "0" label.
-      ctx.textAlign = 'right';
-      ctx.textBaseline = 'top';
-      ctx.fillText('0', xAxisScreen - 4, yAxisScreen + 4);
-
-      // Axis labels (x, y).
-      ctx.fillStyle = axisLabelColor;
-      ctx.font = 'italic 12px ui-serif, Georgia, serif';
-      ctx.textAlign = 'right';
-      ctx.textBaseline = 'bottom';
-      ctx.fillText('x', w - PADDING.right - 4, yAxisScreen - 4);
-      ctx.textAlign = 'left';
-      ctx.textBaseline = 'top';
-      ctx.fillText('y', xAxisScreen + 6, PADDING.top + 2);
-    }
-
-    /* ---------- Plot polylines ---------- */
-    const visiblePlots = computed.filter((p) => p.visible);
-    for (const plot of visiblePlots) {
-      const samples = plot.samples;
-      if (samples.length < 2) continue;
-      ctx.strokeStyle = plot.config.color;
-      ctx.lineWidth = 2;
-      ctx.lineJoin = 'round';
-      ctx.lineCap = 'round';
-      ctx.beginPath();
-      let penDown = false;
-      for (const s of samples) {
-        if (!Number.isFinite(s.x) || !Number.isFinite(s.y)) {
-          penDown = false;
-          continue;
+      /* ---------- Grid ---------- */
+      if (showGrid) {
+        const xNice = niceNumber(vx, 8);
+        const yNice = niceNumber(vy, 6);
+        // Minor grid: half-step.
+        const minorX = xNice.tickStep / 2;
+        const minorY = yNice.tickStep / 2;
+        ctx.lineWidth = 1;
+        ctx.strokeStyle = gridMinor;
+        ctx.beginPath();
+        const xMinTick = Math.floor(vx[0] / minorX) * minorX;
+        for (let xv = xMinTick; xv <= vx[1] + minorX * 0.5; xv += minorX) {
+          const [sx] = dataToScreen(xv, 0);
+          ctx.moveTo(sx, PADDING.top);
+          ctx.lineTo(sx, h - PADDING.bottom);
         }
-        const [sx, sy] = dataToScreen(s.x, s.y);
-        if (!penDown) {
-          ctx.moveTo(sx, sy);
-          penDown = true;
-        } else {
-          ctx.lineTo(sx, sy);
+        const yMinTick = Math.floor(vy[0] / minorY) * minorY;
+        for (let yv = yMinTick; yv <= vy[1] + minorY * 0.5; yv += minorY) {
+          const [, sy] = dataToScreen(0, yv);
+          ctx.moveTo(PADDING.left, sy);
+          ctx.lineTo(w - PADDING.right, sy);
         }
+        ctx.stroke();
+
+        // Major grid.
+        ctx.strokeStyle = gridMajor;
+        ctx.beginPath();
+        for (const xv of xNice.ticks) {
+          const [sx] = dataToScreen(xv, 0);
+          ctx.moveTo(sx, PADDING.top);
+          ctx.lineTo(sx, h - PADDING.bottom);
+        }
+        for (const yv of yNice.ticks) {
+          const [, sy] = dataToScreen(0, yv);
+          ctx.moveTo(PADDING.left, sy);
+          ctx.lineTo(w - PADDING.right, sy);
+        }
+        ctx.stroke();
+
+        /* ---------- Axes (x=0, y=0) with arrowheads ---------- */
+        ctx.strokeStyle = axisColor;
+        ctx.lineWidth = 2;
+        ctx.fillStyle = axisColor;
+        const [, axisYScreen] = dataToScreen(0, 0);
+        const [axisXScreen] = dataToScreen(0, 0);
+
+        // X axis (horizontal line at y=0 if visible, else at top/bottom edge).
+        let yAxisScreen = axisYScreen;
+        if (yAxisScreen < PADDING.top) yAxisScreen = PADDING.top;
+        if (yAxisScreen > h - PADDING.bottom) yAxisScreen = h - PADDING.bottom;
+        ctx.beginPath();
+        ctx.moveTo(PADDING.left, yAxisScreen);
+        ctx.lineTo(w - PADDING.right, yAxisScreen);
+        ctx.stroke();
+        // Arrowhead at right.
+        ctx.beginPath();
+        ctx.moveTo(w - PADDING.right, yAxisScreen);
+        ctx.lineTo(w - PADDING.right - 7, yAxisScreen - 5);
+        ctx.lineTo(w - PADDING.right - 7, yAxisScreen + 5);
+        ctx.closePath();
+        ctx.fill();
+
+        // Y axis (vertical line at x=0 if visible, else at left edge).
+        let xAxisScreen = axisXScreen;
+        if (xAxisScreen < PADDING.left) xAxisScreen = PADDING.left;
+        if (xAxisScreen > w - PADDING.right) xAxisScreen = w - PADDING.right;
+        ctx.beginPath();
+        ctx.moveTo(xAxisScreen, PADDING.top);
+        ctx.lineTo(xAxisScreen, h - PADDING.bottom);
+        ctx.stroke();
+        // Arrowhead at top.
+        ctx.beginPath();
+        ctx.moveTo(xAxisScreen, PADDING.top);
+        ctx.lineTo(xAxisScreen - 5, PADDING.top + 7);
+        ctx.lineTo(xAxisScreen + 5, PADDING.top + 7);
+        ctx.closePath();
+        ctx.fill();
+
+        /* ---------- Tick labels ---------- */
+        ctx.font = '12px ui-monospace, "Geist Mono", monospace';
+        ctx.fillStyle = tickLabelColor;
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'top';
+        for (const xv of xNice.ticks) {
+          if (Math.abs(xv) < xNice.tickStep * 0.01) continue; // skip 0 on x
+          const [sx] = dataToScreen(xv, 0);
+          const label = formatTickLabel(xv);
+          // Place below the x-axis (or near the bottom edge).
+          const ty = Math.min(Math.max(yAxisScreen + 5, PADDING.top), h - PADDING.bottom - 16);
+          ctx.fillText(label, sx, ty);
+        }
+        ctx.textAlign = 'right';
+        ctx.textBaseline = 'middle';
+        for (const yv of yNice.ticks) {
+          if (Math.abs(yv) < yNice.tickStep * 0.01) continue;
+          const [, sy] = dataToScreen(0, yv);
+          const label = formatTickLabel(yv);
+          const tx = Math.min(Math.max(xAxisScreen - 7, PADDING.left + 16), w - PADDING.right);
+          ctx.fillText(label, tx, sy);
+        }
+
+        // Origin "0" label.
+        ctx.textAlign = 'right';
+        ctx.textBaseline = 'top';
+        ctx.fillText('0', xAxisScreen - 5, yAxisScreen + 5);
+
+        // Axis labels (x, y).
+        ctx.fillStyle = axisLabelColor;
+        ctx.font = 'italic 13px ui-serif, Georgia, serif';
+        ctx.textAlign = 'right';
+        ctx.textBaseline = 'bottom';
+        ctx.fillText('x', w - PADDING.right - 4, yAxisScreen - 6);
+        ctx.textAlign = 'left';
+        ctx.textBaseline = 'top';
+        ctx.fillText('y', xAxisScreen + 7, PADDING.top + 3);
       }
-      ctx.stroke();
-    }
+
+      /* ---------- Plot polylines ---------- */
+      const visiblePlots = computed.filter((p) => p.visible);
+      for (const plot of visiblePlots) {
+        const samples = plot.samples;
+        if (samples.length < 2) continue;
+        ctx.strokeStyle = plot.config.color;
+        ctx.lineWidth = 2.5;
+        ctx.lineJoin = 'round';
+        ctx.lineCap = 'round';
+        // Slight shadow/glow for the curve so it pops against the grid.
+        ctx.save();
+        ctx.shadowColor = plot.config.color;
+        ctx.shadowBlur = dark ? 10 : 6;
+        ctx.shadowOffsetX = 0;
+        ctx.shadowOffsetY = 0;
+        ctx.beginPath();
+        let penDown = false;
+        for (const s of samples) {
+          if (!Number.isFinite(s.x) || !Number.isFinite(s.y)) {
+            penDown = false;
+            continue;
+          }
+          const [sx, sy] = dataToScreen(s.x, s.y);
+          if (!penDown) {
+            ctx.moveTo(sx, sy);
+            penDown = true;
+          } else {
+            ctx.lineTo(sx, sy);
+          }
+        }
+        ctx.stroke();
+        ctx.restore();
+      }
 
     /* ---------- Extrema + zero markers ---------- */
     if (showMarkers) {
@@ -488,90 +497,52 @@ export function Plot2DCanvas({
       }
 
       // Tooltip box.
-      const lines: string[] = [];
-      lines.push(`x = ${formatNumberForTooltip(hover.wx)}`);
-      lines.push(`y = ${formatNumberForTooltip(hover.wy)}`);
-      if (hover.snap) {
-        lines.push(`▸ ${formatCoord(hover.snap.x, hover.snap.y)}`);
+      const lines: { text: string; color?: string }[] = [];
+      lines.push({ text: `x = ${formatNumberForTooltip(hover.wx)}` });
+      lines.push({ text: `y = ${formatNumberForTooltip(hover.wy)}` });
+      if (hover.snap && hover.snapColor) {
+        lines.push({
+          text: `curve ${formatCoord(hover.snap.x, hover.snap.y)}`,
+          color: hover.snapColor,
+        });
       }
-      ctx.font = '11px ui-monospace, "Geist Mono", monospace';
-      const padding = 6;
-      const lineHeight = 14;
+      ctx.font = '12px ui-monospace, "Geist Mono", monospace';
+      const padding = 8;
+      const lineHeight = 16;
       let boxW = 0;
-      for (const ln of lines) boxW = Math.max(boxW, ctx.measureText(ln).width);
+      for (const ln of lines) boxW = Math.max(boxW, ctx.measureText(ln.text).width);
       boxW += padding * 2;
       const boxH = lines.length * lineHeight + padding * 2;
-      // Position: prefer top-right of cursor; flip if near right edge.
-      let bx = hover.sx + 12;
-      let by = hover.sy + 12;
-      if (bx + boxW > w - PADDING.right) bx = hover.sx - boxW - 12;
-      if (by + boxH > h - PADDING.bottom) by = hover.sy - boxH - 12;
+      // Position: prefer top-right of cursor; flip if near edge.
+      let bx = hover.sx + 14;
+      let by = hover.sy + 14;
+      if (bx + boxW > w - PADDING.right) bx = hover.sx - boxW - 14;
+      if (by + boxH > h - PADDING.bottom) by = hover.sy - boxH - 14;
       if (bx < PADDING.left) bx = PADDING.left;
       if (by < PADDING.top) by = PADDING.top;
 
-      // Glass background.
+      // High-contrast tooltip with soft shadow.
       ctx.save();
       ctx.fillStyle = tooltipBg;
       ctx.strokeStyle = tooltipBorder;
       ctx.lineWidth = 1;
+      ctx.shadowColor = dark ? 'rgba(0,0,0,0.45)' : 'rgba(0,0,0,0.15)';
+      ctx.shadowBlur = 10;
+      ctx.shadowOffsetX = 0;
+      ctx.shadowOffsetY = 3;
       drawRoundRect(ctx, bx, by, boxW, boxH, 6);
       ctx.fill();
       ctx.stroke();
       ctx.restore();
 
-      ctx.fillStyle = fg;
       ctx.textAlign = 'left';
       ctx.textBaseline = 'top';
       for (let i = 0; i < lines.length; i++) {
-        const isSnap = i === 2;
-        ctx.fillStyle = isSnap ? crosshairColor : fg;
-        ctx.fillText(lines[i], bx + padding, by + padding + i * lineHeight);
+        ctx.fillStyle = lines[i].color ?? tooltipFg;
+        ctx.fillText(lines[i].text, bx + padding, by + padding + i * lineHeight);
       }
     }
 
-    /* ---------- Legend (top-right) ---------- */
-    if (visiblePlots.length > 0) {
-      const legendPad = 8;
-      const lineH = 16;
-      ctx.font = '11px ui-monospace, "Geist Mono", monospace';
-      const legendItems = visiblePlots.map((p) => {
-        const expr = p.config.expression;
-        const label =
-          p.config.plotType === 'polar' ? `r = ${expr}` :
-          p.config.plotType === 'parametric' ? `(t) = ${expr}` :
-          `y = ${expr}`;
-        return { color: p.config.color, label };
-      });
-      let legendW = 0;
-      for (const it of legendItems) legendW = Math.max(legendW, ctx.measureText(it.label).width);
-      legendW += 24 + legendPad * 2; // swatch + padding
-      const legendH = legendItems.length * lineH + legendPad * 2;
-      const lx = w - PADDING.right - legendW - 4;
-      const ly = PADDING.top + 4;
-      // Glass bg.
-      ctx.save();
-      ctx.fillStyle = legendBg;
-      ctx.strokeStyle = legendBorder;
-      ctx.lineWidth = 1;
-      drawRoundRect(ctx, lx, ly, legendW, legendH, 6);
-      ctx.fill();
-      ctx.stroke();
-      ctx.restore();
-
-      ctx.textAlign = 'left';
-      ctx.textBaseline = 'middle';
-      for (let i = 0; i < legendItems.length; i++) {
-        const it = legendItems[i];
-        const iy = ly + legendPad + i * lineH + lineH / 2;
-        // Color swatch.
-        ctx.fillStyle = it.color;
-        drawRoundRect(ctx, lx + legendPad, iy - 5, 12, 10, 2);
-        ctx.fill();
-        // Label.
-        ctx.fillStyle = fg;
-        ctx.fillText(it.label, lx + legendPad + 18, iy);
-      }
-    }
     } catch (err) {
       console.error('[Plot2DCanvas] draw error:', err);
       setDrawError(err instanceof Error ? err.message : '绘制失败');
