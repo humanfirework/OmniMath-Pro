@@ -2,84 +2,130 @@
 
 # OmniMath Pro
 
-一款 **VSCode 风格的沉浸式数学工作台**，专为需要频繁进行符号计算、公式编辑、函数绘图与数据探索的用户打造。
+一款 **VSCode 风格的沉浸式数学工作台**，为工程师、学生、科研人员和数学爱好者打造。
 
-**Omni** 意为“无所不包”，**Math** 是数学的核心。OmniMath Pro 试图把日常数学工作所需的工具——计算、绘图、公式、单位换算、进制转换、变量管理——统一到一个简洁、快速、可离线使用的桌面应用中。
+OmniMath Pro 将符号计算、函数绘图、公式渲染、矩阵运算、线性代数求解与可视化节点工作流整合进一个简洁、快速、可离线运行的桌面应用中。界面灵感来自现代代码编辑器，让你像写代码一样做数学。
 
 ![License](https://img.shields.io/github/license/humanfirework/OmniMath-Pro)
 ![Release](https://img.shields.io/github/v/release/humanfirework/OmniMath-Pro)
+
 ![Build](https://img.shields.io/github/actions/workflow/status/humanfirework/OmniMath-Pro/release.yml?logo=github&label=release%20build)
-![Platform](https://img.shields.io/badge/platform-Windows%20%7C%20macOS%20%7C%20Linux-blue)
 ![Tauri](https://img.shields.io/badge/Tauri-2.0-FFC131?logo=tauri)
-![Next.js](https://img.shields.io/badge/Next.js-16-black?logo=next.js)
 ![React](https://img.shields.io/badge/React-19-61DAFB?logo=react)
 
 ---
 
-## 为什么做 OmniMath Pro？
+## 为什么是 OmniMath Pro？
 
-普通计算器太简单，专业数学软件又太厚重。OmniMath Pro 想做一个中间态：
+普通计算器功能有限，专业数学软件又过于笨重。OmniMath Pro 取其中间态：
 
-- 启动快，离线可用
-- 界面像代码编辑器一样顺手
-- 输入即所得，支持 LaTeX 与键盘快捷键
-- 一个窗口内完成计算、绘图、公式、变量管理
+- **启动快、离线用** — 基于 Tauri 的本地桌面应用，无需网络
+- **编辑器式交互** — 三栏布局、命令面板、快捷键，像 VSCode 一样顺手
+- **输入即所得** — 支持类自然语言、Python/MATLAB 风格语法，实时渲染 LaTeX
+- **可视化工作流** — 节点式 Pipeline，拖拽连接即可构建复杂计算图
+- **深度可定制** — 任务栏位置、面板显隐、主题模式、自动隐藏均可记忆
+
+---
 
 ## 核心功能
 
-- **符号计算与实时求值**：基于 mathjs，支持变量、函数、矩阵、复数等
-- **2D 函数绘图**：含直角坐标与极坐标，Canvas 渲染，支持多函数叠加
-- **LaTeX 公式渲染**：使用 KaTeX，输入公式即时呈现
-- **方程求解**：一元方程、方程组求解
-- **单位转换与进制转换**：长度、质量、时间、角度等常用单位，二到三十六进制互转
-- **命令面板与快捷键**：类似 VSCode 的 `Ctrl/Cmd + Shift + P`，快速跳转功能
-- **变量滑块与变量面板**：实时调节参数，观察结果与图像变化
-- **中英文 i18n**：界面支持中/英切换
-- **深色 / 浅色主题**：跟随系统或手动切换
-- **VSCode 风格三栏布局**：ActivityBar / SidePanel / Editor / Preview / StatusBar 可调
+### 计算与符号运算
+- 基于 **mathjs** 的高性能计算引擎
+- 支持变量、函数、矩阵、复数、微积分、方程求解
+- 多种输入风格：简洁模式 / Python 风格 / MATLAB 风格
+- 变量面板实时查看与管理计算状态
+
+### 2D / 3D 绘图
+- 直角坐标、极坐标与参数方程 2D 绘图
+- 多函数叠加、自动标注重值点与零点
+- 鼠标滚轮缩放、拖拽平移、悬停读数
+- 极端范围与异常表达式防御，避免崩溃
+
+### 公式渲染
+- 使用 **KaTeX** 即时渲染 LaTeX
+- 长公式支持水平滚动、缩放（0.6x–2.0x）与折叠/展开
+- 一键复制 LaTeX 源码
+
+### 线性代数
+- 矩阵输入、编辑与粘贴解析（支持 MATLAB / CSV / TSV 格式）
+- 高斯消元、LU / QR 分解、特征值计算
+- 线性方程组求解，自动判断唯一解 / 无解 / 无穷解
+
+### 节点式工作流（Pipeline）
+- ComfyUI / Blueprint 风格的数学节点图
+- 拖拽节点、连接端口、实时传播计算结果
+- 独立 mathjs 作用域，不污染主工作台变量
+
+### 界面与体验
+- **VSCode 风格布局**：ActivityBar / SidePanel / Editor / Preview / StatusBar
+- **任务栏**：支持左右切换、锁定/解锁、自动隐藏、手动隐藏
+- **面板显隐**：编辑器、预览区、侧边栏、任务栏均可独立显示/隐藏，状态自动记忆
+- **深色 / 浅色主题**：高对比度配色，符合 WCAG 可读性标准
+- **中英文 i18n**：界面一键切换中/英文
+- **命令面板**：`Ctrl/Cmd + Shift + P` 快速执行命令
+
+---
 
 ## 下载安装
 
-前往 [Releases](https://github.com/humanfirework/OmniMath-Pro/releases) 页面，选择对应平台的安装包：
+前往 [Releases](https://github.com/humanfirework/OmniMath-Pro/releases) 页面，选择对应平台安装包：
 
 | 平台 | 推荐安装包 |
 |---|---|
-| Windows | `OmniMath-Pro_xxx_x64-setup.exe` |
+| Windows | `OmniMath-Pro_xxx_x64-setup.exe` / `.msi` |
 | macOS (Apple Silicon / M 系列) | `OmniMath-Pro_xxx_aarch64.dmg` |
 | macOS (Intel) | `OmniMath-Pro_xxx_x64.dmg` |
 | Linux | `OmniMath-Pro_xxx_amd64.deb` / `.AppImage` |
 
 > 文件名中的 `xxx` 为版本号，请下载与你的系统架构匹配的版本。
 
+---
+
 ## 技术栈
 
 | 层级 | 技术 |
 |---|---|
-| 前端框架 | Next.js 16（Static Export）、React 19、TypeScript |
-| 样式与组件 | Tailwind CSS v4、shadcn/ui |
+| 前端框架 | Next.js 16、React 19、TypeScript 5 |
+| 样式与组件 | Tailwind CSS v4、shadcn/ui、Framer Motion |
 | 状态管理 | Zustand |
 | 计算引擎 | mathjs |
 | 公式渲染 | KaTeX |
+| 节点图 | 自研 Canvas + SVG 节点引擎 |
 | 桌面壳 | Tauri 2（Rust + wry/WebKit） |
 | 打包 | Tauri bundler（.msi / .exe / .dmg / .deb / .AppImage） |
 
-## 目录结构
+---
+
+## 项目结构
 
 ```
 omnimath-pro/
-├── src/                     # Next.js 应用（纯客户端计算器）
-│   ├── app/                 # App Router（layout / page / globals.css）
-│   ├── components/          # 计算器组件（CalculatorLayout 等）
-│   └── lib/                 # 工具、状态与计算引擎
-├── src-tauri/               # Tauri 桌面壳（Rust）
-│   ├── src/                 # main.rs / lib.rs
-│   ├── icons/               # 全平台应用图标
-│   ├── capabilities/        # Tauri 权限配置
-│   └── tauri.conf.json      # 构建/窗口/打包配置
-├── prisma/                  # Prisma schema（保留未来扩展）
-├── public/                  # 静态资源（logo 等）
-└── .github/workflows/       # 多平台自动发布工作流
+├── src/
+│   ├── app/                    # Next.js App Router（layout / page / globals.css）
+│   ├── components/
+│   │   ├── workbench/          # 主工作台（布局、面板、绘图、节点）
+│   │   │   ├── layout/         # ActivityBar、EditorPanel、PreviewPanel、SidePanel、StatusBar
+│   │   │   ├── panels/         # History、Variables、FormulaLibrary、LinearAlgebra、Solver、CommandPalette
+│   │   │   ├── plots/          # Plot2DCanvas 等绘图组件
+│   │   │   └── nodes/          # 节点式 Pipeline 引擎与 UI
+│   │   └── ui/                 # shadcn/ui 组件库
+│   ├── lib/
+│   │   ├── engine/             # 数学计算引擎与求值器
+│   │   ├── plots/              # 2D/3D 绘图采样与辅助函数
+│   │   ├── store/              # Zustand 状态管理（含持久化）
+│   │   └── i18n/               # 中英文翻译字典
+│   └── hooks/                  # 自定义 React Hooks
+├── src-tauri/                  # Tauri 桌面壳（Rust）
+│   ├── src/                    # main.rs / lib.rs
+│   ├── icons/                  # 全平台应用图标
+│   ├── capabilities/           # Tauri 权限配置
+│   └── tauri.conf.json         # 构建/窗口/打包配置
+├── prisma/                     # Prisma schema（保留未来扩展）
+├── public/                     # 静态资源（logo 等）
+└── .github/workflows/          # 多平台自动发布工作流
 ```
+
+---
 
 ## 开发环境
 
@@ -133,6 +179,8 @@ bun run tauri:build
 
 产物位于 `src-tauri/target/release/bundle/`。
 
+---
+
 ## 自动发布
 
 推送 `v*` 标签即可触发 GitHub Actions，自动在 Windows、macOS（Intel + Apple Silicon）、Linux 上构建并发布到 Release：
@@ -144,11 +192,18 @@ git push origin v0.1.0
 
 详见 [`.github/workflows/release.yml`](.github/workflows/release.yml)。
 
-## 跨平台说明
+---
 
-- 前端使用 Next.js `output: "export"` 产出纯静态文件，Tauri 以 `file://` 方式加载，无服务端依赖
-- 计算器核心为纯客户端逻辑，当前不依赖 Prisma / API 路由
-- `tauri.conf.json` 中 `bundle.targets: "all"` 会按当前平台自动选择打包格式
+## 最近更新（v0.0.2）
+
+- 修复 2D 绘图在极端范围与异常表达式下的崩溃问题
+- 优化深色模式对比度，所有文本与背景达到 WCAG 可读标准
+- 任务栏支持左右切换、锁定/解锁、自动隐藏与手动隐藏
+- 公式渲染支持缩放、折叠/展开与水平滚动
+- 编辑器、预览区、侧边栏、任务栏支持独立显隐切换，状态自动持久化
+- 修复 35+ TypeScript 类型错误，lint 与 build 全部通过
+
+---
 
 ## 常用命令
 
@@ -156,9 +211,12 @@ git push origin v0.1.0
 |---|---|
 | `bun run dev` | 启动 Next.js 开发服务器 |
 | `bun run build` | 静态导出到 `out/` |
+| `bun run lint` | 运行 ESLint 代码检查 |
 | `bun run tauri:dev` | Tauri 桌面开发模式 |
 | `bun run tauri:build` | 构建当前平台桌面安装包 |
 | `bun run db:push` | Prisma schema 同步（可选） |
+
+---
 
 ## 许可证
 
