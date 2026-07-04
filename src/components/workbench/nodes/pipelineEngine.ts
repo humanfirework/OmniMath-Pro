@@ -104,9 +104,13 @@ export const PORT_ROW_H = 22;
 export const PORTS_PAD_TOP = 8;
 export const RESULT_FOOTER_H = 58;
 
+// Port dots are inset 12px from the left/right card edges and are 10px wide,
+// so their center is 12 + 10/2 = 17px from the edge.
+const PORT_INSET_X = 17;
+
 /** Vertical center of port `i` (0-indexed) relative to the node's top-left. */
 export function portCenterY(index: number): number {
-  return NODE_HEADER_H + PORTS_PAD_TOP + 11 + index * PORT_ROW_H;
+  return NODE_HEADER_H + PORTS_PAD_TOP + PORT_ROW_H / 2 + index * PORT_ROW_H;
 }
 
 /** Port center in canvas-content coordinates. */
@@ -121,7 +125,7 @@ export function getPortPosition(
   const idx = ports.findIndex((p) => p.id === portId);
   if (idx < 0) return null;
   return {
-    x: node.position.x + (isOutput ? NODE_WIDTH : 0),
+    x: node.position.x + (isOutput ? NODE_WIDTH - PORT_INSET_X : PORT_INSET_X),
     y: node.position.y + portCenterY(idx),
   };
 }

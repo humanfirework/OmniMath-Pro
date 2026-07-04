@@ -371,12 +371,20 @@
   font-size: 1.05em;
 }
 
-.dark .katex {
-  color: #ececec;
+.dark .katex,
+.dark .katex .base,
+.dark .katex .katex-html,
+.dark .katex .katex-html span,
+.dark .katex .katex-mathml {
+  color: #f0f0f0 !important;
 }
 
-:not(.dark) .katex {
-  color: #1f1f1f;
+:not(.dark) .katex,
+:not(.dark) .katex .base,
+:not(.dark) .katex .katex-html,
+:not(.dark) .katex .katex-html span,
+:not(.dark) .katex .katex-mathml {
+  color: #1f1f1f !important;
 }
 
 .katex .base {
