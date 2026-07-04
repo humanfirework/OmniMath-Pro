@@ -83,6 +83,7 @@ import {
 } from '@/components/ui/tooltip';
 import { cn } from '@/lib/utils';
 import { t } from '@/lib/i18n';
+import type { TranslationDict } from '@/lib/i18n';
 import { useWorkbenchStore } from '@/lib/store/workbench';
 import { FormulaRenderer } from '@/components/workbench/FormulaRenderer';
 import {
@@ -126,7 +127,7 @@ const CATEGORY_COLOR: Record<NodeCategory, { stripe: string; text: string; bg: s
   output:    { stripe: 'bg-cyan-500',    text: 'text-cyan-500',    bg: 'bg-cyan-500/10' },
 };
 
-const CATEGORY_LABEL_KEY: Record<NodeCategory, string> = {
+const CATEGORY_LABEL_KEY: Record<NodeCategory, keyof TranslationDict> = {
   input: 'npCategoryInput',
   operation: 'npCategoryOp',
   function: 'npCategoryFunction',

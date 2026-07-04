@@ -18,13 +18,14 @@ import { useWorkbenchStore } from '@/lib/store/workbench';
 import { t } from '@/lib/i18n';
 import { cn } from '@/lib/utils';
 import type { SidePanelTab } from '@/lib/store/workbench';
+import type { TranslationDict } from '@/lib/i18n';
 import { HistoryPanel } from '@/components/workbench/panels/HistoryPanel';
 import { VariablesPanel } from '@/components/workbench/panels/VariablesPanel';
 import { FormulaLibraryPanel } from '@/components/workbench/panels/FormulaLibraryPanel';
 import { LinearAlgebraPanel } from '@/components/workbench/panels/LinearAlgebraPanel';
 import { SolverPanel } from '@/components/workbench/panels/SolverPanel';
 
-const PANEL_TITLE_KEY: Record<SidePanelTab, string> = {
+const PANEL_TITLE_KEY: Record<SidePanelTab, keyof TranslationDict> = {
   history: 'histTitle',
   variables: 'varsTitle',
   formulas: 'formulasTitle',

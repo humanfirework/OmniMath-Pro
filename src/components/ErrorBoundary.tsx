@@ -32,12 +32,10 @@ export class ErrorBoundary extends Component<ErrorBoundaryProps, ErrorBoundarySt
 
   handleReload = () => {
     if (typeof window !== 'undefined') {
-      try {
-        localStorage.removeItem('omnimath-pro-v2');
-        localStorage.removeItem('omnimath-pipeline-v1');
-      } catch {
-        // ignore
-      }
+      // NOTE: We intentionally do NOT clear localStorage here.
+      // A full storage wipe is destructive and unexpected for users who
+      // just hit a transient render bug. A simple page reload gives the
+      // app a clean start while preserving their work.
       window.location.reload();
     }
   };

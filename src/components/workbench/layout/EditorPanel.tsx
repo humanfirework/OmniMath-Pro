@@ -220,6 +220,13 @@ export function EditorPanel() {
     setActivePreviewTab,
   ]);
 
+  /* ─── Global run-all event from command palette ───────────────── */
+  useEffect(() => {
+    const handler = () => runScript();
+    window.addEventListener('omnimath:run-all', handler);
+    return () => window.removeEventListener('omnimath:run-all', handler);
+  }, [runScript]);
+
   /* ─── Keyboard handling ────────────────────────────────────────── */
   const handleKeyDown = useCallback(
     (e: React.KeyboardEvent<HTMLTextAreaElement>) => {

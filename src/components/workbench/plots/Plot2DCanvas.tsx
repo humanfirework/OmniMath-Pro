@@ -38,6 +38,7 @@ import {
   autoYRange,
   type PlotSample,
 } from '@/lib/plots/plot2d';
+import { AlertTriangle, RotateCcw, Maximize } from 'lucide-react';
 import type { PlotConfig } from '@/lib/store/workbench';
 
 /* ----------------------------- Props ----------------------------- */
@@ -136,6 +137,7 @@ export function Plot2DCanvas({
   const pinchRef = useRef<{ d: number; cx: number; cy: number } | null>(null);
   const redrawScheduledRef = useRef(false);
   const [canvasSize, setCanvasSize] = useState({ w: 0, h: 0 });
+  const [drawError, setDrawError] = useState<string | null>(null);
 
   /* ----------------------- Schedule redraw -------------------------- */
   // We keep a ref to the latest `drawNow` so the rAF callback always invokes
@@ -193,10 +195,15 @@ export function Plot2DCanvas({
     (wx: number, wy: number): [number, number] => {
       const { w, h } = sizeRef.current;
       const { x: vx, y: vy } = viewRef.current;
+      const xSpan = vx[1] - vx[0];
+      const ySpan = vy[1] - vy[0];
+      if (!Number.isFinite(xSpan) || xSpan === 0 || !Number.isFinite(ySpan) || ySpan === 0) {
+        return [NaN, NaN];
+      }
       const plotW = Math.max(1, w - PADDING.left - PADDING.right);
       const plotH = Math.max(1, h - PADDING.top - PADDING.bottom);
-      const sx = PADDING.left + ((wx - vx[0]) / (vx[1] - vx[0])) * plotW;
-      const sy = PADDING.top + (1 - (wy - vy[0]) / (vy[1] - vy[0])) * plotH;
+      const sx = PADDING.left + ((wx - vx[0]) / xSpan) * plotW;
+      const sy = PADDING.top + (1 - (wy - vy[0]) / ySpan) * plotH;
       return [sx, sy];
     },
     [],
@@ -205,21 +212,28 @@ export function Plot2DCanvas({
   const screenToData = useCallback((sx: number, sy: number): [number, number] => {
     const { w, h } = sizeRef.current;
     const { x: vx, y: vy } = viewRef.current;
+    const xSpan = vx[1] - vx[0];
+    const ySpan = vy[1] - vy[0];
+    if (!Number.isFinite(xSpan) || xSpan === 0 || !Number.isFinite(ySpan) || ySpan === 0) {
+      return [NaN, NaN];
+    }
     const plotW = Math.max(1, w - PADDING.left - PADDING.right);
     const plotH = Math.max(1, h - PADDING.top - PADDING.bottom);
-    const wx = vx[0] + ((sx - PADDING.left) / plotW) * (vx[1] - vx[0]);
-    const wy = vy[0] + (1 - (sy - PADDING.top) / plotH) * (vy[1] - vy[0]);
+    const wx = vx[0] + ((sx - PADDING.left) / plotW) * xSpan;
+    const wy = vy[0] + (1 - (sy - PADDING.top) / plotH) * ySpan;
     return [wx, wy];
   }, []);
 
   /* ----------------------- Actual draw ------------------------------ */
   const drawNow = useCallback(() => {
-    const canvas = canvasRef.current;
-    if (!canvas) return;
-    const ctx = canvas.getContext('2d');
-    if (!ctx) return;
-    const { w, h, dpr } = sizeRef.current;
-    if (w === 0 || h === 0) return;
+    try {
+      const canvas = canvasRef.current;
+      if (!canvas) return;
+      const ctx = canvas.getContext('2d');
+      if (!ctx) return;
+      const { w, h, dpr } = sizeRef.current;
+      if (w === 0 || h === 0) return;
+      if (!Number.isFinite(dpr) || dpr <= 0) return;
 
     // Reset & DPI scale.
     canvas.width = Math.floor(w * dpr);
@@ -230,14 +244,22 @@ export function Plot2DCanvas({
     ctx.clearRect(0, 0, w, h);
 
     const dark = theme === 'dark';
-    const bg = dark ? '#2e2e32' : '#ffffff';        /* lifted from #1a1a1d */
-    const fg = dark ? '#f0f2f5' : '#1f1f1f';         /* brighter text */
-    const axisColor = dark ? '#c4cad4' : '#555560';  /* brighter axes */
-    const gridMajor = dark ? 'rgba(255,255,255,0.16)' : 'rgba(0,0,0,0.10)';  /* more visible */
-    const gridMinor = dark ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.05)';  /* more visible */
-    const tickLabelColor = dark ? '#d0d4dc' : '#404048';
-    const axisLabelColor = dark ? '#c4cad4' : '#606068';
-    const crosshairColor = '#2dd4bf';
+    const bg = getCssVar('--background', dark ? '#2e2e32' : '#ffffff');
+    const fg = getCssVar('--foreground', dark ? '#f0f2f5' : '#1f1f1f');
+    const axisColor = getCssVar('--muted-foreground', dark ? '#c4cad4' : '#555560');
+    const gridMajor = dark ? 'rgba(255,255,255,0.16)' : 'rgba(0,0,0,0.10)';
+    const gridMinor = dark ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.05)';
+    const tickLabelColor = getCssVar('--muted-foreground', dark ? '#d0d4dc' : '#404048');
+    const axisLabelColor = getCssVar('--muted-foreground', dark ? '#c4cad4' : '#606068');
+    const crosshairColor = getCssVar('--primary', '#2dd4bf');
+
+    // Semantic marker / overlay colors for high contrast in both themes.
+    const markerStroke = getCssVar('--background', dark ? '#18181b' : '#ffffff');
+    const zeroFill = dark ? '#93c5fd' : '#2563eb';
+    const tooltipBg = dark ? 'rgba(39,39,42,0.92)' : 'rgba(255,255,255,0.92)';
+    const tooltipBorder = dark ? 'rgba(255,255,255,0.20)' : 'rgba(0,0,0,0.10)';
+    const legendBg = dark ? 'rgba(39,39,42,0.80)' : 'rgba(255,255,255,0.80)';
+    const legendBorder = dark ? 'rgba(255,255,255,0.10)' : 'rgba(0,0,0,0.08)';
 
     // Background.
     ctx.fillStyle = bg;
@@ -393,8 +415,8 @@ export function Plot2DCanvas({
     if (showMarkers) {
       for (const plot of visiblePlots) {
         // Zeros — blue dots.
-        ctx.fillStyle = '#60a5fa';
-        ctx.strokeStyle = dark ? '#1a1a1d' : '#ffffff';
+        ctx.fillStyle = zeroFill;
+        ctx.strokeStyle = markerStroke;
         ctx.lineWidth = 1.5;
         for (const z of plot.extrema.zeros) {
           const [sx, sy] = dataToScreen(z.x, z.y);
@@ -420,7 +442,7 @@ export function Plot2DCanvas({
           ctx.arc(sx, sy, 4, 0, Math.PI * 2);
           ctx.fill();
           ctx.restore();
-          ctx.strokeStyle = dark ? '#1a1a1d' : '#ffffff';
+          ctx.strokeStyle = markerStroke;
           ctx.lineWidth = 1.5;
           ctx.beginPath();
           ctx.arc(sx, sy, 4, 0, Math.PI * 2);
@@ -489,11 +511,10 @@ export function Plot2DCanvas({
 
       // Glass background.
       ctx.save();
-      ctx.fillStyle = dark ? 'rgba(40,40,44,0.92)' : 'rgba(255,255,255,0.92)';
-      ctx.strokeStyle = dark ? 'rgba(255,255,255,0.20)' : 'rgba(0,0,0,0.10)';
+      ctx.fillStyle = tooltipBg;
+      ctx.strokeStyle = tooltipBorder;
       ctx.lineWidth = 1;
-      ctx.beginPath();
-      ctx.roundRect(bx, by, boxW, boxH, 6);
+      drawRoundRect(ctx, bx, by, boxW, boxH, 6);
       ctx.fill();
       ctx.stroke();
       ctx.restore();
@@ -529,11 +550,10 @@ export function Plot2DCanvas({
       const ly = PADDING.top + 4;
       // Glass bg.
       ctx.save();
-      ctx.fillStyle = dark ? 'rgba(40,40,44,0.80)' : 'rgba(255,255,255,0.80)';
-      ctx.strokeStyle = dark ? 'rgba(255,255,255,0.10)' : 'rgba(0,0,0,0.08)';
+      ctx.fillStyle = legendBg;
+      ctx.strokeStyle = legendBorder;
       ctx.lineWidth = 1;
-      ctx.beginPath();
-      ctx.roundRect(lx, ly, legendW, legendH, 6);
+      drawRoundRect(ctx, lx, ly, legendW, legendH, 6);
       ctx.fill();
       ctx.stroke();
       ctx.restore();
@@ -545,13 +565,16 @@ export function Plot2DCanvas({
         const iy = ly + legendPad + i * lineH + lineH / 2;
         // Color swatch.
         ctx.fillStyle = it.color;
-        ctx.beginPath();
-        ctx.roundRect(lx + legendPad, iy - 5, 12, 10, 2);
+        drawRoundRect(ctx, lx + legendPad, iy - 5, 12, 10, 2);
         ctx.fill();
         // Label.
         ctx.fillStyle = fg;
         ctx.fillText(it.label, lx + legendPad + 18, iy);
       }
+    }
+    } catch (err) {
+      console.error('[Plot2DCanvas] draw error:', err);
+      setDrawError(err instanceof Error ? err.message : '绘制失败');
     }
   }, [computed, theme, dataToScreen, screenToData, showGrid, showMarkers]);
 
@@ -566,19 +589,29 @@ export function Plot2DCanvas({
     const container = containerRef.current;
     if (!container) return;
     let resizeTimer: ReturnType<typeof setTimeout> | null = null;
+    let rafId: number | null = null;
     const updateSize = () => {
-      const rect = container.getBoundingClientRect();
-      sizeRef.current = {
-        w: rect.width,
-        h: rect.height,
-        dpr: window.devicePixelRatio || 1,
-      };
-      setCanvasSize({ w: rect.width, h: rect.height });
-      scheduleRedraw();
+      if (!containerRef.current) return;
+      if (rafId) {
+        cancelAnimationFrame(rafId);
+        rafId = null;
+      }
+      rafId = requestAnimationFrame(() => {
+        const rect = container.getBoundingClientRect();
+        const dpr = window.devicePixelRatio || 1;
+        if (!Number.isFinite(rect.width) || !Number.isFinite(rect.height) || !Number.isFinite(dpr)) return;
+        sizeRef.current = {
+          w: rect.width,
+          h: rect.height,
+          dpr,
+        };
+        setCanvasSize({ w: rect.width, h: rect.height });
+        scheduleRedraw();
+      });
     };
     const ro = new ResizeObserver(() => {
       if (resizeTimer) clearTimeout(resizeTimer);
-      resizeTimer = setTimeout(updateSize, 60);
+      resizeTimer = setTimeout(updateSize, 80);
     });
     ro.observe(container);
     // Initial measurement.
@@ -586,6 +619,7 @@ export function Plot2DCanvas({
     return () => {
       ro.disconnect();
       if (resizeTimer) clearTimeout(resizeTimer);
+      if (rafId) cancelAnimationFrame(rafId);
     };
   }, [scheduleRedraw]);
 
@@ -597,26 +631,29 @@ export function Plot2DCanvas({
   /* ----------------------- Wheel zoom ------------------------------- */
   const handleWheel = useCallback(
     (e: ReactWheelEvent<HTMLCanvasElement>) => {
-      e.preventDefault();
-      const rect = canvasRef.current?.getBoundingClientRect();
-      if (!rect) return;
-      const sx = e.clientX - rect.left;
-      const sy = e.clientY - rect.top;
-      const [wx, wy] = screenToData(sx, sy);
-      const factor = e.deltaY < 0 ? 1 / 1.15 : 1.15; // zoom in / out
-      const horizontalOnly = e.shiftKey;
-      const { x: vx, y: vy } = viewRef.current;
-      let nx: [number, number] = vx;
-      let ny: [number, number] = vy;
-      if (!horizontalOnly) {
-        nx = [wx + (vx[0] - wx) * factor, wx + (vx[1] - wx) * factor];
-        ny = [wy + (vy[0] - wy) * factor, wy + (vy[1] - wy) * factor];
-      } else {
-        nx = [wx + (vx[0] - wx) * factor, wx + (vx[1] - wx) * factor];
+      try {
+        e.preventDefault();
+        const rect = canvasRef.current?.getBoundingClientRect();
+        if (!rect) return;
+        const sx = e.clientX - rect.left;
+        const sy = e.clientY - rect.top;
+        const [wx, wy] = screenToData(sx, sy);
+        const rawFactor = e.deltaY < 0 ? 1 / 1.15 : 1.15; // zoom in / out
+        const factor = clamp(rawFactor, 0.5, 2);
+        const horizontalOnly = e.shiftKey;
+        const { x: vx, y: vy } = viewRef.current;
+        let nx: [number, number] = clampRangeWidth([wx + (vx[0] - wx) * factor, wx + (vx[1] - wx) * factor]);
+        let ny: [number, number] = vy;
+        if (!horizontalOnly) {
+          ny = clampRangeWidth([wy + (vy[0] - wy) * factor, wy + (vy[1] - wy) * factor]);
+        }
+        viewRef.current = { x: nx, y: ny };
+        onViewChange?.(nx, ny);
+        scheduleRedraw();
+      } catch (err) {
+        console.error('[Plot2DCanvas] wheel error:', err);
+        setDrawError(err instanceof Error ? err.message : '缩放失败');
       }
-      viewRef.current = { x: nx, y: ny };
-      onViewChange?.(nx, ny);
-      scheduleRedraw();
     },
     [screenToData, onViewChange, scheduleRedraw],
   );
@@ -624,107 +661,116 @@ export function Plot2DCanvas({
   /* ----------------------- Mouse drag (pan) ------------------------- */
   const handlePointerDown = useCallback(
     (e: ReactPointerEvent<HTMLCanvasElement>) => {
-      if (e.pointerType === 'touch' && pinchRef.current) return;
-      const rect = canvasRef.current?.getBoundingClientRect();
-      if (!rect) return;
-      canvasRef.current?.setPointerCapture(e.pointerId);
-      if (canvasRef.current) canvasRef.current.style.cursor = 'grabbing';
-      dragRef.current = {
-        active: true,
-        startX: e.clientX,
-        startY: e.clientY,
-        origX: [...viewRef.current.x] as [number, number],
-        origY: [...viewRef.current.y] as [number, number],
-        moved: false,
-      };
+      try {
+        if (e.pointerType === 'touch' && pinchRef.current) return;
+        const rect = canvasRef.current?.getBoundingClientRect();
+        if (!rect) return;
+        canvasRef.current?.setPointerCapture(e.pointerId);
+        if (canvasRef.current) canvasRef.current.style.cursor = 'grabbing';
+        dragRef.current = {
+          active: true,
+          startX: e.clientX,
+          startY: e.clientY,
+          origX: [...viewRef.current.x] as [number, number],
+          origY: [...viewRef.current.y] as [number, number],
+          moved: false,
+        };
+      } catch (err) {
+        console.error('[Plot2DCanvas] pointer down error:', err);
+      }
     },
     [],
   );
 
   const handlePointerMove = useCallback(
     (e: ReactPointerEvent<HTMLCanvasElement>) => {
-      const rect = canvasRef.current?.getBoundingClientRect();
-      if (!rect) return;
-      const sx = e.clientX - rect.left;
-      const sy = e.clientY - rect.top;
+      try {
+        const rect = canvasRef.current?.getBoundingClientRect();
+        if (!rect) return;
+        const sx = e.clientX - rect.left;
+        const sy = e.clientY - rect.top;
 
-      // Drag-pan.
-      if (dragRef.current?.active) {
-        const dx = e.clientX - dragRef.current.startX;
-        const dy = e.clientY - dragRef.current.startY;
-        if (Math.abs(dx) > 2 || Math.abs(dy) > 2) dragRef.current.moved = true;
-        const { w, h } = sizeRef.current;
-        const plotW = Math.max(1, w - PADDING.left - PADDING.right);
-        const plotH = Math.max(1, h - PADDING.top - PADDING.bottom);
-        const wxShift = (dx / plotW) * (dragRef.current.origX[1] - dragRef.current.origX[0]);
-        const wyShift = (dy / plotH) * (dragRef.current.origY[1] - dragRef.current.origY[0]);
-        const nx: [number, number] = [dragRef.current.origX[0] - wxShift, dragRef.current.origX[1] - wxShift];
-        const ny: [number, number] = [dragRef.current.origY[0] + wyShift, dragRef.current.origY[1] + wyShift];
-        viewRef.current = { x: nx, y: ny };
-        hoverRef.current = null;
-        onViewChange?.(nx, ny);
-        scheduleRedraw();
-        return;
-      }
+        // Drag-pan.
+        if (dragRef.current?.active) {
+          const dx = e.clientX - dragRef.current.startX;
+          const dy = e.clientY - dragRef.current.startY;
+          if (Math.abs(dx) > 2 || Math.abs(dy) > 2) dragRef.current.moved = true;
+          const { w, h } = sizeRef.current;
+          const plotW = Math.max(1, w - PADDING.left - PADDING.right);
+          const plotH = Math.max(1, h - PADDING.top - PADDING.bottom);
+          const wxShift = (dx / plotW) * (dragRef.current.origX[1] - dragRef.current.origX[0]);
+          const wyShift = (dy / plotH) * (dragRef.current.origY[1] - dragRef.current.origY[0]);
+          const nx: [number, number] = [dragRef.current.origX[0] - wxShift, dragRef.current.origX[1] - wxShift];
+          const ny: [number, number] = [dragRef.current.origY[0] + wyShift, dragRef.current.origY[1] + wyShift];
+          viewRef.current = { x: nx, y: ny };
+          hoverRef.current = null;
+          onViewChange?.(nx, ny);
+          scheduleRedraw();
+          return;
+        }
 
-      // Hover + snap.
-      const [wx, wy] = screenToData(sx, sy);
-      // Find nearest visible sample point (snapping).
-      let best: PlotSample | undefined;
-      let bestColor: string | undefined;
-      let bestDist = Infinity;
-      const snapPixelRadius = 30;
-      for (const p of computed) {
-        if (!p.visible) continue;
-        // Find the sample whose SCREEN distance to cursor is smallest.
-        // For cartesian, we can shortcut: find the sample whose x is nearest
-        // to wx, then compare screen y. For polar/parametric, fall back to
-        // brute force nearest in screen space (samples are small enough).
-        if (p.config.plotType === 'cartesian' && p.samples.length > 0) {
-          // Binary-ish search via linear scan (samples are sorted by x).
-          let candidate: PlotSample | undefined;
-          let candidateScreenDist = Infinity;
-          for (const s of p.samples) {
-            if (!Number.isFinite(s.x) || !Number.isFinite(s.y)) continue;
-            if (s.x > wx + (viewRef.current.x[1] - viewRef.current.x[0])) break;
-            const [ssx, ssy] = dataToScreen(s.x, s.y);
-            const dist = Math.hypot(ssx - sx, ssy - sy);
-            if (dist < candidateScreenDist) {
-              candidateScreenDist = dist;
-              candidate = s;
+        // Hover + snap.
+        const [wx, wy] = screenToData(sx, sy);
+        // Find nearest visible sample point (snapping).
+        let best: PlotSample | undefined;
+        let bestColor: string | undefined;
+        let bestDist = Infinity;
+        const snapPixelRadius = 30;
+        for (const p of computed) {
+          if (!p.visible) continue;
+          // Find the sample whose SCREEN distance to cursor is smallest.
+          // For cartesian, we can shortcut: find the sample whose x is nearest
+          // to wx, then compare screen y. For polar/parametric, fall back to
+          // brute force nearest in screen space (samples are small enough).
+          if (p.config.plotType === 'cartesian' && p.samples.length > 0) {
+            // Binary-ish search via linear scan (samples are sorted by x).
+            let candidate: PlotSample | undefined;
+            let candidateScreenDist = Infinity;
+            for (const s of p.samples) {
+              if (!Number.isFinite(s.x) || !Number.isFinite(s.y)) continue;
+              if (s.x > wx + (viewRef.current.x[1] - viewRef.current.x[0])) break;
+              const [ssx, ssy] = dataToScreen(s.x, s.y);
+              const dist = Math.hypot(ssx - sx, ssy - sy);
+              if (dist < candidateScreenDist) {
+                candidateScreenDist = dist;
+                candidate = s;
+              }
             }
-          }
-          if (candidate && candidateScreenDist < snapPixelRadius && candidateScreenDist < bestDist) {
-            best = candidate;
-            bestColor = p.config.color;
-            bestDist = candidateScreenDist;
-          }
-        } else {
-          for (const s of p.samples) {
-            if (!Number.isFinite(s.x) || !Number.isFinite(s.y)) continue;
-            const [ssx, ssy] = dataToScreen(s.x, s.y);
-            const dist = Math.hypot(ssx - sx, ssy - sy);
-            if (dist < bestDist) {
-              bestDist = dist;
-              best = s;
+            if (candidate && candidateScreenDist < snapPixelRadius && candidateScreenDist < bestDist) {
+              best = candidate;
               bestColor = p.config.color;
+              bestDist = candidateScreenDist;
             }
-          }
-          if (best && bestDist > snapPixelRadius) {
-            best = undefined;
-            bestColor = undefined;
+          } else {
+            for (const s of p.samples) {
+              if (!Number.isFinite(s.x) || !Number.isFinite(s.y)) continue;
+              const [ssx, ssy] = dataToScreen(s.x, s.y);
+              const dist = Math.hypot(ssx - sx, ssy - sy);
+              if (dist < bestDist) {
+                bestDist = dist;
+                best = s;
+                bestColor = p.config.color;
+              }
+            }
+            if (best && bestDist > snapPixelRadius) {
+              best = undefined;
+              bestColor = undefined;
+            }
           }
         }
+        hoverRef.current = {
+          sx,
+          sy,
+          wx,
+          wy,
+          snap: best,
+          snapColor: bestColor,
+        };
+        scheduleRedraw();
+      } catch (err) {
+        console.error('[Plot2DCanvas] pointer move error:', err);
+        setDrawError(err instanceof Error ? err.message : '绘制交互失败');
       }
-      hoverRef.current = {
-        sx,
-        sy,
-        wx,
-        wy,
-        snap: best,
-        snapColor: bestColor,
-      };
-      scheduleRedraw();
     },
     [screenToData, dataToScreen, computed, onViewChange, scheduleRedraw],
   );
@@ -751,24 +797,28 @@ export function Plot2DCanvas({
 
   const handleTouchStart = useCallback(
     (e: React.TouchEvent<HTMLCanvasElement>) => {
-      if (e.touches.length === 2) {
-        e.preventDefault();
-        const t0 = e.touches[0];
-        const t1 = e.touches[1];
-        const rect = canvasRef.current?.getBoundingClientRect();
-        if (!rect) return;
-        const d = Math.hypot(t0.clientX - t1.clientX, t0.clientY - t1.clientY);
-        const cx = (t0.clientX + t1.clientX) / 2 - rect.left;
-        const cy = (t0.clientY + t1.clientY) / 2 - rect.top;
-        pinchRef.current = { d, cx, cy };
-        dragRef.current = null;
-        touchStateRef.current = {
-          ids: [t0.identifier, t1.identifier],
-          pts: [
-            { x: t0.clientX - rect.left, y: t0.clientY - rect.top },
-            { x: t1.clientX - rect.left, y: t1.clientY - rect.top },
-          ],
-        };
+      try {
+        if (e.touches.length === 2) {
+          e.preventDefault();
+          const t0 = e.touches[0];
+          const t1 = e.touches[1];
+          const rect = canvasRef.current?.getBoundingClientRect();
+          if (!rect) return;
+          const d = Math.hypot(t0.clientX - t1.clientX, t0.clientY - t1.clientY);
+          const cx = (t0.clientX + t1.clientX) / 2 - rect.left;
+          const cy = (t0.clientY + t1.clientY) / 2 - rect.top;
+          pinchRef.current = { d, cx, cy };
+          dragRef.current = null;
+          touchStateRef.current = {
+            ids: [t0.identifier, t1.identifier],
+            pts: [
+              { x: t0.clientX - rect.left, y: t0.clientY - rect.top },
+              { x: t1.clientX - rect.left, y: t1.clientY - rect.top },
+            ],
+          };
+        }
+      } catch (err) {
+        console.error('[Plot2DCanvas] touch start error:', err);
       }
     },
     [],
@@ -776,24 +826,30 @@ export function Plot2DCanvas({
 
   const handleTouchMove = useCallback(
     (e: React.TouchEvent<HTMLCanvasElement>) => {
-      if (e.touches.length === 2 && pinchRef.current && touchStateRef.current) {
-        e.preventDefault();
-        const t0 = e.touches[0];
-        const t1 = e.touches[1];
-        const rect = canvasRef.current?.getBoundingClientRect();
-        if (!rect) return;
-        const d = Math.hypot(t0.clientX - t1.clientX, t0.clientY - t1.clientY);
-        const factor = pinchRef.current.d / d;
-        const cx = (t0.clientX + t1.clientX) / 2 - rect.left;
-        const cy = (t0.clientY + t1.clientY) / 2 - rect.top;
-        const [wx, wy] = screenToData(cx, cy);
-        const { x: vx, y: vy } = viewRef.current;
-        const nx: [number, number] = [wx + (vx[0] - wx) * factor, wx + (vx[1] - wx) * factor];
-        const ny: [number, number] = [wy + (vy[0] - wy) * factor, wy + (vy[1] - wy) * factor];
-        viewRef.current = { x: nx, y: ny };
-        pinchRef.current = { d, cx, cy };
-        onViewChange?.(nx, ny);
-        scheduleRedraw();
+      try {
+        if (e.touches.length === 2 && pinchRef.current && touchStateRef.current) {
+          e.preventDefault();
+          const t0 = e.touches[0];
+          const t1 = e.touches[1];
+          const rect = canvasRef.current?.getBoundingClientRect();
+          if (!rect) return;
+          const d = Math.hypot(t0.clientX - t1.clientX, t0.clientY - t1.clientY);
+          const rawFactor = pinchRef.current.d / d;
+          const factor = clamp(rawFactor, 0.5, 2);
+          const cx = (t0.clientX + t1.clientX) / 2 - rect.left;
+          const cy = (t0.clientY + t1.clientY) / 2 - rect.top;
+          const [wx, wy] = screenToData(cx, cy);
+          const { x: vx, y: vy } = viewRef.current;
+          const nx = clampRangeWidth([wx + (vx[0] - wx) * factor, wx + (vx[1] - wx) * factor]);
+          const ny = clampRangeWidth([wy + (vy[0] - wy) * factor, wy + (vy[1] - wy) * factor]);
+          viewRef.current = { x: nx, y: ny };
+          pinchRef.current = { d, cx, cy };
+          onViewChange?.(nx, ny);
+          scheduleRedraw();
+        }
+      } catch (err) {
+        console.error('[Plot2DCanvas] touch move error:', err);
+        setDrawError(err instanceof Error ? err.message : '触控缩放失败');
       }
     },
     [screenToData, onViewChange, scheduleRedraw],
@@ -863,8 +919,8 @@ export function Plot2DCanvas({
   return (
     <div
       ref={containerRef}
-      className="relative h-full w-full overflow-hidden"
-      style={{ background: theme === 'dark' ? '#1a1a1d' : '#ffffff', minHeight: 280 }}
+      className="relative h-full w-full overflow-hidden bg-background"
+      style={{ minHeight: 280 }}
     >
       <canvas
         ref={canvasRef}
@@ -881,14 +937,115 @@ export function Plot2DCanvas({
         onTouchEnd={handleTouchEnd}
       />
       {/* Tiny range badge bottom-left */}
-      <div className="pointer-events-none absolute bottom-1.5 left-2 rounded bg-black/30 px-1.5 py-0.5 font-mono text-[10px] text-white/70 backdrop-blur-sm dark:bg-black/40">
+      <div className="pointer-events-none absolute bottom-1.5 left-2 rounded bg-muted-foreground/20 px-1.5 py-0.5 font-mono text-[10px] text-foreground/80 backdrop-blur-sm">
         x ∈ [{xRange[0].toFixed(2)}, {xRange[1].toFixed(2)}] · y ∈ [{yRange[0].toFixed(2)}, {yRange[1].toFixed(2)}]
       </div>
+
+      {/* Draw error overlay */}
+      {drawError && (
+        <div className="absolute inset-0 z-20 flex flex-col items-center justify-center gap-3 bg-background/80 p-6 text-center backdrop-blur-sm">
+          <div className="grid size-12 place-items-center rounded-full bg-destructive/10">
+            <AlertTriangle className="size-6 text-destructive" />
+          </div>
+          <div className="space-y-1">
+            <p className="text-sm font-medium text-foreground">绘图出错</p>
+            <p className="max-w-xs text-xs text-muted-foreground">{drawError}</p>
+          </div>
+          <div className="flex items-center gap-2">
+            <button
+              type="button"
+              onClick={() => {
+                setDrawError(null);
+                scheduleRedraw();
+              }}
+              className="inline-flex items-center gap-1 rounded-md bg-primary px-3 py-1.5 text-xs font-medium text-primary-foreground hover:bg-primary/90 transition-colors"
+            >
+              <RotateCcw className="size-3.5" />
+              重绘
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                setDrawError(null);
+                onResetView?.();
+              }}
+              className="inline-flex items-center gap-1 rounded-md border border-border bg-background px-3 py-1.5 text-xs font-medium text-foreground hover:bg-accent transition-colors"
+            >
+              <Maximize className="size-3.5" />
+              重置视图
+            </button>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
 
 /* ----------------------- Local helpers ---------------------------- */
+
+/** Safe rounded rect that falls back to a plain rect on older canvas impls. */
+function drawRoundRect(
+  ctx: CanvasRenderingContext2D,
+  x: number,
+  y: number,
+  w: number,
+  h: number,
+  r: number,
+) {
+  if (typeof (ctx as any).roundRect === 'function') {
+    try {
+      (ctx as any).roundRect(x, y, w, h, r);
+      return;
+    } catch {
+      // fall through
+    }
+  }
+  const radius = Math.min(r, w / 2, h / 2);
+  ctx.beginPath();
+  ctx.moveTo(x + radius, y);
+  ctx.lineTo(x + w - radius, y);
+  ctx.quadraticCurveTo(x + w, y, x + w, y + radius);
+  ctx.lineTo(x + w, y + h - radius);
+  ctx.quadraticCurveTo(x + w, y + h, x + w - radius, y + h);
+  ctx.lineTo(x + radius, y + h);
+  ctx.quadraticCurveTo(x, y + h, x, y + h - radius);
+  ctx.lineTo(x, y + radius);
+  ctx.quadraticCurveTo(x, y, x + radius, y);
+  ctx.closePath();
+}
+
+function getCssVar(name: string, fallback: string): string {
+  if (typeof document === 'undefined') return fallback;
+  const value = getComputedStyle(document.documentElement).getPropertyValue(name).trim();
+  return value || fallback;
+}
+
+function clamp(v: number, min: number, max: number): number {
+  return Math.min(max, Math.max(min, v));
+}
+
+/** Prevent the view range from collapsing to zero or growing beyond safe bounds. */
+function clampRangeWidth(range: [number, number]): [number, number] {
+  const MIN_WIDTH = 1e-12;
+  const MAX_WIDTH = 1e12;
+  let [a, b] = range;
+  if (!Number.isFinite(a) || !Number.isFinite(b)) {
+    return [-10, 10];
+  }
+  let width = b - a;
+  if (width === 0 || Math.abs(width) < MIN_WIDTH) {
+    const mid = a;
+    a = mid - MIN_WIDTH / 2;
+    b = mid + MIN_WIDTH / 2;
+    width = b - a;
+  }
+  if (Math.abs(width) > MAX_WIDTH) {
+    const mid = (a + b) / 2;
+    a = mid - MAX_WIDTH / 2;
+    b = mid + MAX_WIDTH / 2;
+  }
+  return [a, b];
+}
 
 function formatNumberForTooltip(v: number): string {
   if (!Number.isFinite(v)) return '—';

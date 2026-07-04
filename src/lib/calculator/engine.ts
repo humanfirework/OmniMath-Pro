@@ -1,4 +1,5 @@
 import { create, all, MathJsInstance, Matrix } from 'mathjs';
+import type { CalculationResult, SymbolItem } from './types';
 
 const math = create(all) as MathJsInstance;
 

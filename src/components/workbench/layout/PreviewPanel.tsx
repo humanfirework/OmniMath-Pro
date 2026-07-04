@@ -259,6 +259,7 @@ function FormulaView({ result }: { result: ReturnType<typeof useWorkbenchStore.g
                   latex={result.latex}
                   displayMode
                   showCopy
+                  collapsible
                   className="text-[15px]"
                 />
               ) : (

@@ -206,7 +206,7 @@ function parsePastedMatrix(text: string): Matrix | null {
   if (!trimmed) return null;
 
   // MATLAB-style: [1,2;3,4] or [1 2; 3 4]
-  const bracketMatch = /^\[(.+)\]$/s.exec(trimmed);
+  const bracketMatch = /^\[([\s\S]+)\]$/m.exec(trimmed);
   if (bracketMatch) {
     const inner = bracketMatch[1];
     const rows = inner.split(';').map((r) => r.trim()).filter(Boolean);

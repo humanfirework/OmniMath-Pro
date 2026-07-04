@@ -22,13 +22,14 @@
 
 import { useEffect } from 'react';
 import { motion } from 'framer-motion';
+import { PanelLeftClose, PanelRight, PanelRightOpen, LayoutTemplate } from 'lucide-react';
 import {
   ResizablePanelGroup,
   ResizablePanel,
   ResizableHandle,
 } from '@/components/ui/resizable';
 import { useWorkbenchStore } from '@/lib/store/workbench';
-import { setLocale as setI18nLocale, getLocale } from '@/lib/i18n';
+import { setLocale as setI18nLocale, getLocale, t } from '@/lib/i18n';
 import { useIsMobile } from '@/hooks/use-mobile';
 import { TitleBar } from '@/components/workbench/layout/TitleBar';
 import { ActivityBar } from '@/components/workbench/layout/ActivityBar';
@@ -47,6 +48,12 @@ export function Workbench() {
   const locale = useWorkbenchStore((s) => s.locale);
   const sidePanelCollapsed = useWorkbenchStore((s) => s.sidePanelCollapsed);
   const viewMode = useWorkbenchStore((s) => s.viewMode);
+  const activityBarPosition = useWorkbenchStore((s) => s.activityBarPosition);
+  const editorVisible = useWorkbenchStore((s) => s.editorVisible);
+  const previewVisible = useWorkbenchStore((s) => s.previewVisible);
+  const setEditorVisible = useWorkbenchStore((s) => s.setEditorVisible);
+  const setPreviewVisible = useWorkbenchStore((s) => s.setPreviewVisible);
+  const toggleActivityBarHidden = useWorkbenchStore((s) => s.toggleActivityBarHidden);
 
   // Mount: load persisted state once + install global error guards.
   useEffect(() => {
@@ -73,7 +80,7 @@ export function Workbench() {
 
   // Sync i18n locale with the store locale.
   useEffect(() => {
-    setI18nLocale(locale);
+    if (getLocale() !== locale) setI18nLocale(locale);
   }, [locale]);
 
   // Apply theme class to <html> whenever it changes.
@@ -82,11 +89,6 @@ export function Workbench() {
     if (theme === 'dark') document.documentElement.classList.add('dark');
     else document.documentElement.classList.remove('dark');
   }, [theme]);
-
-  // Sync i18n locale when store locale changes.
-  useEffect(() => {
-    if (getLocale() !== locale) setI18nLocale(locale);
-  }, [locale]);
 
   const isMobile = useIsMobile();
 
@@ -110,12 +112,58 @@ export function Workbench() {
       <TitleBar />
 
       <div className="flex-1 flex min-h-0">
-        <ActivityBar />
+        {activityBarPosition === 'left' && <ActivityBar />}
 
         {viewMode === 'pipeline' ? (
           /* Pipeline view takes over the main area (Task 6). */
           <div className="flex-1 min-w-0 min-h-0">
             <NodePipeline />
+          </div>
+        ) : !editorVisible && !previewVisible ? (
+          /* Plain layout when both main panels are hidden — avoids empty resizable group. */
+          <div className="flex-1 flex min-w-0">
+            {!sidePanelCollapsed && (
+              <div className="w-[280px] shrink-0 border-r border-border/60 bg-card/30">
+                <SidePanel />
+              </div>
+            )}
+            <div className="flex-1 flex flex-col items-center justify-center gap-3 px-6 text-center bg-background/40">
+              <div className="grid place-items-center size-14 rounded-2xl bg-primary/8 border border-primary/20">
+                <PanelLeftClose className="size-6 text-primary/70" />
+              </div>
+              <p className="text-[13px] font-medium text-foreground/80">
+                {t('wbAllPanelsHidden')}
+              </p>
+              <p className="text-[11.5px] text-muted-foreground max-w-xs">
+                {t('wbAllPanelsHiddenHint')}
+              </p>
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => setEditorVisible(true)}
+                  className="inline-flex items-center gap-1.5 rounded-md bg-primary px-3 py-1.5 text-xs font-medium text-primary-foreground hover:bg-primary/90 transition-colors"
+                >
+                  <LayoutTemplate className="size-3.5" />
+                  {t('abToggleEditor')}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setPreviewVisible(true)}
+                  className="inline-flex items-center gap-1.5 rounded-md border border-border bg-background px-3 py-1.5 text-xs font-medium text-foreground hover:bg-accent transition-colors"
+                >
+                  <PanelRight className="size-3.5" />
+                  {t('abTogglePreview')}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => toggleActivityBarHidden()}
+                  className="inline-flex items-center gap-1.5 rounded-md border border-border bg-background px-3 py-1.5 text-xs font-medium text-foreground hover:bg-accent transition-colors"
+                >
+                  <PanelRightOpen className="size-3.5" />
+                  {t('abShowTaskbar')}
+                </button>
+              </div>
+            </div>
           </div>
         ) : (
           <ResizablePanelGroup direction="horizontal" className="flex-1 min-w-0">
@@ -136,28 +184,34 @@ export function Workbench() {
             )}
 
             {/* Editor */}
-            <ResizablePanel
-              defaultSize={viewMode === 'pipeline' ? 0 : 40}
-              minSize={25}
-              id="editor-panel"
-              order={2}
-            >
-              <EditorPanel />
-            </ResizablePanel>
+            {editorVisible && (
+              <ResizablePanel
+                defaultSize={previewVisible ? 40 : 60}
+                minSize={25}
+                id="editor-panel"
+                order={2}
+              >
+                <EditorPanel />
+              </ResizablePanel>
+            )}
 
-            <ResizableHandle />
+            {editorVisible && previewVisible && <ResizableHandle />}
 
             {/* Preview */}
-            <ResizablePanel
-              defaultSize={40}
-              minSize={25}
-              id="preview-panel"
-              order={3}
-            >
-              <PreviewPanel />
-            </ResizablePanel>
+            {previewVisible && (
+              <ResizablePanel
+                defaultSize={editorVisible ? 40 : 60}
+                minSize={25}
+                id="preview-panel"
+                order={3}
+              >
+                <PreviewPanel />
+              </ResizablePanel>
+            )}
           </ResizablePanelGroup>
         )}
+
+        {activityBarPosition === 'right' && <ActivityBar />}
       </div>
 
       <StatusBar />

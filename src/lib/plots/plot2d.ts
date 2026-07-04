@@ -163,9 +163,9 @@ export function sampleFunction(
   ) {
     return [];
   }
-  let compiled: ReturnType<MathJsInstance['compile']>;
+  let compiled: { evaluate: (scope?: Record<string, unknown>) => unknown };
   try {
-    compiled = math.compile(expr);
+    compiled = math.compile(expr) as unknown as { evaluate: (scope?: Record<string, unknown>) => unknown };
   } catch {
     return [];
   }

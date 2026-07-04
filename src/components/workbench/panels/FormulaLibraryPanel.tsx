@@ -29,6 +29,7 @@ import { Badge } from '@/components/ui/badge';
 import { FormulaRenderer } from '@/components/workbench/FormulaRenderer';
 import { useWorkbenchStore } from '@/lib/store/workbench';
 import { t } from '@/lib/i18n';
+import type { TranslationDict } from '@/lib/i18n';
 import { cn } from '@/lib/utils';
 
 type CategoryKey =
@@ -49,7 +50,7 @@ interface Formula {
   example: string;
 }
 
-const CATEGORY_LABEL_KEY: Record<CategoryKey, string> = {
+const CATEGORY_LABEL_KEY: Record<CategoryKey, keyof TranslationDict> = {
   algebra: 'formulasCategoryAlgebra',
   geometry: 'formulasCategoryGeometry',
   trigonometry: 'formulasCategoryTrigonometry',

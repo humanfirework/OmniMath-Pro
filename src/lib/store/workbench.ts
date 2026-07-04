@@ -41,6 +41,7 @@ export type SidePanelTab = 'history' | 'variables' | 'formulas' | 'pipeline' | '
 export type PreviewTab = 'formula' | 'plot2d' | 'plot3d' | 'log' | 'pipeline' | 'ai';
 export type Theme = 'dark' | 'light';
 export type ViewMode = 'workbench' | 'pipeline' | 'focus';
+export type ActivityBarPosition = 'left' | 'right';
 
 interface WorkbenchState {
   // Editor
@@ -70,6 +71,11 @@ interface WorkbenchState {
   commandPaletteOpen: boolean;
   globalCalcOpen: boolean;
   rightPanelMode: 'preview' | 'pipeline' | 'ai';
+  activityBarPosition: ActivityBarPosition;
+  activityBarLocked: boolean;
+  activityBarAutoHide: boolean;
+  activityBarHidden: boolean;
+  editorVisible: boolean;
 
   // Actions
   setEditorContent: (content: string) => void;
@@ -105,6 +111,11 @@ interface WorkbenchState {
   setCommandPaletteOpen: (v: boolean) => void;
   setGlobalCalcOpen: (v: boolean) => void;
   setRightPanelMode: (m: 'preview' | 'pipeline' | 'ai') => void;
+  setActivityBarPosition: (p: ActivityBarPosition) => void;
+  toggleActivityBarLock: () => void;
+  setActivityBarAutoHide: (v: boolean) => void;
+  toggleActivityBarHidden: () => void;
+  setEditorVisible: (v: boolean) => void;
 
   // Persistence
   saveToStorage: () => void;
@@ -163,6 +174,12 @@ function loadInitial(): Partial<WorkbenchState> {
       locale: data.locale ?? 'zh-CN',
       activeSidePanel: data.activeSidePanel ?? 'history',
       sidePanelCollapsed: data.sidePanelCollapsed ?? false,
+      previewVisible: data.previewVisible ?? true,
+      editorVisible: data.editorVisible ?? true,
+      activityBarPosition: data.activityBarPosition ?? 'left',
+      activityBarLocked: data.activityBarLocked ?? false,
+      activityBarAutoHide: data.activityBarAutoHide ?? false,
+      activityBarHidden: data.activityBarHidden ?? false,
     };
   } catch {
     return {};
@@ -195,6 +212,11 @@ export const useWorkbenchStore = create<WorkbenchState>((set, get) => ({
   commandPaletteOpen: false,
   globalCalcOpen: false,
   rightPanelMode: 'preview',
+  activityBarPosition: 'left',
+  activityBarLocked: false,
+  activityBarAutoHide: false,
+  activityBarHidden: false,
+  editorVisible: true,
 
   setEditorContent: (content) => { set({ editorContent: content }); get().saveToStorage(); },
   setInputMode: (mode) => { set({ inputMode: mode }); get().saveToStorage(); },
@@ -255,17 +277,22 @@ export const useWorkbenchStore = create<WorkbenchState>((set, get) => ({
   },
   toggleTheme: () => get().setTheme(get().theme === 'dark' ? 'light' : 'dark'),
   setLocale: (locale) => { set({ locale }); get().saveToStorage(); },
-  setActiveSidePanel: (tab) => set({ activeSidePanel: tab, sidePanelCollapsed: false }),
-  toggleSidePanel: () => set((s) => ({ sidePanelCollapsed: !s.sidePanelCollapsed })),
-  setSidePanelWidth: (w) => set({ sidePanelWidth: Math.max(200, Math.min(500, w)) }),
-  setPreviewVisible: (v) => set({ previewVisible: v }),
-  setPreviewWidth: (w) => set({ previewWidth: Math.max(25, Math.min(75, w)) }),
-  setEditorWidth: (w) => set({ editorWidth: Math.max(25, Math.min(75, w)) }),
-  setActivePreviewTab: (tab) => set({ activePreviewTab: tab }),
-  setViewMode: (mode) => set({ viewMode: mode }),
+  setActiveSidePanel: (tab) => { set({ activeSidePanel: tab, sidePanelCollapsed: false }); get().saveToStorage(); },
+  toggleSidePanel: () => { set((s) => ({ sidePanelCollapsed: !s.sidePanelCollapsed })); get().saveToStorage(); },
+  setSidePanelWidth: (w) => { set({ sidePanelWidth: Math.max(200, Math.min(500, w)) }); get().saveToStorage(); },
+  setPreviewVisible: (v) => { set({ previewVisible: v }); get().saveToStorage(); },
+  setPreviewWidth: (w) => { set({ previewWidth: Math.max(25, Math.min(75, w)) }); get().saveToStorage(); },
+  setEditorWidth: (w) => { set({ editorWidth: Math.max(25, Math.min(75, w)) }); get().saveToStorage(); },
+  setActivePreviewTab: (tab) => { set({ activePreviewTab: tab }); get().saveToStorage(); },
+  setViewMode: (mode) => { set({ viewMode: mode }); get().saveToStorage(); },
   setCommandPaletteOpen: (v) => set({ commandPaletteOpen: v }),
   setGlobalCalcOpen: (v) => set({ globalCalcOpen: v }),
   setRightPanelMode: (m) => set({ rightPanelMode: m }),
+  setActivityBarPosition: (p) => { set({ activityBarPosition: p }); get().saveToStorage(); },
+  toggleActivityBarLock: () => { set((s) => ({ activityBarLocked: !s.activityBarLocked })); get().saveToStorage(); },
+  setActivityBarAutoHide: (v) => { set({ activityBarAutoHide: v }); get().saveToStorage(); },
+  toggleActivityBarHidden: () => { set((s) => ({ activityBarHidden: !s.activityBarHidden })); get().saveToStorage(); },
+  setEditorVisible: (v) => { set({ editorVisible: v }); get().saveToStorage(); },
 
   saveToStorage: () => {
     if (typeof window === 'undefined') return;
@@ -285,6 +312,12 @@ export const useWorkbenchStore = create<WorkbenchState>((set, get) => ({
             locale: s.locale,
             activeSidePanel: s.activeSidePanel,
             sidePanelCollapsed: s.sidePanelCollapsed,
+            previewVisible: s.previewVisible,
+            editorVisible: s.editorVisible,
+            activityBarPosition: s.activityBarPosition,
+            activityBarLocked: s.activityBarLocked,
+            activityBarAutoHide: s.activityBarAutoHide,
+            activityBarHidden: s.activityBarHidden,
           }),
         );
       } catch {

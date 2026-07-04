@@ -128,6 +128,17 @@ export interface TranslationDict {
   abPlots: string;
   abShowSidebar: string;
   abHideSidebar: string;
+  abToggleEditor: string;
+  abTogglePreview: string;
+  abMoveLeft: string;
+  abMoveRight: string;
+  abLockTaskbar: string;
+  abUnlockTaskbar: string;
+  abAutoHide: string;
+  abDisableAutoHide: string;
+  abHideTaskbar: string;
+  abShowTaskbar: string;
+  abLocked: string;
 
   /* ---------------- Status bar ---------------- */
   statusReady: string;
@@ -486,7 +497,6 @@ export interface TranslationDict {
   npAddCol: string;
   npDelRow: string;
   npDelCol: string;
-  npMatrixOp: string;
   npLowerBound: string;
   npUpperBound: string;
   npVariable_: string;
@@ -538,6 +548,7 @@ export interface TranslationDict {
   cpGroupActions: string;
   cpGroupView: string;
   cpGroupPanels: string;
+  cpGroupLayout: string;
   cpGroupTemplates: string;
   cpRunAll: string;
   cpClearEditor: string;
@@ -546,6 +557,16 @@ export interface TranslationDict {
   cpSwitchDark: string;
   cpToggleSidebar: string;
   cpTogglePreview: string;
+  cpToggleEditor: string;
+  cpToggleActivityBar: string;
+  cpMoveActivityBarLeft: string;
+  cpMoveActivityBarRight: string;
+  cpLockActivityBar: string;
+  cpUnlockActivityBar: string;
+  cpAutoHideActivityBar: string;
+  cpDisableAutoHideActivityBar: string;
+  cpHideActivityBar: string;
+  cpShowActivityBar: string;
   cpOpenSymbols: string;
   cpOpenTemplates: string;
   cpOpenSolver: string;
@@ -558,6 +579,10 @@ export interface TranslationDict {
   cpOpenPipeline: string;
   cpOpenAI: string;
   cpOpenLinalg: string;
+
+  /* ---------------- Workbench layout ---------------- */
+  wbAllPanelsHidden: string;
+  wbAllPanelsHiddenHint: string;
 
   /* ---------------- Keyboard shortcuts ---------------- */
   ksTitle: string;
@@ -615,6 +640,8 @@ export interface TranslationDict {
   commonSuccess: string;
   commonWarning: string;
   commonInfo: string;
+  commonExpand: string;
+  commonCollapse: string;
 
   /* ---------------- Errors ---------------- */
   errInvalidExpression: string;
@@ -750,6 +777,17 @@ const zhCN: TranslationDict = {
   abPlots: "图表",
   abShowSidebar: "显示侧栏",
   abHideSidebar: "隐藏侧栏",
+  abToggleEditor: "切换编辑器",
+  abTogglePreview: "切换预览区",
+  abMoveLeft: "移到左侧",
+  abMoveRight: "移到右侧",
+  abLockTaskbar: "锁定任务栏",
+  abUnlockTaskbar: "解锁任务栏",
+  abAutoHide: "自动隐藏任务栏",
+  abDisableAutoHide: "取消自动隐藏",
+  abHideTaskbar: "隐藏任务栏",
+  abShowTaskbar: "显示任务栏",
+  abLocked: "任务栏已锁定",
 
   /* Status */
   statusReady: "就绪",
@@ -1108,7 +1146,6 @@ const zhCN: TranslationDict = {
   npAddCol: "加列",
   npDelRow: "删行",
   npDelCol: "删列",
-  npMatrixOp: "运算",
   npLowerBound: "下限",
   npUpperBound: "上限",
   npVariable_: "变量",
@@ -1160,6 +1197,7 @@ const zhCN: TranslationDict = {
   cpGroupActions: "操作",
   cpGroupView: "视图",
   cpGroupPanels: "面板",
+  cpGroupLayout: "布局",
   cpGroupTemplates: "模板",
   cpRunAll: "运行全部",
   cpClearEditor: "清空编辑器",
@@ -1168,6 +1206,16 @@ const zhCN: TranslationDict = {
   cpSwitchDark: "切换到深色主题",
   cpToggleSidebar: "切换侧栏",
   cpTogglePreview: "切换预览",
+  cpToggleEditor: "切换编辑器",
+  cpToggleActivityBar: "切换任务栏",
+  cpMoveActivityBarLeft: "任务栏移到左侧",
+  cpMoveActivityBarRight: "任务栏移到右侧",
+  cpLockActivityBar: "锁定任务栏",
+  cpUnlockActivityBar: "解锁任务栏",
+  cpAutoHideActivityBar: "任务栏自动隐藏",
+  cpDisableAutoHideActivityBar: "任务栏取消自动隐藏",
+  cpHideActivityBar: "隐藏任务栏",
+  cpShowActivityBar: "显示任务栏",
   cpOpenSymbols: "打开：符号",
   cpOpenTemplates: "打开：模板",
   cpOpenSolver: "打开：求解器",
@@ -1180,6 +1228,10 @@ const zhCN: TranslationDict = {
   cpOpenPipeline: "打开：流水线",
   cpOpenAI: "打开：AI 助手",
   cpOpenLinalg: "打开：线性代数",
+
+  /* Workbench layout */
+  wbAllPanelsHidden: "所有面板已隐藏",
+  wbAllPanelsHiddenHint: "可通过命令面板或任务栏恢复编辑器、预览区和任务栏",
 
   /* Keyboard shortcuts */
   ksTitle: "键盘快捷键",
@@ -1237,6 +1289,8 @@ const zhCN: TranslationDict = {
   commonSuccess: "成功",
   commonWarning: "警告",
   commonInfo: "信息",
+  commonExpand: "展开",
+  commonCollapse: "折叠",
 
   /* Errors */
   errInvalidExpression: "无效的表达式",
@@ -1369,6 +1423,17 @@ const en: TranslationDict = {
   abPlots: "Plots",
   abShowSidebar: "Show Sidebar",
   abHideSidebar: "Hide Sidebar",
+  abToggleEditor: "Toggle Editor",
+  abTogglePreview: "Toggle Preview",
+  abMoveLeft: "Move Left",
+  abMoveRight: "Move Right",
+  abLockTaskbar: "Lock Taskbar",
+  abUnlockTaskbar: "Unlock Taskbar",
+  abAutoHide: "Auto-hide Taskbar",
+  abDisableAutoHide: "Disable Auto-hide",
+  abHideTaskbar: "Hide Taskbar",
+  abShowTaskbar: "Show Taskbar",
+  abLocked: "Taskbar Locked",
 
   /* Status */
   statusReady: "Ready",
@@ -1727,7 +1792,6 @@ const en: TranslationDict = {
   npAddCol: "Add column",
   npDelRow: "Delete row",
   npDelCol: "Delete column",
-  npMatrixOp: "Operation",
   npLowerBound: "Lower bound",
   npUpperBound: "Upper bound",
   npVariable_: "Variable",
@@ -1779,6 +1843,7 @@ const en: TranslationDict = {
   cpGroupActions: "Actions",
   cpGroupView: "View",
   cpGroupPanels: "Panels",
+  cpGroupLayout: "Layout",
   cpGroupTemplates: "Templates",
   cpRunAll: "Run All",
   cpClearEditor: "Clear Editor",
@@ -1787,6 +1852,16 @@ const en: TranslationDict = {
   cpSwitchDark: "Switch to Dark Theme",
   cpToggleSidebar: "Toggle Sidebar",
   cpTogglePreview: "Toggle Preview",
+  cpToggleEditor: "Toggle Editor",
+  cpToggleActivityBar: "Toggle Activity Bar",
+  cpMoveActivityBarLeft: "Move Activity Bar Left",
+  cpMoveActivityBarRight: "Move Activity Bar Right",
+  cpLockActivityBar: "Lock Activity Bar",
+  cpUnlockActivityBar: "Unlock Activity Bar",
+  cpAutoHideActivityBar: "Auto-hide Activity Bar",
+  cpDisableAutoHideActivityBar: "Disable Activity Bar Auto-hide",
+  cpHideActivityBar: "Hide Activity Bar",
+  cpShowActivityBar: "Show Activity Bar",
   cpOpenSymbols: "Open: Symbols",
   cpOpenTemplates: "Open: Templates",
   cpOpenSolver: "Open: Equation Solver",
@@ -1799,6 +1874,10 @@ const en: TranslationDict = {
   cpOpenPipeline: "Open: Pipeline",
   cpOpenAI: "Open: AI Assistant",
   cpOpenLinalg: "Open: Linear Algebra",
+
+  /* Workbench layout */
+  wbAllPanelsHidden: "All panels are hidden",
+  wbAllPanelsHiddenHint: "Restore editor, preview, or activity bar via the command palette or activity bar",
 
   /* Keyboard shortcuts */
   ksTitle: "Keyboard Shortcuts",
@@ -1856,6 +1935,8 @@ const en: TranslationDict = {
   commonSuccess: "Success",
   commonWarning: "Warning",
   commonInfo: "Info",
+  commonExpand: "Expand",
+  commonCollapse: "Collapse",
 
   /* Errors */
   errInvalidExpression: "Invalid expression",

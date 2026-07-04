@@ -10,6 +10,7 @@
  */
 
 import { create, all, type MathNode } from 'mathjs';
+import type { TranslationDict } from '@/lib/i18n';
 
 const math = create(all);
 
@@ -47,7 +48,7 @@ export type NodeType =
 export interface PortDef {
   id: string;
   /** i18n key — resolved by the UI. */
-  labelKey: string;
+  labelKey: keyof TranslationDict;
   type: PortDataType;
 }
 
@@ -80,7 +81,7 @@ export interface NodeTypeDef {
   type: NodeType;
   category: NodeCategory;
   /** i18n key for the node title. */
-  labelKey: string;
+  labelKey: keyof TranslationDict;
   /** Lucide icon name (string — UI maps to component). */
   icon: string;
   color: 'teal' | 'amber' | 'rose' | 'violet' | 'emerald' | 'orange' | 'cyan';

@@ -41,6 +41,12 @@ import {
   PanelLeft,
   PanelRight,
   Code2,
+  LayoutTemplate,
+  Pin,
+  PinOff,
+  PanelLeftClose,
+  PanelRightClose,
+  PanelRightOpen,
 } from 'lucide-react';
 import { useWorkbenchStore } from '@/lib/store/workbench';
 import {
@@ -77,6 +83,19 @@ export function CommandPalette() {
   const setViewMode = useWorkbenchStore((s) => s.setViewMode);
   const setLocaleStore = useWorkbenchStore((s) => s.setLocale);
   const editorContent = useWorkbenchStore((s) => s.editorContent);
+
+  const editorVisible = useWorkbenchStore((s) => s.editorVisible);
+  const previewVisible = useWorkbenchStore((s) => s.previewVisible);
+  const setEditorVisible = useWorkbenchStore((s) => s.setEditorVisible);
+  const setPreviewVisible = useWorkbenchStore((s) => s.setPreviewVisible);
+  const activityBarPosition = useWorkbenchStore((s) => s.activityBarPosition);
+  const activityBarLocked = useWorkbenchStore((s) => s.activityBarLocked);
+  const activityBarAutoHide = useWorkbenchStore((s) => s.activityBarAutoHide);
+  const activityBarHidden = useWorkbenchStore((s) => s.activityBarHidden);
+  const setActivityBarPosition = useWorkbenchStore((s) => s.setActivityBarPosition);
+  const toggleActivityBarLock = useWorkbenchStore((s) => s.toggleActivityBarLock);
+  const setActivityBarAutoHide = useWorkbenchStore((s) => s.setActivityBarAutoHide);
+  const toggleActivityBarHidden = useWorkbenchStore((s) => s.toggleActivityBarHidden);
 
   // Global hotkeys — Ctrl+Shift+P / Ctrl+K
   useEffect(() => {
@@ -120,10 +139,9 @@ export function CommandPalette() {
         <CommandGroup heading={t('cpGroupActions')}>
           <CommandItem
             onSelect={() => {
-              // Trigger run by dispatching a click on the Run button (simpler:
-              // set the editor content to itself and trigger run via store
-              // event). For now we leave Run to the EditorPanel's own hotkey
-              // (Enter), so we just close.
+              // Let EditorPanel handle the actual run so the command palette
+              // does not need to know implementation details.
+              window.dispatchEvent(new CustomEvent('omnimath:run-all'));
               close();
             }}
           >
@@ -202,6 +220,72 @@ export function CommandPalette() {
           >
             <Workflow className="size-4" />
             <span>Pipeline</span>
+          </CommandItem>
+        </CommandGroup>
+
+        <CommandSeparator />
+
+        {/* Layout */}
+        <CommandGroup heading={t('cpGroupLayout')}>
+          <CommandItem
+            onSelect={() => {
+              setEditorVisible(!editorVisible);
+              close();
+            }}
+          >
+            <LayoutTemplate className="size-4" />
+            <span>{t('cpToggleEditor')}</span>
+            {editorVisible && <CommandShortcut>✓</CommandShortcut>}
+          </CommandItem>
+          <CommandItem
+            onSelect={() => {
+              setPreviewVisible(!previewVisible);
+              close();
+            }}
+          >
+            <PanelRight className="size-4" />
+            <span>{t('cpTogglePreview')}</span>
+            {previewVisible && <CommandShortcut>✓</CommandShortcut>}
+          </CommandItem>
+          <CommandItem
+            onSelect={() => {
+              toggleActivityBarHidden();
+              close();
+            }}
+          >
+            {activityBarHidden ? <PanelRightOpen className="size-4" /> : <PanelLeftClose className="size-4" />}
+            <span>{activityBarHidden ? t('cpShowActivityBar') : t('cpHideActivityBar')}</span>
+          </CommandItem>
+          <CommandItem
+            onSelect={() => {
+              setActivityBarPosition(activityBarPosition === 'left' ? 'right' : 'left');
+              close();
+            }}
+          >
+            {activityBarPosition === 'left' ? <PanelRight className="size-4" /> : <PanelLeft className="size-4" />}
+            <span>
+              {activityBarPosition === 'left' ? t('cpMoveActivityBarRight') : t('cpMoveActivityBarLeft')}
+            </span>
+          </CommandItem>
+          <CommandItem
+            onSelect={() => {
+              toggleActivityBarLock();
+              close();
+            }}
+          >
+            {activityBarLocked ? <PinOff className="size-4" /> : <Pin className="size-4" />}
+            <span>{activityBarLocked ? t('cpUnlockActivityBar') : t('cpLockActivityBar')}</span>
+          </CommandItem>
+          <CommandItem
+            onSelect={() => {
+              setActivityBarAutoHide(!activityBarAutoHide);
+              close();
+            }}
+          >
+            {activityBarAutoHide ? <PanelRightOpen className="size-4" /> : <PanelRightClose className="size-4" />}
+            <span>
+              {activityBarAutoHide ? t('cpDisableAutoHideActivityBar') : t('cpAutoHideActivityBar')}
+            </span>
           </CommandItem>
         </CommandGroup>
 

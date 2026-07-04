@@ -156,7 +156,7 @@
   --secondary: oklch(0.32 0 0);     /* was 0.26 → lifted */
   --secondary-foreground: oklch(0.98 0 0);
   --muted: oklch(0.32 0 0);         /* was 0.26 → lifted */
-  --muted-foreground: oklch(0.85 0 0);  /* was 0.78 → much brighter */
+  --muted-foreground: oklch(0.88 0 0);  /* was 0.78 → lifted for WCAG AA */
 
   /* Accent — elevated surface */
   --accent: oklch(0.34 0 0);        /* was 0.28 → lifted */
@@ -391,7 +391,7 @@
 .dark .katex .msupsub,
 .dark .katex .frac-line,
 .dark .katex .sqrt {
-  color: #ffffff !important;
+  color: var(--foreground);
 }
 
 :not(.dark) .katex,
@@ -414,11 +414,18 @@
 :not(.dark) .katex .msupsub,
 :not(.dark) .katex .frac-line,
 :not(.dark) .katex .sqrt {
-  color: #1f1f1f !important;
+  color: var(--foreground);
 }
 
 .katex .base,
 .katex .base span {
+  color: inherit;
+}
+
+/* Catch-all: any remaining KaTeX internal elements inherit the wrapper color
+   so that third-party macros or newer KaTeX internals don't render black. */
+.dark .katex *,
+:not(.dark) .katex * {
   color: inherit;
 }
 
@@ -441,7 +448,7 @@
 .dark .result-output code,
 .dark .result-output .katex,
 .dark .result-output .katex * {
-  color: #ffffff !important;
+  color: var(--foreground);
 }
 
 /* KaTeX error fallback */
@@ -478,6 +485,29 @@
 .dark pre,
 .dark .font-mono {
   color: oklch(0.96 0 0);
+}
+
+/* Ensure muted text remains readable in dark mode. Many components use
+   text-muted-foreground/50 which can fall below WCAG AA on dark backgrounds.
+   We force the base opacity-carrying classes to a brighter value. */
+.dark .text-muted-foreground,
+.dark .text-muted-foreground\/70,
+.dark .text-muted-foreground\/80 {
+  color: oklch(0.88 0 0);
+}
+
+.dark .text-muted-foreground\/50,
+.dark .text-muted-foreground\/60 {
+  color: oklch(0.82 0 0);
+}
+
+/* Contrast-safe fallback for dynamic/third-party content */
+.text-contrast-safe {
+  color: var(--foreground);
+}
+
+.dark .text-contrast-safe {
+  color: oklch(0.98 0 0);
 }
 
 /* ------------------------------------------------------------
