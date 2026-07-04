@@ -53,6 +53,8 @@ export interface Plot3DSceneProps {
   wireframe: boolean;
   autoRotate?: boolean;
   colorMode?: 'height' | 'solid';
+  /** 'y-up' (default) or 'z-up' — swaps the vertical axis. */
+  upAxis?: 'y' | 'z';
   /** Bump this number to force the camera back to its default position. */
   resetSignal?: number;
 }
@@ -330,19 +332,21 @@ function Grid3D({
 function CameraReset({
   resetSignal,
   controlsRef,
+  defaultPos,
 }: {
   resetSignal: number;
   controlsRef: MutableRefObject<{ reset: () => void } | null>;
+  defaultPos: [number, number, number];
 }) {
   const { camera } = useThree();
   useEffect(() => {
     if (resetSignal === 0) return; // skip initial mount
-    camera.position.set(6, 5, 6);
+    camera.position.set(...defaultPos);
     camera.lookAt(0, 0, 0);
     if (controlsRef.current) {
       controlsRef.current.reset();
     }
-  }, [resetSignal]);
+  }, [resetSignal, defaultPos]);
   return null;
 }
 
@@ -358,6 +362,7 @@ interface SceneContentsProps {
   wireframe: boolean;
   autoRotate: boolean;
   colorMode: 'height' | 'solid';
+  upAxis: 'y' | 'z';
   resetSignal: number;
 }
 
@@ -369,10 +374,12 @@ function SceneContents({
   wireframe,
   autoRotate,
   colorMode,
+  upAxis,
   resetSignal,
 }: SceneContentsProps) {
   const palette = THEME[theme];
   const controlsRef = useRef<{ reset: () => void } | null>(null);
+  const isZUp = upAxis === 'z';
 
   // Compute a unified axis half-extent: max of |x|, |y| from the surfaces'
   // domain plus a generous margin so axes extend beyond the data.
@@ -392,44 +399,54 @@ function SceneContents({
     return Math.ceil(m * 1.08 * 2) / 2;
   }, [surfaces]);
 
+  // For Z-up, rotate the world -90deg around X so Y becomes Z and vice
+  // versa. The camera + controls live outside this group so orbit still
+  // feels natural (up is screen-up).
+  const worldRotX = isZUp ? -Math.PI / 2 : 0;
+  const defaultCam = isZUp
+    ? [6, 6, 5] as [number, number, number]
+    : [6, 5, 6] as [number, number, number];
+
   return (
     <>
       <color attach="background" args={[palette.bg]} />
       <fog attach="fog" args={[palette.fogColor, palette.fogNear, palette.fogFar]} />
 
-      {/* Lighting — three-point-ish setup */}
-      <ambientLight intensity={theme === 'dark' ? 0.6 : 0.9} />
-      <directionalLight
-        position={[8, 12, 6]}
-        intensity={theme === 'dark' ? 1.0 : 1.2}
-        color="#ffffff"
-      />
-      <pointLight
-        position={[-6, -4, 8]}
-        intensity={theme === 'dark' ? 0.4 : 0.25}
-        color={AXIS_COLORS.x}
-      />
-      <pointLight
-        position={[6, -4, -8]}
-        intensity={theme === 'dark' ? 0.3 : 0.18}
-        color={AXIS_COLORS.z}
-      />
-
-      {/* Surfaces */}
-      {surfaces.map((s, i) => (
-        <SurfaceMesh
-          key={`surf-${i}-${s.expression}`}
-          data={s}
-          wireframe={wireframe}
-          colorMode={colorMode}
+      <group rotation={[worldRotX, 0, 0]}>
+        {/* Lighting — three-point-ish setup */}
+        <ambientLight intensity={theme === 'dark' ? 0.6 : 0.9} />
+        <directionalLight
+          position={[8, 12, 6]}
+          intensity={theme === 'dark' ? 1.0 : 1.2}
+          color="#ffffff"
         />
-      ))}
+        <pointLight
+          position={[-6, -4, 8]}
+          intensity={theme === 'dark' ? 0.4 : 0.25}
+          color={AXIS_COLORS.x}
+        />
+        <pointLight
+          position={[6, -4, -8]}
+          intensity={theme === 'dark' ? 0.3 : 0.18}
+          color={AXIS_COLORS.z}
+        />
 
-      {/* Axes */}
-      {showAxes && <Axes3D size={axisSize} theme={theme} />}
+        {/* Surfaces */}
+        {surfaces.map((s, i) => (
+          <SurfaceMesh
+            key={`surf-${i}-${s.expression}`}
+            data={s}
+            wireframe={wireframe}
+            colorMode={colorMode}
+          />
+        ))}
 
-      {/* Grid */}
-      {showGrid && <Grid3D size={axisSize} theme={theme} />}
+        {/* Axes */}
+        {showAxes && <Axes3D size={axisSize} theme={theme} />}
+
+        {/* Grid */}
+        {showGrid && <Grid3D size={axisSize} theme={theme} />}
+      </group>
 
       {/* Camera controls — fully orbit / zoom / pan enabled */}
       <OrbitControls
@@ -447,7 +464,11 @@ function SceneContents({
         makeDefault
       />
 
-      <CameraReset resetSignal={resetSignal} controlsRef={controlsRef} />
+      <CameraReset
+        resetSignal={resetSignal}
+        controlsRef={controlsRef}
+        defaultPos={defaultCam}
+      />
     </>
   );
 }
@@ -464,15 +485,18 @@ export function Plot3DScene({
   wireframe,
   autoRotate = false,
   colorMode = 'height',
+  upAxis = 'y',
   resetSignal = 0,
 }: Plot3DSceneProps) {
   // `frameloop="demand"` saves GPU cycles when the scene is static. When
   // auto-rotating we switch to `always` so the rotation animates smoothly.
   const frameloop = autoRotate ? 'always' : 'demand';
+  const initialCam: [number, number, number] =
+    upAxis === 'z' ? [6, 6, 5] : [6, 5, 6];
 
   return (
     <Canvas
-      camera={{ position: [6, 5, 6], fov: 50, near: 0.1, far: 100 }}
+      camera={{ position: initialCam, fov: 50, near: 0.1, far: 100 }}
       dpr={[1, 2]}
       frameloop={frameloop}
       gl={{ antialias: true, alpha: false, preserveDrawingBuffer: true }}
@@ -486,6 +510,7 @@ export function Plot3DScene({
         wireframe={wireframe}
         autoRotate={autoRotate}
         colorMode={colorMode}
+        upAxis={upAxis}
         resetSignal={resetSignal}
       />
     </Canvas>

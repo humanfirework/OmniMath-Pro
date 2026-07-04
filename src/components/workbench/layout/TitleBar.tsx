@@ -94,17 +94,12 @@ export function TitleBar() {
           />
         </motion.div>
 
-        <div className="flex flex-col leading-none min-w-0">
-          <div className="flex items-baseline gap-1.5">
-            <span className="text-[15px] font-semibold tracking-tight text-gradient-teal">
-              OmniMath Pro
-            </span>
-            <span className="text-[10px] text-muted-foreground/80 hidden sm:inline">
-              v2.0
-            </span>
-          </div>
-          <span className="text-[10.5px] text-muted-foreground truncate hidden md:block">
-            {t('appSubtitle')}
+        <div className="flex items-baseline gap-1.5 min-w-0">
+          <span className="text-[15px] font-semibold tracking-tight text-gradient-teal">
+            OmniMath Pro
+          </span>
+          <span className="text-[10px] text-muted-foreground/80 hidden sm:inline">
+            v0.0.2
           </span>
         </div>
       </div>

@@ -48,9 +48,27 @@ export function Workbench() {
   const sidePanelCollapsed = useWorkbenchStore((s) => s.sidePanelCollapsed);
   const viewMode = useWorkbenchStore((s) => s.viewMode);
 
-  // Mount: load persisted state once.
+  // Mount: load persisted state once + install global error guards.
   useEffect(() => {
     loadFromStorage();
+
+    const onUnhandledRejection = (e: PromiseRejectionEvent) => {
+      if (typeof console !== 'undefined') {
+        console.warn('[OmniMath] unhandled rejection:', e.reason);
+      }
+      e.preventDefault();
+    };
+    const onError = (e: ErrorEvent) => {
+      if (typeof console !== 'undefined') {
+        console.warn('[OmniMath] window error:', e.error ?? e.message);
+      }
+    };
+    window.addEventListener('unhandledrejection', onUnhandledRejection);
+    window.addEventListener('error', onError);
+    return () => {
+      window.removeEventListener('unhandledrejection', onUnhandledRejection);
+      window.removeEventListener('error', onError);
+    };
   }, [loadFromStorage]);
 
   // Sync i18n locale with the store locale.

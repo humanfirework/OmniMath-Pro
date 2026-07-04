@@ -95,8 +95,7 @@ export interface NodeTypeDef {
 }
 
 /* ------------------------------------------------------------------ *
- * Layout constants — port positions are computed deterministically
- * from these so the SVG edge layer never needs to measure the DOM.
+ * Layout constants
  * ------------------------------------------------------------------ */
 export const NODE_WIDTH = 248;
 export const NODE_HEADER_H = 34;
@@ -104,16 +103,19 @@ export const PORT_ROW_H = 22;
 export const PORTS_PAD_TOP = 8;
 export const RESULT_FOOTER_H = 58;
 
-// Port dots are inset 12px from the left/right card edges and are 10px wide,
-// so their center is 12 + 10/2 = 17px from the edge.
+// Best-guess X inset — used as fallback before DOM measurement and for
+// initial connection-start positioning. The real value is measured from
+// the DOM at runtime so edges always land exactly on the port dots.
 const PORT_INSET_X = 17;
 
-/** Vertical center of port `i` (0-indexed) relative to the node's top-left. */
+/** Vertical center of port `i` (0-indexed) relative to the node's top-left.
+ *  Used as a fallback; the real position comes from DOM measurement. */
 export function portCenterY(index: number): number {
   return NODE_HEADER_H + PORTS_PAD_TOP + PORT_ROW_H / 2 + index * PORT_ROW_H;
 }
 
-/** Port center in canvas-content coordinates. */
+/** Port center in canvas-content coordinates (estimate from constants).
+ *  Used as fallback / for initial connection drag start. */
 export function getPortPosition(
   node: PipelineNode,
   portId: string,

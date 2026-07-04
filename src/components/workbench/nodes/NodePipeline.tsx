@@ -261,6 +261,9 @@ export function NodePipeline() {
 
   // Refs for canvas + content (transform layer).
   const canvasRef = useRef<HTMLDivElement>(null);
+  const nodesContainerRef = useRef<HTMLDivElement>(null);
+  const portPositionsRef = useRef<Map<string, { x: number; y: number }>>(new Map());
+  const [portPositionsRev, setPortPositionsRev] = useState(0);
 
   // Track canvas dimensions (used by palette clamping, fit-view, minimap).
   const [canvasSize, setCanvasSize] = useState({ w: 800, h: 600 });
@@ -690,28 +693,53 @@ export function NodePipeline() {
     return m;
   }, [nodes]);
 
+  // Re-measure port positions from the real DOM after every render so edges
+  // always land exactly on the port dots, regardless of CSS / layout shifts.
+  useLayoutEffect(() => {
+    const container = nodesContainerRef.current;
+    if (!container) return;
+    const ports = container.querySelectorAll('[data-port-node][data-port-id][data-port-output]');
+    const next = new Map<string, { x: number; y: number }>();
+    const containerRect = container.getBoundingClientRect();
+    for (const el of Array.from(ports)) {
+      const nodeId = el.getAttribute('data-port-node');
+      const portId = el.getAttribute('data-port-id');
+      if (!nodeId || !portId) continue;
+      const r = el.getBoundingClientRect();
+      const x = (r.left + r.width / 2 - containerRect.left) / viewRef.current.scale;
+      const y = (r.top + r.height / 2 - containerRect.top) / viewRef.current.scale;
+      next.set(`${nodeId}:${portId}`, { x, y });
+    }
+    portPositionsRef.current = next;
+    setPortPositionsRev((n) => n + 1);
+  });
+
+  const measuredPortPos = (nodeId: string, portId: string) =>
+    portPositionsRef.current.get(`${nodeId}:${portId}`) ?? null;
+
   const edgePaths = useMemo(() => {
     return edges
       .map((e) => {
         const from = nodeById.get(e.from);
         const to = nodeById.get(e.to);
         if (!from || !to) return null;
-        const p1 = getPortPosition(from, e.fromPort, true);
-        const p2 = getPortPosition(to, e.toPort, false);
+        const p1 = measuredPortPos(e.from, e.fromPort) ?? getPortPosition(from, e.fromPort, true);
+        const p2 = measuredPortPos(e.to, e.toPort) ?? getPortPosition(to, e.toPort, false);
         if (!p1 || !p2) return null;
         return { edge: e, from: p1, to: p2 };
       })
       .filter((x): x is { edge: PipelineEdge; from: { x: number; y: number }; to: { x: number; y: number } } => x !== null);
-  }, [edges, nodeById]);
+  }, [edges, nodeById, portPositionsRev]);
 
   const pendingPath = useMemo(() => {
     if (!connecting) return null;
     const from = nodeById.get(connecting.fromNode);
     if (!from) return null;
-    const p1 = getPortPosition(from, connecting.fromPort, true);
+    const p1 = measuredPortPos(connecting.fromNode, connecting.fromPort)
+      ?? getPortPosition(from, connecting.fromPort, true);
     if (!p1) return null;
     return { from: p1, to: connecting.cursor };
-  }, [connecting, nodeById]);
+  }, [connecting, nodeById, portPositionsRev]);
 
   /* ── Render ──────────────────────────────────────────────────── */
   return (
@@ -795,7 +823,7 @@ export function NodePipeline() {
           </svg>
 
           {/* Nodes */}
-          <div className="absolute top-0 left-0" style={{ zIndex: 2 }}>
+          <div ref={nodesContainerRef} className="absolute top-0 left-0" style={{ zIndex: 2 }}>
             <AnimatePresence>
               {nodes.map((node) => (
                 <NodeCard
@@ -1077,29 +1105,31 @@ function NodeCard({
       {/* Ports section */}
       <div className="relative pl-3.5 pr-3" style={{ height: portsH, paddingTop: PORTS_PAD_TOP }}>
         {def.inputs.map((port, i) => (
-          <PortLabel
-            key={port.id}
-            port={port}
-            isOutput={false}
-            y={i * PORT_ROW_H}
-            connected={Boolean(node.outputs && port.id in (node.outputs as object))}
-            isConnecting={isConnecting}
-            onStartConnection={onStartConnection}
-            onCompleteConnection={onCompleteConnection}
-          />
-        ))}
-        {def.outputs.map((port, i) => (
-          <PortLabel
-            key={port.id}
-            port={port}
-            isOutput
-            y={i * PORT_ROW_H}
-            connected={Boolean(node.outputs && port.id in (node.outputs as object))}
-            isConnecting={isConnecting}
-            onStartConnection={onStartConnection}
-            onCompleteConnection={onCompleteConnection}
-          />
-        ))}
+            <PortLabel
+              key={port.id}
+              nodeId={node.id}
+              port={port}
+              isOutput={false}
+              y={i * PORT_ROW_H}
+              connected={Boolean(node.outputs && port.id in (node.outputs as object))}
+              isConnecting={isConnecting}
+              onStartConnection={onStartConnection}
+              onCompleteConnection={onCompleteConnection}
+            />
+          ))}
+          {def.outputs.map((port, i) => (
+            <PortLabel
+              key={port.id}
+              nodeId={node.id}
+              port={port}
+              isOutput
+              y={i * PORT_ROW_H}
+              connected={Boolean(node.outputs && port.id in (node.outputs as object))}
+              isConnecting={isConnecting}
+              onStartConnection={onStartConnection}
+              onCompleteConnection={onCompleteConnection}
+            />
+          ))}
       </div>
 
       {/* Config section */}
@@ -1124,6 +1154,7 @@ function NodeCard({
  * Port label + socket
  * ================================================================== */
 interface PortLabelProps {
+  nodeId: string;
   port: PortDef;
   isOutput: boolean;
   y: number;
@@ -1134,7 +1165,7 @@ interface PortLabelProps {
 }
 
 function PortLabel({
-  port, isOutput, y, connected, isConnecting,
+  nodeId, port, isOutput, y, connected, isConnecting,
   onStartConnection, onCompleteConnection,
 }: PortLabelProps) {
   const [hover, setHover] = useState(false);
@@ -1161,6 +1192,9 @@ function PortLabel({
         }}
         onMouseEnter={() => setHover(true)}
         onMouseLeave={() => setHover(false)}
+        data-port-node={nodeId}
+        data-port-id={port.id}
+        data-port-output={isOutput ? '1' : '0'}
         className={cn(
           'node-port',
           connected && 'connected',

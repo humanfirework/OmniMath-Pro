@@ -375,16 +375,42 @@
 .dark .katex .base,
 .dark .katex .katex-html,
 .dark .katex .katex-html span,
-.dark .katex .katex-mathml {
-  color: #f0f0f0 !important;
+.dark .katex .katex-html .mathnormal,
+.dark .katex .katex-html .mathrm,
+.dark .katex .katex-html .mathit,
+.dark .katex .katex-html .mathbf,
+.dark .katex .katex-html .text,
+.dark .katex .katex-mathml,
+.dark .katex .mord,
+.dark .katex .mop,
+.dark .katex .mbin,
+.dark .katex .mrel,
+.dark .katex .mopen,
+.dark .katex .mclose,
+.dark .katex .mpunct {
+  color: #ffffff !important;
+  fill: #ffffff !important;
 }
 
 :not(.dark) .katex,
 :not(.dark) .katex .base,
 :not(.dark) .katex .katex-html,
 :not(.dark) .katex .katex-html span,
-:not(.dark) .katex .katex-mathml {
-  color: #1f1f1f !important;
+:not(.dark) .katex .katex-html .mathnormal,
+:not(.dark) .katex .katex-html .mathrm,
+:not(.dark) .katex .katex-html .mathit,
+:not(.dark) .katex .katex-html .mathbf,
+:not(.dark) .katex .katex-html .text,
+:not(.dark) .katex .katex-mathml,
+:not(.dark) .katex .mord,
+:not(.dark) .katex .mop,
+:not(.dark) .katex .mbin,
+:not(.dark) .katex .mrel,
+:not(.dark) .katex .mopen,
+:not(.dark) .katex .mclose,
+:not(.dark) .katex .mpunct {
+  color: #0a0a0a !important;
+  fill: #0a0a0a !important;
 }
 
 .katex .base {
