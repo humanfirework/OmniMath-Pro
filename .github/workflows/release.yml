@@ -10,17 +10,19 @@ on:
 
 jobs:
   publish-tauri:
+    permissions:
+      contents: write
     strategy:
       fail-fast: false
       matrix:
         include:
-          - platform: macos-latest
+          - platform: "macos-14"
             args: "--target aarch64-apple-darwin"
-          - platform: macos-latest
+          - platform: "macos-14"
             args: "--target x86_64-apple-darwin"
-          - platform: ubuntu-22.04
+          - platform: "ubuntu-22.04"
             args: ""
-          - platform: windows-latest
+          - platform: "windows-latest"
             args: ""
 
     runs-on: ${{ matrix.platform }}
@@ -44,20 +46,32 @@ jobs:
       - name: Install Rust stable
         uses: dtolnay/rust-toolchain@stable
         with:
-          targets: ${{ matrix.platform == 'macos-latest' && 'aarch64-apple-darwin,x86_64-apple-darwin' || '' }}
+          targets: ${{ matrix.args == '--target aarch64-apple-darwin' && 'aarch64-apple-darwin' || matrix.args == '--target x86_64-apple-darwin' && 'x86_64-apple-darwin' || '' }}
 
       - name: Rust cache
         uses: swatinem/rust-cache@v2
         with:
           workspaces: "./src-tauri -> target"
 
-      - uses: tauri-apps/tauri-action@v0
+      - name: Build and publish Tauri app
+        uses: tauri-apps/tauri-action@v0
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
+          projectPath: "./src-tauri"
           tagName: ${{ github.ref_name }}
           releaseName: "OmniMath Pro ${{ github.ref_name }}"
-          releaseBody: "Cross-platform desktop builds for OmniMath Pro. See the assets below to download the installer for your platform."
+          releaseBody: |
+            OmniMath Pro ${{ github.ref_name }} 桌面端安装包
+
+            | 平台 | 推荐下载 |
+            |---|---|
+            | Windows | `OmniMath-Pro_***_x64-setup.exe` / `.msi` |
+            | macOS (Apple Silicon / M 系列) | `OmniMath-Pro_***_aarch64.dmg` |
+            | macOS (Intel) | `OmniMath-Pro_***_x64.dmg` |
+            | Linux | `OmniMath-Pro_***_amd64.deb` / `.AppImage` |
+
+            文件名中包含版本号 `${{ github.ref_name }}` 和目标平台，请根据你的系统选择对应安装包。
           releaseDraft: false
           prerelease: false
           args: ${{ matrix.args }}
