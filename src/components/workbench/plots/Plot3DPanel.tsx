@@ -106,8 +106,8 @@ export function Plot3DPanel() {
   const [showAxes, setShowAxes] = useState(true);
   const [showGrid, setShowGrid] = useState(true);
   const [autoRotate, setAutoRotate] = useState(false);
-  const [upAxis, setUpAxis] = useState<'y' | 'z'>('y');
   const [colorMode, setColorMode] = useState<'height' | 'solid'>('height');
+  const [upAxis, setUpAxis] = useState<'y' | 'z'>('y');
   const [showControls, setShowControls] = useState(true);
   const [resetSignal, setResetSignal] = useState(0);
   const [expandOpen, setExpandOpen] = useState(false);
@@ -373,37 +373,6 @@ export function Plot3DPanel() {
                 />
               </div>
 
-              {/* Up axis */}
-              <div className="col-span-2 flex flex-col gap-1 sm:col-span-1">
-                <Label className="text-[11px] text-muted-foreground">
-                  向上轴
-                </Label>
-                <ToggleGroup
-                  type="single"
-                  value={upAxis}
-                  onValueChange={(v) => {
-                    if (v === 'y' || v === 'z') setUpAxis(v);
-                  }}
-                  className="h-6"
-                  size="sm"
-                >
-                  <ToggleGroupItem
-                    value="y"
-                    className="h-6 px-2 text-[11px]"
-                    aria-label="Y轴向上"
-                  >
-                    Y↑
-                  </ToggleGroupItem>
-                  <ToggleGroupItem
-                    value="z"
-                    className="h-6 px-2 text-[11px]"
-                    aria-label="Z轴向上"
-                  >
-                    Z↑
-                  </ToggleGroupItem>
-                </ToggleGroup>
-              </div>
-
               {/* Color mode */}
               <div className="col-span-2 flex flex-col gap-1 sm:col-span-1">
                 <Label className="text-[11px] text-muted-foreground">
@@ -431,6 +400,37 @@ export function Plot3DPanel() {
                     aria-label="单色"
                   >
                     单色
+                  </ToggleGroupItem>
+                </ToggleGroup>
+              </div>
+
+              {/* Up-axis mode */}
+              <div className="col-span-2 flex flex-col gap-1 sm:col-span-1">
+                <Label className="text-[11px] text-muted-foreground">
+                  上方向
+                </Label>
+                <ToggleGroup
+                  type="single"
+                  value={upAxis}
+                  onValueChange={(v) => {
+                    if (v === 'y' || v === 'z') setUpAxis(v);
+                  }}
+                  className="h-6"
+                  size="sm"
+                >
+                  <ToggleGroupItem
+                    value="y"
+                    className="h-6 px-2 text-[11px]"
+                    aria-label="Y 轴向上"
+                  >
+                    Y 向上
+                  </ToggleGroupItem>
+                  <ToggleGroupItem
+                    value="z"
+                    className="h-6 px-2 text-[11px]"
+                    aria-label="Z 轴向上"
+                  >
+                    Z 向上
                   </ToggleGroupItem>
                 </ToggleGroup>
               </div>

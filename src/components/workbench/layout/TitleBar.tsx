@@ -38,6 +38,7 @@ import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
 import { useWorkbenchStore } from '@/lib/store/workbench';
 import { t, useLocale, setLocale, type Locale } from '@/lib/i18n';
+import pkg from '@/../package.json';
 
 const MENU_KEYS = ['menuFile', 'menuEdit', 'menuView', 'menuHelp'] as const;
 
@@ -94,13 +95,15 @@ export function TitleBar() {
           />
         </motion.div>
 
-        <div className="flex items-baseline gap-1.5 min-w-0">
-          <span className="text-[15px] font-semibold tracking-tight text-gradient-teal">
-            OmniMath Pro
-          </span>
-          <span className="text-[10px] text-muted-foreground/80 hidden sm:inline">
-            v0.0.2
-          </span>
+        <div className="flex flex-col leading-none min-w-0">
+          <div className="flex items-baseline gap-1.5">
+            <span className="text-[15px] font-semibold tracking-tight text-gradient-teal">
+              OmniMath Pro
+            </span>
+            <span className="text-[10px] text-muted-foreground/80 hidden sm:inline">
+              v{pkg.version}
+            </span>
+          </div>
         </div>
       </div>
 

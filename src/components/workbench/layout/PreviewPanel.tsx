@@ -239,7 +239,7 @@ function FormulaView({ result }: { result: ReturnType<typeof useWorkbenchStore.g
             </div>
           </div>
         ) : (
-          <div className="rounded-lg border border-primary/30 bg-primary/5 p-4 glow-card-teal min-h-[80px] grid place-items-center text-center">
+          <div className="rounded-lg border border-primary/30 bg-primary/5 p-4 glow-card-teal min-h-[80px] grid place-items-center text-center result-output">
             <div className="w-full">
               <div className="text-[10px] uppercase tracking-wider text-muted-foreground/80 mb-2 flex items-center justify-center gap-1.5">
                 <span className="size-1.5 rounded-full bg-emerald-500/80" />

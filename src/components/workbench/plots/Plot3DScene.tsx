@@ -53,7 +53,7 @@ export interface Plot3DSceneProps {
   wireframe: boolean;
   autoRotate?: boolean;
   colorMode?: 'height' | 'solid';
-  /** 'y-up' (default) or 'z-up' — swaps the vertical axis. */
+  /** Camera up axis — `y` matches three.js default; `z` gives the math-style z-up view. */
   upAxis?: 'y' | 'z';
   /** Bump this number to force the camera back to its default position. */
   resetSignal?: number;
@@ -302,14 +302,17 @@ function Axes3D({ size, theme }: Axes3DProps) {
 function Grid3D({
   size,
   theme,
+  upAxis,
 }: {
   size: number;
   theme: 'dark' | 'light';
+  upAxis: 'y' | 'z';
 }) {
   const palette = THEME[theme];
   return (
     <Grid
       position={[0, 0, 0]}
+      rotation={upAxis === 'z' ? [-Math.PI / 2, 0, 0] : [0, 0, 0]}
       args={[2 * size, 2 * size]}
       cellSize={Math.max(0.25, size / 10)}
       cellThickness={0.6}
@@ -332,21 +335,24 @@ function Grid3D({
 function CameraReset({
   resetSignal,
   controlsRef,
-  defaultPos,
+  upAxis,
 }: {
   resetSignal: number;
   controlsRef: MutableRefObject<{ reset: () => void } | null>;
-  defaultPos: [number, number, number];
+  upAxis: 'y' | 'z';
 }) {
   const { camera } = useThree();
   useEffect(() => {
     if (resetSignal === 0) return; // skip initial mount
+    const defaultPos: [number, number, number] =
+      upAxis === 'z' ? [6, 6, 5] : [6, 5, 6];
+    camera.up.set(0, upAxis === 'z' ? 0 : 1, upAxis === 'z' ? 1 : 0);
     camera.position.set(...defaultPos);
     camera.lookAt(0, 0, 0);
     if (controlsRef.current) {
       controlsRef.current.reset();
     }
-  }, [resetSignal, defaultPos]);
+  }, [resetSignal, upAxis]);
   return null;
 }
 
@@ -379,7 +385,6 @@ function SceneContents({
 }: SceneContentsProps) {
   const palette = THEME[theme];
   const controlsRef = useRef<{ reset: () => void } | null>(null);
-  const isZUp = upAxis === 'z';
 
   // Compute a unified axis half-extent: max of |x|, |y| from the surfaces'
   // domain plus a generous margin so axes extend beyond the data.
@@ -399,54 +404,44 @@ function SceneContents({
     return Math.ceil(m * 1.08 * 2) / 2;
   }, [surfaces]);
 
-  // For Z-up, rotate the world -90deg around X so Y becomes Z and vice
-  // versa. The camera + controls live outside this group so orbit still
-  // feels natural (up is screen-up).
-  const worldRotX = isZUp ? -Math.PI / 2 : 0;
-  const defaultCam = isZUp
-    ? [6, 6, 5] as [number, number, number]
-    : [6, 5, 6] as [number, number, number];
-
   return (
     <>
       <color attach="background" args={[palette.bg]} />
       <fog attach="fog" args={[palette.fogColor, palette.fogNear, palette.fogFar]} />
 
-      <group rotation={[worldRotX, 0, 0]}>
-        {/* Lighting — three-point-ish setup */}
-        <ambientLight intensity={theme === 'dark' ? 0.6 : 0.9} />
-        <directionalLight
-          position={[8, 12, 6]}
-          intensity={theme === 'dark' ? 1.0 : 1.2}
-          color="#ffffff"
-        />
-        <pointLight
-          position={[-6, -4, 8]}
-          intensity={theme === 'dark' ? 0.4 : 0.25}
-          color={AXIS_COLORS.x}
-        />
-        <pointLight
-          position={[6, -4, -8]}
-          intensity={theme === 'dark' ? 0.3 : 0.18}
-          color={AXIS_COLORS.z}
-        />
+      {/* Lighting — three-point-ish setup */}
+      <ambientLight intensity={theme === 'dark' ? 0.6 : 0.9} />
+      <directionalLight
+        position={[8, 12, 6]}
+        intensity={theme === 'dark' ? 1.0 : 1.2}
+        color="#ffffff"
+      />
+      <pointLight
+        position={[-6, -4, 8]}
+        intensity={theme === 'dark' ? 0.4 : 0.25}
+        color={AXIS_COLORS.x}
+      />
+      <pointLight
+        position={[6, -4, -8]}
+        intensity={theme === 'dark' ? 0.3 : 0.18}
+        color={AXIS_COLORS.z}
+      />
 
-        {/* Surfaces */}
-        {surfaces.map((s, i) => (
-          <SurfaceMesh
-            key={`surf-${i}-${s.expression}`}
-            data={s}
-            wireframe={wireframe}
-            colorMode={colorMode}
-          />
-        ))}
+      {/* Surfaces */}
+      {surfaces.map((s, i) => (
+        <SurfaceMesh
+          key={`surf-${i}-${s.expression}`}
+          data={s}
+          wireframe={wireframe}
+          colorMode={colorMode}
+        />
+      ))}
 
-        {/* Axes */}
-        {showAxes && <Axes3D size={axisSize} theme={theme} />}
+      {/* Axes */}
+      {showAxes && <Axes3D size={axisSize} theme={theme} />}
 
-        {/* Grid */}
-        {showGrid && <Grid3D size={axisSize} theme={theme} />}
-      </group>
+      {/* Grid */}
+      {showGrid && <Grid3D size={axisSize} theme={theme} upAxis={upAxis} />}
 
       {/* Camera controls — fully orbit / zoom / pan enabled */}
       <OrbitControls
@@ -464,11 +459,7 @@ function SceneContents({
         makeDefault
       />
 
-      <CameraReset
-        resetSignal={resetSignal}
-        controlsRef={controlsRef}
-        defaultPos={defaultCam}
-      />
+      <CameraReset resetSignal={resetSignal} controlsRef={controlsRef} upAxis={upAxis} />
     </>
   );
 }
@@ -491,12 +482,16 @@ export function Plot3DScene({
   // `frameloop="demand"` saves GPU cycles when the scene is static. When
   // auto-rotating we switch to `always` so the rotation animates smoothly.
   const frameloop = autoRotate ? 'always' : 'demand';
-  const initialCam: [number, number, number] =
-    upAxis === 'z' ? [6, 6, 5] : [6, 5, 6];
 
   return (
     <Canvas
-      camera={{ position: initialCam, fov: 50, near: 0.1, far: 100 }}
+      camera={{
+        position: upAxis === 'z' ? [6, 6, 5] : [6, 5, 6],
+        up: upAxis === 'z' ? [0, 0, 1] : [0, 1, 0],
+        fov: 50,
+        near: 0.1,
+        far: 100,
+      }}
       dpr={[1, 2]}
       frameloop={frameloop}
       gl={{ antialias: true, alpha: false, preserveDrawingBuffer: true }}
