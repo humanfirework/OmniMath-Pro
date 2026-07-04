@@ -8,7 +8,15 @@ A **VSCode-style immersive math workbench** built for users who frequently need 
 
 ![License](https://img.shields.io/github/license/humanfirework/OmniMath-Pro)
 ![Release](https://img.shields.io/github/v/release/humanfirework/OmniMath-Pro)
+![Build](https://img.shields.io/github/actions/workflow/status/humanfirework/OmniMath-Pro/release.yml?logo=github&label=release%20build)
 ![Platform](https://img.shields.io/badge/platform-Windows%20%7C%20macOS%20%7C%20Linux-blue)
+![Tauri](https://img.shields.io/badge/Tauri-2.0-FFC131?logo=tauri)
+![Next.js](https://img.shields.io/badge/Next.js-16-black?logo=next.js)
+![React](https://img.shields.io/badge/React-19-61DAFB?logo=react)
+![TypeScript](https://img.shields.io/badge/TypeScript-3178C6?logo=typescript&logoColor=white)
+![Tailwind CSS](https://img.shields.io/badge/Tailwind%20CSS-v4-06B6D4?logo=tailwindcss)
+![Bun](https://img.shields.io/badge/Bun-F9F1E1?logo=bun&logoColor=black)
+![Rust](https://img.shields.io/badge/Rust-000000?logo=rust&logoColor=white)
 
 ---
 
