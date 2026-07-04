@@ -1,15 +1,5 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100" role="img" aria-label="OmniMath Pro logo">
-  <defs>
-    <linearGradient id="omniBg" x1="0" y1="0" x2="100" y2="100" gradientUnits="userSpaceOnUse">
-      <stop offset="0%" stop-color="#1e1b4b"/>
-      <stop offset="55%" stop-color="#312e81"/>
-      <stop offset="100%" stop-color="#4f46e5"/>
-    </linearGradient>
-  </defs>
-
-  <rect x="8" y="8" width="84" height="84" rx="26" fill="url(#omniBg)"/>
-
-  <!-- 数学之花：6 片白色花瓣呈六边形对称，象征 Omni 的完整与全面 -->
+  <!-- 数学之花：6 片花瓣呈六边形对称，象征 Omni 的完整与全面 -->
   <g transform="translate(50,50)" fill="#f8fafc">
     <ellipse cx="0" cy="-22" rx="9" ry="19" transform="rotate(0)"/>
     <ellipse cx="0" cy="-22" rx="9" ry="19" transform="rotate(60)"/>
