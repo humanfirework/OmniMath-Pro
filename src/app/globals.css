@@ -1,0 +1,922 @@
+/* ============================================================
+   OmniMath Pro — Global Design System
+   Inspired by Claude typography, Xiaomi cleanliness, VSCode layout,
+   and ComfyUI/blueprint-style nodes.
+   Accent: refined teal/emerald (NO indigo, NO default blue).
+   ============================================================ */
+
+@import "tailwindcss";
+@import "tw-animate-css";
+@import "katex/dist/katex.min.css";
+
+@custom-variant dark (&:is(.dark *));
+
+/* ------------------------------------------------------------
+   Theme tokens — mapped to shadcn color names
+   ------------------------------------------------------------ */
+@theme inline {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-card: var(--card);
+  --color-card-foreground: var(--card-foreground);
+  --color-popover: var(--popover);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-primary: var(--primary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-secondary: var(--secondary);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-accent: var(--accent);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-destructive: var(--destructive);
+  --color-destructive-foreground: var(--destructive-foreground);
+  --color-border: var(--border);
+  --color-input: var(--input);
+  --color-ring: var(--ring);
+  --color-chart-1: var(--chart-1);
+  --color-chart-2: var(--chart-2);
+  --color-chart-3: var(--chart-3);
+  --color-chart-4: var(--chart-4);
+  --color-chart-5: var(--chart-5);
+  --color-sidebar: var(--sidebar);
+  --color-sidebar-foreground: var(--sidebar-foreground);
+  --color-sidebar-primary: var(--sidebar-primary);
+  --color-sidebar-primary-foreground: var(--sidebar-primary-foreground);
+  --color-sidebar-accent: var(--sidebar-accent);
+  --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
+  --color-sidebar-border: var(--sidebar-border);
+  --color-sidebar-ring: var(--sidebar-ring);
+
+  /* Custom semantic tokens */
+  --color-teal: var(--teal);
+  --color-teal-foreground: var(--teal-foreground);
+  --color-amber: var(--amber);
+  --color-rose: var(--rose);
+  --color-node-bg: var(--node-bg);
+  --color-node-border: var(--node-border);
+  --color-connector: var(--connector);
+
+  --font-sans: var(--font-geist-sans), "Inter", "SF Pro Display", "SF Pro Text", -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Microsoft YaHei", "Noto Sans SC", "Hiragino Sans GB", ui-sans-serif, system-ui, sans-serif;
+  --font-mono: var(--font-geist-mono), "JetBrains Mono", "SF Mono", "Fira Code", "Roboto Mono", ui-monospace, SFMono-Regular, Menlo, Consolas, "Courier New", monospace;
+
+  --radius-sm: calc(var(--radius) - 4px);
+  --radius-md: calc(var(--radius) - 2px);
+  --radius-lg: var(--radius);
+  --radius-xl: calc(var(--radius) + 4px);
+}
+
+/* ------------------------------------------------------------
+   LIGHT THEME — Claude-like clean white/gray
+   ------------------------------------------------------------ */
+:root {
+  --radius: 0.625rem;
+
+  /* Backgrounds — near-white, very subtle warm gray */
+  --background: oklch(0.99 0 0);
+  --foreground: oklch(0.15 0 0);
+  --card: oklch(1 0 0);
+  --card-foreground: oklch(0.15 0 0);
+  --popover: oklch(1 0 0);
+  --popover-foreground: oklch(0.15 0 0);
+
+  /* Primary — refined teal/emerald */
+  --primary: oklch(0.55 0.13 165);
+  --primary-foreground: oklch(0.99 0 0);
+
+  /* Secondary / muted — warm light gray */
+  --secondary: oklch(0.96 0.004 145);
+  --secondary-foreground: oklch(0.2 0 0);
+  --muted: oklch(0.96 0.004 145);
+  --muted-foreground: oklch(0.45 0.008 145);
+
+  /* Accent — slightly elevated surface */
+  --accent: oklch(0.94 0.01 165);
+  --accent-foreground: oklch(0.2 0.02 165);
+
+  /* Destructive — refined rose */
+  --destructive: oklch(0.6 0.22 25);
+  --destructive-foreground: oklch(0.99 0 0);
+
+  /* Borders / inputs / rings */
+  --border: oklch(0.9 0 0);
+  --input: oklch(0.9 0 0);
+  --ring: oklch(0.55 0.13 165);
+
+  /* Chart palette — teal/amber/rose/violet/sky (NO blue-primary) */
+  --chart-1: oklch(0.55 0.13 165);   /* teal */
+  --chart-2: oklch(0.75 0.15 75);    /* amber */
+  --chart-3: oklch(0.65 0.2 15);     /* rose */
+  --chart-4: oklch(0.55 0.16 300);   /* violet */
+  --chart-5: oklch(0.6 0.14 220);    /* cyan-sky */
+
+  /* Sidebar — slight teal tint */
+  --sidebar: oklch(0.985 0.003 165);
+  --sidebar-foreground: oklch(0.15 0 0);
+  --sidebar-primary: oklch(0.55 0.13 165);
+  --sidebar-primary-foreground: oklch(0.99 0 0);
+  --sidebar-accent: oklch(0.94 0.01 165);
+  --sidebar-accent-foreground: oklch(0.2 0.02 165);
+  --sidebar-border: oklch(0.9 0 0);
+  --sidebar-ring: oklch(0.55 0.13 165);
+
+  /* Custom semantic colors */
+  --teal: oklch(0.55 0.13 165);
+  --teal-foreground: oklch(0.99 0 0);
+  --amber: oklch(0.75 0.15 75);
+  --rose: oklch(0.65 0.2 15);
+  --node-bg: oklch(1 0 0);
+  --node-border: oklch(0.85 0.01 165);
+  --connector: oklch(0.55 0.13 165);
+
+  /* Typography */
+  --font-size-base: 14px;
+}
+
+/* ------------------------------------------------------------
+   DARK THEME — BRIGHT and readable (NOT pitch black)
+   Lifted from previous 0.145 → 0.18 background.
+   ------------------------------------------------------------ */
+.dark {
+  --radius: 0.625rem;
+
+  /* Backgrounds — BRIGHT dark gray (lifted significantly for readability) */
+  --background: oklch(0.235 0 0);   /* was 0.18 → lifted to ~#2e2e30 */
+  --foreground: oklch(0.98 0 0);    /* near-white text */
+  --card: oklch(0.275 0 0);         /* was 0.22 → lifted to ~#363638 */
+  --card-foreground: oklch(0.98 0 0);
+  --popover: oklch(0.30 0 0);
+  --popover-foreground: oklch(0.98 0 0);
+
+  /* Primary — bright teal in dark */
+  --primary: oklch(0.75 0.15 165);
+  --primary-foreground: oklch(0.12 0 0);
+
+  /* Secondary / muted — elevated surfaces (much brighter) */
+  --secondary: oklch(0.32 0 0);     /* was 0.26 → lifted */
+  --secondary-foreground: oklch(0.98 0 0);
+  --muted: oklch(0.32 0 0);         /* was 0.26 → lifted */
+  --muted-foreground: oklch(0.85 0 0);  /* was 0.78 → much brighter */
+
+  /* Accent — elevated surface */
+  --accent: oklch(0.34 0 0);        /* was 0.28 → lifted */
+  --accent-foreground: oklch(0.98 0 0);
+
+  /* Destructive — bright rose */
+  --destructive: oklch(0.7 0.2 22);
+  --destructive-foreground: oklch(0.99 0 0);
+
+  /* Borders / inputs / rings — MORE visible */
+  --border: oklch(1 0 0 / 20%);     /* was 14% → 20% for visibility */
+  --input: oklch(1 0 0 / 24%);      /* was 18% → 24% */
+  --ring: oklch(0.75 0.15 165);
+
+  /* Chart palette — brightened for dark */
+  --chart-1: oklch(0.75 0.15 165);   /* teal */
+  --chart-2: oklch(0.82 0.15 75);    /* amber */
+  --chart-3: oklch(0.72 0.2 15);     /* rose */
+  --chart-4: oklch(0.75 0.16 300);   /* violet */
+  --chart-5: oklch(0.75 0.14 220);   /* cyan-sky */
+
+  /* Sidebar — elevated over background */
+  --sidebar: oklch(0.275 0 0);
+  --sidebar-foreground: oklch(0.98 0 0);
+  --sidebar-primary: oklch(0.75 0.15 165);
+  --sidebar-primary-foreground: oklch(0.12 0 0);
+  --sidebar-accent: oklch(0.34 0 0);
+  --sidebar-accent-foreground: oklch(0.98 0 0);
+  --sidebar-border: oklch(1 0 0 / 20%);
+  --sidebar-ring: oklch(0.75 0.15 165);
+
+  /* Custom semantic colors */
+  --teal: oklch(0.75 0.15 165);
+  --teal-foreground: oklch(0.12 0 0);
+  --amber: oklch(0.82 0.15 75);
+  --rose: oklch(0.72 0.2 15);
+  --node-bg: oklch(0.275 0 0);
+  --node-border: oklch(0.75 0.15 165 / 40%);
+  --connector: oklch(0.75 0.15 165);
+}
+
+/* ------------------------------------------------------------
+   Base layer — typography, body, base elements
+   ------------------------------------------------------------ */
+@layer base {
+  * {
+    @apply border-border outline-ring/50;
+  }
+
+  html {
+    font-size: var(--font-size-base, 14px);
+    -webkit-text-size-adjust: 100%;
+  }
+
+  body {
+    @apply bg-background text-foreground;
+    font-family: var(--font-sans);
+    font-feature-settings: "cv11", "ss01", "ss03";
+    font-variation-settings: "opsz" 32;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+    text-rendering: optimizeLegibility;
+    overflow: hidden;  /* App is full-screen */
+    /* Smooth theme transition */
+    transition: background-color 0.2s ease, color 0.2s ease;
+  }
+
+  h1, h2, h3, h4, h5, h6 {
+    font-family: var(--font-sans);
+    letter-spacing: -0.02em;
+    font-weight: 600;
+  }
+
+  /* Headings — tighter tracking for premium feel */
+  h1 { letter-spacing: -0.03em; }
+  h2 { letter-spacing: -0.025em; }
+
+  /* Monospace for code/math areas — tabular nums for aligned columns */
+  code, pre, kbd, samp, .font-mono {
+    font-family: var(--font-mono);
+    font-feature-settings: "calt" 1, "liga" 0, "tnum" 1, "zero" 1;
+  }
+
+  /* Selection color — teal-tinted */
+  ::selection {
+    background: oklch(0.7 0.15 165 / 25%);
+    color: inherit;
+  }
+
+  .dark ::selection {
+    background: oklch(0.7 0.15 165 / 35%);
+    color: inherit;
+  }
+
+  /* Focus ring — teal */
+  :focus-visible {
+    outline: 2px solid oklch(0.7 0.15 165 / 70%);
+    outline-offset: 1px;
+    border-radius: 4px;
+  }
+
+  /* Textarea: no outline, smooth caret */
+  textarea {
+    outline: none !important;
+    resize: none;
+  }
+
+  textarea:focus {
+    outline: none !important;
+    box-shadow: none !important;
+  }
+
+  /* Resizer styles for panels */
+  [data-panel-resize-handle-id] {
+    position: relative;
+    background: transparent;
+    transition: background 0.15s ease;
+  }
+
+  [data-panel-resize-handle-id]:hover,
+  [data-panel-resize-handle-id][data-resize-handle-active] {
+    background: oklch(0.7 0.15 165 / 50%);
+  }
+
+  /* Legacy compat selectors */
+  [data-panel-group-direction="horizontal"] > [data-resize-handle] {
+    background: oklch(0 0 0 / 8%);
+    transition: background 0.15s;
+    width: 1px;
+  }
+
+  [data-panel-group-direction="horizontal"] > [data-resize-handle]:hover,
+  [data-panel-group-direction="horizontal"] > [data-resize-handle][data-resize-handle-active] {
+    background: var(--teal);
+  }
+
+  [data-panel-group-direction="vertical"] > [data-resize-handle] {
+    background: oklch(0 0 0 / 8%);
+    transition: background 0.15s;
+    height: 1px;
+  }
+
+  [data-panel-group-direction="vertical"] > [data-resize-handle]:hover,
+  [data-panel-group-direction="vertical"] > [data-resize-handle][data-resize-handle-active] {
+    background: var(--teal);
+  }
+}
+
+/* ------------------------------------------------------------
+   Custom scrollbar — bright in dark, subtle in light
+   ------------------------------------------------------------ */
+::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+
+::-webkit-scrollbar-track {
+  background: #f5f5f5;
+}
+
+::-webkit-scrollbar-thumb {
+  background: #d0d0d0;
+  border-radius: 5px;
+  border: 2px solid transparent;
+  background-clip: padding-box;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: #b0b0b0;
+  background-clip: padding-box;
+  border: 2px solid transparent;
+}
+
+::-webkit-scrollbar-corner {
+  background: transparent;
+}
+
+/* Dark theme scrollbar — brighter for readability */
+.dark ::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+
+.dark ::-webkit-scrollbar-track {
+  background: #2a2a2d;
+}
+
+.dark ::-webkit-scrollbar-thumb {
+  background: #555560;
+  border-radius: 5px;
+  border: 2px solid transparent;
+  background-clip: padding-box;
+}
+
+.dark ::-webkit-scrollbar-thumb:hover {
+  background: #6a6a78;
+  background-clip: padding-box;
+  border: 2px solid transparent;
+}
+
+.dark ::-webkit-scrollbar-corner {
+  background: transparent;
+}
+
+/* ------------------------------------------------------------
+   KaTeX overrides — bright in dark, dark in light
+   ------------------------------------------------------------ */
+.katex {
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  text-rendering: optimizeLegibility;
+  font-size: 1.05em;
+}
+
+.dark .katex {
+  color: #ececec;
+}
+
+:not(.dark) .katex {
+  color: #1f1f1f;
+}
+
+.katex .base {
+  color: inherit;
+}
+
+.katex-display {
+  margin: 0.75em 0;
+  overflow-x: auto;
+  overflow-y: hidden;
+  padding: 4px 0;
+}
+
+/* KaTeX error fallback */
+.katex-error {
+  color: oklch(0.65 0.2 15);
+  font-family: var(--font-mono);
+  font-size: 0.85em;
+  padding: 4px 8px;
+  background: oklch(0.65 0.2 15 / 10%);
+  border-radius: 4px;
+}
+
+/* ------------------------------------------------------------
+   Glass morphism utility
+   ------------------------------------------------------------ */
+.glass {
+  backdrop-filter: blur(12px) saturate(140%);
+  -webkit-backdrop-filter: blur(12px) saturate(140%);
+  background: rgba(255, 255, 255, 0.6);
+  border: 1px solid rgba(255, 255, 255, 0.4);
+}
+
+.dark .glass {
+  backdrop-filter: blur(12px) saturate(140%);
+  -webkit-backdrop-filter: blur(12px) saturate(140%);
+  background: rgba(20, 20, 22, 0.55);
+  border: 1px solid rgba(255, 255, 255, 0.06);
+}
+
+.glass-strong {
+  backdrop-filter: blur(20px) saturate(160%);
+  -webkit-backdrop-filter: blur(20px) saturate(160%);
+  background: rgba(255, 255, 255, 0.8);
+  border: 1px solid rgba(255, 255, 255, 0.5);
+}
+
+.dark .glass-strong {
+  backdrop-filter: blur(20px) saturate(160%);
+  -webkit-backdrop-filter: blur(20px) saturate(160%);
+  background: rgba(20, 20, 22, 0.75);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+/* ------------------------------------------------------------
+   Gradient text utility
+   ------------------------------------------------------------ */
+.text-gradient {
+  background-clip: text;
+  -webkit-background-clip: text;
+  color: transparent;
+  -webkit-text-fill-color: transparent;
+}
+
+.text-gradient-teal {
+  background-image: linear-gradient(135deg, oklch(0.7 0.15 165) 0%, oklch(0.6 0.16 195) 100%);
+  background-clip: text;
+  -webkit-background-clip: text;
+  color: transparent;
+  -webkit-text-fill-color: transparent;
+}
+
+.text-gradient-amber {
+  background-image: linear-gradient(135deg, oklch(0.78 0.15 75) 0%, oklch(0.7 0.18 50) 100%);
+  background-clip: text;
+  -webkit-background-clip: text;
+  color: transparent;
+  -webkit-text-fill-color: transparent;
+}
+
+.text-gradient-rose {
+  background-image: linear-gradient(135deg, oklch(0.7 0.2 15) 0%, oklch(0.65 0.18 350) 100%);
+  background-clip: text;
+  -webkit-background-clip: text;
+  color: transparent;
+  -webkit-text-fill-color: transparent;
+}
+
+/* ------------------------------------------------------------
+   Animated grid background — for empty states / canvas
+   ------------------------------------------------------------ */
+.grid-bg {
+  background-image:
+    linear-gradient(to right, oklch(0 0 0 / 4%) 1px, transparent 1px),
+    linear-gradient(to bottom, oklch(0 0 0 / 4%) 1px, transparent 1px);
+  background-size: 24px 24px;
+  background-position: center center;
+  animation: gridShift 20s linear infinite;
+}
+
+.dark .grid-bg {
+  background-image:
+    linear-gradient(to right, oklch(1 0 0 / 5%) 1px, transparent 1px),
+    linear-gradient(to bottom, oklch(1 0 0 / 5%) 1px, transparent 1px);
+}
+
+@keyframes gridShift {
+  0% { background-position: 0 0, 0 0; }
+  100% { background-position: 24px 24px, 24px 24px; }
+}
+
+/* Dotted grid background variant */
+.grid-bg-dots {
+  background-image: radial-gradient(circle, oklch(0 0 0 / 12%) 1px, transparent 1px);
+  background-size: 18px 18px;
+  animation: gridShift 25s linear infinite;
+}
+
+.dark .grid-bg-dots {
+  background-image: radial-gradient(circle, oklch(1 0 0 / 12%) 1px, transparent 1px);
+}
+
+/* ------------------------------------------------------------
+   ComfyUI / blueprint-style node & connector styles
+   ------------------------------------------------------------ */
+.node-card {
+  position: relative;
+  background: var(--node-bg);
+  border: 1px solid var(--node-border);
+  border-radius: 10px;
+  box-shadow:
+    0 1px 2px oklch(0 0 0 / 6%),
+    0 4px 12px oklch(0 0 0 / 8%);
+  transition:
+    transform 0.18s cubic-bezier(0.2, 0.8, 0.2, 1),
+    box-shadow 0.18s ease,
+    border-color 0.18s ease;
+}
+
+.dark .node-card {
+  box-shadow:
+    0 1px 2px oklch(0 0 0 / 30%),
+    0 6px 18px oklch(0 0 0 / 35%);
+}
+
+.node-card:hover {
+  transform: translateY(-1px);
+  border-color: var(--teal);
+  box-shadow:
+    0 2px 4px oklch(0 0 0 / 8%),
+    0 8px 24px oklch(0.7 0.15 165 / 18%);
+}
+
+.dark .node-card:hover {
+  box-shadow:
+    0 2px 4px oklch(0 0 0 / 35%),
+    0 8px 24px oklch(0.7 0.15 165 / 25%);
+}
+
+.node-card.selected,
+.node-card[data-selected="true"] {
+  border-color: var(--teal);
+  box-shadow:
+    0 0 0 1px var(--teal),
+    0 8px 24px oklch(0.7 0.15 165 / 25%);
+}
+
+/* Node header strip */
+.node-card .node-header {
+  background: linear-gradient(180deg, oklch(0.7 0.15 165 / 12%) 0%, transparent 100%);
+  border-bottom: 1px solid var(--node-border);
+  border-radius: 10px 10px 0 0;
+  padding: 6px 10px;
+  font-weight: 600;
+  font-size: 0.8em;
+  letter-spacing: -0.01em;
+  color: var(--foreground);
+}
+
+.dark .node-card .node-header {
+  background: linear-gradient(180deg, oklch(0.7 0.15 165 / 18%) 0%, transparent 100%);
+}
+
+/* Connector lines */
+.node-connector {
+  stroke: var(--connector);
+  stroke-width: 2;
+  fill: none;
+  opacity: 0.7;
+  transition: opacity 0.15s ease, stroke-width 0.15s ease;
+}
+
+.node-connector:hover {
+  opacity: 1;
+  stroke-width: 2.5;
+}
+
+.node-connector.animated {
+  stroke-dasharray: 6 4;
+  animation: connectorDash 0.8s linear infinite;
+}
+
+@keyframes connectorDash {
+  0% { stroke-dashoffset: 0; }
+  100% { stroke-dashoffset: -10; }
+}
+
+/* Node ports (input/output sockets) */
+.node-port {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: var(--node-bg);
+  border: 2px solid var(--teal);
+  cursor: crosshair;
+  transition: transform 0.15s ease, box-shadow 0.15s ease, background 0.15s ease;
+}
+
+.node-port:hover,
+.node-port.active {
+  transform: scale(1.3);
+  background: var(--teal);
+  box-shadow: 0 0 0 3px oklch(0.7 0.15 165 / 30%);
+}
+
+.node-port.connected {
+  background: var(--teal);
+}
+
+/* ------------------------------------------------------------
+   Animations — keyframes + utility classes
+   ------------------------------------------------------------ */
+@keyframes fadeIn {
+  from { opacity: 0; transform: translateY(-4px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+.animate-fade-in {
+  animation: fadeIn 0.18s ease-out both;
+}
+
+@keyframes slideInLeft {
+  from { opacity: 0; transform: translateX(-16px); }
+  to { opacity: 1; transform: translateX(0); }
+}
+.animate-slide-in-left {
+  animation: slideInLeft 0.22s cubic-bezier(0.2, 0.8, 0.2, 1) both;
+}
+
+@keyframes slideInRight {
+  from { opacity: 0; transform: translateX(16px); }
+  to { opacity: 1; transform: translateX(0); }
+}
+.animate-slide-in-right {
+  animation: slideInRight 0.22s cubic-bezier(0.2, 0.8, 0.2, 1) both;
+}
+
+@keyframes slideInUp {
+  from { opacity: 0; transform: translateY(16px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+.animate-slide-in-up {
+  animation: slideInUp 0.22s cubic-bezier(0.2, 0.8, 0.2, 1) both;
+}
+
+@keyframes scaleIn {
+  from { opacity: 0; transform: scale(0.95); }
+  to { opacity: 1; transform: scale(1); }
+}
+.animate-scale-in {
+  animation: scaleIn 0.18s cubic-bezier(0.2, 0.8, 0.2, 1) both;
+}
+
+@keyframes bounceIn {
+  0% { opacity: 0; transform: scale(0.8); }
+  60% { opacity: 1; transform: scale(1.04); }
+  100% { opacity: 1; transform: scale(1); }
+}
+.animate-bounce-in {
+  animation: bounceIn 0.32s cubic-bezier(0.2, 0.8, 0.2, 1) both;
+}
+
+@keyframes glowPulse {
+  0%, 100% {
+    box-shadow:
+      0 0 4px oklch(0.7 0.15 165 / 25%),
+      0 0 0 0 oklch(0.7 0.15 165 / 20%);
+  }
+  50% {
+    box-shadow:
+      0 0 12px oklch(0.7 0.15 165 / 50%),
+      0 0 0 4px oklch(0.7 0.15 165 / 8%);
+  }
+}
+.animate-glow-pulse {
+  animation: glowPulse 2.4s ease-in-out infinite;
+}
+
+@keyframes shimmer {
+  0% { background-position: -200% 0; }
+  100% { background-position: 200% 0; }
+}
+.animate-shimmer {
+  background: linear-gradient(
+    90deg,
+    transparent 0%,
+    oklch(0.7 0.15 165 / 8%) 50%,
+    transparent 100%
+  );
+  background-size: 200% 100%;
+  animation: shimmer 1.6s ease-in-out infinite;
+}
+
+@keyframes float {
+  0%, 100% { transform: translateY(0); }
+  50% { transform: translateY(-6px); }
+}
+.animate-float {
+  animation: float 4s ease-in-out infinite;
+}
+
+@keyframes gradientShift {
+  0% { background-position: 0% 50%; }
+  50% { background-position: 100% 50%; }
+  100% { background-position: 0% 50%; }
+}
+.animate-gradient {
+  background-size: 200% 200%;
+  animation: gradientShift 6s ease infinite;
+}
+
+@keyframes pulseRing {
+  0% {
+    transform: scale(0.85);
+    opacity: 0.7;
+  }
+  100% {
+    transform: scale(1.6);
+    opacity: 0;
+  }
+}
+.animate-pulse-ring {
+  position: relative;
+}
+.animate-pulse-ring::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  border: 2px solid oklch(0.7 0.15 165 / 60%);
+  animation: pulseRing 1.6s cubic-bezier(0.2, 0.8, 0.2, 1) infinite;
+}
+
+/* Subtle pulse for active indicators */
+@keyframes pulseSubtle {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.7; }
+}
+.animate-pulse-subtle {
+  animation: pulseSubtle 2s ease-in-out infinite;
+}
+
+/* Spin (for loading) */
+@keyframes spin {
+  to { transform: rotate(360deg); }
+}
+.animate-spin-slow {
+  animation: spin 1.4s linear infinite;
+}
+
+/* ------------------------------------------------------------
+   Command palette styling
+   ------------------------------------------------------------ */
+[cmdk-root] {
+  font-family: var(--font-sans);
+}
+
+[cmdk-input] {
+  font-family: var(--font-sans);
+}
+
+[cmdk-item] {
+  font-family: var(--font-sans);
+  transition: background 0.1s ease, color 0.1s ease;
+}
+
+[cmdk-item][data-selected="true"] {
+  background: oklch(0.7 0.15 165 / 12%);
+}
+
+.dark [cmdk-item][data-selected="true"] {
+  background: oklch(0.7 0.15 165 / 22%);
+}
+
+/* ------------------------------------------------------------
+   Radix popper / tooltip z-index
+   ------------------------------------------------------------ */
+[data-radix-popper-content-wrapper] {
+  z-index: 100;
+}
+
+/* ------------------------------------------------------------
+   Selection behavior — disable on UI chrome, enable on content
+   ------------------------------------------------------------ */
+button, .select-none {
+  -webkit-user-select: none;
+  user-select: none;
+}
+
+textarea, pre, code, .katex, .select-text {
+  -webkit-user-select: text;
+  user-select: text;
+}
+
+/* ------------------------------------------------------------
+   Custom tooltip arrow & smooth dialog transitions
+   ------------------------------------------------------------ */
+[data-state="open"].animate-in,
+[data-state="closed"].animate-out {
+  transition: opacity 0.15s ease, transform 0.15s ease;
+}
+
+/* ------------------------------------------------------------
+   Premium dashboard accents — gradient borders
+   ------------------------------------------------------------ */
+.gradient-border-teal {
+  position: relative;
+  background: var(--card);
+  border-radius: var(--radius);
+}
+
+.gradient-border-teal::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  padding: 1px;
+  background: linear-gradient(135deg, oklch(0.7 0.15 165 / 60%), oklch(0.6 0.16 195 / 30%), transparent);
+  -webkit-mask:
+    linear-gradient(#fff 0 0) content-box,
+    linear-gradient(#fff 0 0);
+  -webkit-mask-composite: xor;
+  mask-composite: exclude;
+  pointer-events: none;
+}
+
+/* Glow card — for emphasis cards (AI output, results) */
+.glow-card-teal {
+  box-shadow:
+    0 0 0 1px oklch(0.7 0.15 165 / 25%),
+    0 8px 24px oklch(0.7 0.15 165 / 12%);
+}
+
+.dark .glow-card-teal {
+  box-shadow:
+    0 0 0 1px oklch(0.7 0.15 165 / 35%),
+    0 8px 24px oklch(0.7 0.15 165 / 20%);
+}
+
+/* ------------------------------------------------------------
+   VSCode-style activity bar accent (left side)
+   ------------------------------------------------------------ */
+.activity-indicator {
+  position: absolute;
+  left: 0;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 2px;
+  height: 60%;
+  background: var(--teal);
+  border-radius: 0 2px 2px 0;
+  box-shadow: 0 0 8px oklch(0.7 0.15 165 / 60%);
+  transition: opacity 0.15s ease, transform 0.15s ease;
+}
+
+/* ------------------------------------------------------------
+   Hide scrollbar utility (for inner panels)
+   ------------------------------------------------------------ */
+.scrollbar-none {
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+}
+.scrollbar-none::-webkit-scrollbar {
+  display: none;
+}
+
+/* ------------------------------------------------------------
+   Premium inputs — clean focus
+   ------------------------------------------------------------ */
+input[type="text"],
+input[type="number"],
+input[type="search"],
+input:not([type]) {
+  font-family: var(--font-sans);
+}
+
+input::placeholder,
+textarea::placeholder {
+  color: var(--muted-foreground);
+  opacity: 0.8;
+}
+
+/* Code editor textarea — comfortable line height */
+textarea.code-input,
+textarea.editor-input {
+  font-family: var(--font-mono);
+  font-size: 13.5px;
+  line-height: 1.65;
+  tab-size: 2;
+}
+
+/* ------------------------------------------------------------
+   Misc — high contrast utility, smooth color transitions
+   ------------------------------------------------------------ */
+.transition-theme {
+  transition:
+    background-color 0.18s ease,
+    border-color 0.18s ease,
+    color 0.18s ease;
+}
+
+/* Disable text selection on drag operations */
+.dragging,
+.dragging * {
+  user-select: none !important;
+  cursor: grabbing !important;
+}
+
+/* Premium focus state for interactive cards */
+.interactive-card {
+  transition:
+    transform 0.18s cubic-bezier(0.2, 0.8, 0.2, 1),
+    box-shadow 0.18s ease,
+    border-color 0.18s ease,
+    background-color 0.18s ease;
+}
+
+.interactive-card:hover {
+  transform: translateY(-1px);
+}
+
+.interactive-card:active {
+  transform: translateY(0) scale(0.99);
+}

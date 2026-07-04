@@ -1,0 +1,44 @@
+{
+  "$schema": "../node_modules/@tauri-apps/cli/config.schema.json",
+  "productName": "OmniMath Pro",
+  "version": "0.0.2",
+  "identifier": "com.omnimath.pro",
+  "build": {
+    "frontendDist": "../out",
+    "devUrl": "http://localhost:3000",
+    "beforeDevCommand": "bun run dev",
+    "beforeBuildCommand": "bun run build"
+  },
+  "app": {
+    "windows": [
+      {
+        "title": "OmniMath Pro",
+        "width": 1280,
+        "height": 800,
+        "minWidth": 900,
+        "minHeight": 600,
+        "resizable": true,
+        "center": true,
+        "fullscreen": false
+      }
+    ],
+    "security": {
+      "csp": null
+    }
+  },
+  "bundle": {
+    "active": true,
+    "targets": "all",
+    "publisher": "OmniMath",
+    "category": "Education",
+    "shortDescription": "OmniMath Pro — 全能数学工作台",
+    "longDescription": "OmniMath Pro 是一款 VSCode 风格的沉浸式数学工作台，集成符号计算、2D 绘图、公式渲染、方程求解、单位/进制转换与命令面板，基于 Tauri 2 + Next.js + React 19 构建，支持跨平台桌面运行。",
+    "icon": [
+      "icons/32x32.png",
+      "icons/128x128.png",
+      "icons/128x128@2x.png",
+      "icons/icon.icns",
+      "icons/icon.ico"
+    ]
+  }
+}
