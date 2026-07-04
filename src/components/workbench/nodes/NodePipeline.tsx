@@ -244,6 +244,7 @@ export function NodePipeline() {
   const addResult = useWorkbenchStore((s) => s.addResult);
   const variables = useWorkbenchStore((s) => s.variables);
   const setViewMode = useWorkbenchStore((s) => s.setViewMode);
+  const setActivePreviewTab = useWorkbenchStore((s) => s.setActivePreviewTab);
 
   // Pipeline state — lazy-init from localStorage (safe on client).
   const [nodes, setNodes] = useState<PipelineNode[]>(() => loadState()?.nodes ?? []);
@@ -332,6 +333,56 @@ export function NodePipeline() {
   );
 
   /* ── Execution ───────────────────────────────────────────────── */
+  // Compute a sensible y-range from a sampled plot so the 2D panel can
+  // show the curve without clipping (previously hard-coded to [-5, 5]).
+  const computeYRange = useCallback(
+    (samples: Array<[number, number]>): [number, number] => {
+      let min = Infinity;
+      let max = -Infinity;
+      for (const [, y] of samples) {
+        if (Number.isFinite(y)) {
+          if (y < min) min = y;
+          if (y > max) max = y;
+        }
+      }
+      if (!Number.isFinite(min) || !Number.isFinite(max)) return [-5, 5];
+      if (min === max) {
+        const pad = Math.max(1, Math.abs(min) * 0.1);
+        return [min - pad, max + pad];
+      }
+      const pad = (max - min) * 0.1;
+      return [min - pad, max + pad];
+    },
+    [],
+  );
+
+  // Push every plot-output node's curve to the workbench store so the
+  // 2D panel renders it. Used both by manual run and auto-execute.
+  const pushPlotsToWorkbench = useCallback(
+    (executed: PipelineNode[]) => {
+      for (const n of executed) {
+        if (n.type === 'plot-output' && n.outputs?.plot) {
+          const plot = n.outputs.plot as {
+            expr: string;
+            xMin: number;
+            xMax: number;
+            samples: Array<[number, number]>;
+          };
+          addPlot({
+            expression: plot.expr,
+            xRange: [plot.xMin, plot.xMax],
+            yRange: computeYRange(plot.samples ?? []),
+            color: '#a78bfa',
+            plotType: 'cartesian',
+            visible: true,
+            width: 2,
+          });
+        }
+      }
+    },
+    [addPlot, computeYRange],
+  );
+
   const runPipeline = useCallback(() => {
     const ctx = {
       variables: Object.fromEntries(
@@ -344,19 +395,8 @@ export function NodePipeline() {
 
     // Side-effects: plot-output nodes push plots to the workbench store;
     // display nodes push results to history.
+    pushPlotsToWorkbench(executed);
     for (const n of executed) {
-      if (n.type === 'plot-output' && n.outputs?.plot) {
-        const plot = n.outputs.plot as { expr: string; xMin: number; xMax: number };
-        addPlot({
-          expression: plot.expr,
-          xRange: [plot.xMin, plot.xMax],
-          yRange: [-5, 5],
-          color: '#a78bfa',
-          plotType: 'cartesian',
-          visible: true,
-          width: 2,
-        });
-      }
       if (n.type === 'display' && n.result !== undefined && n.result !== null) {
         const r = n.result;
         let output = '';
@@ -387,7 +427,7 @@ export function NodePipeline() {
         });
       }
     }
-  }, [nodes, edges, variables, addPlot, addResult]);
+  }, [nodes, edges, variables, pushPlotsToWorkbench, addResult]);
 
   /* ── Auto-execute on graph / config change (debounced) ───────── */
   useEffect(() => {
@@ -695,6 +735,18 @@ export function NodePipeline() {
     [],
   );
 
+  /* ── Right-click canvas → open palette at cursor (ComfyUI-style) */
+  const onCanvasContextMenu = useCallback(
+    (e: React.MouseEvent) => {
+      e.preventDefault();
+      const rect = canvasRef.current?.getBoundingClientRect();
+      if (!rect) return;
+      setPalettePos({ x: e.clientX - rect.left, y: e.clientY - rect.top });
+      setPaletteOpen(true);
+    },
+    [],
+  );
+
   /* ── Derived: edge paths ─────────────────────────────────────── */
   const nodeById = useMemo(() => {
     const m = new Map<string, PipelineNode>();
@@ -746,6 +798,7 @@ export function NodePipeline() {
         className="relative flex-1 min-h-0 overflow-hidden grid-bg"
         onPointerDown={onCanvasPointerDown}
         onDoubleClick={onCanvasDoubleClick}
+        onContextMenu={onCanvasContextMenu}
       >
         {/* Animated parallax dots overlay */}
         <div
@@ -823,6 +876,13 @@ export function NodePipeline() {
                   onStartConnection={(portId, e) => startConnection(node.id, portId, e)}
                   onCompleteConnection={(portId, type) => completeConnection(node.id, portId, type)}
                   variables={Object.keys(variables)}
+                  onPlotOpen={() => {
+                    // Ensure the latest curve is pushed to the 2D panel
+                    // (covers the auto-execute path which doesn't push).
+                    pushPlotsToWorkbench([node]);
+                    setViewMode('workbench');
+                    setActivePreviewTab('plot2d');
+                  }}
                 />
               ))}
             </AnimatePresence>
@@ -1003,13 +1063,14 @@ interface NodeCardProps {
   onStartConnection: (portId: string, e: React.PointerEvent) => void;
   onCompleteConnection: (portId: string, type: PortDataType) => void;
   variables: string[];
+  onPlotOpen?: () => void;
 }
 
 function NodeCard({
   node, selected, computeTick, isConnecting,
   onPointerDownHeader, onDelete, onSelect,
   onConfigChange, onStartConnection, onCompleteConnection,
-  variables,
+  variables, onPlotOpen,
 }: NodeCardProps) {
   const def = NODE_TYPES[node.type];
   const cat = CATEGORY_COLOR[def.category];
@@ -1126,7 +1187,7 @@ function NodeCard({
           node.error ? 'bg-destructive/8' : 'bg-primary/5',
         )}
       >
-        <NodeResultFooter node={node} />
+        <NodeResultFooter node={node} onPlotOpen={onPlotOpen} />
       </div>
     </motion.div>
   );
@@ -1515,7 +1576,13 @@ function MatrixConfig({ node, onConfigChange }: { node: PipelineNode; onConfigCh
 /* ================================================================== *
  * Node result footer — shows computed value
  * ================================================================== */
-function NodeResultFooter({ node }: { node: PipelineNode }) {
+function NodeResultFooter({
+  node,
+  onPlotOpen,
+}: {
+  node: PipelineNode;
+  onPlotOpen?: () => void;
+}) {
   if (node.error) {
     return (
       <div className="flex items-center gap-1.5 text-[11px] text-destructive w-full">
@@ -1544,10 +1611,10 @@ function NodeResultFooter({ node }: { node: PipelineNode }) {
     );
   }
 
-  // Plot output → mini sparkline
+  // Plot output → mini sparkline (click to open in 2D panel)
   if (node.type === 'plot-output' && node.outputs?.plot) {
     const plot = node.outputs.plot as { samples: Array<[number, number]> };
-    return <Sparkline samples={plot.samples} />;
+    return <Sparkline samples={plot.samples} onClick={onPlotOpen} />;
   }
 
   // MathNode (derivative) → KaTeX
@@ -1613,7 +1680,13 @@ function resultKey(r: unknown): string {
 /* ================================================================== *
  * Sparkline — mini curve preview for plot-output nodes
  * ================================================================== */
-function Sparkline({ samples }: { samples: Array<[number, number]> }) {
+function Sparkline({
+  samples,
+  onClick,
+}: {
+  samples: Array<[number, number]>;
+  onClick?: () => void;
+}) {
   const ref = useRef<HTMLCanvasElement>(null);
   useLayoutEffect(() => {
     const canvas = ref.current;
@@ -1672,12 +1745,19 @@ function Sparkline({ samples }: { samples: Array<[number, number]> }) {
   }, [samples]);
 
   return (
-    <canvas
-      ref={ref}
-      width={200}
-      height={42}
-      className="w-full h-[42px] rounded border border-violet-500/20 bg-violet-500/5"
-    />
+    <button
+      type="button"
+      onClick={onClick}
+      title="点击在 2D 绘图面板中查看完整图像"
+      className="block w-full cursor-pointer transition-opacity hover:opacity-80"
+    >
+      <canvas
+        ref={ref}
+        width={200}
+        height={42}
+        className="w-full h-[42px] rounded border border-violet-500/20 bg-violet-500/5"
+      />
+    </button>
   );
 }
 

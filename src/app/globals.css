@@ -454,6 +454,32 @@
   border-radius: 4px;
 }
 
+.dark .katex-error {
+  color: #fca5a5 !important;
+  background: oklch(0.65 0.2 15 / 18%);
+}
+
+/* ------------------------------------------------------------
+   Generic dark-mode text contrast safety net
+   ------------------------------------------------------------ */
+/* Any element whose color is still dark in dark mode (e.g. inline
+   styles or libraries bypassing Tailwind tokens) is lifted to a
+   readable foreground. This covers result text, history cards,
+   tooltips, AI replies, and Plot2D labels that previously rendered
+   black-on-dark. */
+.dark .text-foreground,
+.dark .text-foreground\/80,
+.dark .text-foreground\/85,
+.dark .text-foreground\/90 {
+  color: oklch(0.98 0 0);
+}
+
+.dark code,
+.dark pre,
+.dark .font-mono {
+  color: oklch(0.96 0 0);
+}
+
 /* ------------------------------------------------------------
    Glass morphism utility
    ------------------------------------------------------------ */

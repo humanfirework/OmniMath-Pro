@@ -104,7 +104,24 @@ export function lenientPreprocess(input: string, mode: InputMode = 'simple'): st
         `(x+1)(x-1) → (x+1)*(x-1)`, `(x+1)2 → (x+1)*2`. */
   s = s.replace(/\)\s*([(a-zA-Z0-9])/g, ')*$1');
 
-  /* 3. Identifier-then-identifier implicit multiplication.
+  /* 3. Function-name followed by space(s) then an identifier/number —
+        Desmos-style "natural math" syntax. Only applies in simple mode.
+        Examples:
+          `arcsin x`    → `arcsin(x)`
+          `sin 0.5`     → `sin(0.5)`
+          `log 100`     → `log(100)`
+          `arctan x + 1` → `arctan(x) + 1`
+        The function-name allowlist (FUNCTION_NAMES) is shared with the
+        implicit-multiply pass below, so only KNOWN functions get the
+        bracket-insertion treatment — user-defined identifiers are left
+        alone so `myvar x` stays as `myvar*x` (not `myvar(x)`).
+        We capture the argument up to the next operator/comma/paren so
+        `sin x + cos y` → `sin(x) + cos(y)` (not `sin(x + cos(y))`). */
+  if (mode === 'simple') {
+    s = wrapFunctionSpaceArgument(s);
+  }
+
+  /* 4. Identifier-then-identifier implicit multiplication.
         Walks the string, emitting `*` between two identifier sequences
         when the first one is NOT a function name (so `sin(x)` stays
         untouched but `xy → x*y`). */
@@ -113,6 +130,103 @@ export function lenientPreprocess(input: string, mode: InputMode = 'simple'): st
   }
 
   return s;
+}
+
+/* ------------------------------------------------------------------ *
+ * wrapFunctionSpaceArgument
+ * ------------------------------------------------------------------ *
+ * For each known function name in FUNCTION_NAMES that is followed by
+ * one or more spaces and then an identifier / number / `(`, insert
+ * parentheses around the argument. The argument extends until the
+ * next top-level operator (+, -, *, /, ^, %, comma), end of string,
+ * or closing bracket at the same nesting level.
+ *
+ * Examples:
+ *   `arcsin x`          → `arcsin(x)`
+ *   `arcsin x + 1`      → `arcsin(x) + 1`
+ *   `sin 0.5`           → `sin(0.5)`
+ *   `log 100, 2`        → `log(100, 2)`     (comma kept inside)
+ *   `sin x ^ 2`         → `sin(x ^ 2)`      (function binds tighter)
+ *   `sin(cos x)`        → `sin(cos(x))`     (nested call)
+ *
+ * The "^" case above is intentional — `sin x ^ 2` in natural math
+ * usually means sin(x^2) rather than (sin x)^2 because the user is
+ * thinking of the function applied to "x squared".
+ */
+function wrapFunctionSpaceArgument(s: string): string {
+  // Build a single alternation regex of all known function names,
+  // longest first so `arctan` wins over `arc` if both were in the set.
+  const names = Array.from(FUNCTION_NAMES).sort((a, b) => b.length - a.length);
+  if (names.length === 0) return s;
+  const namePattern = names.map(escapeRegex).join('|');
+  // Match: function-name, then 1+ spaces, then a non-operator char.
+  // We do NOT match if followed by `(` already (that's already a call).
+  const re = new RegExp(`\\b(${namePattern})(\\s+)([A-Za-z0-9_\\.])`, 'g');
+
+  let out = '';
+  let lastIdx = 0;
+  let m: RegExpExecArray | null;
+  while ((m = re.exec(s)) !== null) {
+    const fnEnd = m.index + m[1].length;        // end of function name
+    const argStart = m.index + m[1].length + m[2].length; // start of arg
+    // Walk forward from argStart to find the end of the argument.
+    // Stop at top-level operators (but keep ^ inside, since sin x^2 means
+    // sin(x^2)), commas, semicolons, or closing brackets.
+    let depth = 0;
+    let i = argStart;
+    while (i < s.length) {
+      const ch = s[i];
+      if (ch === '(' || ch === '[' || ch === '{') {
+        depth++;
+      } else if (ch === ')' || ch === ']' || ch === '}') {
+        if (depth === 0) break;
+        depth--;
+      } else if (depth === 0) {
+        // Top-level: stop at binary operators except `^` (function binds
+        // tighter), and at commas/semicolons (handled inside).
+        // Allow `*` only when it was inserted by a previous rule and the
+        // context is multiplicative — but to keep this simple and safe,
+        // we stop at `+`, `-`, `*`, `/`, `%`, `,`, `;`, and whitespace
+        // followed by another function name.
+        if (ch === '+' || ch === '-' || ch === '*' || ch === '/' || ch === '%' || ch === ',' || ch === ';') {
+          break;
+        }
+        // Whitespace followed by another known function name → stop here
+        // so `sin x cos y` becomes `sin(x) cos(y)` (then the implicit-
+        // multiply pass inserts the `*`).
+        if (ch === ' ' || ch === '\t') {
+          // Peek: does the remainder start with a known function name?
+          const rest = s.slice(i).trimStart();
+          const nextWord = rest.match(/^([A-Za-z_][A-Za-z0-9_]*)/);
+          if (nextWord && FUNCTION_NAMES.has(nextWord[1])) {
+            break;
+          }
+          // Otherwise, whitespace inside an argument is fine — keep going
+          // (e.g. `log 100, 2` has a comma which we already stop at; but
+          // `sin x` has no further chars after x anyway).
+        }
+      }
+      i++;
+    }
+    const argEnd = i;
+    // Emit everything before the function name, the function name,
+    // `(`, the argument, `)`.
+    out += s.slice(lastIdx, m.index);
+    out += m[1];
+    out += '(';
+    out += s.slice(argStart, argEnd);
+    out += ')';
+    lastIdx = argEnd;
+    // Advance the regex past what we consumed so we don't re-match
+    // inside the wrapped argument.
+    re.lastIndex = argEnd;
+  }
+  out += s.slice(lastIdx);
+  return out;
+}
+
+function escapeRegex(s: string): string {
+  return s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 }
 
 /* ------------------------------------------------------------------ *

@@ -85,14 +85,14 @@ function renderAssistantContent(
           if (p.startsWith('$$') && p.endsWith('$$')) {
             return (
               <div key={i} className="my-1.5 overflow-x-auto">
-                <FormulaRenderer expression={p.slice(2, -2)} displayMode />
+                <FormulaRenderer latex={p.slice(2, -2)} displayMode />
               </div>
             );
           }
           if (p.startsWith('$') && p.endsWith('$')) {
             return (
               <span key={i} className="inline-block align-middle">
-                <FormulaRenderer expression={p.slice(1, -1)} />
+                <FormulaRenderer latex={p.slice(1, -1)} />
               </span>
             );
           }

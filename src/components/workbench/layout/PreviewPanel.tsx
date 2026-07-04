@@ -41,6 +41,7 @@ import {
 } from '@/components/ui/tooltip';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Button } from '@/components/ui/button';
+import { ErrorBoundary } from '@/components/ErrorBoundary';
 import { FormulaRenderer } from '@/components/workbench/FormulaRenderer';
 import { Plot2DPanel } from '@/components/workbench/plots/Plot2DPanel';
 import { AIPanel } from '@/components/workbench/panels/AIPanel';
@@ -177,8 +178,16 @@ export function PreviewPanel() {
             {activeTab === 'formula' && (
               <FormulaView result={currentResult} />
             )}
-            {activeTab === 'plot2d' && <Plot2DPanel />}
-            {activeTab === 'plot3d' && <Plot3DPanel />}
+            {activeTab === 'plot2d' && (
+              <ErrorBoundary>
+                <Plot2DPanel />
+              </ErrorBoundary>
+            )}
+            {activeTab === 'plot3d' && (
+              <ErrorBoundary>
+                <Plot3DPanel />
+              </ErrorBoundary>
+            )}
             {activeTab === 'log' && (
               <LogView results={results} onPick={setEditorContent} />
             )}

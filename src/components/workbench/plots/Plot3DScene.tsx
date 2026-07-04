@@ -31,15 +31,43 @@
  *   - `<Grid3D>` uses drei `<Grid>` for a subtle floor grid.
  *   - Lighting: ambient + directional + colored point lights for a
  *     teal/rose rim that gives surfaces a premium feel.
+ *
+ * Robustness:
+ *   - WebGL availability is probed ONCE at module load. If the browser
+ *     cannot create a WebGL2 (or WebGL1) context, we render a friendly
+ *     fallback instead of mounting `<Canvas>` (which would throw and
+ *     crash the whole app — previously the top cause of "绘图即崩溃").
+ *   - SurfaceMesh validates Float32Array lengths before handing them to
+ *     three.js BufferAttribute, so a malformed Surface3DData cannot
+ *     trigger a WebGL error.
  */
 
-import { useEffect, useMemo, useRef } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import type { MutableRefObject } from 'react';
 import { Canvas, useThree } from '@react-three/fiber';
 import { OrbitControls, Grid, Text, Line } from '@react-three/drei';
 import * as THREE from 'three';
 import type { Surface3DData } from '@/lib/plots/plot3d';
 import { solidColorArray } from '@/lib/plots/plot3d';
+
+/* ------------------------------------------------------------------ */
+/*  WebGL availability probe                                          */
+/* ------------------------------------------------------------------ */
+function probeWebGL(): boolean {
+  if (typeof window === 'undefined') return false;
+  try {
+    const c = document.createElement('canvas');
+    return !!(c.getContext('webgl2') || c.getContext('webgl') || c.getContext('experimental-webgl'));
+  } catch {
+    return false;
+  }
+}
+
+let webglAvailable: boolean | null = null;
+function isWebGLAvailable(): boolean {
+  if (webglAvailable === null) webglAvailable = probeWebGL();
+  return webglAvailable;
+}
 
 /* ------------------------------------------------------------------ */
 /*  Types                                                              */
@@ -110,13 +138,32 @@ function SurfaceMesh({ data, wireframe, colorMode }: SurfaceMeshProps) {
   // data or color mode actually changes.
   const geometry = useMemo(() => {
     const g = new THREE.BufferGeometry();
+    // Defensive: validate lengths so a malformed Surface3DData cannot
+    // trigger a three.js error that would bubble up and crash the app.
+    if (
+      !data || !data.vertices || data.vertices.length < 3 ||
+      data.vertices.length % 3 !== 0 ||
+      !data.normals || data.normals.length !== data.vertices.length ||
+      !data.indices || data.indices.length === 0
+    ) {
+      // Return an empty geometry — the mesh will simply not render.
+      g.setAttribute('position', new THREE.BufferAttribute(new Float32Array(3), 3));
+      g.setAttribute('normal', new THREE.BufferAttribute(new Float32Array(3), 3));
+      g.setAttribute('color', new THREE.BufferAttribute(new Float32Array(3), 3));
+      return g;
+    }
     g.setAttribute('position', new THREE.BufferAttribute(data.vertices, 3));
     g.setAttribute('normal', new THREE.BufferAttribute(data.normals, 3));
     const colorAttr =
       colorMode === 'solid'
         ? solidColorArray(data.vertices.length / 3, data.color)
         : data.colors;
-    g.setAttribute('color', new THREE.BufferAttribute(colorAttr, 3));
+    g.setAttribute('color', new THREE.BufferAttribute(
+      colorAttr && colorAttr.length === data.vertices.length
+        ? colorAttr
+        : solidColorArray(data.vertices.length / 3, data.color),
+      3,
+    ));
     g.setIndex(new THREE.BufferAttribute(data.indices, 1));
     g.computeBoundingSphere();
     return g;
@@ -482,6 +529,23 @@ export function Plot3DScene({
   // `frameloop="demand"` saves GPU cycles when the scene is static. When
   // auto-rotating we switch to `always` so the rotation animates smoothly.
   const frameloop = autoRotate ? 'always' : 'demand';
+
+  // Probe WebGL once on the client; if unavailable, render a fallback
+  // instead of mounting <Canvas> (which would synchronously throw).
+  const [webglOk] = useState<boolean>(() => isWebGLAvailable());
+
+  if (!webglOk) {
+    return (
+      <div className="grid h-full w-full place-items-center bg-background p-6 text-center">
+        <div className="space-y-2">
+          <div className="text-2xl"> WebGL 不可用</div>
+          <p className="max-w-sm text-sm text-muted-foreground">
+            当前环境无法创建 WebGL 上下文，3D 绘图不可用。请检查显卡驱动是否正常、浏览器是否禁用了硬件加速。
+          </p>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <Canvas

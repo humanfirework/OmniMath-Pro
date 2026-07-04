@@ -142,6 +142,19 @@ export function sampleSurface(
   resolution = 60,
   color = '#2dd4bf',
 ): Surface3DData {
+  // Defensive: reject malformed ranges so we never produce NaN vertices
+  // that would later blow up WebGL (GL_INVALID_OPERATION) in three.js.
+  if (
+    !Array.isArray(xRange) || xRange.length !== 2 ||
+    !Number.isFinite(xRange[0]) || !Number.isFinite(xRange[1]) ||
+    xRange[0] === xRange[1] ||
+    !Array.isArray(yRange) || yRange.length !== 2 ||
+    !Number.isFinite(yRange[0]) || !Number.isFinite(yRange[1]) ||
+    yRange[0] === yRange[1]
+  ) {
+    throw new Error('Invalid sampling range');
+  }
+
   // Throws on a parse error — let trySampleSurface catch it.
   const compiled = math.compile(expr);
 

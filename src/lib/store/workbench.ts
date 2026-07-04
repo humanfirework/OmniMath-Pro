@@ -113,6 +113,38 @@ interface WorkbenchState {
 
 export const STORAGE_KEY = 'omnimath-pro-v2';
 
+/** Validate a plot config from localStorage — rejects malformed entries
+ *  that would crash downstream sampling (xRange/yRange must be finite
+ *  2-tuples, expression must be a non-empty string). */
+function sanitizePlot(p: unknown): PlotConfig | null {
+  if (!p || typeof p !== 'object') return null;
+  const o = p as Record<string, unknown>;
+  const expr = o.expression;
+  const xRange = o.xRange;
+  const yRange = o.yRange;
+  if (typeof expr !== 'string' || !expr.trim()) return null;
+  if (
+    !Array.isArray(xRange) || xRange.length !== 2 ||
+    !Number.isFinite(xRange[0]) || !Number.isFinite(xRange[1]) ||
+    !Array.isArray(yRange) || yRange.length !== 2 ||
+    !Number.isFinite(yRange[0]) || !Number.isFinite(yRange[1])
+  ) {
+    return null;
+  }
+  return {
+    id: typeof o.id === 'string' ? o.id : `plot-${Math.random().toString(36).slice(2, 7)}`,
+    expression: expr,
+    xRange: [xRange[0], xRange[1]] as [number, number],
+    yRange: [yRange[0], yRange[1]] as [number, number],
+    color: typeof o.color === 'string' ? o.color : '#2dd4bf',
+    plotType: (o.plotType === 'cartesian' || o.plotType === 'polar' ||
+      o.plotType === 'parametric' || o.plotType === 'surface3d')
+      ? o.plotType : 'cartesian',
+    visible: typeof o.visible === 'boolean' ? o.visible : true,
+    width: typeof o.width === 'number' ? o.width : 2,
+  };
+}
+
 function loadInitial(): Partial<WorkbenchState> {
   if (typeof window === 'undefined') return {};
   try {
@@ -124,7 +156,9 @@ function loadInitial(): Partial<WorkbenchState> {
       inputMode: data.inputMode ?? 'simple',
       results: data.results ?? [],
       variables: data.variables ?? {},
-      plots: data.plots ?? [],
+      plots: Array.isArray(data.plots)
+        ? data.plots.map(sanitizePlot).filter((p: PlotConfig | null): p is PlotConfig => p !== null)
+        : [],
       theme: data.theme ?? 'dark',
       locale: data.locale ?? 'zh-CN',
       activeSidePanel: data.activeSidePanel ?? 'history',

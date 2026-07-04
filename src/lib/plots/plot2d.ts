@@ -154,6 +154,15 @@ export function sampleFunction(
   count = 600,
 ): PlotSample[] {
   if (!expr || !expr.trim()) return [];
+  // Defensive: reject malformed ranges so downstream code never hits a
+  // TypeError by destructuring null/undefined or looping NaN spans.
+  if (
+    !Array.isArray(xRange) || xRange.length !== 2 ||
+    !Number.isFinite(xRange[0]) || !Number.isFinite(xRange[1]) ||
+    xRange[0] === xRange[1]
+  ) {
+    return [];
+  }
   let compiled: ReturnType<MathJsInstance['compile']>;
   try {
     compiled = math.compile(expr);

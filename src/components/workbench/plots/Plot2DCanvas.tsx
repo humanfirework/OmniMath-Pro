@@ -818,14 +818,14 @@ export function Plot2DCanvas({
     return (
       <div
         ref={containerRef}
-        className="relative h-full w-full overflow-hidden bg-[#1a1a1d] dark:bg-[#1a1a1d]"
+        className="relative h-full w-full overflow-hidden bg-background"
         style={{ minHeight: 280 }}
       >
         <div className="grid-bg pointer-events-none absolute inset-0 opacity-50" />
         <div className="relative z-10 flex h-full w-full flex-col items-center justify-center gap-4 px-6 text-center">
           <svg
             viewBox="0 0 240 80"
-            className="animate-float h-16 w-48 text-[#2dd4bf]"
+            className="animate-float h-16 w-48 text-primary"
             fill="none"
             stroke="currentColor"
             strokeWidth="2"
@@ -837,10 +837,10 @@ export function Plot2DCanvas({
             />
           </svg>
           <div className="space-y-1.5">
-            <p className="text-base font-medium text-[#e8edf3]">
-              输入 <code className="rounded bg-white/10 px-1.5 py-0.5 font-mono text-[#2dd4bf]">plot(sin(x))</code> 或在简单模式输入 <code className="rounded bg-white/10 px-1.5 py-0.5 font-mono text-[#2dd4bf]">sin x</code> 来绘图
+            <p className="text-base font-medium text-foreground/90">
+              输入 <code className="rounded bg-muted px-1.5 py-0.5 font-mono text-primary">plot(sin(x))</code> 或在简单模式输入 <code className="rounded bg-muted px-1.5 py-0.5 font-mono text-primary">sin x</code> 来绘图
             </p>
-            <p className="text-sm text-[#9aa0aa]">支持滚轮缩放、拖拽平移、悬停查看精确坐标</p>
+            <p className="text-sm text-muted-foreground">支持滚轮缩放、拖拽平移、悬停查看精确坐标</p>
           </div>
           <div className="flex flex-wrap items-center justify-center gap-2">
             {EXAMPLES.map((ex) => (
@@ -848,7 +848,7 @@ export function Plot2DCanvas({
                 key={ex.expr}
                 type="button"
                 onClick={() => onInsertExample?.(ex.expr)}
-                className="interactive-card rounded-full border border-white/10 bg-white/5 px-3 py-1.5 font-mono text-xs text-[#e8edf3] transition-theme hover:border-[#2dd4bf]/40 hover:bg-[#2dd4bf]/10 hover:text-[#2dd4bf]"
+                className="interactive-card rounded-full border border-border bg-muted/40 px-3 py-1.5 font-mono text-xs text-foreground/90 transition-theme hover:border-primary/40 hover:bg-primary/10 hover:text-primary"
               >
                 {ex.label}
               </button>
