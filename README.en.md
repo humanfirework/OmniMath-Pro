@@ -13,10 +13,6 @@ A **VSCode-style immersive math workbench** built for users who frequently need 
 ![Tauri](https://img.shields.io/badge/Tauri-2.0-FFC131?logo=tauri)
 ![Next.js](https://img.shields.io/badge/Next.js-16-black?logo=next.js)
 ![React](https://img.shields.io/badge/React-19-61DAFB?logo=react)
-![TypeScript](https://img.shields.io/badge/TypeScript-3178C6?logo=typescript&logoColor=white)
-![Tailwind CSS](https://img.shields.io/badge/Tailwind%20CSS-v4-06B6D4?logo=tailwindcss)
-![Bun](https://img.shields.io/badge/Bun-F9F1E1?logo=bun&logoColor=black)
-![Rust](https://img.shields.io/badge/Rust-000000?logo=rust&logoColor=white)
 
 ---
 
