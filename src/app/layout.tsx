@@ -53,6 +53,9 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="zh-CN" className="dark" suppressHydrationWarning>
+      <head>
+        <link rel="preconnect" href="https://cdn.jsdelivr.net" />
+      </head>
       <body
         className={`${geistSans.variable} ${geistMono.variable} antialiased`}
       >

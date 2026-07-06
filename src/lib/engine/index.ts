@@ -15,7 +15,7 @@
  */
 
 // ── Public API ────────────────────────────────────────────────────
-export { evaluateExpression, getScope, resetScope, setScopeVar } from './evaluator';
+export { evaluateExpression, evaluateExpressionAsync, getScope, resetScope, setScopeVar } from './evaluator';
 export { inputToLatex, resultToLatex, formatNumber, stepsToLatex } from './latex';
 export { normalizeSymbols, symbolAliases } from './symbols';
 export { lenientPreprocess, preprocessForMode } from './parser';

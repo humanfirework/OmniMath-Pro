@@ -44,8 +44,8 @@
 
 import { useEffect, useMemo, useRef, useState } from 'react';
 import type { MutableRefObject } from 'react';
-import { Canvas, useThree } from '@react-three/fiber';
-import { OrbitControls, Grid, Text, Line } from '@react-three/drei';
+import { Canvas, useThree, useFrame } from '@react-three/fiber';
+import { OrbitControls, Grid, Text, Line, Billboard } from '@react-three/drei';
 import * as THREE from 'three';
 import type { Surface3DData } from '@/lib/plots/plot3d';
 import { solidColorArray } from '@/lib/plots/plot3d';
@@ -243,6 +243,61 @@ function TickMark({ position, axis, color, length = 0.14 }: TickMarkProps) {
 }
 
 /* ------------------------------------------------------------------ */
+/*  BillboardLabel — text that always faces the camera with           */
+/*  screen-space constant size (independent of zoom level)            */
+/* ------------------------------------------------------------------ */
+
+interface BillboardLabelProps {
+  position: [number, number, number];
+  text: string;
+  color: string;
+  outlineColor: string;
+  /** Desired font size in screen pixels (will be scaled by camera distance). */
+  pixelSize?: number;
+  outlineWidth?: number;
+}
+
+function BillboardLabel({
+  position,
+  text,
+  color,
+  outlineColor,
+  pixelSize = 14,
+  outlineWidth = 0.04,
+}: BillboardLabelProps) {
+  const { camera } = useThree();
+  const textRef = useRef<any>(null);
+  const posVec = useMemo(() => new THREE.Vector3(...position), [position]);
+
+  // Update fontSize every frame based on camera distance so the label
+  // maintains a constant screen-pixel size regardless of zoom.
+  useFrame(() => {
+    if (!textRef.current) return;
+    const distance = camera.position.distanceTo(posVec);
+    // Convert desired screen pixels to world units at this distance.
+    // The magic number ~0.5 scales so that pixelSize=14 looks reasonable.
+    const worldSize = (pixelSize * distance) / 280;
+    textRef.current.fontSize = worldSize;
+  });
+
+  return (
+    <Billboard position={position}>
+      <Text
+        ref={textRef}
+        fontSize={0.3}
+        color={color}
+        anchorX="center"
+        anchorY="middle"
+        outlineWidth={outlineWidth}
+        outlineColor={outlineColor}
+      >
+        {text}
+      </Text>
+    </Billboard>
+  );
+}
+
+/* ------------------------------------------------------------------ */
 /*  Axes3D — labeled X / Y / Z lines with tick marks                  */
 /* ------------------------------------------------------------------ */
 
@@ -269,23 +324,8 @@ function Axes3D({ size, theme }: Axes3DProps) {
     return { step, values: out };
   }, [size]);
 
-  const labelProps = {
-    fontSize: 0.45,
-    color: palette.axisLabel,
-    anchorX: 'center' as const,
-    anchorY: 'middle' as const,
-    outlineWidth: 0.025,
-    outlineColor: palette.bg,
-  };
-
-  const tickLabelProps = {
-    fontSize: 0.28,
-    color: palette.tickLabel,
-    anchorX: 'center' as const,
-    anchorY: 'middle' as const,
-    outlineWidth: 0.018,
-    outlineColor: palette.bg,
-  };
+  // Tick label offset from the axis (in world units at default zoom).
+  const tickOffset = Math.max(0.3, size * 0.04);
 
   return (
     <group>
@@ -302,42 +342,73 @@ function Axes3D({ size, theme }: Axes3DProps) {
           {/* X tick at (v, 0, 0) */}
           <TickMark position={[v, 0, 0]} axis="x" color={AXIS_COLORS.x} />
           {Math.abs(v) > 1e-9 && (
-            <Text position={[v, -0.3, 0.3]} rotation={[-Math.PI / 2, 0, 0]} {...tickLabelProps}>
-              {fmtTick(v, ticks.step)}
-            </Text>
+            <BillboardLabel
+              position={[v, -tickOffset, tickOffset]}
+              text={fmtTick(v, ticks.step)}
+              color={palette.tickLabel}
+              outlineColor={palette.bg}
+              pixelSize={11}
+            />
           )}
           {/* Y tick at (0, v, 0) */}
           <TickMark position={[0, v, 0]} axis="y" color={AXIS_COLORS.y} />
           {Math.abs(v) > 1e-9 && (
-            <Text position={[0.3, v, 0.3]} rotation={[0, 0, 0]} {...tickLabelProps}>
-              {fmtTick(v, ticks.step)}
-            </Text>
+            <BillboardLabel
+              position={[tickOffset, v, tickOffset]}
+              text={fmtTick(v, ticks.step)}
+              color={palette.tickLabel}
+              outlineColor={palette.bg}
+              pixelSize={11}
+            />
           )}
           {/* Z tick at (0, 0, v) */}
           <TickMark position={[0, 0, v]} axis="z" color={AXIS_COLORS.z} />
           {Math.abs(v) > 1e-9 && (
-            <Text position={[0.3, 0, v]} rotation={[0, 0, 0]} {...tickLabelProps}>
-              {fmtTick(v, ticks.step)}
-            </Text>
+            <BillboardLabel
+              position={[tickOffset, 0, v]}
+              text={fmtTick(v, ticks.step)}
+              color={palette.tickLabel}
+              outlineColor={palette.bg}
+              pixelSize={11}
+            />
           )}
         </group>
       ))}
 
-      {/* Axis end labels */}
-      <Text position={[size + 0.6, 0, 0]} {...labelProps}>
-        x
-      </Text>
-      <Text position={[0, size + 0.6, 0]} {...labelProps}>
-        y
-      </Text>
-      <Text position={[0, 0, size + 0.6]} {...labelProps}>
-        z
-      </Text>
+      {/* Axis end labels — larger, bolder */}
+      <BillboardLabel
+        position={[size + tickOffset * 1.8, 0, 0]}
+        text="x"
+        color={palette.axisLabel}
+        outlineColor={palette.bg}
+        pixelSize={18}
+        outlineWidth={0.05}
+      />
+      <BillboardLabel
+        position={[0, size + tickOffset * 1.8, 0]}
+        text="y"
+        color={palette.axisLabel}
+        outlineColor={palette.bg}
+        pixelSize={18}
+        outlineWidth={0.05}
+      />
+      <BillboardLabel
+        position={[0, 0, size + tickOffset * 1.8]}
+        text="z"
+        color={palette.axisLabel}
+        outlineColor={palette.bg}
+        pixelSize={18}
+        outlineWidth={0.05}
+      />
 
       {/* Origin label */}
-      <Text position={[-0.35, -0.35, -0.1]} {...tickLabelProps}>
-        0
-      </Text>
+      <BillboardLabel
+        position={[-tickOffset, -tickOffset, -tickOffset * 0.4]}
+        text="0"
+        color={palette.tickLabel}
+        outlineColor={palette.bg}
+        pixelSize={11}
+      />
     </group>
   );
 }

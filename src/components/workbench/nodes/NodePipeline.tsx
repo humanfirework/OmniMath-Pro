@@ -251,6 +251,9 @@ export function NodePipeline() {
   const [nodes, setNodes] = useState<PipelineNode[]>(() => loadState()?.nodes ?? []);
   const [edges, setEdges] = useState<PipelineEdge[]>(() => loadState()?.edges ?? []);
   const [selectedId, setSelectedId] = useState<string | null>(null);
+  // Multi-selection set. `selectedId` is kept in sync as the "anchor" /
+  // primary selection for Inspector compatibility and edge highlighting.
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
 
   // Viewport (pan + zoom).
   const [view, setView] = useState<{ x: number; y: number; scale: number }>({
@@ -265,6 +268,20 @@ export function NodePipeline() {
     fromPort: string;
     cursor: { x: number; y: number };
   } | null>(null);
+
+  // Port snapping — when the cursor is near an input port while dragging a
+  // connection, we snap the endpoint to the port center and highlight it.
+  const [snapTarget, setSnapTarget] = useState<{ nodeId: string; portId: string } | null>(null);
+
+  // Marquee box selection — Shift+drag on empty canvas draws a rectangle
+  // and selects all nodes whose bbox intersects it. Always additive
+  // (Shift is the "add to selection" modifier, matching ComfyUI/Blender).
+  const [marquee, setMarquee] = useState<{
+    start: { x: number; y: number }; // world coords
+    current: { x: number; y: number };
+  } | null>(null);
+  const marqueeRef = useRef(marquee);
+  marqueeRef.current = marquee;
 
   // Palette (add-node drawer).
   const [paletteOpen, setPaletteOpen] = useState(false);
@@ -292,6 +309,12 @@ export function NodePipeline() {
   const viewRef = useRef(view);
   useEffect(() => { viewRef.current = view; }, [view]);
 
+  // Mirror `nodes` into a ref so marquee collision detection (which runs
+  // inside a global pointerup handler) reads the latest list without
+  // re-binding the handler on every nodes change.
+  const nodesRef = useRef(nodes);
+  useEffect(() => { nodesRef.current = nodes; }, [nodes]);
+
   // Drag state (node dragging) — kept in ref to avoid re-renders.
   const dragRef = useRef<{
     nodeId: string;
@@ -308,6 +331,12 @@ export function NodePipeline() {
     viewX: number;
     viewY: number;
   } | null>(null);
+
+  // Multi-select anchor (for Shift+click range selection) + snap target
+  // mirror (so the global pointerup handler can read the latest value
+  // without re-subscribing listeners on every state change).
+  const lastSelectedId = useRef<string | null>(null);
+  const snapTargetRef = useRef<{ nodeId: string; portId: string; type: PortDataType } | null>(null);
 
   /* ── Persist on change (debounced) ───────────────────────────── */
   const saveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -483,10 +512,45 @@ export function NodePipeline() {
       const node = createNode(type, x, y);
       setNodes((prev) => [...prev, node]);
       setSelectedId(node.id);
+      setSelectedIds(new Set([node.id]));
+      lastSelectedId.current = node.id;
       setPaletteOpen(false);
       setPalettePos(null);
     },
     [nodes.length],
+  );
+
+  /* ── Multi-select aware node selection ───────────────────────── */
+  const selectNode = useCallback(
+    (nodeId: string, e: React.PointerEvent | React.MouseEvent) => {
+      if (e.ctrlKey || e.metaKey) {
+        // Toggle this node in the selection set.
+        setSelectedIds((prev) => {
+          const next = new Set(prev);
+          if (next.has(nodeId)) next.delete(nodeId);
+          else next.add(nodeId);
+          return next;
+        });
+        setSelectedId(nodeId);
+        lastSelectedId.current = nodeId;
+      } else if (e.shiftKey && lastSelectedId.current && lastSelectedId.current !== nodeId) {
+        // Range select: from last selected to current (by node order).
+        const ids = nodes.map((n) => n.id);
+        const startIdx = ids.indexOf(lastSelectedId.current);
+        const endIdx = ids.indexOf(nodeId);
+        if (startIdx !== -1 && endIdx !== -1) {
+          const [from, to] = startIdx < endIdx ? [startIdx, endIdx] : [endIdx, startIdx];
+          setSelectedIds(new Set(ids.slice(from, to + 1)));
+          setSelectedId(nodeId);
+        }
+      } else {
+        // Plain click — single select.
+        setSelectedIds(new Set([nodeId]));
+        setSelectedId(nodeId);
+        lastSelectedId.current = nodeId;
+      }
+    },
+    [nodes],
   );
 
   /* ── Delete selected node + its edges ────────────────────────── */
@@ -494,16 +558,38 @@ export function NodePipeline() {
     (id: string) => {
       setNodes((prev) => prev.filter((n) => n.id !== id));
       setEdges((prev) => prev.filter((e) => e.from !== id && e.to !== id));
+      setSelectedIds((prev) => {
+        if (!prev.has(id)) return prev;
+        const next = new Set(prev);
+        next.delete(id);
+        return next;
+      });
       if (selectedId === id) setSelectedId(null);
     },
     [selectedId],
   );
+
+  /* ── Delete all nodes in the multi-selection ─────────────────── */
+  const deleteSelected = useCallback(() => {
+    setSelectedIds((curr) => {
+      if (curr.size === 0) {
+        // Fall back to single-selected node.
+        if (selectedId) deleteNode(selectedId);
+        return curr;
+      }
+      setNodes((prev) => prev.filter((n) => !curr.has(n.id)));
+      setEdges((prev) => prev.filter((e) => !curr.has(e.from) && !curr.has(e.to)));
+      if (selectedId && curr.has(selectedId)) setSelectedId(null);
+      return new Set();
+    });
+  }, [selectedId, deleteNode]);
 
   /* ── Clear pipeline ──────────────────────────────────────────── */
   const clearAll = useCallback(() => {
     setNodes([]);
     setEdges([]);
     setSelectedId(null);
+    setSelectedIds(new Set());
   }, []);
 
   /* ── Load a template (replaces current canvas) ───────────────── */
@@ -513,6 +599,7 @@ export function NodePipeline() {
     setNodes(loaded.nodes);
     setEdges(loaded.edges);
     setSelectedId(null);
+    setSelectedIds(new Set());
     // Frame the freshly-loaded graph so it lands in view.
     const next = fitViewFor(loaded.nodes, canvasSize);
     if (next) setView(next);
@@ -596,7 +683,8 @@ export function NodePipeline() {
       const nodeX = node.position.x;
       const nodeY = node.position.y;
       dragRef.current = { nodeId, startX, startY, nodeX, nodeY };
-      setSelectedId(nodeId);
+      // Multi-select aware selection (Ctrl/Cmd/Shift modifiers honoured).
+      selectNode(nodeId, e);
       document.body.classList.add('dragging');
 
       const onMove = (ev: PointerEvent) => {
@@ -620,15 +708,77 @@ export function NodePipeline() {
       window.addEventListener('pointermove', onMove);
       window.addEventListener('pointerup', onUp);
     },
-    [nodes],
+    [nodes, selectNode],
   );
 
   /* ── Canvas pan (pointer on background) ──────────────────────── */
   const onCanvasPointerDown = useCallback(
     (e: React.PointerEvent) => {
-      // Only pan when clicking the background (not a node/port).
+      // Only handle clicks on the background (not a node/port).
       if (e.target !== e.currentTarget) return;
+
+      // ── Marquee selection: Shift+drag on empty canvas ──────────
+      // Draws a rectangle and selects all nodes whose bbox intersects.
+      // Always additive (Shift = "add to selection", ComfyUI/Blender style).
+      if (e.shiftKey && !connecting) {
+        const rect = canvasRef.current?.getBoundingClientRect();
+        if (!rect) return;
+        const v = viewRef.current;
+        // Convert screen → world coords (account for pan + zoom).
+        const wx = (e.clientX - rect.left - v.x) / v.scale;
+        const wy = (e.clientY - rect.top - v.y) / v.scale;
+        setMarquee({ start: { x: wx, y: wy }, current: { x: wx, y: wy } });
+        document.body.classList.add('dragging');
+
+        const onMove = (ev: PointerEvent) => {
+          const r = canvasRef.current?.getBoundingClientRect();
+          if (!r) return;
+          const vv = viewRef.current;
+          const cx = (ev.clientX - r.left - vv.x) / vv.scale;
+          const cy = (ev.clientY - r.top - vv.y) / vv.scale;
+          setMarquee((m) => (m ? { ...m, current: { x: cx, y: cy } } : m));
+        };
+        const onUp = () => {
+          document.body.classList.remove('dragging');
+          window.removeEventListener('pointermove', onMove);
+          window.removeEventListener('pointerup', onUp);
+          // Collision detection: select nodes intersecting the marquee rect.
+          const m = marqueeRef.current;
+          if (m) {
+            const x1 = Math.min(m.start.x, m.current.x);
+            const y1 = Math.min(m.start.y, m.current.y);
+            const x2 = Math.max(m.start.x, m.current.x);
+            const y2 = Math.max(m.start.y, m.current.y);
+            // Only count as a click (not a drag) if the rect is larger than
+            // a few pixels — otherwise it's just a Shift+click on empty.
+            const isRealDrag = Math.abs(x2 - x1) > 3 || Math.abs(y2 - y1) > 3;
+            if (isRealDrag) {
+              setSelectedIds((prev) => {
+                const next = new Set(prev);
+                for (const n of nodesRef.current) {
+                  const nx1 = n.position.x;
+                  const ny1 = n.position.y;
+                  const nx2 = nx1 + NODE_WIDTH;
+                  const ny2 = ny1 + APPROX_NODE_H;
+                  // AABB intersection test.
+                  if (!(nx1 > x2 || nx2 < x1 || ny1 > y2 || ny2 < y1)) {
+                    next.add(n.id);
+                  }
+                }
+                return next;
+              });
+            }
+          }
+          setMarquee(null);
+        };
+        window.addEventListener('pointermove', onMove);
+        window.addEventListener('pointerup', onUp);
+        return;
+      }
+
+      // ── Default: pan the canvas ─────────────────────────────────
       setSelectedId(null);
+      setSelectedIds(new Set());
       if (connecting) {
         setConnecting(null);
         return;
@@ -685,18 +835,67 @@ export function NodePipeline() {
     return () => el.removeEventListener('wheel', handler);
   }, []);
 
-  /* ── Connecting: follow cursor with pointermove on window ────── */
+  /* ── All input port positions (for connection snapping) ──────── */
+  const allInputPorts = useMemo(() => {
+    if (!connecting) return [];
+    const ports: Array<{ nodeId: string; portId: string; x: number; y: number; type: PortDataType }> = [];
+    for (const n of nodes) {
+      if (n.id === connecting.fromNode) continue;
+      const def = NODE_TYPES[n.type];
+      for (const port of def.inputs) {
+        const pos = getPortPosition(n, port.id, false);
+        if (pos) ports.push({ nodeId: n.id, portId: port.id, x: pos.x, y: pos.y, type: port.type });
+      }
+    }
+    return ports;
+  }, [nodes, connecting]);
+
+  const allInputPortsRef = useRef(allInputPorts);
+  useEffect(() => { allInputPortsRef.current = allInputPorts; }, [allInputPorts]);
+
+  const completeConnectionRef = useRef(completeConnection);
+  useEffect(() => { completeConnectionRef.current = completeConnection; }, [completeConnection]);
+
+  /* ── Connecting: follow cursor + snap to nearby input ports ──── */
   useEffect(() => {
     if (!connecting) return;
+    const SNAP_DIST = 14; // local-space px — snaps when cursor within this.
     const moveHandler = (e: PointerEvent) => {
       const local = screenToLocal(e.clientX, e.clientY);
-      setConnecting((c) => (c ? { ...c, cursor: local } : null));
+      let nearest: { nodeId: string; portId: string; x: number; y: number; type: PortDataType } | null = null;
+      let minDist = SNAP_DIST;
+      for (const p of allInputPortsRef.current) {
+        const d = Math.hypot(p.x - local.x, p.y - local.y);
+        if (d < minDist) {
+          minDist = d;
+          nearest = p;
+        }
+      }
+      if (nearest) {
+        setSnapTarget({ nodeId: nearest.nodeId, portId: nearest.portId });
+        snapTargetRef.current = nearest;
+        const snap = nearest;
+        setConnecting((c) => (c ? { ...c, cursor: { x: snap.x, y: snap.y } } : null));
+      } else {
+        setSnapTarget(null);
+        snapTargetRef.current = null;
+        setConnecting((c) => (c ? { ...c, cursor: local } : null));
+      }
     };
-    // If the user releases without landing on a port, cancel the
-    // pending connection. (Releasing on a port calls completeConnection
-    // first via the port's onPointerUp — that handler clears connecting
-    // synchronously, so this no-ops in that case.)
-    const upHandler = () => setConnecting(null);
+    // If the user releases over a snapped port, complete the connection
+    // there; otherwise cancel. (Releasing directly on a port element
+    // calls completeConnection first via the port's onPointerUp, which
+    // clears connecting synchronously — this no-ops in that case.)
+    const upHandler = () => {
+      const snap = snapTargetRef.current;
+      if (snap) {
+        completeConnectionRef.current(snap.nodeId, snap.portId, snap.type);
+      } else {
+        setConnecting(null);
+      }
+      setSnapTarget(null);
+      snapTargetRef.current = null;
+    };
     window.addEventListener('pointermove', moveHandler);
     window.addEventListener('pointerup', upHandler);
     return () => {
@@ -705,25 +904,39 @@ export function NodePipeline() {
     };
   }, [connecting, screenToLocal]);
 
+  /* ── Clear snap highlight whenever a connection ends ─────────── */
+  useEffect(() => {
+    if (!connecting) {
+      setSnapTarget(null);
+      snapTargetRef.current = null;
+    }
+  }, [connecting]);
+
   /* ── Keyboard: Delete to remove selected ─────────────────────── */
   useEffect(() => {
     const handler = (e: KeyboardEvent) => {
       // Don't interfere with inputs.
       const target = e.target as HTMLElement;
       if (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA' || target.isContentEditable) return;
-      if ((e.key === 'Delete' || e.key === 'Backspace') && selectedId) {
-        e.preventDefault();
-        deleteNode(selectedId);
+      if (e.key === 'Delete' || e.key === 'Backspace') {
+        if (selectedIds.size > 0) {
+          e.preventDefault();
+          deleteSelected();
+        } else if (selectedId) {
+          e.preventDefault();
+          deleteNode(selectedId);
+        }
       }
       if (e.key === 'Escape') {
         setSelectedId(null);
+        setSelectedIds(new Set());
         setConnecting(null);
         setPaletteOpen(false);
       }
     };
     window.addEventListener('keydown', handler);
     return () => window.removeEventListener('keydown', handler);
-  }, [selectedId, deleteNode]);
+  }, [selectedId, selectedIds, deleteNode, deleteSelected]);
 
   /* ── Double-click canvas → open palette at cursor ────────────── */
   const onCanvasDoubleClick = useCallback(
@@ -790,8 +1003,10 @@ export function NodePipeline() {
         onZoomOut={() => setView((v) => ({ ...v, scale: Math.max(0.4, v.scale / 1.2) }))}
         onResetView={() => setView({ x: 40, y: 40, scale: 1 })}
         onAddNode={() => { setPalettePos(null); setPaletteOpen(true); }}
+        onDeleteSelected={deleteSelected}
         nodeCount={nodes.length}
         edgeCount={edges.length}
+        selectedCount={selectedIds.size}
       />
 
       <div
@@ -858,6 +1073,21 @@ export function NodePipeline() {
                 opacity={0.85}
               />
             )}
+
+            {/* Marquee selection rectangle (Shift+drag on empty canvas) */}
+            {marquee && (
+              <rect
+                x={Math.min(marquee.start.x, marquee.current.x)}
+                y={Math.min(marquee.start.y, marquee.current.y)}
+                width={Math.abs(marquee.current.x - marquee.start.x)}
+                height={Math.abs(marquee.current.y - marquee.start.y)}
+                fill="oklch(0.7 0.15 165 / 0.08)"
+                stroke="oklch(0.7 0.15 165 / 0.7)"
+                strokeWidth={1 / view.scale}
+                strokeDasharray={`${4 / view.scale} ${2 / view.scale}`}
+                className="pointer-events-none"
+              />
+            )}
           </svg>
 
           {/* Nodes */}
@@ -868,11 +1098,13 @@ export function NodePipeline() {
                   key={node.id}
                   node={node}
                   selected={selectedId === node.id}
+                  multiSelected={selectedIds.has(node.id)}
                   computeTick={computeTick}
                   isConnecting={!!connecting}
+                  snapPortId={snapTarget?.nodeId === node.id ? snapTarget.portId : null}
                   onPointerDownHeader={(e) => startNodeDrag(e, node.id)}
                   onDelete={() => deleteNode(node.id)}
-                  onSelect={() => setSelectedId(node.id)}
+                  onSelect={(e) => selectNode(node.id, e)}
                   onConfigChange={(patch) => updateConfig(node.id, patch)}
                   onStartConnection={(portId, e) => startConnection(node.id, portId, e)}
                   onCompleteConnection={(portId, type) => completeConnection(node.id, portId, type)}
@@ -939,14 +1171,16 @@ interface ToolbarProps {
   onZoomOut: () => void;
   onResetView: () => void;
   onAddNode: () => void;
+  onDeleteSelected: () => void;
   nodeCount: number;
   edgeCount: number;
+  selectedCount: number;
 }
 
 function PipelineToolbar({
   onBack, onRun, onClear, onExport,
-  onZoomIn, onZoomOut, onResetView, onAddNode,
-  nodeCount, edgeCount,
+  onZoomIn, onZoomOut, onResetView, onAddNode, onDeleteSelected,
+  nodeCount, edgeCount, selectedCount,
 }: ToolbarProps) {
   return (
     <div className="shrink-0 h-11 flex items-center justify-between px-3 gap-3 glass border-b border-border">
@@ -974,7 +1208,23 @@ function PipelineToolbar({
           <span className="px-1.5 py-0.5 rounded border border-border/60 bg-muted/40 font-mono">
             {edgeCount} {t('npEdges')}
           </span>
+          {selectedCount > 0 && (
+            <span className="px-1.5 py-0.5 rounded border border-blue-500/50 bg-blue-500/10 text-blue-500 font-mono">
+              {selectedCount} 选中
+            </span>
+          )}
         </div>
+        {selectedCount > 0 && (
+          <Button
+            variant="outline"
+            size="sm"
+            className="h-8 px-2.5 gap-1.5 text-[12px] border-blue-500/50 text-blue-500 hover:bg-blue-500/10"
+            onClick={onDeleteSelected}
+          >
+            <Trash2 className="size-3.5" />
+            <span className="hidden sm:inline">删除选中 ({selectedCount})</span>
+          </Button>
+        )}
       </div>
 
       <div className="flex items-center gap-1">
@@ -1055,11 +1305,13 @@ function PipelineToolbar({
 interface NodeCardProps {
   node: PipelineNode;
   selected: boolean;
+  multiSelected: boolean;
   computeTick: number;
   isConnecting: boolean;
+  snapPortId: string | null;
   onPointerDownHeader: (e: React.PointerEvent) => void;
   onDelete: () => void;
-  onSelect: () => void;
+  onSelect: (e: React.PointerEvent) => void;
   onConfigChange: (patch: Record<string, unknown>) => void;
   onStartConnection: (portId: string, e: React.PointerEvent) => void;
   onCompleteConnection: (portId: string, type: PortDataType) => void;
@@ -1068,7 +1320,7 @@ interface NodeCardProps {
 }
 
 function NodeCard({
-  node, selected, computeTick, isConnecting,
+  node, selected, multiSelected, computeTick, isConnecting, snapPortId,
   onPointerDownHeader, onDelete, onSelect,
   onConfigChange, onStartConnection, onCompleteConnection,
   variables, onPlotOpen,
@@ -1108,17 +1360,18 @@ function NodeCard({
       className={cn(
         'absolute node-card group',
         selected && 'selected',
+        multiSelected && 'ring-2 ring-blue-500 ring-offset-0',
       )}
       style={{
         width: NODE_WIDTH,
         left: node.position.x,
         top: node.position.y,
-        zIndex: selected ? 20 : 10,
+        zIndex: selected || multiSelected ? 20 : 10,
       }}
       onPointerDown={(e) => {
-        // Click anywhere on the card selects it.
+        // Click anywhere on the card selects it (multi-select aware).
         e.stopPropagation();
-        onSelect();
+        onSelect(e);
       }}
     >
       {/* Category color stripe (left edge) */}
@@ -1158,6 +1411,7 @@ function NodeCard({
             y={i * PORT_ROW_H}
             connected={Boolean(node.outputs && port.id in (node.outputs as object))}
             isConnecting={isConnecting}
+            snapped={snapPortId === port.id}
             onStartConnection={onStartConnection}
             onCompleteConnection={onCompleteConnection}
           />
@@ -1170,6 +1424,7 @@ function NodeCard({
             y={i * PORT_ROW_H}
             connected={Boolean(node.outputs && port.id in (node.outputs as object))}
             isConnecting={isConnecting}
+            snapped={false}
             onStartConnection={onStartConnection}
             onCompleteConnection={onCompleteConnection}
           />
@@ -1203,12 +1458,13 @@ interface PortLabelProps {
   y: number;
   connected: boolean;
   isConnecting: boolean;
+  snapped: boolean;
   onStartConnection: (portId: string, e: React.PointerEvent) => void;
   onCompleteConnection: (portId: string, type: PortDataType) => void;
 }
 
 function PortLabel({
-  port, isOutput, y, connected, isConnecting,
+  port, isOutput, y, connected, isConnecting, snapped,
   onStartConnection, onCompleteConnection,
 }: PortLabelProps) {
   const [hover, setHover] = useState(false);
@@ -1239,12 +1495,17 @@ function PortLabel({
           'node-port',
           connected && 'connected',
           (hover || (isConnecting && !isOutput)) && 'active',
+          snapped && 'ring-2 ring-cyan-400 scale-125',
         )}
         style={{
-          borderColor: isOutput ? 'oklch(0.78 0.15 75)' : 'oklch(0.7 0.15 165)',
-          background: connected
-            ? (isOutput ? 'oklch(0.78 0.15 75)' : 'oklch(0.7 0.15 165)')
-            : 'var(--node-bg)',
+          borderColor: snapped
+            ? 'oklch(0.75 0.18 195)'
+            : (isOutput ? 'oklch(0.78 0.15 75)' : 'oklch(0.7 0.15 165)'),
+          background: snapped
+            ? 'oklch(0.75 0.18 195 / 0.35)'
+            : connected
+              ? (isOutput ? 'oklch(0.78 0.15 75)' : 'oklch(0.7 0.15 165)')
+              : 'var(--node-bg)',
         }}
       />
       <span className="text-muted-foreground/80 select-none truncate max-w-[140px]">
@@ -1858,6 +2119,23 @@ function NodePalette({
       }
     : { left: 12, top: 12, bottom: 12 };
 
+  // Search filter — matches node type id or localized label (case-insensitive).
+  const [paletteSearch, setPaletteSearch] = useState('');
+  const query = paletteSearch.trim().toLowerCase();
+  const filteredGroups = useMemo(() => {
+    if (!query) return PALETTE_GROUPS;
+    return PALETTE_GROUPS
+      .map((group) => ({
+        ...group,
+        types: group.types.filter((type) => {
+          const def = NODE_TYPES[type];
+          const label = t(def.labelKey).toLowerCase();
+          return type.toLowerCase().includes(query) || label.includes(query);
+        }),
+      }))
+      .filter((g) => g.types.length > 0);
+  }, [query]);
+
   return (
     <>
       {/* Backdrop */}
@@ -1890,8 +2168,24 @@ function NodePalette({
             <X className="size-3" />
           </button>
         </div>
+        {/* Search input */}
+        <div className="p-2 border-b border-border/60">
+          <Input
+            type="text"
+            value={paletteSearch}
+            onChange={(e) => setPaletteSearch(e.target.value)}
+            placeholder="搜索节点..."
+            className="h-7 text-[12px]"
+            autoFocus
+          />
+        </div>
         <div className="overflow-y-auto max-h-[60vh] p-2 space-y-2.5 scrollbar-none">
-          {PALETTE_GROUPS.map((group) => (
+          {filteredGroups.length === 0 && (
+            <div className="text-center text-[11px] text-muted-foreground/70 py-6">
+              无匹配节点
+            </div>
+          )}
+          {filteredGroups.map((group) => (
             <div key={group.category}>
               <div className={cn(
                 'text-[10px] font-semibold uppercase tracking-wider mb-1 px-1 flex items-center gap-1.5',

@@ -31,7 +31,6 @@ const PANEL_TITLE_KEY: Record<SidePanelTab, keyof TranslationDict> = {
   formulas: 'formulasTitle',
   linalg: 'linalgTitle',
   solver: 'solverTitle',
-  pipeline: 'pipelineTitle',
   files: 'tabFiles',
 };
 
@@ -71,8 +70,7 @@ export function SidePanel() {
         {activeSidePanel === 'formulas' && <FormulaLibraryPanel />}
         {activeSidePanel === 'linalg' && <LinearAlgebraPanel />}
         {activeSidePanel === 'solver' && <SolverPanel />}
-        {(activeSidePanel === 'files' ||
-          activeSidePanel === 'pipeline') && (
+        {activeSidePanel === 'files' && (
           <PlaceholderPanel tab={activeSidePanel} />
         )}
       </div>
@@ -84,7 +82,7 @@ function PlaceholderPanel({ tab }: { tab: SidePanelTab }) {
   return (
     <div className="flex flex-col items-center justify-center h-full text-center px-6 py-12">
       <div className="grid place-items-center size-14 rounded-2xl bg-primary/8 border border-primary/20 mb-3">
-        <span className="text-2xl">🚧</span>
+        <span className="text-2xl">📁</span>
       </div>
       <p className="text-[12.5px] font-medium text-foreground/80 mb-1">
         {t(PANEL_TITLE_KEY[tab])}

@@ -47,7 +47,7 @@ import {
 } from '@/components/ui/tooltip';
 import { useWorkbenchStore, STORAGE_KEY } from '@/lib/store/workbench';
 import {
-  evaluateExpression,
+  evaluateExpressionAsync,
   getScope,
   resetScope,
   inputToLatex,
@@ -58,16 +58,24 @@ import { t } from '@/lib/i18n';
 import { cn } from '@/lib/utils';
 import { toast } from 'sonner';
 import type { CalculationResult, PlotConfig } from '@/lib/store/workbench';
+import { CodeEditor } from '@/components/workbench/layout/CodeEditor';
+import { FormulaRenderer } from '@/components/workbench/FormulaRenderer';
 
 const DEFAULT_SCRIPT = `# OmniMath Pro — 示例脚本
-# 按 Enter 运行当前行，Shift+Enter 换行
-2 + 3 * 4
-sin(pi/4)
-log(100)
+# 按 Enter 运行，Shift+Enter 换行
+
+# 矩阵运算
 A = [1, 2; 3, 4]
 det(A)
-sin(x)
-solve(x^2 - 5*x + 6, x)`;
+
+# 方程求解
+solve(x^2 - 5*x + 6, x)
+
+# 符号积分
+integrate(x^2, x)
+
+# 绘图
+plot(sin(x))`;
 
 const MODES: Array<{ id: InputMode; labelKey: 'editorModeSimple' | 'editorModePython' | 'editorModeMatlab' }> = [
   { id: 'simple', labelKey: 'editorModeSimple' },
@@ -96,10 +104,10 @@ export function EditorPanel() {
   const setActivePreviewTab = useWorkbenchStore((s) => s.setActivePreviewTab);
   const variables = useWorkbenchStore((s) => s.variables);
 
-  const textareaRef = useRef<HTMLTextAreaElement>(null);
-  const gutterRef = useRef<HTMLDivElement>(null);
   const [cursor, setCursor] = useState({ line: 1, col: 1 });
   const [isRunning, setIsRunning] = useState(false);
+  const [previewLine, setPreviewLine] = useState(1);
+  const previewTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const defaultScriptSetRef = useRef(false);
 
   // Initialize default script only on the very first app launch (no persisted
@@ -116,25 +124,33 @@ export function EditorPanel() {
     }
   }, [editorContent, setEditorContent]);
 
+  // Clean up the preview debounce timer on unmount.
+  useEffect(() => {
+    return () => {
+      if (previewTimerRef.current) clearTimeout(previewTimerRef.current);
+    };
+  }, []);
+
   const lineCount = useMemo(() => editorContent.split('\n').length, [editorContent]);
   const varCount = Object.keys(variables).length;
 
-  /* ─── Cursor position tracking ─────────────────────────────────── */
-  const updateCursor = useCallback(() => {
-    const ta = textareaRef.current;
-    if (!ta) return;
-    const pos = ta.selectionStart ?? 0;
-    const before = ta.value.slice(0, pos);
-    const linesArr = before.split('\n');
-    setCursor({ line: linesArr.length, col: (linesArr[linesArr.length - 1]?.length ?? 0) + 1 });
-  }, []);
+  /* ─── Live preview LaTeX (simple mode only) ───────────────────── */
+  const previewLatex = useMemo(() => {
+    if (inputMode !== 'simple') return '';
+    const lines = editorContent.split('\n');
+    const line = lines[previewLine - 1];
+    if (!line) return '';
+    const trimmed = line.trim();
+    if (!trimmed || trimmed.startsWith('#') || trimmed.startsWith('//')) return '';
+    return inputToLatex(line, 'simple');
+  }, [previewLine, editorContent, inputMode]);
 
   /* ─── Run script ───────────────────────────────────────────────── */
   const runScript = useCallback(() => {
     if (isRunning) return;
     setIsRunning(true);
     // Defer to allow UI to show running state.
-    setTimeout(() => {
+    setTimeout(async () => {
       try {
         const lines = editorContent.split('\n');
         let lastResult: CalculationResult | null = null;
@@ -148,7 +164,8 @@ export function EditorPanel() {
           const line = lines[i].trim();
           if (!line || line.startsWith('#') || line.startsWith('//')) continue;
 
-          const result = evaluateExpression(line, inputMode);
+          // Use async evaluator to support symbolic operations (algebrite).
+          const result = await evaluateExpressionAsync(line, inputMode);
           const latex = result.latex || (result.success ? '' : '');
           const calcResult = {
             id: `r-${Date.now()}-${i}-${Math.random().toString(36).slice(2, 6)}`,
@@ -227,65 +244,6 @@ export function EditorPanel() {
     return () => window.removeEventListener('omnimath:run-all', handler);
   }, [runScript]);
 
-  /* ─── Keyboard handling ────────────────────────────────────────── */
-  const handleKeyDown = useCallback(
-    (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
-      // Enter (no shift) → run
-      if (e.key === 'Enter' && !e.shiftKey && !e.ctrlKey && !e.metaKey && !e.altKey) {
-        e.preventDefault();
-        runScript();
-        return;
-      }
-      // Tab → indent 2 spaces
-      if (e.key === 'Tab') {
-        e.preventDefault();
-        const ta = e.currentTarget;
-        const start = ta.selectionStart;
-        const end = ta.selectionEnd;
-        const next = ta.value.slice(0, start) + '  ' + ta.value.slice(end);
-        setEditorContent(next);
-        requestAnimationFrame(() => {
-          ta.selectionStart = ta.selectionEnd = start + 2;
-        });
-        return;
-      }
-      // Ctrl/Cmd + / → toggle line comment
-      if ((e.ctrlKey || e.metaKey) && e.key === '/') {
-        e.preventDefault();
-        const ta = e.currentTarget;
-        const start = ta.selectionStart;
-        const end = ta.selectionEnd;
-        const value = ta.value;
-        // find line start of selection start
-        const lineStart = value.lastIndexOf('\n', start - 1) + 1;
-        const lineEndIdx = value.indexOf('\n', end);
-        const lineEnd = lineEndIdx === -1 ? value.length : lineEndIdx;
-        const selectedLines = value.slice(lineStart, lineEnd);
-        const lines = selectedLines.split('\n');
-        const allCommented = lines.every((l) => l.trimStart().startsWith('#'));
-        const newLines = lines.map((l) =>
-          allCommented ? l.replace(/^(\s*)#\s?/, '$1') : /^\s/.test(l) ? l.replace(/^(\s*)/, '$1# ') : '# ' + l,
-        );
-        const nextValue = value.slice(0, lineStart) + newLines.join('\n') + value.slice(lineEnd);
-        setEditorContent(nextValue);
-        requestAnimationFrame(() => {
-          ta.selectionStart = lineStart;
-          ta.selectionEnd = lineStart + newLines.join('\n').length;
-        });
-      }
-    },
-    [runScript, setEditorContent],
-  );
-
-  /* ─── Sync gutter scroll with textarea ─────────────────────────── */
-  const handleScroll = useCallback(() => {
-    const ta = textareaRef.current;
-    const gutter = gutterRef.current;
-    if (ta && gutter) {
-      gutter.scrollTop = ta.scrollTop;
-    }
-  }, []);
-
   /* ─── Reset scope ──────────────────────────────────────────────── */
   const handleReset = useCallback(() => {
     resetScope();
@@ -298,7 +256,6 @@ export function EditorPanel() {
 
   const handleClear = useCallback(() => {
     setEditorContent('');
-    requestAnimationFrame(() => textareaRef.current?.focus());
   }, [setEditorContent]);
 
   /* ─── Render ───────────────────────────────────────────────────── */
@@ -419,47 +376,40 @@ export function EditorPanel() {
         </div>
       </div>
 
+      {/* Live preview bar (simple mode only) */}
+      {inputMode === 'simple' && (
+        <div className="shrink-0 h-8 flex items-center gap-2 px-2.5 border-b border-border/60 bg-muted/30 border-l-2 border-l-primary/60 overflow-hidden">
+          <span className="text-[10.5px] font-medium text-muted-foreground shrink-0">
+            预览:
+          </span>
+          {previewLatex ? (
+            <FormulaRenderer
+              latex={previewLatex}
+              displayMode={false}
+              className="overflow-hidden text-[11px]"
+            />
+          ) : (
+            <span className="text-[10.5px] text-muted-foreground/70 truncate">
+              输入表达式查看实时预览
+            </span>
+          )}
+        </div>
+      )}
+
       {/* Editor area */}
       <div className="flex-1 min-h-0 flex overflow-hidden">
-        {/* Gutter */}
-        <div
-          ref={gutterRef}
-          aria-hidden
-          className="shrink-0 w-12 overflow-hidden select-none text-right py-3 px-2 font-mono text-[12px] leading-[1.65] text-muted-foreground/60 bg-muted/20 border-r border-border/60"
-        >
-          {Array.from({ length: lineCount }, (_, i) => (
-            <div
-              key={i}
-              className={cn(
-                'h-[1.65em] leading-[1.65em]',
-                cursor.line === i + 1 && 'text-primary/80',
-              )}
-            >
-              {i + 1}
-            </div>
-          ))}
-        </div>
-
-        {/* Textarea */}
-        <textarea
-          ref={textareaRef}
+        <CodeEditor
           value={editorContent}
-          onChange={(e) => setEditorContent(e.target.value)}
-          onKeyDown={handleKeyDown}
-          onKeyUp={updateCursor}
-          onClick={updateCursor}
-          onScroll={handleScroll}
-          spellCheck={false}
-          autoCapitalize="off"
-          autoCorrect="off"
+          onChange={setEditorContent}
+          onRun={runScript}
+          onCursorChange={(line, col) => {
+            setCursor({ line, col });
+            // Debounced preview update.
+            if (previewTimerRef.current) clearTimeout(previewTimerRef.current);
+            previewTimerRef.current = setTimeout(() => setPreviewLine(line), 200);
+          }}
+          language={inputMode}
           placeholder={t('editorPlaceholder')}
-          className={cn(
-            'editor-input flex-1 min-w-0 resize-none bg-transparent',
-            'px-3 py-3 text-foreground font-mono text-[13.5px] leading-[1.65]',
-            'placeholder:text-muted-foreground/50',
-            'outline-none border-0',
-          )}
-          style={{ tabSize: 2 }}
         />
       </div>
 

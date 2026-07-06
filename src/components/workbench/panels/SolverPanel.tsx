@@ -45,6 +45,10 @@ import {
   TooltipContent,
   TooltipTrigger,
 } from '@/components/ui/tooltip';
+import {
+  ToggleGroup,
+  ToggleGroupItem,
+} from '@/components/ui/toggle-group';
 import { FormulaRenderer } from '@/components/workbench/FormulaRenderer';
 import { evaluateExpression } from '@/lib/engine';
 import { t } from '@/lib/i18n';
@@ -68,8 +72,11 @@ interface ComplexRoot {
 interface EqResult {
   latex: string;
   roots: ComplexRoot[];
-  kind: 'polynomial' | 'transcendental' | 'none';
+  kind: 'polynomial' | 'transcendental' | 'none' | 'symbolic';
   info?: string;
+  symbolicLatex?: string;
+  symbolicExpression?: string;
+  symbolicFallback?: boolean;
 }
 
 interface SystemResult {
@@ -171,6 +178,25 @@ function tryGetPolyCoeffs(equation: string, varName: string): number[] | null {
   }
 }
 
+/** Normalize a mathjs-style equation string for Algebrite consumption.
+ *  Handles `=` sign (lhs - rhs) and Algebrite syntax differences:
+ *    - `e^x` → `exp(x)` (Algebrite's exp function)
+ *    - `ln(x)` → `log(x)` (Algebrite's natural log is `log`) */
+function normalizeForAlgebrite(equation: string): string {
+  let expr = equation.trim();
+  if (expr.includes('=')) {
+    const eqIdx = expr.indexOf('=');
+    const lhs = expr.slice(0, eqIdx).trim();
+    const rhs = expr.slice(eqIdx + 1).trim();
+    expr = `(${lhs}) - (${rhs})`;
+  }
+  // Convert e^x → exp(x) when e is used as base
+  expr = expr.replace(/\be\^(\([^)]+\)|[a-zA-Z0-9_]+)/g, 'exp($1)');
+  // Convert ln( → log(
+  expr = expr.replace(/\bln\(/g, 'log(');
+  return expr;
+}
+
 /** Find all roots (real + complex) of a polynomial via Durand-Kerner method. */
 function polyRoots(coeffs: number[]): ComplexRoot[] {
   // Strip leading zeros (high-order)
@@ -206,11 +232,21 @@ function polyRoots(coeffs: number[]): ComplexRoot[] {
   const a = c.map((v) => v / lead);
   // Initial guesses: complex circle
   const r0 = Math.pow(Math.abs(a[0]) + 1, 1 / n);
-  let roots: ComplexRoot[] = [];
-  for (let k = 0; k < n; k++) {
-    const angle = (2 * Math.PI * k) / n + 0.4;
-    roots.push({ re: r0 * Math.cos(angle), im: r0 * Math.sin(angle) });
-  }
+
+  // Build initial guesses, optionally with random perturbation to escape
+  // divergence or stagnation when the default seed happens to be unlucky.
+  const initGuesses = (perturb: boolean): ComplexRoot[] => {
+    const guesses: ComplexRoot[] = [];
+    for (let k = 0; k < n; k++) {
+      const baseAngle = (2 * Math.PI * k) / n + 0.4;
+      const angle = perturb ? baseAngle + (Math.random() - 0.5) * 0.5 : baseAngle;
+      const radius = perturb ? r0 * (0.8 + Math.random() * 0.4) : r0;
+      guesses.push({ re: radius * Math.cos(angle), im: radius * Math.sin(angle) });
+    }
+    return guesses;
+  };
+
+  let roots: ComplexRoot[] = initGuesses(false);
   const polyEval = (z: ComplexRoot): ComplexRoot => {
     // Horner's method with complex arithmetic
     let acc: ComplexRoot = { re: 0, im: 0 };
@@ -237,8 +273,17 @@ function polyRoots(coeffs: number[]): ComplexRoot[] {
   };
   const complexAbs = (z: ComplexRoot): number => Math.sqrt(z.re * z.re + z.im * z.im);
 
-  for (let iter = 0; iter < 500; iter++) {
+  // Iteration loop: max 500 iterations (>= 200 requirement).
+  // Re-initialize guesses with perturbation every 100 iterations if not
+  // converged, and also whenever divergence is detected (roots blowing up).
+  const MAX_ITER = 500;
+  for (let iter = 0; iter < MAX_ITER; iter++) {
+    // Re-initialize with perturbed guesses after every 100 stagnant iterations
+    if (iter > 0 && iter % 100 === 0) {
+      roots = initGuesses(true);
+    }
     let maxChange = 0;
+    let diverging = false;
     const newRoots: ComplexRoot[] = [];
     for (let i = 0; i < n; i++) {
       const num = polyEval(roots[i]);
@@ -249,10 +294,20 @@ function polyRoots(coeffs: number[]): ComplexRoot[] {
       const delta = complexDiv(num, den);
       const newR = complexSub(roots[i], delta);
       newRoots.push(newR);
-      maxChange = Math.max(maxChange, complexAbs(delta));
+      const change = complexAbs(delta);
+      if (!Number.isFinite(change) || change > 1e15) {
+        diverging = true;
+      }
+      maxChange = Math.max(maxChange, change);
     }
     roots = newRoots;
-    if (maxChange < 1e-13) break;
+    // Divergence detected: re-seed with perturbed guesses and continue
+    if (diverging) {
+      roots = initGuesses(true);
+      continue;
+    }
+    // Convergence: stop when root differences fall below 1e-10
+    if (maxChange < 1e-10) break;
   }
 
   // Clean up: snap near-real roots to real
@@ -320,8 +375,9 @@ function EquationSolverSection() {
   const [result, setResult] = useState<EqResult | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [working, setWorking] = useState(false);
+  const [solveMode, setSolveMode] = useState<'numeric' | 'symbolic'>('numeric');
 
-  const handleSolve = () => {
+  const handleSolve = async () => {
     setWorking(true);
     setError(null);
     setResult(null);
@@ -333,7 +389,47 @@ function EquationSolverSection() {
 
       // Try polynomial first
       const coeffs = tryGetPolyCoeffs(equation, varName);
-      if (coeffs && coeffs.length > 1) {
+      const isPoly = coeffs && coeffs.length > 1;
+
+      // Symbolic mode: try Algebrite for polynomial equations.
+      // Algebrite's `roots` only handles polynomials; for transcendental
+      // equations we skip symbolic and fall straight through to numeric.
+      if (solveMode === 'symbolic' && isPoly) {
+        try {
+          const Algebrite = (await import('algebrite')).default;
+          const polyExpr = normalizeForAlgebrite(equation);
+          const symbolicExpression = Algebrite.run(`roots(${polyExpr}, ${varName})`);
+          const symbolicLatex = Algebrite.run(`printlatex(roots(${polyExpr}, ${varName}))`);
+
+          if (symbolicExpression && symbolicExpression.trim() !== '' && symbolicExpression !== 'nil') {
+            // Also compute numeric roots for side-by-side comparison
+            const roots = polyRoots(coeffs);
+            const realRoots = roots.filter((r) => Math.abs(r.im) < 1e-9);
+            const complexRoots = roots.filter((r) => Math.abs(r.im) >= 1e-9);
+
+            const polyLatex = coeffsToLatex(coeffs, varName);
+            setResult({
+              latex: `${polyLatex} = 0`,
+              roots,
+              kind: 'symbolic',
+              info: `符号解 · ${realRoots.length} 实根, ${complexRoots.length} 复根, 次数 ${coeffs.length - 1}`,
+              symbolicLatex: symbolicLatex || symbolicExpression,
+              symbolicExpression,
+            });
+            return;
+          }
+          // Algebrite returned nil/empty → fall back to numeric
+          toast.warning('Algebrite 未返回有效符号解，已回退到数值解');
+        } catch {
+          // Algebrite threw → fall back to numeric
+          toast.warning('符号解失败，已回退到数值解');
+        }
+      } else if (solveMode === 'symbolic' && !isPoly) {
+        toast.warning('符号解仅支持多项式方程，已回退到数值解');
+      }
+
+      // Numeric mode (or symbolic fallback)
+      if (isPoly) {
         const roots = polyRoots(coeffs);
         const realRoots = roots.filter((r) => Math.abs(r.im) < 1e-9);
         const complexRoots = roots.filter((r) => Math.abs(r.im) >= 1e-9);
@@ -358,6 +454,7 @@ function EquationSolverSection() {
           roots,
           kind: 'polynomial',
           info: `${realRoots.length} 实根, ${complexRoots.length} 复根, 次数 ${coeffs.length - 1}`,
+          symbolicFallback: solveMode === 'symbolic',
         });
         return;
       }
@@ -387,6 +484,7 @@ function EquationSolverSection() {
           roots: [],
           kind: 'none',
           info: `范围 [${rangeA}, ${rangeB}]`,
+          symbolicFallback: solveMode === 'symbolic',
         });
         return;
       }
@@ -399,6 +497,7 @@ function EquationSolverSection() {
         roots: realRoots.map((r) => ({ re: r, im: 0 })),
         kind: 'transcendental',
         info: `数值解 (在 [${fmtNum(rangeA)}, ${fmtNum(rangeB)}] 内找到 ${realRoots.length} 个根)`,
+        symbolicFallback: solveMode === 'symbolic',
       });
     } catch (err) {
       setError((err as Error).message || t('solverError'));
@@ -465,6 +564,36 @@ function EquationSolverSection() {
         {t('solverSolve')}
       </Button>
 
+      {/* Solve mode toggle: numeric (default) vs symbolic */}
+      <div className="flex items-center justify-between gap-2">
+        <span className="text-[10.5px] text-muted-foreground">求解模式</span>
+        <ToggleGroup
+          type="single"
+          value={solveMode}
+          onValueChange={(v) => {
+            if (v === 'numeric' || v === 'symbolic') setSolveMode(v);
+          }}
+          variant="outline"
+          size="sm"
+          className="h-6"
+        >
+          <ToggleGroupItem
+            value="numeric"
+            className="h-6 px-2 text-[11px]"
+            aria-label="数值解"
+          >
+            数值解
+          </ToggleGroupItem>
+          <ToggleGroupItem
+            value="symbolic"
+            className="h-6 px-2 text-[11px]"
+            aria-label="符号解"
+          >
+            符号解
+          </ToggleGroupItem>
+        </ToggleGroup>
+      </div>
+
       {/* Examples */}
       <div>
         <div className="text-[10.5px] text-muted-foreground mb-1">{t('solverExamples')}</div>
@@ -484,11 +613,31 @@ function EquationSolverSection() {
 
       <ResultBlock error={error} result={result ? (
         <>
+          {result.symbolicFallback && (
+            <div className="text-[10.5px] text-amber-600 dark:text-amber-300 bg-amber-500/10 border border-amber-500/30 rounded px-2 py-1 mb-1.5">
+              ⚠️ 符号解失败，已回退到数值解
+            </div>
+          )}
           {result.info && (
             <div className="text-[10.5px] text-primary/80 bg-primary/5 border border-primary/20 rounded px-2 py-1 mb-1.5">
               {result.kind === 'polynomial' && '🧮 多项式方程 · '}
               {result.kind === 'transcendental' && '📈 超越方程 · '}
+              {result.kind === 'symbolic' && '🔤 符号解 · '}
               {result.info}
+            </div>
+          )}
+          {result.kind === 'symbolic' && result.symbolicLatex && (
+            <div className="mb-2">
+              <div className="text-[10.5px] text-muted-foreground mb-1">符号解:</div>
+              <div className="overflow-x-auto">
+                <FormulaRenderer latex={`${varName} \\in ${result.symbolicLatex}`} displayMode />
+              </div>
+              {result.symbolicExpression && result.symbolicExpression !== result.symbolicLatex && (
+                <div className="mt-1 text-[10.5px] font-mono text-muted-foreground break-all">
+                  <span className="text-foreground/60">表达式: </span>
+                  {result.symbolicExpression}
+                </div>
+              )}
             </div>
           )}
           <div className="overflow-x-auto">

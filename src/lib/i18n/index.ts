@@ -313,6 +313,7 @@ export interface TranslationDict {
   linalgTabOps: string;
   linalgTabDecomp: string;
   linalgTabSystem: string;
+  linalgTabTransform: string;
   linalgNewMatrix: string;
   linalgPaste: string;
   linalgSave: string;
@@ -962,6 +963,7 @@ const zhCN: TranslationDict = {
   linalgTabOps: "运算",
   linalgTabDecomp: "分解",
   linalgTabSystem: "方程组",
+  linalgTabTransform: "变换",
   linalgNewMatrix: "新建矩阵",
   linalgPaste: "从文本粘贴",
   linalgSave: "保存到变量",
@@ -1608,6 +1610,7 @@ const en: TranslationDict = {
   linalgTabOps: "Operations",
   linalgTabDecomp: "Decomposition",
   linalgTabSystem: "Linear System",
+  linalgTabTransform: "Transform",
   linalgNewMatrix: "New Matrix",
   linalgPaste: "Paste from Text",
   linalgSave: "Save to Variable",

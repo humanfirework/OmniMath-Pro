@@ -13,7 +13,7 @@
  * Teal accent, glass cards, framer-motion entrance.
  */
 
-import { useState, useMemo, useCallback, useEffect, type ClipboardEvent } from 'react';
+import { useState, useMemo, useCallback, useEffect, type ClipboardEvent, type CSSProperties } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { create, all, type MathJsInstance } from 'mathjs';
 import {
@@ -30,6 +30,10 @@ import {
   X,
   Check,
   RotateCcw,
+  Activity,
+  Play,
+  Pause,
+  Square,
 } from 'lucide-react';
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs';
 import { Button } from '@/components/ui/button';
@@ -168,6 +172,16 @@ function matrixToLatex(m: Matrix): string {
 function numToLatex(v: number): string {
   if (typeof v !== 'number' || !Number.isFinite(v)) {
     return Number.isNaN(v) ? '\\text{NaN}' : String(v);
+  }
+  const rounded = Math.round(v);
+  if (Math.abs(v - rounded) < 1e-10) return String(rounded);
+  return parseFloat(v.toPrecision(8)).toString();
+}
+
+/** Plain-text number formatter (mirrors numToLatex rounding rules, no LaTeX). */
+function formatNum(v: number): string {
+  if (typeof v !== 'number' || !Number.isFinite(v)) {
+    return Number.isNaN(v) ? 'NaN' : String(v);
   }
   const rounded = Math.round(v);
   if (Math.abs(v - rounded) < 1e-10) return String(rounded);
@@ -419,7 +433,7 @@ export function LinearAlgebraPanel() {
         onValueChange={setActiveTab}
         className="flex-1 min-h-0 flex flex-col gap-2 px-2 pt-2"
       >
-        <TabsList className="h-7 grid grid-cols-4 w-full text-[10.5px]">
+        <TabsList className="h-7 grid grid-cols-5 w-full text-[10.5px]">
           <TabsTrigger value="edit" className="text-[10.5px] px-1 py-0.5 gap-1">
             <Grid3x3 className="size-3" />
             <span className="hidden sm:inline">{t('linalgTabEdit')}</span>
@@ -435,6 +449,10 @@ export function LinearAlgebraPanel() {
           <TabsTrigger value="system" className="text-[10.5px] px-1 py-0.5 gap-1">
             <Equal className="size-3" />
             <span className="hidden sm:inline">{t('linalgTabSystem')}</span>
+          </TabsTrigger>
+          <TabsTrigger value="transform" className="text-[10.5px] px-1 py-0.5 gap-1">
+            <Activity className="size-3" />
+            <span className="hidden sm:inline">{t('linalgTabTransform')}</span>
           </TabsTrigger>
         </TabsList>
 
@@ -460,6 +478,10 @@ export function LinearAlgebraPanel() {
 
         <TabsContent value="system" className="flex-1 min-h-0 overflow-hidden">
           <LinearSystemTab defaultMatrix={selected?.data} />
+        </TabsContent>
+
+        <TabsContent value="transform" className="flex-1 min-h-0 overflow-hidden">
+          <LinearTransformAnimation />
         </TabsContent>
       </Tabs>
     </div>
@@ -775,6 +797,80 @@ function MatrixEditorTab({
   );
 }
 
+/* ------------------------------------------------------------------ *
+ * Matrix grid view — read-only table / heatmap toggle
+ * ------------------------------------------------------------------ */
+
+/** Render a read-only matrix as a plain table or a color-coded heatmap.
+ *  Heatmap: values ≥ 0 fade from white → red; values < 0 fade from white → blue.
+ *  Intensity is normalized against the largest magnitude on each side of zero. */
+function MatrixGridView({
+  matrix,
+  viewMode,
+}: {
+  matrix: Matrix;
+  viewMode: 'table' | 'heatmap';
+}) {
+  let min = Infinity;
+  let max = -Infinity;
+  for (const row of matrix) {
+    for (const v of row) {
+      if (Number.isFinite(v)) {
+        if (v < min) min = v;
+        if (v > max) max = v;
+      }
+    }
+  }
+  const posMax = max > 0 ? max : 1;
+  const negMax = min < 0 ? -min : 1;
+
+  const cellStyle = (v: number): CSSProperties => {
+    if (viewMode !== 'heatmap') return {};
+    let r = 255;
+    let g = 255;
+    let b = 255;
+    if (v >= 0) {
+      const intensity = posMax > 0 ? Math.min(v / posMax, 1) : 0;
+      g = Math.round(255 - intensity * 255);
+      b = g;
+    } else {
+      const intensity = negMax > 0 ? Math.min(-v / negMax, 1) : 0;
+      r = Math.round(255 - intensity * 255);
+      g = r;
+    }
+    const lum = (0.299 * r + 0.587 * g + 0.114 * b) / 255;
+    return {
+      backgroundColor: `rgb(${r}, ${g}, ${b})`,
+      color: lum > 0.5 ? '#000' : '#fff',
+    };
+  };
+
+  return (
+    <div className="overflow-x-auto">
+      <div className="inline-block">
+        <div className="flex flex-col gap-0.5">
+          {matrix.map((row, ri) => (
+            <div key={ri} className="flex gap-0.5">
+              {row.map((v, ci) => (
+                <div
+                  key={ci}
+                  style={cellStyle(v)}
+                  className={cn(
+                    'min-w-[2.5rem] h-7 px-1 text-[11px] font-mono tabular-nums text-center',
+                    'border border-border/60 rounded flex items-center justify-center',
+                  )}
+                >
+                  {formatNum(v)}
+                </div>
+              ))}
+            </div>
+          ))}
+        </div>
+      </div>
+    </div>
+  );
+}
+
 /* ================================================================== *
  * TAB 2 — Operations
  * ================================================================== */
@@ -809,6 +905,7 @@ function OperationsTab({ matrices }: { matrices: MatrixEntry[] }) {
   const [result, setResult] = useState<OpResult | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [working, setWorking] = useState(false);
+  const [viewMode, setViewMode] = useState<'table' | 'heatmap'>('table');
 
   const matrixA = matrices.find((m) => m.name === opA)?.data;
   const matrixB = matrices.find((m) => m.name === opB)?.data;
@@ -1146,6 +1243,31 @@ function OperationsTab({ matrices }: { matrices: MatrixEntry[] }) {
               <div className="overflow-x-auto">
                 <FormulaRenderer latex={result.latex} displayMode />
               </div>
+              {result.isMatrix && result.matrix && (
+                <div className="mt-2">
+                  <div className="flex gap-1 mb-1.5">
+                    <Button
+                      variant={viewMode === 'table' ? 'default' : 'outline'}
+                      size="sm"
+                      className="h-6 px-2 text-[10.5px]"
+                      onClick={() => setViewMode('table')}
+                    >
+                      表格
+                    </Button>
+                    <Button
+                      variant={viewMode === 'heatmap' ? 'default' : 'outline'}
+                      size="sm"
+                      className="h-6 px-2 text-[10.5px]"
+                      onClick={() => setViewMode('heatmap')}
+                    >
+                      热力图
+                    </Button>
+                  </div>
+                  <div className="rounded-md border border-border/60 bg-muted/20 p-2">
+                    <MatrixGridView matrix={result.matrix} viewMode={viewMode} />
+                  </div>
+                </div>
+              )}
               {result.steps && result.steps.length > 0 && (
                 <details className="mt-2 group">
                   <summary className="cursor-pointer text-[10.5px] text-muted-foreground hover:text-foreground select-none">
@@ -1324,7 +1446,8 @@ function DecompositionTab({
           break;
         }
         case 'schur': {
-          // mathjs doesn't have a schur function exposed; show note.
+          // mathjs doesn't have a schur function exposed; show note + toast.
+          toast.warning('该分解暂不支持，mathjs 未提供实现');
           res = {
             parts: [],
             note: t('linalgNotSupported') + ' (mathjs 无内置 Schur 分解。可使用 QR 算法迭代近似)',
@@ -1353,6 +1476,7 @@ function DecompositionTab({
           break;
         }
         case 'jordan': {
+          toast.warning('该分解暂不支持，mathjs 未提供实现');
           res = {
             parts: [],
             note: t('linalgNotSupported') + ' (mathjs 无 Jordan 标准型实现；建议使用特征值分解代替)',
@@ -2043,4 +2167,377 @@ function augmentedMatrixLatex(aug: number[][], cols: number): string {
     return `${left} & \\big| & ${right}`;
   });
   return `\\left[\\begin{array}{${'c'.repeat(cols)}|c} ${rows.join(' \\\\ ')} \\end{array}\\right]`;
+}
+
+/* ================================================================== *
+ * LinearTransformAnimation — 3Blue1Brown-style 2D matrix visualization
+ * ================================================================== *
+ * Shows how a 2×2 matrix [[a,b],[c,d]] transforms the plane:
+ *   - Background grid (every 0.5 unit) morphs to show the mapping
+ *   - Unit square (blue) shows area change → |det|
+ *   - Unit circle (green) shows the general distortion
+ *   - Basis vectors î (red) and ĵ (green) show where e1/e2 land
+ *   - Smooth ease-in-out animation from identity to the target matrix
+ *
+ * Interaction:
+ *   - 4 number inputs for a/b/c/d
+ *   - Play / Pause / Reset buttons + progress slider
+ *   - Preset buttons: shear / rotation / scale / projection
+ */
+const TFORM_VIEW = 3;        // viewport half-extent in world units
+const TFORM_SCALE = 56;      // pixels per world unit
+const TFORM_SIZE = TFORM_VIEW * 2 * TFORM_SCALE; // SVG size in px
+
+// Transform a world point by matrix [[a,b],[c,d]].
+function applyMatrix(a: number, b: number, c: number, d: number, x: number, y: number): [number, number] {
+  return [a * x + b * y, c * x + d * y];
+}
+
+// Linear interpolation between identity and target matrix.
+function lerpMatrix(m: number[], t: number): [number, number, number, number] {
+  // m = [a, b, c, d], identity = [1,0,0,1]
+  const a = m[0] * t + 1 * (1 - t);
+  const b = m[1] * t + 0 * (1 - t);
+  const c = m[2] * t + 0 * (1 - t);
+  const d = m[3] * t + 1 * (1 - t);
+  return [a, b, c, d];
+}
+
+// World (x,y) → SVG (px, py). Origin at center, y flipped.
+function worldToSvg(x: number, y: number): [number, number] {
+  return [
+    TFORM_VIEW * TFORM_SCALE + x * TFORM_SCALE,
+    TFORM_VIEW * TFORM_SCALE - y * TFORM_SCALE,
+  ];
+}
+
+function LinearTransformAnimation() {
+  // Matrix [a, b, c, d] representing [[a, b], [c, d]].
+  const [matrix, setMatrix] = useState<number[]>([1, 0, 0, 1]);
+  const [progress, setProgress] = useState(0);
+  const [playing, setPlaying] = useState(false);
+  const [showGrid, setShowGrid] = useState(true);
+  const [showCircle, setShowCircle] = useState(true);
+  const [showSquare, setShowSquare] = useState(true);
+
+  // Animation loop — ease-in-out over 1.5s.
+  useEffect(() => {
+    if (!playing) return;
+    let raf = 0;
+    const start = performance.now();
+    const duration = 1500;
+    const tick = (now: number) => {
+      const t = Math.min(1, (now - start) / duration);
+      // ease-in-out cubic
+      const eased = t < 0.5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2;
+      setProgress(eased);
+      if (t < 1) raf = requestAnimationFrame(tick);
+      else setPlaying(false);
+    };
+    raf = requestAnimationFrame(tick);
+    return () => cancelAnimationFrame(raf);
+  }, [playing]);
+
+  const [a, b, c, d] = lerpMatrix(matrix, progress);
+  const det = a * d - b * c;
+
+  // Grid lines (every 0.5 unit from -3 to 3). Each line is transformed
+  // by the interpolated matrix so the grid morphs with the animation.
+  const gridLines: React.ReactElement[] = [];
+  if (showGrid) {
+    for (let i = -TFORM_VIEW * 2; i <= TFORM_VIEW * 2; i += 0.5) {
+      // Horizontal line: y = i/2, x from -3 to 3 → 13 sample points
+      const pts: [number, number][] = [];
+      for (let xi = -TFORM_VIEW; xi <= TFORM_VIEW + 0.01; xi += 0.5) {
+        pts.push(applyMatrix(a, b, c, d, xi, i / 2));
+      }
+      const isAxis = Math.abs(i) < 0.01;
+      const svgPts = pts.map(([x, y]) => worldToSvg(x, y).join(',')).join(' ');
+      gridLines.push(
+        <polyline
+          key={`h-${i}`}
+          points={svgPts}
+          fill="none"
+          stroke={isAxis ? 'oklch(0.7 0.15 165 / 0.5)' : 'currentColor'}
+          strokeWidth={isAxis ? 1.5 : 0.5}
+          className={isAxis ? '' : 'text-muted-foreground/30'}
+        />,
+      );
+      // Vertical line: x = i/2
+      const vpts: [number, number][] = [];
+      for (let yi = -TFORM_VIEW; yi <= TFORM_VIEW + 0.01; yi += 0.5) {
+        vpts.push(applyMatrix(a, b, c, d, i / 2, yi));
+      }
+      const isVAxis = Math.abs(i) < 0.01;
+      const vSvgPts = vpts.map(([x, y]) => worldToSvg(x, y).join(',')).join(' ');
+      gridLines.push(
+        <polyline
+          key={`v-${i}`}
+          points={vSvgPts}
+          fill="none"
+          stroke={isVAxis ? 'oklch(0.78 0.15 75 / 0.5)' : 'currentColor'}
+          strokeWidth={isVAxis ? 1.5 : 0.5}
+          className={isVAxis ? '' : 'text-muted-foreground/30'}
+        />,
+      );
+    }
+  }
+
+  // Unit square — 4 corners transformed.
+  const squareCorners: [number, number][] = [
+    [0, 0], [1, 0], [1, 1], [0, 1],
+  ].map(([x, y]) => applyMatrix(a, b, c, d, x, y));
+  const squarePath = squareCorners
+    .map(([x, y], i) => {
+      const [sx, sy] = worldToSvg(x, y);
+      return `${i === 0 ? 'M' : 'L'}${sx},${sy}`;
+    })
+    .join(' ') + ' Z';
+
+  // Unit circle — 36 sample points.
+  const circlePts: [number, number][] = [];
+  for (let i = 0; i <= 36; i++) {
+    const angle = (i / 36) * Math.PI * 2;
+    circlePts.push(applyMatrix(a, b, c, d, Math.cos(angle), Math.sin(angle)));
+  }
+  const circlePath = circlePts
+    .map(([x, y], i) => {
+      const [sx, sy] = worldToSvg(x, y);
+      return `${i === 0 ? 'M' : 'L'}${sx},${sy}`;
+    })
+    .join(' ') + (circlePts.length > 0 ? ' Z' : '');
+
+  // Basis vectors — î = (a, c), ĵ = (b, d).
+  const [ihatSvgX, ihatSvgY] = worldToSvg(a, c);
+  const [jhatSvgX, jhatSvgY] = worldToSvg(b, d);
+  const [originSvgX, originSvgY] = worldToSvg(0, 0);
+
+  // Presets.
+  const presets: Array<{ label: string; m: number[]; hint: string }> = [
+    { label: '剪切', m: [1, 1, 0, 1], hint: 'shear' },
+    { label: '旋转45°', m: [Math.cos(Math.PI / 4), -Math.sin(Math.PI / 4), Math.sin(Math.PI / 4), Math.cos(Math.PI / 4)], hint: 'rotation' },
+    { label: '缩放2x', m: [2, 0, 0, 2], hint: 'scale' },
+    { label: '投影', m: [1, 0, 0, 0], hint: 'projection (det=0)' },
+  ];
+
+  const updateCell = (idx: number, value: string) => {
+    const n = parseFloat(value);
+    setMatrix((prev) => {
+      const next = [...prev];
+      next[idx] = Number.isNaN(n) ? 0 : n;
+      return next;
+    });
+    setProgress(1);
+  };
+
+  const handlePlay = () => {
+    if (progress >= 1) setProgress(0);
+    setPlaying(true);
+  };
+  const handleReset = () => {
+    setPlaying(false);
+    setProgress(0);
+    setMatrix([1, 0, 0, 1]);
+  };
+
+  return (
+    <div className="h-full flex flex-col gap-2 overflow-hidden">
+      {/* Controls */}
+      <div className="shrink-0 flex items-center gap-2 px-1 py-1 flex-wrap">
+        {/* Matrix inputs */}
+        <div className="flex items-center gap-1 px-2 py-1 rounded-md bg-muted/40 border border-border/60">
+          <span className="text-[10px] text-muted-foreground font-mono">[[</span>
+          {matrix.map((v, i) => (
+            <input
+              key={i}
+              type="number"
+              step="0.1"
+              value={v}
+              onChange={(e) => updateCell(i, e.target.value)}
+              className="w-12 h-6 px-1 text-[11px] font-mono text-center bg-transparent border border-border/60 rounded focus:outline-none focus:border-primary"
+            />
+          ))}
+          <span className="text-[10px] text-muted-foreground font-mono">]]</span>
+        </div>
+
+        {/* Play / Reset */}
+        <div className="flex items-center gap-0.5">
+          <Button
+            size="sm"
+            variant="default"
+            onClick={handlePlay}
+            disabled={playing}
+            className="h-6 px-2 text-[10.5px] gap-1"
+          >
+            {playing ? <Pause className="size-3" /> : <Play className="size-3" />}
+            {playing ? '播放中' : '播放'}
+          </Button>
+          <Button
+            size="sm"
+            variant="outline"
+            onClick={handleReset}
+            className="h-6 px-2 text-[10.5px] gap-1"
+          >
+            <RotateCcw className="size-3" />
+            重置
+          </Button>
+        </div>
+
+        {/* Progress slider */}
+        <input
+          type="range"
+          min="0"
+          max="1"
+          step="0.01"
+          value={progress}
+          onChange={(e) => { setPlaying(false); setProgress(parseFloat(e.target.value)); }}
+          className="flex-1 min-w-[80px] h-1 accent-primary"
+        />
+
+        {/* Toggles */}
+        <div className="flex items-center gap-1 text-[10px]">
+          <label className="flex items-center gap-0.5 cursor-pointer">
+            <input type="checkbox" checked={showGrid} onChange={(e) => setShowGrid(e.target.checked)} className="accent-primary" />
+            网格
+          </label>
+          <label className="flex items-center gap-0.5 cursor-pointer">
+            <input type="checkbox" checked={showSquare} onChange={(e) => setShowSquare(e.target.checked)} className="accent-primary" />
+            方块
+          </label>
+          <label className="flex items-center gap-0.5 cursor-pointer">
+            <input type="checkbox" checked={showCircle} onChange={(e) => setShowCircle(e.target.checked)} className="accent-primary" />
+            圆
+          </label>
+        </div>
+      </div>
+
+      {/* Presets */}
+      <div className="shrink-0 flex items-center gap-1 px-1 flex-wrap">
+        <span className="text-[10px] text-muted-foreground">预设:</span>
+        {presets.map((p) => (
+          <button
+            key={p.hint}
+            type="button"
+            onClick={() => { setMatrix(p.m); setProgress(0); setPlaying(true); }}
+            className="px-2 py-0.5 text-[10px] rounded border border-border/60 bg-muted/30 hover:bg-accent hover:text-foreground transition-colors"
+            title={p.hint}
+          >
+            {p.label}
+          </button>
+        ))}
+      </div>
+
+      {/* SVG canvas + info */}
+      <div className="flex-1 min-h-0 flex gap-2 overflow-hidden">
+        <div className="flex-1 min-h-0 grid place-items-center overflow-auto bg-muted/20 rounded-md border border-border/40">
+          <svg
+            width={TFORM_SIZE}
+            height={TFORM_SIZE}
+            viewBox={`0 0 ${TFORM_SIZE} ${TFORM_SIZE}`}
+            className="max-w-full max-h-full"
+          >
+            {/* Background grid (transformed) */}
+            {gridLines}
+
+            {/* Origin marker */}
+            <circle cx={originSvgX} cy={originSvgY} r={2} fill="currentColor" className="text-foreground/60" />
+
+            {/* Transformed unit square */}
+            {showSquare && (
+              <path
+                d={squarePath}
+                fill="oklch(0.7 0.15 165 / 0.12)"
+                stroke="oklch(0.7 0.15 165)"
+                strokeWidth={1.5}
+              />
+            )}
+
+            {/* Transformed unit circle */}
+            {showCircle && (
+              <path
+                d={circlePath}
+                fill="oklch(0.78 0.15 75 / 0.08)"
+                stroke="oklch(0.78 0.15 75)"
+                strokeWidth={1.5}
+              />
+            )}
+
+            {/* Basis vector î (red/teal) */}
+            <line
+              x1={originSvgX} y1={originSvgY}
+              x2={ihatSvgX} y2={ihatSvgY}
+              stroke="oklch(0.65 0.2 25)"
+              strokeWidth={2}
+              markerEnd="url(#arrow-ihat)"
+            />
+            {/* Basis vector ĵ (green/amber) */}
+            <line
+              x1={originSvgX} y1={originSvgY}
+              x2={jhatSvgX} y2={jhatSvgY}
+              stroke="oklch(0.7 0.18 95)"
+              strokeWidth={2}
+              markerEnd="url(#arrow-jhat)"
+            />
+
+            {/* Arrow markers */}
+            <defs>
+              <marker id="arrow-ihat" markerWidth="8" markerHeight="8" refX="6" refY="4" orient="auto">
+                <path d="M0,0 L8,4 L0,8 Z" fill="oklch(0.65 0.2 25)" />
+              </marker>
+              <marker id="arrow-jhat" markerWidth="8" markerHeight="8" refX="6" refY="4" orient="auto">
+                <path d="M0,0 L8,4 L0,8 Z" fill="oklch(0.7 0.18 95)" />
+              </marker>
+            </defs>
+
+            {/* Labels */}
+            <text x={ihatSvgX + 6} y={ihatSvgY} className="fill-foreground/80" fontSize="11" fontFamily="ui-monospace">
+              î ({a.toFixed(2)}, {c.toFixed(2)})
+            </text>
+            <text x={jhatSvgX + 6} y={jhatSvgY} className="fill-foreground/80" fontSize="11" fontFamily="ui-monospace">
+              ĵ ({b.toFixed(2)}, {d.toFixed(2)})
+            </text>
+          </svg>
+        </div>
+
+        {/* Info panel */}
+        <div className="shrink-0 w-36 flex flex-col gap-1.5 p-2 rounded-md bg-muted/20 border border-border/40 text-[10.5px]">
+          <div className="font-medium text-foreground/80">变换信息</div>
+          <div className="flex justify-between">
+            <span className="text-muted-foreground">det</span>
+            <span className="font-mono font-medium" style={{ color: Math.abs(det) < 0.01 ? 'oklch(0.65 0.2 25)' : 'inherit' }}>
+              {det.toFixed(3)}
+            </span>
+          </div>
+          <div className="flex justify-between">
+            <span className="text-muted-foreground">面积比</span>
+            <span className="font-mono">{Math.abs(det).toFixed(3)}×</span>
+          </div>
+          <div className="flex justify-between">
+            <span className="text-muted-foreground">|î|</span>
+            <span className="font-mono">{Math.hypot(a, c).toFixed(3)}</span>
+          </div>
+          <div className="flex justify-between">
+            <span className="text-muted-foreground">|ĵ|</span>
+            <span className="font-mono">{Math.hypot(b, d).toFixed(3)}</span>
+          </div>
+          <div className="flex justify-between">
+            <span className="text-muted-foreground">进度</span>
+            <span className="font-mono">{Math.round(progress * 100)}%</span>
+          </div>
+          {Math.abs(det) < 0.01 && (
+            <div className="mt-1 px-1.5 py-1 rounded bg-destructive/10 text-destructive text-[9.5px] leading-tight">
+              det = 0：变换将平面压缩到一条直线（降维）
+            </div>
+          )}
+          <div className="mt-1 text-[9px] text-muted-foreground/70 leading-tight">
+            <div className="font-medium text-muted-foreground mb-0.5">提示</div>
+            红色箭头 = î（原 e₁ 方向）<br />
+            绿色箭头 = ĵ（原 e₂ 方向）<br />
+            蓝色方块 = 单位正方形<br />
+            绿色椭圆 = 单位圆
+          </div>
+        </div>
+      </div>
+    </div>
+  );
 }

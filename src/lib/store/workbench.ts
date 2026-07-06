@@ -37,7 +37,7 @@ export interface VariableEntry {
   latex?: string;
 }
 
-export type SidePanelTab = 'history' | 'variables' | 'formulas' | 'pipeline' | 'linalg' | 'solver' | 'files';
+export type SidePanelTab = 'history' | 'variables' | 'formulas' | 'linalg' | 'solver' | 'files';
 export type PreviewTab = 'formula' | 'plot2d' | 'plot3d' | 'log' | 'pipeline' | 'ai';
 export type Theme = 'dark' | 'light';
 export type ViewMode = 'workbench' | 'pipeline' | 'focus';
@@ -62,15 +62,11 @@ interface WorkbenchState {
   locale: Locale;
   activeSidePanel: SidePanelTab;
   sidePanelCollapsed: boolean;
-  sidePanelWidth: number;
   previewVisible: boolean;
-  previewWidth: number;
   activePreviewTab: PreviewTab;
-  editorWidth: number;
   viewMode: ViewMode;
   commandPaletteOpen: boolean;
   globalCalcOpen: boolean;
-  rightPanelMode: 'preview' | 'pipeline' | 'ai';
   activityBarPosition: ActivityBarPosition;
   activityBarLocked: boolean;
   activityBarAutoHide: boolean;
@@ -102,15 +98,11 @@ interface WorkbenchState {
   setLocale: (locale: Locale) => void;
   setActiveSidePanel: (tab: SidePanelTab) => void;
   toggleSidePanel: () => void;
-  setSidePanelWidth: (w: number) => void;
   setPreviewVisible: (v: boolean) => void;
-  setPreviewWidth: (w: number) => void;
-  setEditorWidth: (w: number) => void;
   setActivePreviewTab: (tab: PreviewTab) => void;
   setViewMode: (mode: ViewMode) => void;
   setCommandPaletteOpen: (v: boolean) => void;
   setGlobalCalcOpen: (v: boolean) => void;
-  setRightPanelMode: (m: 'preview' | 'pipeline' | 'ai') => void;
   setActivityBarPosition: (p: ActivityBarPosition) => void;
   toggleActivityBarLock: () => void;
   setActivityBarAutoHide: (v: boolean) => void;
@@ -176,6 +168,8 @@ function loadInitial(): Partial<WorkbenchState> {
       sidePanelCollapsed: data.sidePanelCollapsed ?? false,
       previewVisible: data.previewVisible ?? true,
       editorVisible: data.editorVisible ?? true,
+      activePreviewTab: data.activePreviewTab ?? 'formula',
+      viewMode: data.viewMode ?? 'workbench',
       activityBarPosition: data.activityBarPosition ?? 'left',
       activityBarLocked: data.activityBarLocked ?? false,
       activityBarAutoHide: data.activityBarAutoHide ?? false,
@@ -203,15 +197,11 @@ export const useWorkbenchStore = create<WorkbenchState>((set, get) => ({
   locale: 'zh-CN',
   activeSidePanel: 'history',
   sidePanelCollapsed: false,
-  sidePanelWidth: 280,
   previewVisible: true,
-  previewWidth: 45,
-  editorWidth: 55,
   activePreviewTab: 'formula',
   viewMode: 'workbench',
   commandPaletteOpen: false,
   globalCalcOpen: false,
-  rightPanelMode: 'preview',
   activityBarPosition: 'left',
   activityBarLocked: false,
   activityBarAutoHide: false,
@@ -279,15 +269,11 @@ export const useWorkbenchStore = create<WorkbenchState>((set, get) => ({
   setLocale: (locale) => { set({ locale }); get().saveToStorage(); },
   setActiveSidePanel: (tab) => { set({ activeSidePanel: tab, sidePanelCollapsed: false }); get().saveToStorage(); },
   toggleSidePanel: () => { set((s) => ({ sidePanelCollapsed: !s.sidePanelCollapsed })); get().saveToStorage(); },
-  setSidePanelWidth: (w) => { set({ sidePanelWidth: Math.max(200, Math.min(500, w)) }); get().saveToStorage(); },
   setPreviewVisible: (v) => { set({ previewVisible: v }); get().saveToStorage(); },
-  setPreviewWidth: (w) => { set({ previewWidth: Math.max(25, Math.min(75, w)) }); get().saveToStorage(); },
-  setEditorWidth: (w) => { set({ editorWidth: Math.max(25, Math.min(75, w)) }); get().saveToStorage(); },
   setActivePreviewTab: (tab) => { set({ activePreviewTab: tab }); get().saveToStorage(); },
   setViewMode: (mode) => { set({ viewMode: mode }); get().saveToStorage(); },
   setCommandPaletteOpen: (v) => set({ commandPaletteOpen: v }),
   setGlobalCalcOpen: (v) => set({ globalCalcOpen: v }),
-  setRightPanelMode: (m) => set({ rightPanelMode: m }),
   setActivityBarPosition: (p) => { set({ activityBarPosition: p }); get().saveToStorage(); },
   toggleActivityBarLock: () => { set((s) => ({ activityBarLocked: !s.activityBarLocked })); get().saveToStorage(); },
   setActivityBarAutoHide: (v) => { set({ activityBarAutoHide: v }); get().saveToStorage(); },
@@ -314,6 +300,8 @@ export const useWorkbenchStore = create<WorkbenchState>((set, get) => ({
             sidePanelCollapsed: s.sidePanelCollapsed,
             previewVisible: s.previewVisible,
             editorVisible: s.editorVisible,
+            activePreviewTab: s.activePreviewTab,
+            viewMode: s.viewMode,
             activityBarPosition: s.activityBarPosition,
             activityBarLocked: s.activityBarLocked,
             activityBarAutoHide: s.activityBarAutoHide,

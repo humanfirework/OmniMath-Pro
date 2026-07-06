@@ -1114,3 +1114,139 @@ function escapeForLatexText(s: string): string {
     .replace(/\}/g, '\\}')
     .replace(/\^/g, '\\textasciicircum{}');
 }
+
+/* ================================================================== *
+ * Async entry — evaluateExpressionAsync
+ * ================================================================== *
+ * Companion to `evaluateExpression` that handles symbolic operations
+ * requiring Algebrite (dynamic-loaded). Falls back to the synchronous
+ * path for everything else.
+ *
+ * Currently handles:
+ *   • integrate(expr, var)               — symbolic indefinite integral
+ *   • integrate(expr, var, a, b, 'sym')  — symbolic definite integral
+ *   • limit(expr, var, point)            — symbolic limit (with numeric fallback)
+ *   • taylor(expr, var, order, point?)   — symbolic Taylor series
+ *
+ * For integrate with numeric bounds, the synchronous Simpson's rule
+ * path in `evaluateExpression` is preferred (faster, no Algebrite load).
+ */
+export async function evaluateExpressionAsync(
+  rawInput: string,
+  mode: InputMode = 'simple'
+): Promise<EvalResult> {
+  const input = stripComments(rawInput).trim();
+  if (!input) {
+    return fail('Expression is empty.');
+  }
+
+  let normalized: string;
+  try {
+    normalized = preprocessForMode(normalizeSymbols(input), mode);
+  } catch (err) {
+    return fail(`Failed to parse input: ${(err as Error).message}`);
+  }
+
+  // ── Symbolic indefinite integral: integrate(expr, var) ─────────
+  if (/^\s*integrate\s*\(/.test(normalized)) {
+    const args = extractArgs(normalized, 'integrate');
+    if (args && args.length === 2) {
+      const expr = args[0];
+      const varName = args[1].trim();
+      const { symbolicIntegrate } = await import('./symbolic');
+      const sym = await symbolicIntegrate(expr, varName);
+      if (sym.success) {
+        return ok({
+          result: `∫ ${expr} d${varName} = ${sym.expression}`,
+          latex: sym.latex,
+          type: 'symbolic',
+          steps: sym.steps,
+        });
+      }
+      return fail(sym.error || '符号积分失败');
+    }
+    // 2-arg form with explicit 'symbolic' flag: integrate(expr, var, a, b, 'symbolic')
+    if (args && args.length === 5 && /['"]symbolic['"]/.test(args[4])) {
+      const expr = args[0];
+      const varName = args[1].trim();
+      const a = math.evaluate(args[2], scope);
+      const b = math.evaluate(args[3], scope);
+      if (typeof a !== 'number' || typeof b !== 'number') {
+        return fail('Integration bounds must evaluate to numbers.');
+      }
+      const { symbolicDefiniteIntegral } = await import('./symbolic');
+      const sym = await symbolicDefiniteIntegral(expr, varName, a, b);
+      if (sym.success) {
+        return ok({
+          result: `∫ from ${a} to ${b} of ${expr} d${varName} = ${sym.expression}${sym.numerical !== undefined ? ` ≈ ${sym.numerical}` : ''}`,
+          latex: sym.latex,
+          type: 'symbolic',
+          steps: sym.steps,
+        });
+      }
+      return fail(sym.error || '符号定积分失败');
+    }
+    // Otherwise fall through to synchronous numeric integration.
+  }
+
+  // ── Symbolic limit: limit(expr, var, point) ───────────────────
+  if (/^\s*limit\s*\(/.test(normalized)) {
+    const args = extractArgs(normalized, 'limit');
+    if (args && args.length === 3) {
+      const expr = args[0];
+      const varName = args[1].trim();
+      const pointRaw = args[2].trim();
+      // Try symbolic first; if it fails, fall back to numeric.
+      const { symbolicLimit } = await import('./symbolic');
+      // Accept infinity as a special point.
+      const point: number | string = /inf|∞/i.test(pointRaw)
+        ? pointRaw
+        : (() => {
+            try {
+              return math.evaluate(pointRaw, scope) as number;
+            } catch {
+              return pointRaw;
+            }
+          })();
+      const sym = await symbolicLimit(expr, varName, point);
+      if (sym.success) {
+        return ok({
+          result: `lim ${varName}→${point} of ${expr} = ${sym.expression}${sym.numerical !== undefined ? ` (≈ ${sym.numerical})` : ''}`,
+          latex: sym.latex,
+          type: 'symbolic',
+          steps: sym.steps,
+        });
+      }
+      // Fall back to the numeric path.
+    }
+  }
+
+  // ── Symbolic Taylor series: taylor(expr, var, order, point?) ──
+  if (/^\s*taylor\s*\(/.test(normalized)) {
+    const args = extractArgs(normalized, 'taylor');
+    if (args && args.length >= 3) {
+      const expr = args[0];
+      const varName = args[1].trim();
+      const order = parseInt(args[2].trim(), 10);
+      const point = args.length >= 4
+        ? (math.evaluate(args[3], scope) as number)
+        : 0;
+      if (Number.isInteger(order) && order >= 0) {
+        const { symbolicSeries } = await import('./symbolic');
+        const sym = await symbolicSeries(expr, varName, order, point);
+        if (sym.success) {
+          return ok({
+            result: `T${order}(${varName}) = ${sym.expression}`,
+            latex: sym.latex,
+            type: 'symbolic',
+            steps: sym.steps,
+          });
+        }
+        // Fall back to the numeric derivative-based path.
+      }
+    }
+  }
+
+  // ── Default: delegate to synchronous evaluator ────────────────
+  return evaluateExpression(rawInput, mode);
+}

@@ -48,6 +48,7 @@ export function Workbench() {
   const locale = useWorkbenchStore((s) => s.locale);
   const sidePanelCollapsed = useWorkbenchStore((s) => s.sidePanelCollapsed);
   const viewMode = useWorkbenchStore((s) => s.viewMode);
+  const setViewMode = useWorkbenchStore((s) => s.setViewMode);
   const activityBarPosition = useWorkbenchStore((s) => s.activityBarPosition);
   const editorVisible = useWorkbenchStore((s) => s.editorVisible);
   const previewVisible = useWorkbenchStore((s) => s.previewVisible);
@@ -90,6 +91,18 @@ export function Workbench() {
     else document.documentElement.classList.remove('dark');
   }, [theme]);
 
+  // F11 toggles focus mode (hide side panel for distraction-free editing).
+  useEffect(() => {
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'F11') {
+        e.preventDefault();
+        setViewMode(viewMode !== 'focus' ? 'focus' : 'workbench');
+      }
+    };
+    window.addEventListener('keydown', onKeyDown);
+    return () => window.removeEventListener('keydown', onKeyDown);
+  }, [viewMode, setViewMode]);
+
   const isMobile = useIsMobile();
 
   if (isMobile) {
@@ -122,8 +135,8 @@ export function Workbench() {
         ) : !editorVisible && !previewVisible ? (
           /* Plain layout when both main panels are hidden — avoids empty resizable group. */
           <div className="flex-1 flex min-w-0">
-            {!sidePanelCollapsed && (
-              <div className="w-[280px] shrink-0 border-r border-border/60 bg-card/30">
+            {!sidePanelCollapsed && viewMode !== 'focus' && (
+              <div className="w-1/4 min-w-[200px] max-w-[400px] shrink-0 border-r border-border/60 bg-card/30">
                 <SidePanel />
               </div>
             )}
@@ -166,20 +179,20 @@ export function Workbench() {
             </div>
           </div>
         ) : (
-          <ResizablePanelGroup direction="horizontal" className="flex-1 min-w-0">
-            {/* Side panel — collapsible */}
-            {!sidePanelCollapsed && (
+          <ResizablePanelGroup direction="horizontal" autoSaveId="omnimath-layout" className="flex-1 min-w-0">
+            {/* Side panel — collapsible (hidden in focus mode) */}
+            {!sidePanelCollapsed && viewMode !== 'focus' && (
               <>
                 <ResizablePanel
                   defaultSize={20}
-                  minSize={15}
-                  maxSize={35}
+                  minSize={12}
+                  maxSize={40}
                   id="side-panel"
                   order={1}
                 >
                   <SidePanel />
                 </ResizablePanel>
-                <ResizableHandle />
+                <ResizableHandle withHandle className="data-[resize-handle-active]:bg-primary/60" />
               </>
             )}
 
@@ -187,7 +200,8 @@ export function Workbench() {
             {editorVisible && (
               <ResizablePanel
                 defaultSize={previewVisible ? 40 : 60}
-                minSize={25}
+                minSize={20}
+                maxSize={70}
                 id="editor-panel"
                 order={2}
               >
@@ -195,13 +209,14 @@ export function Workbench() {
               </ResizablePanel>
             )}
 
-            {editorVisible && previewVisible && <ResizableHandle />}
+            {editorVisible && previewVisible && <ResizableHandle withHandle className="data-[resize-handle-active]:bg-primary/60" />}
 
             {/* Preview */}
             {previewVisible && (
               <ResizablePanel
                 defaultSize={editorVisible ? 40 : 60}
-                minSize={25}
+                minSize={20}
+                maxSize={70}
                 id="preview-panel"
                 order={3}
               >

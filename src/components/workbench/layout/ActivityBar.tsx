@@ -14,6 +14,7 @@
  * Bottom: settings gear (opens command palette)
  */
 
+import { useRef } from 'react';
 import { motion } from 'framer-motion';
 import {
   Clock,
@@ -86,6 +87,7 @@ export function ActivityBar() {
 
   const isRight = activityBarPosition === 'right';
   const tooltipSide = isRight ? 'left' : 'right';
+  const hideTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const handleClick = (id: SidePanelTab) => {
     if (id === 'pipeline') {
@@ -120,6 +122,10 @@ export function ActivityBar() {
           isRight ? 'border-l border-transparent hover:border-border' : 'border-r border-transparent hover:border-border',
         )}
         onMouseEnter={() => {
+          if (hideTimerRef.current) {
+            clearTimeout(hideTimerRef.current);
+            hideTimerRef.current = null;
+          }
           if (!activityBarLocked) {
             toggleActivityBarHidden();
           }
@@ -144,7 +150,11 @@ export function ActivityBar() {
       aria-label="Activity Bar"
       onMouseLeave={() => {
         if (activityBarAutoHide && !activityBarLocked) {
-          toggleActivityBarHidden();
+          if (hideTimerRef.current) clearTimeout(hideTimerRef.current);
+          hideTimerRef.current = setTimeout(() => {
+            toggleActivityBarHidden();
+            hideTimerRef.current = null;
+          }, 200);
         }
       }}
     >

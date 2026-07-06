@@ -21,6 +21,8 @@ import {
   ArrowLeft,
   Sparkles,
   Plus,
+  ChevronDown,
+  ChevronRight,
 } from 'lucide-react';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Input } from '@/components/ui/input';
@@ -73,7 +75,7 @@ const CATEGORY_COLOR: Record<CategoryKey, string> = {
 const FORMULAS: Formula[] = [
   // Algebra
   { id: 'quad-formula', name: '求根公式', category: 'algebra', latex: 'x = \\frac{-b \\pm \\sqrt{b^2 - 4ac}}{2a}', description: '二次方程 ax² + bx + c = 0 的解。', example: 'solve(x^2 - 5*x + 6, x)' },
-  { id: 'binom', name: '二项式展开', category: 'algebra', latex: '(a+b)^n = \\sum_{k=0}^{n} \\binom{n}{k} a^{n-k} b^k', description: '二项式定理的一般展开形式。', example: '2 + 3 * 4' },
+  { id: 'binom', name: '二项式展开', category: 'algebra', latex: '(a+b)^n = \\sum_{k=0}^{n} \\binom{n}{k} a^{n-k} b^k', description: '二项式定理的一般展开形式。', example: '(2+3)^5' },
   { id: 'discriminant', name: '判别式', category: 'algebra', latex: '\\Delta = b^2 - 4ac', description: '判别式决定二次方程的根的个数和性质。', example: 'solve(x^2 - 4*x + 4, x)' },
   { id: 'pythagorean-id', name: '完全平方', category: 'algebra', latex: '(a+b)^2 = a^2 + 2ab + b^2', description: '完全平方展开公式。', example: '(2 + 3)^2' },
 
@@ -94,8 +96,8 @@ const FORMULAS: Formula[] = [
   // Calculus
   { id: 'deriv-xn', name: '幂函数导数', category: 'calculus', latex: '\\frac{d}{dx} x^n = n x^{n-1}', description: '幂函数的导数公式。', example: "derivative('x^3', 'x')" },
   { id: 'deriv-sin', name: '正弦导数', category: 'calculus', latex: '\\frac{d}{dx} \\sin x = \\cos x', description: 'sin(x) 的导数。', example: "derivative('sin(x)', 'x')" },
-  { id: 'integral-xn', name: '幂函数积分', category: 'calculus', latex: '\\int x^n \\, dx = \\frac{x^{n+1}}{n+1} + C', description: '幂函数的不定积分。', example: "integrate('x^2', 'x')" },
-  { id: 'ftc', name: '微积分基本定理', category: 'calculus', latex: '\\int_a^b f(x) \\, dx = F(b) - F(a)', description: '牛顿—莱布尼茨公式。', example: "integrate('x^2', 'x')" },
+  { id: 'integral-xn', name: '幂函数积分', category: 'calculus', latex: '\\int x^n \\, dx = \\frac{x^{n+1}}{n+1} + C', description: '幂函数的不定积分。', example: 'integrate(x^2, x)' },
+  { id: 'ftc', name: '微积分基本定理', category: 'calculus', latex: '\\int_a^b f(x) \\, dx = F(b) - F(a)', description: '牛顿—莱布尼茨公式。', example: 'integrate(x^2, x, 0, 1)' },
   { id: 'chain-rule', name: '链式法则', category: 'calculus', latex: '\\frac{d}{dx} f(g(x)) = f\'(g(x)) \\cdot g\'(x)', description: '复合函数求导法则。', example: "derivative('sin(x^2)', 'x')" },
   { id: 'taylor', name: '泰勒展开', category: 'calculus', latex: 'f(x) = \\sum_{n=0}^{\\infty} \\frac{f^{(n)}(a)}{n!} (x-a)^n', description: '函数在某点的泰勒级数展开。', example: "taylor('sin(x)', 'x', 0, 5)" },
 
@@ -128,11 +130,36 @@ const ALL_CATEGORIES: CategoryKey[] = [
   'finance',
 ];
 
+// Default expanded: first 3 categories (algebra / geometry / trigonometry).
+// The rest start collapsed.
+const DEFAULT_EXPANDED_CATEGORIES: CategoryKey[] = [
+  'algebra',
+  'geometry',
+  'trigonometry',
+];
+
 export function FormulaLibraryPanel() {
   const setEditorContent = useWorkbenchStore((s) => s.setEditorContent);
   const [query, setQuery] = useState('');
   const [activeCat, setActiveCat] = useState<CategoryKey | 'all'>('all');
   const [selected, setSelected] = useState<Formula | null>(null);
+  const [collapsedCategories, setCollapsedCategories] = useState<Set<CategoryKey>>(
+    () =>
+      new Set(
+        ALL_CATEGORIES.filter(
+          (c) => !DEFAULT_EXPANDED_CATEGORIES.includes(c),
+        ),
+      ),
+  );
+
+  const toggleCategory = (cat: CategoryKey) => {
+    setCollapsedCategories((prev) => {
+      const next = new Set(prev);
+      if (next.has(cat)) next.delete(cat);
+      else next.add(cat);
+      return next;
+    });
+  };
 
   const filtered = useMemo(() => {
     const q = query.trim().toLowerCase();
@@ -146,6 +173,11 @@ export function FormulaLibraryPanel() {
       );
     });
   }, [query, activeCat]);
+
+  // Show grouped (collapsible) view only when browsing all categories
+  // without a search query. Searching falls back to a flat list so all
+  // matches are visible regardless of collapse state.
+  const showGrouped = activeCat === 'all' && !query.trim();
 
   return (
     <div className="flex flex-col h-full">
@@ -257,34 +289,74 @@ export function FormulaLibraryPanel() {
                   <div className="text-center py-12 text-[12px] text-muted-foreground">
                     {t('cpNoResults')}
                   </div>
+                ) : showGrouped ? (
+                  ALL_CATEGORIES.map((cat) => {
+                    const items = filtered.filter((f) => f.category === cat);
+                    if (items.length === 0) return null;
+                    const isCollapsed = collapsedCategories.has(cat);
+                    return (
+                      <div key={cat} className="mb-1">
+                        <button
+                          type="button"
+                          onClick={() => toggleCategory(cat)}
+                          className={cn(
+                            'w-full flex items-center justify-between gap-2 px-2 py-1.5 rounded-md border bg-muted/30 hover:bg-muted/60 transition-colors',
+                            'border-border/60',
+                          )}
+                          aria-expanded={!isCollapsed}
+                        >
+                          <span className="flex items-center gap-1.5">
+                            {isCollapsed ? (
+                              <ChevronRight className="size-3.5 text-muted-foreground" />
+                            ) : (
+                              <ChevronDown className="size-3.5 text-muted-foreground" />
+                            )}
+                            <span
+                              className={cn(
+                                'inline-flex items-center text-[10.5px] font-semibold px-1.5 py-0.5 rounded border',
+                                CATEGORY_COLOR[cat],
+                              )}
+                            >
+                              {t(CATEGORY_LABEL_KEY[cat])}
+                            </span>
+                          </span>
+                          <span className="text-[10.5px] text-muted-foreground tabular-nums">
+                            {items.length}
+                          </span>
+                        </button>
+                        <AnimatePresence initial={false}>
+                          {!isCollapsed && (
+                            <motion.div
+                              initial={{ height: 0, opacity: 0 }}
+                              animate={{ height: 'auto', opacity: 1 }}
+                              exit={{ height: 0, opacity: 0 }}
+                              transition={{ duration: 0.2, ease: 'easeInOut' }}
+                              className="overflow-hidden"
+                            >
+                              <div className="space-y-1 pt-1">
+                                {items.map((f, i) => (
+                                  <FormulaCard
+                                    key={f.id}
+                                    formula={f}
+                                    index={i}
+                                    onClick={() => setSelected(f)}
+                                  />
+                                ))}
+                              </div>
+                            </motion.div>
+                          )}
+                        </AnimatePresence>
+                      </div>
+                    );
+                  })
                 ) : (
                   filtered.map((f, i) => (
-                    <motion.button
+                    <FormulaCard
                       key={f.id}
-                      type="button"
+                      formula={f}
+                      index={i}
                       onClick={() => setSelected(f)}
-                      initial={{ opacity: 0, y: -4 }}
-                      animate={{ opacity: 1, y: 0 }}
-                      transition={{ duration: 0.16, delay: Math.min(i * 0.015, 0.16) }}
-                      className="w-full text-left rounded-md border border-border/60 bg-card/60 hover:bg-accent/40 hover:border-primary/40 p-2.5 interactive-card"
-                    >
-                      <div className="flex items-center justify-between gap-2 mb-1">
-                        <span className="text-[12.5px] font-medium text-foreground truncate">
-                          {f.name}
-                        </span>
-                        <span
-                          className={cn(
-                            'inline-flex items-center text-[9.5px] font-medium px-1.5 py-0.5 rounded border',
-                            CATEGORY_COLOR[f.category],
-                          )}
-                        >
-                          {t(CATEGORY_LABEL_KEY[f.category])}
-                        </span>
-                      </div>
-                      <p className="text-[11px] text-muted-foreground line-clamp-2">
-                        {f.description}
-                      </p>
-                    </motion.button>
+                    />
                   ))
                 )}
               </motion.div>
@@ -318,5 +390,43 @@ function Chip({
     >
       {label}
     </button>
+  );
+}
+
+function FormulaCard({
+  formula,
+  index,
+  onClick,
+}: {
+  formula: Formula;
+  index: number;
+  onClick: () => void;
+}) {
+  return (
+    <motion.button
+      type="button"
+      onClick={onClick}
+      initial={{ opacity: 0, y: -4 }}
+      animate={{ opacity: 1, y: 0 }}
+      transition={{ duration: 0.16, delay: Math.min(index * 0.015, 0.16) }}
+      className="w-full text-left rounded-md border border-border/60 bg-card/60 hover:bg-accent/40 hover:border-primary/40 p-2.5 interactive-card"
+    >
+      <div className="flex items-center justify-between gap-2 mb-1">
+        <span className="text-[12.5px] font-medium text-foreground truncate">
+          {formula.name}
+        </span>
+        <span
+          className={cn(
+            'inline-flex items-center text-[9.5px] font-medium px-1.5 py-0.5 rounded border',
+            CATEGORY_COLOR[formula.category],
+          )}
+        >
+          {t(CATEGORY_LABEL_KEY[formula.category])}
+        </span>
+      </div>
+      <p className="text-[11px] text-muted-foreground line-clamp-2">
+        {formula.description}
+      </p>
+    </motion.button>
   );
 }

@@ -42,6 +42,8 @@ interface FormulaRendererProps {
   collapsible?: boolean;
   /** Start collapsed when `collapsible` is true. */
   defaultCollapsed?: boolean;
+  /** Font mode — `katex` (default KaTeX fonts), `stix` (STIX Two Math via CDN), or `system` (system-ui). */
+  fontMode?: 'katex' | 'stix' | 'system';
 }
 
 const MIN_SCALE = 0.6;
@@ -57,6 +59,7 @@ export function FormulaRenderer({
   title,
   collapsible = false,
   defaultCollapsed = false,
+  fontMode = 'katex',
 }: FormulaRendererProps) {
   const [copied, setCopied] = useState(false);
   const [scale, setScale] = useState(1);
@@ -114,13 +117,23 @@ export function FormulaRenderer({
 
   const showToolbar = displayMode && (collapsible || showCopy);
 
+  const fontModeClassName = fontMode === 'stix' ? 'stix-mode' : undefined;
+  const fontModeStyle =
+    fontMode === 'stix'
+      ? { fontFamily: 'var(--font-math)' }
+      : fontMode === 'system'
+        ? { fontFamily: 'system-ui' }
+        : undefined;
+
   return (
     <div
       className={cn(
         'relative group/formula',
         displayMode && 'flex flex-col',
+        fontModeClassName,
         className,
       )}
+      style={fontModeStyle}
       title={title}
     >
       {showToolbar && (

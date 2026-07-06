@@ -77,13 +77,23 @@ const PLOT_COLORS = [
   '#fb923c', // orange
 ];
 
-const EXAMPLES: Array<{ expr: string; label: string; hint: string }> = [
-  { expr: 'sin(x)*cos(y)', label: 'sin(x)·cos(y)', hint: '波纹' },
-  { expr: 'x^2 - y^2', label: 'x² − y²', hint: '鞍面' },
-  { expr: 'exp(-(x^2+y^2)/4)', label: 'e^(−(x²+y²)/4)', hint: '高斯钟形' },
-  { expr: 'sin(sqrt(x^2+y^2))', label: 'sin(√(x²+y²))', hint: '墨西哥帽' },
-  { expr: 'x^2 + y^2', label: 'x² + y²', hint: '抛物面' },
-  { expr: 'cos(x)*sin(y) + 0.1*x', label: 'cos(x)·sin(y)+0.1x', hint: '倾斜波纹' },
+const EXAMPLE_GROUPS: Array<{ title: string; items: Array<{ expr: string; label: string; hint: string }> }> = [
+  {
+    title: '基础',
+    items: [
+      { expr: 'sin(x)*cos(y)', label: 'sin(x)·cos(y)', hint: '波纹' },
+      { expr: 'x^2 - y^2', label: 'x² − y²', hint: '鞍面' },
+      { expr: 'x^2 + y^2', label: 'x² + y²', hint: '抛物面' },
+    ],
+  },
+  {
+    title: '进阶',
+    items: [
+      { expr: 'exp(-(x^2+y^2)/4)', label: 'e^(−(x²+y²)/4)', hint: '高斯钟形' },
+      { expr: 'sin(sqrt(x^2+y^2))', label: 'sin(√(x²+y²))', hint: '墨西哥帽' },
+      { expr: 'cos(x)*sin(y) + 0.1*x', label: 'cos(x)·sin(y)+0.1x', hint: '倾斜波纹' },
+    ],
+  },
 ];
 
 const DEFAULT_X: [number, number] = [-5, 5];
@@ -438,21 +448,31 @@ export function Plot3DPanel() {
             </div>
           )}
 
-          {/* Example chips */}
+          {/* Example chips — grouped into basic / advanced */}
           <div className="flex flex-wrap items-center gap-1 pt-0.5">
             <span className="flex items-center gap-1 text-[10px] text-muted-foreground">
               <Sparkles className="h-3 w-3" /> 示例
             </span>
-            {EXAMPLES.map((ex) => (
-              <button
-                key={ex.expr}
-                type="button"
-                onClick={() => handleAddExample(ex.expr)}
-                className="rounded-full border border-border/60 bg-background/40 px-2 py-0.5 font-mono text-[10px] text-foreground/80 transition-theme hover:border-primary/60 hover:text-primary"
-                title={ex.hint}
-              >
-                {ex.label}
-              </button>
+            {EXAMPLE_GROUPS.map((group, gi) => (
+              <div key={group.title} className="contents">
+                {gi > 0 && (
+                  <span className="mx-1 h-3 w-px self-center bg-border/60" aria-hidden />
+                )}
+                <span className="text-[10px] font-medium uppercase tracking-wide text-muted-foreground/70">
+                  {group.title}
+                </span>
+                {group.items.map((ex) => (
+                  <button
+                    key={ex.expr}
+                    type="button"
+                    onClick={() => handleAddExample(ex.expr)}
+                    className="rounded-full border border-border/60 bg-background/40 px-2 py-0.5 font-mono text-[10px] text-foreground/80 transition-theme hover:border-primary/60 hover:text-primary"
+                    title={ex.hint}
+                  >
+                    {ex.label}
+                  </button>
+                ))}
+              </div>
             ))}
           </div>
 
