@@ -35,13 +35,14 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y libwebkit2gtk-4.1-dev build-essential curl wget file libxdo-dev libssl-dev libayatana-appindicator3-dev librsvg2-dev libgtk-3-dev
 
-      - name: Setup bun
-        uses: oven-sh/setup-bun@v2
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
         with:
-          bun-version: latest
+          node-version: 22
+          cache: npm
 
       - name: Install frontend dependencies
-        run: bun install --frozen-lockfile
+        run: npm ci
 
       - name: Install Rust stable
         uses: dtolnay/rust-toolchain@stable
