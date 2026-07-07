@@ -673,14 +673,20 @@ function ToggleRow({
   onCheckedChange: (v: boolean) => void;
 }) {
   return (
-    <div className="flex items-center justify-between gap-2">
-      <Label className="text-[11px] text-muted-foreground">{label}</Label>
+    <div className="flex items-center gap-2">
       <Switch
         checked={checked}
         onCheckedChange={onCheckedChange}
         className="h-4 w-7 scale-90"
         aria-label={label}
+        id={`toggle-${label}`}
       />
+      <Label
+        htmlFor={`toggle-${label}`}
+        className="cursor-pointer text-[11px] text-muted-foreground"
+      >
+        {label}
+      </Label>
     </div>
   );
 }

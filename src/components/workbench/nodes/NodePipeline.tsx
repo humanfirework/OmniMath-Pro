@@ -281,7 +281,7 @@ export function NodePipeline() {
     current: { x: number; y: number };
   } | null>(null);
   const marqueeRef = useRef(marquee);
-  marqueeRef.current = marquee;
+  useEffect(() => { marqueeRef.current = marquee; }, [marquee]);
 
   // Palette (add-node drawer).
   const [paletteOpen, setPaletteOpen] = useState(false);
@@ -711,6 +711,36 @@ export function NodePipeline() {
     [nodes, selectNode],
   );
 
+  /* ── Shared canvas pan helper ────────────────────────────────── */
+  const startCanvasPan = useCallback((clientX: number, clientY: number) => {
+    const v = viewRef.current;
+    panRef.current = {
+      startX: clientX,
+      startY: clientY,
+      viewX: v.x,
+      viewY: v.y,
+    };
+    document.body.classList.add('dragging');
+
+    const onMove = (ev: PointerEvent) => {
+      const p = panRef.current;
+      if (!p) return;
+      setView((vv) => ({
+        ...vv,
+        x: p.viewX + (ev.clientX - p.startX),
+        y: p.viewY + (ev.clientY - p.startY),
+      }));
+    };
+    const onUp = () => {
+      panRef.current = null;
+      document.body.classList.remove('dragging');
+      window.removeEventListener('pointermove', onMove);
+      window.removeEventListener('pointerup', onUp);
+    };
+    window.addEventListener('pointermove', onMove);
+    window.addEventListener('pointerup', onUp);
+  }, []);
+
   /* ── Canvas pan (pointer on background) ──────────────────────── */
   const onCanvasPointerDown = useCallback(
     (e: React.PointerEvent) => {
@@ -776,6 +806,12 @@ export function NodePipeline() {
         return;
       }
 
+      // ── Middle mouse button always pans the canvas ──────────────
+      if (e.button === 1) {
+        startCanvasPan(e.clientX, e.clientY);
+        return;
+      }
+
       // ── Default: pan the canvas ─────────────────────────────────
       setSelectedId(null);
       setSelectedIds(new Set());
@@ -783,36 +819,12 @@ export function NodePipeline() {
         setConnecting(null);
         return;
       }
-      const v = viewRef.current;
-      const startX = e.clientX;
-      const startY = e.clientY;
-      const viewX = v.x;
-      const viewY = v.y;
-      panRef.current = { startX, startY, viewX, viewY };
-      document.body.classList.add('dragging');
-
-      const onMove = (ev: PointerEvent) => {
-        const p = panRef.current;
-        if (!p) return;
-        setView((vv) => ({
-          ...vv,
-          x: p.viewX + (ev.clientX - p.startX),
-          y: p.viewY + (ev.clientY - p.startY),
-        }));
-      };
-      const onUp = () => {
-        panRef.current = null;
-        document.body.classList.remove('dragging');
-        window.removeEventListener('pointermove', onMove);
-        window.removeEventListener('pointerup', onUp);
-      };
-      window.addEventListener('pointermove', onMove);
-      window.addEventListener('pointerup', onUp);
+      startCanvasPan(e.clientX, e.clientY);
     },
     [connecting],
   );
 
-  /* ── Wheel zoom ──────────────────────────────────────────────── */
+  /* ── Wheel zoom + vertical pan ───────────────────────────────── */
   useEffect(() => {
     const el = canvasRef.current;
     if (!el) return;
@@ -822,6 +834,11 @@ export function NodePipeline() {
       const cx = e.clientX - rect.left;
       const cy = e.clientY - rect.top;
       setView((v) => {
+        if (e.shiftKey) {
+          // Shift + wheel: pan vertically (up/down view control).
+          const panSpeed = 1.2;
+          return { ...v, y: v.y - e.deltaY * panSpeed };
+        }
         const delta = -e.deltaY * 0.0015;
         const next = Math.min(2, Math.max(0.4, v.scale * (1 + delta)));
         // Zoom toward cursor: adjust translate so the world point under
@@ -933,10 +950,24 @@ export function NodePipeline() {
         setConnecting(null);
         setPaletteOpen(false);
       }
+      // Arrow keys pan the canvas (up/down/left/right view control).
+      if (['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight'].includes(e.key)) {
+        e.preventDefault();
+        const step = e.shiftKey ? 40 : 12;
+        setView((v) => {
+          switch (e.key) {
+            case 'ArrowUp': return { ...v, y: v.y + step };
+            case 'ArrowDown': return { ...v, y: v.y - step };
+            case 'ArrowLeft': return { ...v, x: v.x + step };
+            case 'ArrowRight': return { ...v, x: v.x - step };
+          }
+          return v;
+        });
+      }
     };
     window.addEventListener('keydown', handler);
     return () => window.removeEventListener('keydown', handler);
-  }, [selectedId, selectedIds, deleteNode, deleteSelected]);
+  }, [selectedId, selectedIds, deleteNode, deleteSelected, setView]);
 
   /* ── Double-click canvas → open palette at cursor ────────────── */
   const onCanvasDoubleClick = useCallback(
@@ -1149,10 +1180,13 @@ export function NodePipeline() {
           )}
         </AnimatePresence>
 
-        {/* Zoom indicator */}
+        {/* Zoom indicator + control hints */}
         <div className="absolute bottom-3 right-3 flex items-center gap-1.5 px-2 py-1 rounded-md glass border border-border text-[11px] text-muted-foreground pointer-events-none">
           <ZoomIn className="size-3" />
           <span className="font-mono">{Math.round(view.scale * 100)}%</span>
+        </div>
+        <div className="absolute bottom-3 left-3 hidden sm:flex items-center gap-1.5 px-2 py-1 rounded-md glass border border-border text-[10px] text-muted-foreground/80 pointer-events-none">
+          <span>滚轮缩放 · Shift+滚轮上下平移 · 方向键移动</span>
         </div>
       </div>
     </div>

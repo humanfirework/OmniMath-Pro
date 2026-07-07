@@ -38,19 +38,27 @@ interface ViewBox {
   y: [number, number];
 }
 
-/** Auto-derive a sensible Y range from the current plots.
- *  We take the union of all autoYRange results (min of mins, max of maxs)
- *  plus a little extra vertical padding so the curve never touches the
- *  top/bottom edge. This matches the calculator-style "fit to data" look. */
-function deriveDefaultY(plots: ReturnType<typeof useWorkbenchStore.getState>['plots']): [number, number] {
+/** Auto-derive a sensible Y range from the current plots sampled over the
+ *  given X view range. Using the visible X range (instead of each plot's
+ *  full stored range) prevents fast-growing functions like `e^x` from
+ *  blowing up the Y axis when the user is only looking at a narrow window.
+ *  We take the union of all autoYRange results plus a little vertical padding
+ *  so the curve never touches the top/bottom edge. */
+function deriveDefaultY(
+  plots: ReturnType<typeof useWorkbenchStore.getState>['plots'],
+  xRange: [number, number],
+): [number, number] {
   if (plots.length === 0) return DEFAULT_Y;
   const ranges: [number, number][] = [];
   for (const p of plots) {
     const plotType2d = (p.plotType === 'surface3d' ? 'cartesian' : p.plotType ?? 'cartesian') as
       | 'cartesian' | 'polar' | 'parametric';
+    // Sample over the requested X view range so the Y scale matches what is
+    // actually on screen. For polar/parametric this still gives a reasonable
+    // bounding estimate because the parameter range maps to the same window.
     const samples = sampleFunction(
       p.expression,
-      p.xRange ?? DEFAULT_X,
+      xRange,
       plotType2d,
       300,
     );
@@ -93,9 +101,10 @@ export function Plot2DPanel() {
       return { x: [-r, r], y: [-r, r] };
     }
     const latest = plots[plots.length - 1];
+    const x = (latest?.xRange ?? DEFAULT_X) as [number, number];
     return {
-      x: (latest?.xRange ?? DEFAULT_X) as [number, number],
-      y: deriveDefaultY(plots),
+      x,
+      y: deriveDefaultY(plots, x),
     };
   }, [plots]);
 

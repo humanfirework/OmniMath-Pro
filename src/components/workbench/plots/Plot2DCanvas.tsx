@@ -271,8 +271,10 @@ export function Plot2DCanvas({
 
       /* ---------- Grid ---------- */
       if (showGrid) {
+        // Use the same target tick count for both axes so the grid spacing
+        // logic is consistent and the visual scale feels balanced.
         const xNice = niceNumber(vx, 8);
-        const yNice = niceNumber(vy, 6);
+        const yNice = niceNumber(vy, 8);
         // Minor grid: half-step.
         const minorX = xNice.tickStep / 2;
         const minorY = yNice.tickStep / 2;
