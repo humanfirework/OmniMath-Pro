@@ -1705,22 +1705,22 @@ export function SolverPanel() {
         onValueChange={setActiveTab}
         className="flex-1 min-h-0 flex flex-col gap-2 px-2 pt-2"
       >
-        <TabsList className="h-7 grid grid-cols-4 w-full">
-          <TabsTrigger value="equation" className="text-[10.5px] px-1 py-0.5 gap-1">
+        <TabsList className="icon-collapse-tabs h-7 grid grid-cols-4 w-full">
+          <TabsTrigger value="equation" title={t('solverTabEquation')} className="text-[10.5px] px-1 py-0.5 gap-1">
             <Sigma className="size-3" />
-            <span className="hidden sm:inline">{t('solverTabEquation')}</span>
+            <span data-icon-tab-label>{t('solverTabEquation')}</span>
           </TabsTrigger>
-          <TabsTrigger value="system" className="text-[10.5px] px-1 py-0.5 gap-1">
+          <TabsTrigger value="system" title={t('solverTabSystem')} className="text-[10.5px] px-1 py-0.5 gap-1">
             <Equal className="size-3" />
-            <span className="hidden sm:inline">{t('solverTabSystem')}</span>
+            <span data-icon-tab-label>{t('solverTabSystem')}</span>
           </TabsTrigger>
-          <TabsTrigger value="calculus" className="text-[10.5px] px-1 py-0.5 gap-1">
+          <TabsTrigger value="calculus" title={t('solverTabCalculus')} className="text-[10.5px] px-1 py-0.5 gap-1">
             <Calculator className="size-3" />
-            <span className="hidden sm:inline">{t('solverTabCalculus')}</span>
+            <span data-icon-tab-label>{t('solverTabCalculus')}</span>
           </TabsTrigger>
-          <TabsTrigger value="numeric" className="text-[10.5px] px-1 py-0.5 gap-1">
+          <TabsTrigger value="numeric" title={t('solverTabNumeric')} className="text-[10.5px] px-1 py-0.5 gap-1">
             <Target className="size-3" />
-            <span className="hidden sm:inline">{t('solverTabNumeric')}</span>
+            <span data-icon-tab-label>{t('solverTabNumeric')}</span>
           </TabsTrigger>
         </TabsList>
 

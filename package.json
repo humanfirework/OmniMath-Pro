@@ -9,7 +9,7 @@
     "url": "git+ssh://git@github.com/humanfirework/OmniMath-Pro.git"
   },
   "scripts": {
-    "dev": "next dev -p 3000 2>&1 | tee dev.log",
+    "dev": "next dev -p 3000",
     "build": "next build",
     "preview": "bunx serve out -p 3000",
     "lint": "eslint .",

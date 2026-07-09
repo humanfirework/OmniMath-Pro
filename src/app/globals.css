@@ -11,6 +11,44 @@
 
 @custom-variant dark (&:is(.dark *));
 
+@layer components {
+  .icon-collapse-tabs {
+    container-type: inline-size;
+  }
+
+  .icon-collapse-tabs [role="tab"] {
+    min-width: 0;
+    justify-content: center;
+  }
+
+  .icon-collapse-tabs [data-icon-tab-label] {
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  @container (max-width: 28rem) {
+    .icon-collapse-tabs [data-icon-tab-label] {
+      display: none;
+    }
+
+    .icon-collapse-tabs [role="tab"] {
+      padding-inline: 0.25rem;
+    }
+  }
+
+  @container (max-width: 36rem) {
+    .icon-collapse-tabs-wide [data-icon-tab-label] {
+      display: none;
+    }
+
+    .icon-collapse-tabs-wide [role="tab"] {
+      padding-inline: 0.25rem;
+    }
+  }
+}
+
 /* ------------------------------------------------------------
    STIX Two Math font — loaded from CDN for STIX font mode
    ------------------------------------------------------------ */

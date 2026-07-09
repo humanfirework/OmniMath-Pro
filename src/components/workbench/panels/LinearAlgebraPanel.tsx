@@ -13,7 +13,7 @@
  * Teal accent, glass cards, framer-motion entrance.
  */
 
-import { useState, useMemo, useCallback, useEffect, type ClipboardEvent, type CSSProperties } from 'react';
+import { useState, useMemo, useCallback, useEffect, useRef, type ClipboardEvent, type CSSProperties } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { create, all, type MathJsInstance } from 'mathjs';
 import {
@@ -34,6 +34,8 @@ import {
   Play,
   Pause,
   Square,
+  Rows3,
+  Columns3,
 } from 'lucide-react';
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs';
 import { Button } from '@/components/ui/button';
@@ -338,6 +340,7 @@ function pickNextName(used: string[]): string {
  * ================================================================== */
 export function LinearAlgebraPanel() {
   const [activeTab, setActiveTab] = useState<string>('edit');
+  const variables = useWorkbenchStore((s) => s.variables);
   const [matrices, setMatrices] = useState<MatrixEntry[]>(() => {
     // Lazy init: read any matrices already in the store on first mount.
     const initial: MatrixEntry[] = [
@@ -369,11 +372,27 @@ export function LinearAlgebraPanel() {
     return initial;
   });
   const [selectedName, setSelectedName] = useState<string>('A');
+  const [saveNotice, setSaveNotice] = useState<string | null>(null);
+  const saveNoticeTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const selected = useMemo(
     () => matrices.find((m) => m.name === selectedName) ?? matrices[0],
     [matrices, selectedName],
   );
+
+  const savedMatrixVars = useMemo(
+    () =>
+      Object.values(variables).filter(
+        (entry) => entry.type === 'matrix' && Array.isArray(entry.value),
+      ),
+    [variables],
+  );
+
+  useEffect(() => {
+    return () => {
+      if (saveNoticeTimer.current) clearTimeout(saveNoticeTimer.current);
+    };
+  }, []);
 
   const handleNewMatrix = useCallback(() => {
     const used = matrices.map((m) => m.name);
@@ -412,8 +431,14 @@ export function LinearAlgebraPanel() {
     if (selectedName === oldName) setSelectedName(newName);
   }, [selectedName]);
 
+  const handleMatrixSaved = useCallback((name: string) => {
+    setSaveNotice(name);
+    if (saveNoticeTimer.current) clearTimeout(saveNoticeTimer.current);
+    saveNoticeTimer.current = setTimeout(() => setSaveNotice(null), 1800);
+  }, []);
+
   return (
-    <div className="flex flex-col h-full bg-card/30">
+    <div className="relative flex flex-col h-full overflow-hidden bg-card/30">
       {/* Header */}
       <div className="shrink-0 px-3 pt-2.5 pb-2 border-b border-border/60">
         <div className="flex items-center gap-1.5 mb-1">
@@ -433,26 +458,26 @@ export function LinearAlgebraPanel() {
         onValueChange={setActiveTab}
         className="flex-1 min-h-0 flex flex-col gap-2 px-2 pt-2"
       >
-        <TabsList className="h-7 grid grid-cols-5 w-full text-[10.5px]">
-          <TabsTrigger value="edit" className="text-[10.5px] px-1 py-0.5 gap-1">
+        <TabsList className="icon-collapse-tabs icon-collapse-tabs-wide h-7 grid grid-cols-5 w-full text-[10.5px]">
+          <TabsTrigger value="edit" title={t('linalgTabEdit')} className="text-[10.5px] px-1 py-0.5 gap-1">
             <Grid3x3 className="size-3" />
-            <span className="hidden sm:inline">{t('linalgTabEdit')}</span>
+            <span data-icon-tab-label>{t('linalgTabEdit')}</span>
           </TabsTrigger>
-          <TabsTrigger value="ops" className="text-[10.5px] px-1 py-0.5 gap-1">
+          <TabsTrigger value="ops" title={t('linalgTabOps')} className="text-[10.5px] px-1 py-0.5 gap-1">
             <Cog className="size-3" />
-            <span className="hidden sm:inline">{t('linalgTabOps')}</span>
+            <span data-icon-tab-label>{t('linalgTabOps')}</span>
           </TabsTrigger>
-          <TabsTrigger value="decomp" className="text-[10.5px] px-1 py-0.5 gap-1">
+          <TabsTrigger value="decomp" title={t('linalgTabDecomp')} className="text-[10.5px] px-1 py-0.5 gap-1">
             <Split className="size-3" />
-            <span className="hidden sm:inline">{t('linalgTabDecomp')}</span>
+            <span data-icon-tab-label>{t('linalgTabDecomp')}</span>
           </TabsTrigger>
-          <TabsTrigger value="system" className="text-[10.5px] px-1 py-0.5 gap-1">
+          <TabsTrigger value="system" title={t('linalgTabSystem')} className="text-[10.5px] px-1 py-0.5 gap-1">
             <Equal className="size-3" />
-            <span className="hidden sm:inline">{t('linalgTabSystem')}</span>
+            <span data-icon-tab-label>{t('linalgTabSystem')}</span>
           </TabsTrigger>
-          <TabsTrigger value="transform" className="text-[10.5px] px-1 py-0.5 gap-1">
+          <TabsTrigger value="transform" title={t('linalgTabTransform')} className="text-[10.5px] px-1 py-0.5 gap-1">
             <Activity className="size-3" />
-            <span className="hidden sm:inline">{t('linalgTabTransform')}</span>
+            <span data-icon-tab-label>{t('linalgTabTransform')}</span>
           </TabsTrigger>
         </TabsList>
 
@@ -465,6 +490,7 @@ export function LinearAlgebraPanel() {
             onDelete={handleDeleteMatrix}
             onRename={handleRenameMatrix}
             onUpdate={handleUpdateMatrix}
+            onSaved={handleMatrixSaved}
           />
         </TabsContent>
 
@@ -484,6 +510,59 @@ export function LinearAlgebraPanel() {
           <LinearTransformAnimation />
         </TabsContent>
       </Tabs>
+
+      <div className="pointer-events-none absolute bottom-3 right-0 z-30 flex max-w-[90%] flex-col items-end gap-2">
+        <AnimatePresence>
+          {saveNotice && (
+            <motion.div
+              initial={{ opacity: 0, y: 8, scale: 0.96 }}
+              animate={{ opacity: 1, y: 0, scale: 1 }}
+              exit={{ opacity: 0, y: 8, scale: 0.96 }}
+              transition={{ duration: 0.16 }}
+              className="mr-2 rounded-md border border-primary/40 bg-popover/95 px-3 py-1.5 text-[11px] text-popover-foreground shadow-lg shadow-black/20 backdrop-blur"
+            >
+              已保存变量:<span className="ml-1 font-mono font-semibold text-primary">{saveNotice}</span>
+            </motion.div>
+          )}
+        </AnimatePresence>
+
+        {savedMatrixVars.length > 0 && (
+          <div className="pointer-events-auto flex max-h-44 flex-col items-end gap-1.5 overflow-visible py-1">
+            {savedMatrixVars.map((entry) => {
+              const value = toMatrixArray(entry.value);
+              const latex = entry.latex ?? matrixToLatex(value);
+
+              return (
+                <Tooltip key={entry.name}>
+                  <TooltipTrigger asChild>
+                    <button
+                      type="button"
+                      className={cn(
+                        'translate-x-7 rounded-l-md border border-primary/40 bg-primary/15',
+                        'px-3 py-1 text-[11px] font-mono font-semibold text-primary',
+                        'shadow-md shadow-black/20 backdrop-blur transition-transform duration-200',
+                        'hover:translate-x-0 hover:bg-primary/25 focus-visible:translate-x-0',
+                        'focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-primary',
+                      )}
+                    >
+                      {entry.name}
+                    </button>
+                  </TooltipTrigger>
+                  <TooltipContent
+                    side="left"
+                    sideOffset={8}
+                    className="max-w-[320px] border border-border bg-popover p-2 text-popover-foreground shadow-xl"
+                  >
+                    <div className="max-w-[280px] overflow-x-auto rounded-sm bg-background/40 px-2 py-1.5">
+                      <FormulaRenderer latex={`${entry.name} = ${latex}`} displayMode />
+                    </div>
+                  </TooltipContent>
+                </Tooltip>
+              );
+            })}
+          </div>
+        )}
+      </div>
     </div>
   );
 }
@@ -499,6 +578,7 @@ function MatrixEditorTab({
   onDelete,
   onRename,
   onUpdate,
+  onSaved,
 }: {
   matrices: MatrixEntry[];
   selected: MatrixEntry | undefined;
@@ -507,6 +587,7 @@ function MatrixEditorTab({
   onDelete: (name: string) => void;
   onRename: (old: string, next: string) => void;
   onUpdate: (name: string, data: Matrix) => void;
+  onSaved: (name: string) => void;
 }) {
   const setVariable = useWorkbenchStore((s) => s.setVariable);
   const [pasteOpen, setPasteOpen] = useState(false);
@@ -574,12 +655,13 @@ function MatrixEditorTab({
       latex: matrixToLatex(matrix),
     };
     setVariable(name, entry);
-    toast.success(t('linalgSaved') + ': ' + name);
+    onSaved(name);
   };
 
   return (
-    <ScrollArea className="h-full">
-      <div className="p-2 space-y-3">
+    <div className="h-full overflow-hidden">
+      <ScrollArea className="h-full">
+        <div className="p-2 space-y-3">
         {/* Matrix selector */}
         <div className="flex items-center gap-1.5">
           <Select value={name} onValueChange={onSelect}>
@@ -757,43 +839,45 @@ function MatrixEditorTab({
             <FormulaRenderer latex={name + ' = ' + matrixToLatex(matrix)} displayMode />
           </div>
         </div>
-      </div>
+        </div>
 
-      {/* Paste dialog */}
-      <Dialog open={pasteOpen} onOpenChange={setPasteOpen}>
-        <DialogContent className="max-w-md">
-          <DialogHeader>
-            <DialogTitle className="text-[13px]">{t('linalgPaste')}</DialogTitle>
-          </DialogHeader>
-          <p className="text-[11.5px] text-muted-foreground whitespace-pre-line">
-            {t('linalgPasteHint')}
-          </p>
-          <textarea
-            autoFocus
-            value={pasteText}
-            onChange={(e) => setPasteText(e.target.value)}
-            className={cn(
-              'min-h-[120px] w-full p-2.5 text-[12px] font-mono',
-              'bg-muted/40 border border-border/60 rounded-md',
-              'focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary/40',
-              'resize-y',
-            )}
-            placeholder={'1, 2, 3\n4, 5, 6\n7, 8, 9\n\nor [1,2;3,4]'}
-            onKeyDown={(e) => {
-              if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) handlePaste();
-            }}
-          />
-          <DialogFooter>
-            <Button variant="outline" size="sm" onClick={() => setPasteOpen(false)}>
-              {t('commonCancel')}
-            </Button>
-            <Button size="sm" onClick={handlePaste}>
-              {t('linalgPasteConfirm')}
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
-    </ScrollArea>
+        {/* Paste dialog */}
+        <Dialog open={pasteOpen} onOpenChange={setPasteOpen}>
+          <DialogContent className="max-w-md">
+            <DialogHeader>
+              <DialogTitle className="text-[13px]">{t('linalgPaste')}</DialogTitle>
+            </DialogHeader>
+            <p className="text-[11.5px] text-muted-foreground whitespace-pre-line">
+              {t('linalgPasteHint')}
+            </p>
+            <textarea
+              autoFocus
+              value={pasteText}
+              onChange={(e) => setPasteText(e.target.value)}
+              className={cn(
+                'min-h-[120px] w-full p-2.5 text-[12px] font-mono',
+                'bg-muted/40 border border-border/60 rounded-md',
+                'focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary/40',
+                'resize-y',
+              )}
+              placeholder={'1, 2, 3\n4, 5, 6\n7, 8, 9\n\nor [1,2;3,4]'}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) handlePaste();
+              }}
+            />
+            <DialogFooter>
+              <Button variant="outline" size="sm" onClick={() => setPasteOpen(false)}>
+                {t('commonCancel')}
+              </Button>
+              <Button size="sm" onClick={handlePaste}>
+                {t('linalgPasteConfirm')}
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
+      </ScrollArea>
+
+    </div>
   );
 }
 
@@ -1815,24 +1899,31 @@ function LinearSystemTab({ defaultMatrix }: { defaultMatrix: Matrix | undefined 
         <div>
           <div className="flex items-center justify-between mb-1">
             <label className="text-[10.5px] text-muted-foreground">{t('linalgMatrixA')}</label>
-            <div className="flex gap-0.5">
-              <Button variant="outline" size="sm" className="h-5 w-5 p-0" onClick={addRow}>
-                <Plus className="size-3" />
+            <div className="flex flex-wrap justify-end gap-1">
+              <Button variant="outline" size="sm" className="h-6 px-1.5 text-[10px] gap-1" onClick={addRow}>
+                <Rows3 className="size-3" />
+                增行
               </Button>
-              <Button variant="outline" size="sm" className="h-5 w-5 p-0" onClick={delRow}>
-                <Minus className="size-3" />
+              <Button variant="outline" size="sm" className="h-6 px-1.5 text-[10px] gap-1" onClick={delRow}>
+                <Rows3 className="size-3" />
+                减行
               </Button>
-              <Button variant="outline" size="sm" className="h-5 w-5 p-0" onClick={addCol}>
-                <Plus className="size-3" />
+              <Button variant="outline" size="sm" className="h-6 px-1.5 text-[10px] gap-1" onClick={addCol}>
+                <Columns3 className="size-3" />
+                增列
               </Button>
-              <Button variant="outline" size="sm" className="h-5 w-5 p-0" onClick={delCol}>
-                <Minus className="size-3" />
+              <Button variant="outline" size="sm" className="h-6 px-1.5 text-[10px] gap-1" onClick={delCol}>
+                <Columns3 className="size-3" />
+                减列
               </Button>
             </div>
           </div>
           <div className="rounded-md border border-border/60 bg-muted/20 p-1.5 overflow-x-auto">
-            <div className="inline-flex gap-3">
-              {/* Matrix A */}
+            <div className="inline-grid grid-cols-[max-content_auto_max-content] grid-rows-[auto_auto] items-start gap-x-2 gap-y-1">
+              <div className="text-[9.5px] text-muted-foreground font-medium">A</div>
+              <div />
+              <div className="text-[9.5px] text-muted-foreground text-center font-medium">b</div>
+
               <div className="flex flex-col gap-1">
                 {matrix.map((row, ri) => (
                   <div key={ri} className="flex gap-1">
@@ -1850,9 +1941,10 @@ function LinearSystemTab({ defaultMatrix }: { defaultMatrix: Matrix | undefined 
                   </div>
                 ))}
               </div>
-              {/* Vector b */}
+              <div className="flex h-full min-w-4 items-center justify-center text-[12px] font-semibold text-muted-foreground">
+                =
+              </div>
               <div className="flex flex-col gap-1">
-                <div className="text-[9.5px] text-muted-foreground text-center mb-0.5">b</div>
                 {vector.map((v, i) => (
                   <input
                     key={i}
