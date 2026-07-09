@@ -1,17 +1,45 @@
-> 语言：中文 | [English](README.en.md)
+**简体中文** | [繁體中文](README_zh-HK.md) | [English](README_en-US.md)
+
+<!-- markdownlint-disable -->
+
+<div align="center">
+
+<img src="./public/logo-master.png" width="120" alt="OmniMath Pro Logo">
 
 # OmniMath Pro
 
-一款 **VSCode 风格的沉浸式数学工作台**，为工程师、学生、科研人员和数学爱好者打造。
+一款 **VSCode 风格的沉浸式数学工作台**<br>
+基于 Tauri 2 + Next.js 16 + React 19 构建
 
-OmniMath Pro 将符号计算、函数绘图、公式渲染、矩阵运算、线性代数求解与可视化节点工作流整合进一个简洁、快速、可离线运行的桌面应用中。界面灵感来自现代代码编辑器，让你像写代码一样做数学。
+[Report Issue](https://github.com/humanfirework/OmniMath-Pro/issues) · [Download](https://github.com/humanfirework/OmniMath-Pro/releases)
 
-![License](https://img.shields.io/github/license/humanfirework/OmniMath-Pro)
-![Release](https://img.shields.io/github/v/release/humanfirework/OmniMath-Pro)
+[![Release](https://img.shields.io/github/v/release/humanfirework/OmniMath-Pro)](https://github.com/humanfirework/OmniMath-Pro/releases/latest)
+[![License](https://img.shields.io/github/license/humanfirework/OmniMath-Pro)](LICENSE)
+[![Build](https://img.shields.io/github/actions/workflow/status/humanfirework/OmniMath-Pro/release.yml?logo=github&label=release%20build)](https://github.com/humanfirework/OmniMath-Pro/actions)
+<br>
+![Tauri](https://img.shields.io/badge/Tauri-v2-%2324C8D8?logo=tauri)
+![React](https://img.shields.io/badge/React-19-blue?logo=react)
+![Rust](https://img.shields.io/badge/Rust-2021-%23000000?logo=rust)
 
-![Build](https://img.shields.io/github/actions/workflow/status/humanfirework/OmniMath-Pro/release.yml?logo=github&label=release%20build)
-![Tauri](https://img.shields.io/badge/Tauri-2.0-FFC131?logo=tauri)
-![React](https://img.shields.io/badge/React-19-61DAFB?logo=react)
+</div>
+
+<!-- markdownlint-restore -->
+
+---
+
+## 预览
+
+### 工作台与函数绘图
+
+![工作台与函数绘图](./public/screenshots/workbench.png)
+
+### 节点式计算流水线
+
+![节点式计算流水线](./public/screenshots/pipeline.png)
+
+### 线性代数求解
+
+![线性代数求解](./public/screenshots/linear-algebra.png)
 
 ---
 
@@ -30,33 +58,39 @@ OmniMath Pro 将符号计算、函数绘图、公式渲染、矩阵运算、线�
 ## 核心功能
 
 ### 计算与符号运算
+
 - 基于 **mathjs** 的高性能计算引擎
 - 支持变量、函数、矩阵、复数、微积分、方程求解
 - 多种输入风格：简洁模式 / Python 风格 / MATLAB 风格
 - 变量面板实时查看与管理计算状态
 
 ### 2D / 3D 绘图
+
 - 直角坐标、极坐标与参数方程 2D 绘图
 - 多函数叠加、自动标注重值点与零点
 - 鼠标滚轮缩放、拖拽平移、悬停读数
 - 极端范围与异常表达式防御，避免崩溃
 
 ### 公式渲染
+
 - 使用 **KaTeX** 即时渲染 LaTeX
 - 长公式支持水平滚动、缩放（0.6x–2.0x）与折叠/展开
 - 一键复制 LaTeX 源码
 
 ### 线性代数
+
 - 矩阵输入、编辑与粘贴解析（支持 MATLAB / CSV / TSV 格式）
 - 高斯消元、LU / QR 分解、特征值计算
 - 线性方程组求解，自动判断唯一解 / 无解 / 无穷解
 
 ### 节点式工作流（Pipeline）
+
 - ComfyUI / Blueprint 风格的数学节点图
 - 拖拽节点、连接端口、实时传播计算结果
 - 独立 mathjs 作用域，不污染主工作台变量
 
 ### 界面与体验
+
 - **VSCode 风格布局**：ActivityBar / SidePanel / Editor / Preview / StatusBar
 - **任务栏**：支持左右切换、锁定/解锁、自动隐藏、手动隐藏
 - **面板显隐**：编辑器、预览区、侧边栏、任务栏均可独立显示/隐藏，状态自动记忆
@@ -121,7 +155,7 @@ omnimath-pro/
 │   ├── capabilities/           # Tauri 权限配置
 │   └── tauri.conf.json         # 构建/窗口/打包配置
 ├── prisma/                     # Prisma schema（保留未来扩展）
-├── public/                     # 静态资源（logo 等）
+├── public/                     # 静态资源（logo、截图等）
 └── .github/workflows/          # 多平台自动发布工作流
 ```
 
@@ -191,7 +225,6 @@ git push origin v0.1.0
 ```
 
 详见 [`.github/workflows/release.yml`](.github/workflows/release.yml)。
-
 
 ---
 
