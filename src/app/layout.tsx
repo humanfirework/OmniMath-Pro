@@ -1,19 +1,32 @@
 import type { Metadata, Viewport } from "next";
-import { Geist, Geist_Mono } from "next/font/google";
+import { Inter, JetBrains_Mono, Noto_Sans_SC } from "next/font/google";
 import "katex/dist/katex.min.css";
 import "./globals.css";
-import { Toaster } from "@/components/ui/toaster";
+import { Toaster } from "@/components/ui/sonner";
 
-const geistSans = Geist({
-  variable: "--font-geist-sans",
+/* UI Latin font — Inter: outstanding legibility at 12–14px UI sizes,
+ * neutral tone that pairs cleanly with CJK glyphs. */
+const inter = Inter({
+  variable: "--font-inter",
   subsets: ["latin"],
   display: "swap",
 });
 
-const geistMono = Geist_Mono({
-  variable: "--font-geist-mono",
+/* Code / math input font — JetBrains Mono: dotted zero, clear
+ * l/1/I and O/0 differentiation, tabular figures for aligned output. */
+const jbMono = JetBrains_Mono({
+  variable: "--font-jb-mono",
   subsets: ["latin"],
   display: "swap",
+});
+
+/* CJK font — Noto Sans SC: consistent Chinese rendering across
+ * Windows / macOS / Linux (replaces dated Microsoft YaHei fallback). */
+const notoSansSC = Noto_Sans_SC({
+  variable: "--font-noto-sc",
+  weight: ["400", "500", "700"],
+  display: "swap",
+  preload: false,
 });
 
 export const metadata: Metadata = {
@@ -39,8 +52,8 @@ export const metadata: Metadata = {
 
 export const viewport: Viewport = {
   themeColor: [
-    { media: "(prefers-color-scheme: light)", color: "#fafafa" },
-    { media: "(prefers-color-scheme: dark)", color: "#1f1f22" },
+    { media: "(prefers-color-scheme: light)", color: "#f8fafa" },
+    { media: "(prefers-color-scheme: dark)", color: "#2e3437" },
   ],
   width: "device-width",
   initialScale: 1,
@@ -57,7 +70,7 @@ export default function RootLayout({
         <link rel="preconnect" href="https://cdn.jsdelivr.net" />
       </head>
       <body
-        className={`${geistSans.variable} ${geistMono.variable} antialiased`}
+        className={`${inter.variable} ${jbMono.variable} ${notoSansSC.variable} antialiased`}
       >
         {children}
         <Toaster />

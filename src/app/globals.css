@@ -67,8 +67,8 @@
   --color-node-border: var(--node-border);
   --color-connector: var(--connector);
 
-  --font-sans: var(--font-geist-sans), "Inter", "SF Pro Display", "SF Pro Text", -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Microsoft YaHei", "Noto Sans SC", "Hiragino Sans GB", ui-sans-serif, system-ui, sans-serif;
-  --font-mono: var(--font-geist-mono), "JetBrains Mono", "SF Mono", "Fira Code", "Roboto Mono", ui-monospace, SFMono-Regular, Menlo, Consolas, "Courier New", monospace;
+  --font-sans: var(--font-inter), var(--font-noto-sc), "SF Pro Display", "SF Pro Text", -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", ui-sans-serif, system-ui, sans-serif;
+  --font-mono: var(--font-jb-mono), "SF Mono", "Fira Code", "Cascadia Code", "Roboto Mono", ui-monospace, SFMono-Regular, Menlo, Consolas, "Courier New", monospace;
   --font-math: "STIX Two Math", "KaTeX_Math", "Cambria Math", serif;
 
   --radius-sm: calc(var(--radius) - 4px);
@@ -83,39 +83,59 @@
 :root {
   --radius: 0.625rem;
 
-  /* Backgrounds — near-white, very subtle warm gray */
-  --background: oklch(0.99 0 0);
-  --foreground: oklch(0.15 0 0);
+  /* ── Motion tokens ──────────────────────────────────────────────
+   * 全局动画时长/曲线 token，所有 framer-motion 动画 + CSS transition
+   * 都应引用这些变量，保证全应用动画手感一致。
+   *
+   *   --motion-fast     150ms   按钮按下、hover 高亮、tab 切换
+   *   --motion-normal   200ms   面板淡入、卡片浮起（默认值）
+   *   --motion-slow     300ms   抽屉滑入、对话框出现
+   *
+   *   --motion-ease     标准 ease-out，适合大多数出场动画
+   *   --motion-spring   带轻微回弹，适合选中态/激活态
+   *
+   * 配合 .motion-fast / .motion-normal 工具类，可在不写 framer-motion
+   * 的纯 CSS 场景复用同一套 token。
+   */
+  --motion-fast: 150ms;
+  --motion-normal: 200ms;
+  --motion-slow: 300ms;
+  --motion-ease: cubic-bezier(0.4, 0, 0.2, 1);
+  --motion-spring: cubic-bezier(0.34, 1.56, 0.64, 1);
+
+  /* Backgrounds — cool paper white with a whisper of teal (not sterile pure gray) */
+  --background: oklch(0.982 0.005 190);
+  --foreground: oklch(0.24 0.02 200);   /* tinted slate ink — softer than near-black */
 
   /* Indent guide line color (used by CodeMirror .cm-line) */
   --indent-guide: rgba(0, 0, 0, 0.06);
-  --card: oklch(1 0 0);
-  --card-foreground: oklch(0.15 0 0);
-  --popover: oklch(1 0 0);
-  --popover-foreground: oklch(0.15 0 0);
+  --card: oklch(0.998 0.002 190);
+  --card-foreground: oklch(0.24 0.02 200);
+  --popover: oklch(0.998 0.002 190);
+  --popover-foreground: oklch(0.24 0.02 200);
 
-  /* Primary — refined teal/emerald */
-  --primary: oklch(0.55 0.13 165);
+  /* Primary — refined teal/emerald (slightly more vivid) */
+  --primary: oklch(0.58 0.13 168);
   --primary-foreground: oklch(0.99 0 0);
 
-  /* Secondary / muted — warm light gray */
-  --secondary: oklch(0.96 0.004 145);
-  --secondary-foreground: oklch(0.2 0 0);
-  --muted: oklch(0.96 0.004 145);
-  --muted-foreground: oklch(0.45 0.008 145);
+  /* Secondary / muted — cool light gray */
+  --secondary: oklch(0.955 0.007 185);
+  --secondary-foreground: oklch(0.27 0.02 200);
+  --muted: oklch(0.955 0.007 185);
+  --muted-foreground: oklch(0.48 0.015 195);
 
   /* Accent — slightly elevated surface */
-  --accent: oklch(0.94 0.01 165);
-  --accent-foreground: oklch(0.2 0.02 165);
+  --accent: oklch(0.935 0.014 170);
+  --accent-foreground: oklch(0.28 0.04 175);
 
   /* Destructive — refined rose */
   --destructive: oklch(0.6 0.22 25);
   --destructive-foreground: oklch(0.99 0 0);
 
-  /* Borders / inputs / rings */
-  --border: oklch(0.9 0 0);
-  --input: oklch(0.9 0 0);
-  --ring: oklch(0.55 0.13 165);
+  /* Borders / inputs / rings — subtly tinted */
+  --border: oklch(0.9 0.006 190);
+  --input: oklch(0.9 0.006 190);
+  --ring: oklch(0.58 0.13 168);
 
   /* Chart palette — teal/amber/rose/violet/sky (NO blue-primary) */
   --chart-1: oklch(0.55 0.13 165);   /* teal */
@@ -125,23 +145,23 @@
   --chart-5: oklch(0.6 0.14 220);    /* cyan-sky */
 
   /* Sidebar — slight teal tint */
-  --sidebar: oklch(0.985 0.003 165);
-  --sidebar-foreground: oklch(0.15 0 0);
-  --sidebar-primary: oklch(0.55 0.13 165);
+  --sidebar: oklch(0.972 0.006 185);
+  --sidebar-foreground: oklch(0.24 0.02 200);
+  --sidebar-primary: oklch(0.58 0.13 168);
   --sidebar-primary-foreground: oklch(0.99 0 0);
-  --sidebar-accent: oklch(0.94 0.01 165);
-  --sidebar-accent-foreground: oklch(0.2 0.02 165);
-  --sidebar-border: oklch(0.9 0 0);
-  --sidebar-ring: oklch(0.55 0.13 165);
+  --sidebar-accent: oklch(0.935 0.014 170);
+  --sidebar-accent-foreground: oklch(0.28 0.04 175);
+  --sidebar-border: oklch(0.9 0.006 190);
+  --sidebar-ring: oklch(0.58 0.13 168);
 
   /* Custom semantic colors */
-  --teal: oklch(0.55 0.13 165);
+  --teal: oklch(0.58 0.13 168);
   --teal-foreground: oklch(0.99 0 0);
   --amber: oklch(0.75 0.15 75);
   --rose: oklch(0.65 0.2 15);
-  --node-bg: oklch(1 0 0);
-  --node-border: oklch(0.85 0.01 165);
-  --connector: oklch(0.55 0.13 165);
+  --node-bg: oklch(0.998 0.002 190);
+  --node-border: oklch(0.86 0.012 175);
+  --connector: oklch(0.58 0.13 168);
 
   /* Typography */
   --font-size-base: 14px;
@@ -154,39 +174,40 @@
 .dark {
   --radius: 0.625rem;
 
-  /* Backgrounds — BRIGHT dark gray (lifted significantly for readability) */
-  --background: oklch(0.235 0 0);   /* was 0.18 → lifted to ~#2e2e30 */
-  --foreground: oklch(0.98 0 0);    /* near-white text */
+  /* Backgrounds — deep slate-teal (readable, NOT pitch black, tinted
+     so the whole UI shares one cohesive atmosphere with the accent) */
+  --background: oklch(0.245 0.012 200);
+  --foreground: oklch(0.95 0.008 190);    /* soft tinted near-white */
 
   /* Indent guide line color — lighter for dark theme */
   --indent-guide: rgba(255, 255, 255, 0.06);
-  --card: oklch(0.275 0 0);         /* was 0.22 → lifted to ~#363638 */
-  --card-foreground: oklch(0.98 0 0);
-  --popover: oklch(0.30 0 0);
-  --popover-foreground: oklch(0.98 0 0);
+  --card: oklch(0.285 0.014 200);
+  --card-foreground: oklch(0.95 0.008 190);
+  --popover: oklch(0.305 0.015 200);
+  --popover-foreground: oklch(0.95 0.008 190);
 
   /* Primary — bright teal in dark */
-  --primary: oklch(0.75 0.15 165);
-  --primary-foreground: oklch(0.12 0 0);
+  --primary: oklch(0.78 0.13 170);
+  --primary-foreground: oklch(0.12 0.01 200);
 
-  /* Secondary / muted — elevated surfaces (much brighter) */
-  --secondary: oklch(0.32 0 0);     /* was 0.26 → lifted */
-  --secondary-foreground: oklch(0.98 0 0);
-  --muted: oklch(0.32 0 0);         /* was 0.26 → lifted */
-  --muted-foreground: oklch(0.88 0 0);  /* was 0.78 → lifted for WCAG AA */
+  /* Secondary / muted — elevated surfaces */
+  --secondary: oklch(0.325 0.014 200);
+  --secondary-foreground: oklch(0.95 0.008 190);
+  --muted: oklch(0.325 0.014 200);
+  --muted-foreground: oklch(0.85 0.012 195);  /* tinted, WCAG AA on dark */
 
   /* Accent — elevated surface */
-  --accent: oklch(0.34 0 0);        /* was 0.28 → lifted */
-  --accent-foreground: oklch(0.98 0 0);
+  --accent: oklch(0.35 0.018 195);
+  --accent-foreground: oklch(0.95 0.008 190);
 
   /* Destructive — bright rose */
   --destructive: oklch(0.7 0.2 22);
   --destructive-foreground: oklch(0.99 0 0);
 
   /* Borders / inputs / rings — MORE visible */
-  --border: oklch(1 0 0 / 20%);     /* was 14% → 20% for visibility */
-  --input: oklch(1 0 0 / 24%);      /* was 18% → 24% */
-  --ring: oklch(0.75 0.15 165);
+  --border: oklch(1 0 0 / 20%);
+  --input: oklch(1 0 0 / 24%);
+  --ring: oklch(0.78 0.13 170);
 
   /* Chart palette — brightened for dark */
   --chart-1: oklch(0.75 0.15 165);   /* teal */
@@ -196,23 +217,23 @@
   --chart-5: oklch(0.75 0.14 220);   /* cyan-sky */
 
   /* Sidebar — elevated over background */
-  --sidebar: oklch(0.275 0 0);
-  --sidebar-foreground: oklch(0.98 0 0);
-  --sidebar-primary: oklch(0.75 0.15 165);
-  --sidebar-primary-foreground: oklch(0.12 0 0);
-  --sidebar-accent: oklch(0.34 0 0);
-  --sidebar-accent-foreground: oklch(0.98 0 0);
+  --sidebar: oklch(0.285 0.014 200);
+  --sidebar-foreground: oklch(0.95 0.008 190);
+  --sidebar-primary: oklch(0.78 0.13 170);
+  --sidebar-primary-foreground: oklch(0.12 0.01 200);
+  --sidebar-accent: oklch(0.35 0.018 195);
+  --sidebar-accent-foreground: oklch(0.95 0.008 190);
   --sidebar-border: oklch(1 0 0 / 20%);
-  --sidebar-ring: oklch(0.75 0.15 165);
+  --sidebar-ring: oklch(0.78 0.13 170);
 
   /* Custom semantic colors */
-  --teal: oklch(0.75 0.15 165);
-  --teal-foreground: oklch(0.12 0 0);
+  --teal: oklch(0.78 0.13 170);
+  --teal-foreground: oklch(0.12 0.01 200);
   --amber: oklch(0.82 0.15 75);
   --rose: oklch(0.72 0.2 15);
-  --node-bg: oklch(0.275 0 0);
-  --node-border: oklch(0.75 0.15 165 / 40%);
-  --connector: oklch(0.75 0.15 165);
+  --node-bg: oklch(0.285 0.014 200);
+  --node-border: oklch(0.78 0.13 170 / 40%);
+  --connector: oklch(0.78 0.13 170);
 }
 
 /* ------------------------------------------------------------
@@ -351,25 +372,25 @@
   background: transparent;
 }
 
-/* Dark theme scrollbar — brighter for readability */
+/* Dark theme scrollbar — tinted slate-teal to match the palette */
 .dark ::-webkit-scrollbar {
   width: 10px;
   height: 10px;
 }
 
 .dark ::-webkit-scrollbar-track {
-  background: #2a2a2d;
+  background: #272e31;
 }
 
 .dark ::-webkit-scrollbar-thumb {
-  background: #555560;
+  background: #4a585d;
   border-radius: 5px;
   border: 2px solid transparent;
   background-clip: padding-box;
 }
 
 .dark ::-webkit-scrollbar-thumb:hover {
-  background: #6a6a78;
+  background: #5d6e74;
   background-clip: padding-box;
   border: 2px solid transparent;
 }
@@ -501,13 +522,13 @@
 .dark .text-foreground\/80,
 .dark .text-foreground\/85,
 .dark .text-foreground\/90 {
-  color: oklch(0.98 0 0);
+  color: oklch(0.95 0.008 190);
 }
 
 .dark code,
 .dark pre,
 .dark .font-mono {
-  color: oklch(0.96 0 0);
+  color: oklch(0.94 0.008 190);
 }
 
 /* Ensure muted text remains readable in dark mode. Many components use
@@ -516,12 +537,12 @@
 .dark .text-muted-foreground,
 .dark .text-muted-foreground\/70,
 .dark .text-muted-foreground\/80 {
-  color: oklch(0.88 0 0);
+  color: oklch(0.85 0.012 195);
 }
 
 .dark .text-muted-foreground\/50,
 .dark .text-muted-foreground\/60 {
-  color: oklch(0.82 0 0);
+  color: oklch(0.8 0.012 195);
 }
 
 /* Contrast-safe fallback for dynamic/third-party content */
@@ -530,7 +551,7 @@
 }
 
 .dark .text-contrast-safe {
-  color: oklch(0.98 0 0);
+  color: oklch(0.95 0.008 190);
 }
 
 /* ------------------------------------------------------------
@@ -546,7 +567,7 @@
 .dark .glass {
   backdrop-filter: blur(12px) saturate(140%);
   -webkit-backdrop-filter: blur(12px) saturate(140%);
-  background: rgba(20, 20, 22, 0.55);
+  background: rgba(23, 30, 33, 0.55);
   border: 1px solid rgba(255, 255, 255, 0.06);
 }
 
@@ -562,6 +583,30 @@
   -webkit-backdrop-filter: blur(20px) saturate(160%);
   background: rgba(20, 20, 22, 0.75);
   border: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+/* ------------------------------------------------------------
+   AI Panel — warm light mode (护眼暖色)
+   ------------------------------------------------------------ */
+:not(.dark) .ai-panel {
+  background: oklch(0.96 0.012 75);
+}
+:not(.dark) .ai-panel .border-border\/60 {
+  border-color: oklch(0.88 0.015 70) !important;
+}
+/* 暖色表面：覆盖 bg-muted/20、/30、/50 在白天模式下的冷灰底 */
+:not(.dark) .ai-panel .bg-muted\/20 {
+  background-color: oklch(0.93 0.014 70) !important;
+}
+:not(.dark) .ai-panel .bg-muted\/30 {
+  background-color: oklch(0.91 0.016 70) !important;
+}
+:not(.dark) .ai-panel .bg-muted\/50 {
+  background-color: oklch(0.94 0.012 75) !important;
+}
+/* 输入框聚焦边框沿用暖色调 */
+:not(.dark) .ai-panel .focus-within\:border-primary\/40:focus-within {
+  border-color: oklch(0.7 0.1 75) !important;
 }
 
 /* ------------------------------------------------------------
@@ -1052,4 +1097,53 @@ textarea.editor-input {
 
 .interactive-card:active {
   transform: translateY(0) scale(0.99);
+}
+
+/* ── Motion utility classes ──────────────────────────────────────
+ * 引用 :root 中的 motion token，让纯 CSS 场景也能复用同一套动画时长/曲线。
+ * framer-motion 动画仍可在 transition prop 中直接用 var(--motion-*) 。
+ *
+ * 用法：
+ *   <button className="motion-fast">…</button>
+ *   <div className="motion-normal" style={{ willChange: 'transform' }}>
+ *
+ * will-change 提示浏览器为 transform/opacity 开启 GPU 合成层，
+ * 避免动画期间触发重排。仅在确实会动画的元素上加，不要全局加
+ * （否则反而会增加内存占用）。
+ */
+.motion-fast {
+  transition-duration: var(--motion-fast);
+  transition-timing-function: var(--motion-ease);
+}
+
+.motion-normal {
+  transition-duration: var(--motion-normal);
+  transition-timing-function: var(--motion-ease);
+}
+
+.motion-slow {
+  transition-duration: var(--motion-slow);
+  transition-timing-function: var(--motion-ease);
+}
+
+/* 频繁动画元素的 will-change 提示 —— 仅在动画即将发生时加，
+ * 动画结束后移除（framer-motion 会自动管理；这里是给纯 CSS
+ * 动画的元素用的，如 hover 时的 transform）。 */
+.will-change-transform {
+  will-change: transform;
+}
+
+.will-change-opacity {
+  will-change: opacity;
+}
+
+.will-change-transform-opacity {
+  will-change: transform, opacity;
+}
+
+/* 强制使用 GPU 合成层（用于持续动画的元素，如旋转的空状态图标） */
+.gpu-layer {
+  transform: translateZ(0);
+  backface-visibility: hidden;
+  perspective: 1000px;
 }
