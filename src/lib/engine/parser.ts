@@ -52,7 +52,7 @@ const MATHJS_BUILTINS = new Set([
   'derivative', 'integrate', 'limit', 'taylor', 'simplify', 'rationalize',
   'solve',
   // plot verbs
-  'plot', 'polarplot', 'polar',
+  'plot', 'polarplot', 'polar', 'plot3d', 'plot2d', 'surface', 'surf',
   // misc
   'map', 'filter', 'forEach', 'format', 'print', 'typeOf', 'typeof', 'clone',
   'index', 'subset', 'matrix', 'sparse', 'unit', 'splitUnit', 'to', 'in',
@@ -90,6 +90,24 @@ export function preprocessForMode(input: string, mode: InputMode): string {
  */
 export function lenientPreprocess(input: string, mode: InputMode = 'simple'): string {
   let s = input;
+
+  /* 0. Protect multi-char "verb" names that end in a digit or are
+        otherwise vulnerable to the implicit-multiply pass below.
+        `plot3d(...)` would otherwise become `plot3*d(...)` because
+        the `3` + `d` boundary matches the number-then-letter rule.
+        We swap them for a sentinel that contains NO digits and NO
+        identifier chars, run the implicit-multiply passes, then
+        swap back. */
+  const VERB_GUARDS: Array<[RegExp, string, string]> = [
+    [/\bplot3d\s*\(/g, '\u0001PLOTTHREED(', 'plot3d('],
+    [/\bplot2d\s*\(/g, '\u0001PLOTTWOD(', 'plot2d('],
+    [/\bsurface\s*\(/g, '\u0001SURFACE(', 'surface('],
+    [/\bsurf\s*\(/g, '\u0001SURF(', 'surf('],
+    [/\bpolarplot\s*\(/g, '\u0001POLARPLOT(', 'polarplot('],
+  ];
+  for (const [re, sentinel] of VERB_GUARDS) {
+    s = s.replace(re, sentinel);
+  }
 
   /* 1. Number (incl. scientific notation) followed by letter or `(`.
         `2x → 2*x`, `2sin(x) → 2*sin(x)`, `2(...) → 2*(...)`.
@@ -129,6 +147,11 @@ export function lenientPreprocess(input: string, mode: InputMode = 'simple'): st
     s = insertImplicitMultiplyBetweenIdentifiers(s);
   }
 
+  /* 5. Restore the protected verb names (undo step 0). */
+  for (const [, sentinel, original] of VERB_GUARDS) {
+    s = s.split(sentinel).join(original);
+  }
+
   return s;
 }
 
@@ -161,7 +184,7 @@ function wrapFunctionSpaceArgument(s: string): string {
   const namePattern = names.map(escapeRegex).join('|');
   // Match: function-name, then 1+ spaces, then a non-operator char.
   // We do NOT match if followed by `(` already (that's already a call).
-  const re = new RegExp(`\\b(${namePattern})(\\s+)([A-Za-z0-9_\\.])`, 'g');
+  const re = new RegExp(`\\b(${namePattern})(\\s+)([A-Za-z0-9_\.])`, 'g');
 
   let out = '';
   let lastIdx = 0;
