@@ -42,7 +42,7 @@ jobs:
 
       - name: Install frontend dependencies
         # 锁定依赖保证可复现性（package-lock.json 已在仓库中）
-        run: npm ci --no-audit --no-fund
+        run: npm install --no-audit --no-fund
 
       - name: Install Rust stable
         uses: dtolnay/rust-toolchain@stable
