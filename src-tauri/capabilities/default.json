@@ -1,11 +1,14 @@
 {
   "$schema": "../gen/schemas/desktop-schema.json",
   "identifier": "default",
-  "description": "enables the default permissions",
+  "description": "最小化权限：仅启用应用运行所需的核心能力，关闭未使用的文件/系统访问",
   "windows": [
     "main"
   ],
   "permissions": [
-    "core:default"
+    "core:app:default",
+    "core:event:default",
+    "core:window:default",
+    "core:webview:default"
   ]
 }

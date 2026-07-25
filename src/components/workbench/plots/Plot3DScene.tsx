@@ -85,6 +85,9 @@ export interface Plot3DSceneProps {
   upAxis?: 'y' | 'z';
   /** Bump this number to force the camera back to its default position. */
   resetSignal?: number;
+  /** T6: 命令式截图 ref — 调用 captureRef.current() 会强制渲染一帧并返回
+   * PNG data URL。用于绕过 `preserveDrawingBuffer:false` 导致的黑屏导出。 */
+  captureRef?: MutableRefObject<CaptureFn | null>;
 }
 
 /* ------------------------------------------------------------------ */
@@ -302,71 +305,88 @@ function BillboardLabel({
 /* ------------------------------------------------------------------ */
 
 interface Axes3DProps {
-  /** Half-extent of the axes (axis runs from -size to +size). */
-  size: number;
+  /** Half-extent of the X axis (axis runs from -sizeX to +sizeX). */
+  sizeX: number;
+  /** Half-extent of the Y axis. */
+  sizeY: number;
+  /** T5: Half-extent of the Z axis — derived from actual surface zRange,
+   * so the Z axis fits the data instead of mirroring the X/Y extent. */
+  sizeZ: number;
   theme: 'dark' | 'light';
 }
 
-function Axes3D({ size, theme }: Axes3DProps) {
+/** Compute a "nice" tick step + tick values for a symmetric [-size, +size] axis. */
+function niceTicks(size: number): { step: number; values: number[] } {
+  const rawStep = (2 * size) / 8;
+  const mag = Math.pow(10, Math.floor(Math.log10(rawStep)));
+  const norm = rawStep / mag;
+  const step = (norm < 1.5 ? 1 : norm < 3 ? 2 : norm < 7 ? 5 : 10) * mag;
+  const out: number[] = [];
+  for (let v = -Math.floor(size / step) * step; v <= size + 1e-9; v += step) {
+    if (Math.abs(v) > size + 1e-9) continue;
+    out.push(Math.abs(v) < 1e-9 ? 0 : v);
+  }
+  return { step, values: out };
+}
+
+function Axes3D({ sizeX, sizeY, sizeZ, theme }: Axes3DProps) {
   const palette = THEME[theme];
 
-  // Tick spacing — pick a "nice" step from {1, 2, 5} × 10^n.
-  const ticks = useMemo(() => {
-    const rawStep = (2 * size) / 8;
-    const mag = Math.pow(10, Math.floor(Math.log10(rawStep)));
-    const norm = rawStep / mag;
-    const step = (norm < 1.5 ? 1 : norm < 3 ? 2 : norm < 7 ? 5 : 10) * mag;
-    const out: number[] = [];
-    for (let v = -Math.floor(size / step) * step; v <= size + 1e-9; v += step) {
-      if (Math.abs(v) > size + 1e-9) continue;
-      out.push(Math.abs(v) < 1e-9 ? 0 : v);
-    }
-    return { step, values: out };
-  }, [size]);
+  // T5: 每个轴独立计算刻度，避免共用 size 导致 Z 轴刻度与数据脱节。
+  const tx = useMemo(() => niceTicks(sizeX), [sizeX]);
+  const ty = useMemo(() => niceTicks(sizeY), [sizeY]);
+  const tz = useMemo(() => niceTicks(sizeZ), [sizeZ]);
 
-  // Tick label offset from the axis (in world units at default zoom).
-  const tickOffset = Math.max(0.3, size * 0.04);
+  // Tick label offset — based on the largest axis so labels stay readable.
+  const tickOffset = Math.max(0.3, Math.max(sizeX, sizeY, sizeZ) * 0.04);
 
   return (
     <group>
       {/* X axis line (teal) */}
-      <AxisLine from={[-size, 0, 0]} to={[size, 0, 0]} color={AXIS_COLORS.x} lineWidth={2.5} />
+      <AxisLine from={[-sizeX, 0, 0]} to={[sizeX, 0, 0]} color={AXIS_COLORS.x} lineWidth={2.5} />
       {/* Y axis line (amber) */}
-      <AxisLine from={[0, -size, 0]} to={[0, size, 0]} color={AXIS_COLORS.y} lineWidth={2.5} />
+      <AxisLine from={[0, -sizeY, 0]} to={[0, sizeY, 0]} color={AXIS_COLORS.y} lineWidth={2.5} />
       {/* Z axis line (rose) */}
-      <AxisLine from={[0, 0, -size]} to={[0, 0, size]} color={AXIS_COLORS.z} lineWidth={2.5} />
+      <AxisLine from={[0, 0, -sizeZ]} to={[0, 0, sizeZ]} color={AXIS_COLORS.z} lineWidth={2.5} />
 
-      {/* Tick marks + labels along each axis */}
-      {ticks.values.map((v, i) => (
-        <group key={`tick-${i}`}>
-          {/* X tick at (v, 0, 0) */}
+      {/* X ticks */}
+      {tx.values.map((v, i) => (
+        <group key={`tx-${i}`}>
           <TickMark position={[v, 0, 0]} axis="x" color={AXIS_COLORS.x} />
           {Math.abs(v) > 1e-9 && (
             <BillboardLabel
               position={[v, -tickOffset, tickOffset]}
-              text={fmtTick(v, ticks.step)}
+              text={fmtTick(v, tx.step)}
               color={palette.tickLabel}
               outlineColor={palette.bg}
               pixelSize={11}
             />
           )}
-          {/* Y tick at (0, v, 0) */}
+        </group>
+      ))}
+      {/* Y ticks */}
+      {ty.values.map((v, i) => (
+        <group key={`ty-${i}`}>
           <TickMark position={[0, v, 0]} axis="y" color={AXIS_COLORS.y} />
           {Math.abs(v) > 1e-9 && (
             <BillboardLabel
               position={[tickOffset, v, tickOffset]}
-              text={fmtTick(v, ticks.step)}
+              text={fmtTick(v, ty.step)}
               color={palette.tickLabel}
               outlineColor={palette.bg}
               pixelSize={11}
             />
           )}
-          {/* Z tick at (0, 0, v) */}
+        </group>
+      ))}
+      {/* Z ticks */}
+      {tz.values.map((v, i) => (
+        <group key={`tz-${i}`}>
           <TickMark position={[0, 0, v]} axis="z" color={AXIS_COLORS.z} />
           {Math.abs(v) > 1e-9 && (
             <BillboardLabel
               position={[tickOffset, 0, v]}
-              text={fmtTick(v, ticks.step)}
+              text={fmtTick(v, tz.step)}
               color={palette.tickLabel}
               outlineColor={palette.bg}
               pixelSize={11}
@@ -377,7 +397,7 @@ function Axes3D({ size, theme }: Axes3DProps) {
 
       {/* Axis end labels — larger, bolder */}
       <BillboardLabel
-        position={[size + tickOffset * 1.8, 0, 0]}
+        position={[sizeX + tickOffset * 1.8, 0, 0]}
         text="x"
         color={palette.axisLabel}
         outlineColor={palette.bg}
@@ -385,7 +405,7 @@ function Axes3D({ size, theme }: Axes3DProps) {
         outlineWidth={0.05}
       />
       <BillboardLabel
-        position={[0, size + tickOffset * 1.8, 0]}
+        position={[0, sizeY + tickOffset * 1.8, 0]}
         text="y"
         color={palette.axisLabel}
         outlineColor={palette.bg}
@@ -393,7 +413,7 @@ function Axes3D({ size, theme }: Axes3DProps) {
         outlineWidth={0.05}
       />
       <BillboardLabel
-        position={[0, 0, size + tickOffset * 1.8]}
+        position={[0, 0, sizeZ + tickOffset * 1.8]}
         text="z"
         color={palette.axisLabel}
         outlineColor={palette.bg}
@@ -418,24 +438,27 @@ function Axes3D({ size, theme }: Axes3DProps) {
 /* ------------------------------------------------------------------ */
 
 function Grid3D({
-  size,
+  sizeX,
+  sizeY,
   theme,
   upAxis,
 }: {
-  size: number;
+  sizeX: number;
+  sizeY: number;
   theme: 'dark' | 'light';
   upAxis: 'y' | 'z';
 }) {
   const palette = THEME[theme];
+  const maxXY = Math.max(sizeX, sizeY);
   return (
     <Grid
       position={[0, 0, 0]}
       rotation={upAxis === 'z' ? [-Math.PI / 2, 0, 0] : [0, 0, 0]}
-      args={[2 * size, 2 * size]}
-      cellSize={Math.max(0.25, size / 10)}
+      args={[2 * sizeX, 2 * sizeY]}
+      cellSize={Math.max(0.25, maxXY / 10)}
       cellThickness={0.6}
       cellColor={palette.gridSection}
-      sectionSize={Math.max(1, size / 2)}
+      sectionSize={Math.max(1, maxXY / 2)}
       sectionThickness={1.1}
       sectionColor={palette.gridColor}
       fadeDistance={40}
@@ -444,6 +467,48 @@ function Grid3D({
       infiniteGrid={false}
     />
   );
+}
+
+/* ------------------------------------------------------------------ */
+/*  CaptureBridge — T6: 暴露命令式截图 API                            */
+/* ------------------------------------------------------------------ */
+/**
+ * 因为 Plot3DScene 用 `preserveDrawingBuffer: false` 以提升性能，导出
+ * `canvas.toDataURL()` 会得到黑屏（缓冲区在合成后已被清空）。
+ *
+ * 此组件在 Canvas 内部用 `useThree` 拿到 gl/scene/camera，把一个
+ * "渲染一帧 → 返回 canvas"的函数注册到外部 ref。导出按钮调用它拿到
+ * 刚渲染好的 canvas，再立即交给 saveCanvasToFile 转 blob —— 整个流程
+ * 同步执行，避免浏览器在中间清空缓冲区。
+ */
+export type CaptureFn = () => HTMLCanvasElement | null;
+
+function CaptureBridge({
+  captureRef,
+}: {
+  captureRef: MutableRefObject<CaptureFn | null>;
+}) {
+  const { gl, scene, camera } = useThree();
+
+  useEffect(() => {
+    captureRef.current = () => {
+      try {
+        // 强制渲染一帧，把当前场景写入 drawing buffer。
+        // 调用方必须紧接着同步读取（toBlob/drawImage），否则缓冲区
+        // 会在下一次合成后被清空。
+        gl.render(scene, camera);
+        return gl.domElement;
+      } catch (err) {
+        console.error('[Plot3DScene] capture failed', err);
+        return null;
+      }
+    };
+    return () => {
+      captureRef.current = null;
+    };
+  }, [gl, scene, camera, captureRef]);
+
+  return null;
 }
 
 /* ------------------------------------------------------------------ */
@@ -456,10 +521,23 @@ function CameraReset({
   upAxis,
 }: {
   resetSignal: number;
-  controlsRef: MutableRefObject<{ reset: () => void } | null>;
+  controlsRef: MutableRefObject<{ reset: () => void; update?: () => void } | null>;
   upAxis: 'y' | 'z';
 }) {
   const { camera } = useThree();
+
+  // upAxis 变化时总是同步 camera.up 向量 + controls，不受 resetSignal 限制。
+  // 这修复了"切换 Y/Z 轴有时失效"的问题：之前 upAxis 变化被 resetSignal===0
+  // 守卫跳过，导致 camera.up 未更新，OrbitControls 行为异常。
+  useEffect(() => {
+    camera.up.set(0, upAxis === 'z' ? 0 : 1, upAxis === 'z' ? 1 : 0);
+    camera.lookAt(0, 0, 0);
+    if (controlsRef.current?.update) {
+      controlsRef.current.update();
+    }
+  }, [upAxis, camera]);
+
+  // resetSignal 变化时重置相机到默认位置（保留首次挂载跳过）。
   useEffect(() => {
     if (resetSignal === 0) return; // skip initial mount
     const defaultPos: [number, number, number] =
@@ -470,7 +548,7 @@ function CameraReset({
     if (controlsRef.current) {
       controlsRef.current.reset();
     }
-  }, [resetSignal, upAxis]);
+  }, [resetSignal]); // eslint-disable-line react-hooks/exhaustive-deps
   return null;
 }
 
@@ -488,6 +566,7 @@ interface SceneContentsProps {
   colorMode: 'height' | 'solid';
   upAxis: 'y' | 'z';
   resetSignal: number;
+  captureRef?: MutableRefObject<CaptureFn | null>;
 }
 
 function SceneContents({
@@ -500,26 +579,29 @@ function SceneContents({
   colorMode,
   upAxis,
   resetSignal,
+  captureRef,
 }: SceneContentsProps) {
   const palette = THEME[theme];
   const controlsRef = useRef<{ reset: () => void } | null>(null);
 
-  // Compute a unified axis half-extent: max of |x|, |y| from the surfaces'
-  // domain plus a generous margin so axes extend beyond the data.
-  const axisSize = useMemo(() => {
-    if (surfaces.length === 0) return 5;
-    let m = 5;
+  // T5: 各轴独立计算半轴长度。X/Y 来自曲面域，Z 来自实际采样到的 zRange，
+  // 这样高曲率曲面（如 e^x）的 Z 轴不再被压扁成 X/Y 的尺度。
+  const { sizeX, sizeY, sizeZ } = useMemo(() => {
+    if (surfaces.length === 0) {
+      return { sizeX: 5, sizeY: 5, sizeZ: 5 };
+    }
+    let mx = 5, my = 5, mz = 5;
     for (const s of surfaces) {
-      m = Math.max(
-        m,
-        Math.abs(s.xRange[0]),
-        Math.abs(s.xRange[1]),
-        Math.abs(s.yRange[0]),
-        Math.abs(s.yRange[1]),
-      );
+      mx = Math.max(mx, Math.abs(s.xRange[0]), Math.abs(s.xRange[1]));
+      my = Math.max(my, Math.abs(s.yRange[0]), Math.abs(s.yRange[1]));
+      // Z 用实际数据范围（已含正负），取绝对值最大者作为对称半轴。
+      if (s.validTriangleCount > 0) {
+        mz = Math.max(mz, Math.abs(s.zRange[0]), Math.abs(s.zRange[1]));
+      }
     }
     // Add ~8% margin, snap to next 0.5
-    return Math.ceil(m * 1.08 * 2) / 2;
+    const snap = (v: number) => Math.ceil(v * 1.08 * 2) / 2;
+    return { sizeX: snap(mx), sizeY: snap(my), sizeZ: snap(mz) };
   }, [surfaces]);
 
   return (
@@ -556,10 +638,10 @@ function SceneContents({
       ))}
 
       {/* Axes */}
-      {showAxes && <Axes3D size={axisSize} theme={theme} />}
+      {showAxes && <Axes3D sizeX={sizeX} sizeY={sizeY} sizeZ={sizeZ} theme={theme} />}
 
       {/* Grid */}
-      {showGrid && <Grid3D size={axisSize} theme={theme} upAxis={upAxis} />}
+      {showGrid && <Grid3D sizeX={sizeX} sizeY={sizeY} theme={theme} upAxis={upAxis} />}
 
       {/* Camera controls — fully orbit / zoom / pan enabled */}
       <OrbitControls
@@ -578,6 +660,9 @@ function SceneContents({
       />
 
       <CameraReset resetSignal={resetSignal} controlsRef={controlsRef} upAxis={upAxis} />
+
+      {/* T6: 命令式截图桥接 — 把 gl.render + toDataURL 注册到外部 ref */}
+      {captureRef && <CaptureBridge captureRef={captureRef} />}
     </>
   );
 }
@@ -596,6 +681,7 @@ export function Plot3DScene({
   colorMode = 'height',
   upAxis = 'y',
   resetSignal = 0,
+  captureRef,
 }: Plot3DSceneProps) {
   // `frameloop="demand"` saves GPU cycles when the scene is static. When
   // auto-rotating we switch to `always` so the rotation animates smoothly.
@@ -629,7 +715,7 @@ export function Plot3DScene({
       }}
       dpr={[1, 2]}
       frameloop={frameloop}
-      gl={{ antialias: true, alpha: false, preserveDrawingBuffer: true }}
+      gl={{ antialias: true, alpha: false, preserveDrawingBuffer: false, powerPreference: 'high-performance' }}
       style={{ width: '100%', height: '100%', touchAction: 'none' }}
     >
       <SceneContents
@@ -642,6 +728,7 @@ export function Plot3DScene({
         colorMode={colorMode}
         upAxis={upAxis}
         resetSignal={resetSignal}
+        captureRef={captureRef}
       />
     </Canvas>
   );

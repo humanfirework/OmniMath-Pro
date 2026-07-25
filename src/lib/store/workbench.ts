@@ -1,6 +1,7 @@
 import { create } from 'zustand';
 import type { InputMode } from '@/lib/engine/types';
 import type { Locale } from '@/lib/i18n';
+import { deleteScopeVar, resetScope, syncScope, math } from '@/lib/engine/mathInstance';
 
 export interface CalculationResult {
   id: string;
@@ -71,6 +72,7 @@ interface WorkbenchState {
   activityBarLocked: boolean;
   activityBarAutoHide: boolean;
   activityBarHidden: boolean;
+  activityBarOrder: SidePanelTab[];
   editorVisible: boolean;
 
   // Actions
@@ -107,6 +109,7 @@ interface WorkbenchState {
   toggleActivityBarLock: () => void;
   setActivityBarAutoHide: (v: boolean) => void;
   toggleActivityBarHidden: () => void;
+  setActivityBarOrder: (order: SidePanelTab[]) => void;
   setEditorVisible: (v: boolean) => void;
 
   // Persistence
@@ -115,6 +118,11 @@ interface WorkbenchState {
 }
 
 export const STORAGE_KEY = 'omnimath-pro-v2';
+
+/** Default order of activity bar items (left-to-right or top-to-bottom). */
+const DEFAULT_ACTIVITY_BAR_ORDER: SidePanelTab[] = [
+  'history', 'variables', 'formulas', 'linalg', 'solver', 'files',
+];
 
 /** Validate a plot config from localStorage — rejects malformed entries
  *  that would crash downstream sampling (xRange/yRange must be finite
@@ -174,6 +182,9 @@ function loadInitial(): Partial<WorkbenchState> {
       activityBarLocked: data.activityBarLocked ?? false,
       activityBarAutoHide: data.activityBarAutoHide ?? false,
       activityBarHidden: data.activityBarHidden ?? false,
+      activityBarOrder: Array.isArray(data.activityBarOrder)
+        ? data.activityBarOrder
+        : DEFAULT_ACTIVITY_BAR_ORDER,
     };
   } catch {
     return {};
@@ -181,6 +192,27 @@ function loadInitial(): Partial<WorkbenchState> {
 }
 
 let saveTimer: ReturnType<typeof setTimeout> | null = null;
+
+/**
+ * Revive a JSON-deserialized variable value back into something mathjs
+ * understands. mathjs classes (Matrix / Complex / Unit / ...) carry a
+ * `mathjs` class tag produced by their `toJSON()` and are restored via
+ * `math.reviver`. User-defined functions cannot survive JSON (the
+ * evaluator stores them as the placeholder string `'<function>'`) and
+ * are skipped — the user re-defines them by re-running the script.
+ */
+function reviveStoredValue(value: unknown): unknown {
+  if (value === null || value === undefined) return undefined;
+  if (typeof value === 'string' && value === '<function>') return undefined;
+  if (typeof value === 'object' && 'mathjs' in (value as Record<string, unknown>)) {
+    try {
+      return (math.reviver as (key: string, v: unknown) => unknown)('', value);
+    } catch {
+      return undefined;
+    }
+  }
+  return value;
+}
 
 export const useWorkbenchStore = create<WorkbenchState>((set, get) => ({
   editorContent: '',
@@ -206,6 +238,7 @@ export const useWorkbenchStore = create<WorkbenchState>((set, get) => ({
   activityBarLocked: false,
   activityBarAutoHide: false,
   activityBarHidden: false,
+  activityBarOrder: DEFAULT_ACTIVITY_BAR_ORDER,
   editorVisible: true,
 
   setEditorContent: (content) => { set({ editorContent: content }); get().saveToStorage(); },
@@ -230,9 +263,16 @@ export const useWorkbenchStore = create<WorkbenchState>((set, get) => ({
       delete next[name];
       return { variables: next };
     });
+    // Keep the engine scope in sync — otherwise deleted variables keep
+    // evaluating in plots / console until the next page reload.
+    deleteScopeVar(name);
     get().saveToStorage();
   },
-  clearVariables: () => { set({ variables: {} }); get().saveToStorage(); },
+  clearVariables: () => {
+    set({ variables: {} });
+    resetScope();
+    get().saveToStorage();
+  },
 
   addPlot: (plot) => {
     const id = `plot-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
@@ -278,6 +318,7 @@ export const useWorkbenchStore = create<WorkbenchState>((set, get) => ({
   toggleActivityBarLock: () => { set((s) => ({ activityBarLocked: !s.activityBarLocked })); get().saveToStorage(); },
   setActivityBarAutoHide: (v) => { set({ activityBarAutoHide: v }); get().saveToStorage(); },
   toggleActivityBarHidden: () => { set((s) => ({ activityBarHidden: !s.activityBarHidden })); get().saveToStorage(); },
+  setActivityBarOrder: (order) => { set({ activityBarOrder: order }); get().saveToStorage(); },
   setEditorVisible: (v) => { set({ editorVisible: v }); get().saveToStorage(); },
 
   saveToStorage: () => {
@@ -306,6 +347,7 @@ export const useWorkbenchStore = create<WorkbenchState>((set, get) => ({
             activityBarLocked: s.activityBarLocked,
             activityBarAutoHide: s.activityBarAutoHide,
             activityBarHidden: s.activityBarHidden,
+            activityBarOrder: s.activityBarOrder,
           }),
         );
       } catch {
@@ -319,6 +361,18 @@ export const useWorkbenchStore = create<WorkbenchState>((set, get) => ({
       set(initial);
       if (initial.theme === 'dark' && typeof document !== 'undefined') {
         document.documentElement.classList.add('dark');
+      }
+      // Back-fill the engine scope with the restored variables so plots,
+      // the console and blueprint nodes can use them immediately after a
+      // page reload (previously the panel showed them but mathjs could
+      // not evaluate them until re-assigned).
+      if (initial.variables) {
+        const revived: Record<string, unknown> = {};
+        for (const [name, entry] of Object.entries(initial.variables)) {
+          const v = reviveStoredValue((entry as VariableEntry).value);
+          if (v !== undefined) revived[name] = v;
+        }
+        syncScope(revived);
       }
     }
   },

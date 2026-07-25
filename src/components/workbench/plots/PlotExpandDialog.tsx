@@ -15,6 +15,7 @@ import { useWorkbenchStore } from '@/lib/store/workbench';
 import { Plot2DCanvas, type Plot2DCanvasProps } from './Plot2DCanvas';
 import { inputToLatex } from '@/lib/engine';
 import { autoYRange, sampleFunction } from '@/lib/plots/plot2d';
+import { useScopeVersion } from '@/lib/hooks/useScopeVersion';
 import { toast } from 'sonner';
 
 const DEFAULT_X: [number, number] = [-10, 10];
@@ -63,7 +64,9 @@ export function PlotExpandDialog({ open, onClose }: PlotExpandDialogProps) {
   const theme = useWorkbenchStore((s) => s.theme);
   const [userView, setUserView] = useState<ViewBox | null>(null);
 
+  const scopeVersion = useScopeVersion();
   const defaultView = useMemo<ViewBox>(() => {
+    void scopeVersion;
     if (plots.length === 0) return { x: DEFAULT_X, y: DEFAULT_Y };
     const hasPolar = plots.some((p) => p.plotType === 'polar');
     if (hasPolar) {
@@ -75,7 +78,8 @@ export function PlotExpandDialog({ open, onClose }: PlotExpandDialogProps) {
       x: (latest?.xRange ?? DEFAULT_X) as [number, number],
       y: deriveDefaultY(plots),
     };
-  }, [plots]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [plots, scopeVersion]);
 
   const effectiveX = userView?.x ?? defaultView.x;
   const effectiveY = userView?.y ?? defaultView.y;

@@ -24,6 +24,7 @@ import { VariablesPanel } from '@/components/workbench/panels/VariablesPanel';
 import { FormulaLibraryPanel } from '@/components/workbench/panels/FormulaLibraryPanel';
 import { LinearAlgebraPanel } from '@/components/workbench/panels/LinearAlgebraPanel';
 import { SolverPanel } from '@/components/workbench/panels/SolverPanel';
+import { FilesPanel } from '@/components/workbench/panels/FilesPanel';
 
 const PANEL_TITLE_KEY: Record<SidePanelTab, keyof TranslationDict> = {
   history: 'histTitle',
@@ -70,26 +71,8 @@ export function SidePanel() {
         {activeSidePanel === 'formulas' && <FormulaLibraryPanel />}
         {activeSidePanel === 'linalg' && <LinearAlgebraPanel />}
         {activeSidePanel === 'solver' && <SolverPanel />}
-        {activeSidePanel === 'files' && (
-          <PlaceholderPanel tab={activeSidePanel} />
-        )}
+        {activeSidePanel === 'files' && <FilesPanel />}
       </div>
-    </div>
-  );
-}
-
-function PlaceholderPanel({ tab }: { tab: SidePanelTab }) {
-  return (
-    <div className="flex flex-col items-center justify-center h-full text-center px-6 py-12">
-      <div className="grid place-items-center size-14 rounded-2xl bg-primary/8 border border-primary/20 mb-3">
-        <span className="text-2xl">📁</span>
-      </div>
-      <p className="text-[12.5px] font-medium text-foreground/80 mb-1">
-        {t(PANEL_TITLE_KEY[tab])}
-      </p>
-      <p className="text-[11px] text-muted-foreground">
-        该面板正在开发中（由后续任务实现）。
-      </p>
     </div>
   );
 }

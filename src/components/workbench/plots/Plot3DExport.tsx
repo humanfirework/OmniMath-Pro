@@ -3,16 +3,20 @@
 /**
  * OmniMath Pro — 3D Plot PNG Export Helper
  *
- * Tiny helper that grabs the WebGL canvas inside a wrapper element and
- * triggers a PNG download via `canvas.toDataURL('image/png')`. Because the
- * Plot3DScene Canvas is created with `preserveDrawingBuffer: true`, the
- * drawing buffer is accessible for read-back.
+ * T6: 由于 Plot3DScene 使用 `preserveDrawingBuffer: false`，直接读取
+ * canvas 会得到黑屏。这里改用 `captureRef` —— 一个由 Plot3DScene 内部
+ * `CaptureBridge` 注册的命令式函数：调用它会 `gl.render(scene, camera)`
+ * 后立即返回 canvas，我们在同一同步任务里把它交给 `saveCanvasToFile`
+ * 转 blob，避免缓冲区被清空。
  *
- * Exposed as a hook (so the parent can call it on demand) and as a button
- * component (so the parent can drop it in directly).
+ * 向后兼容：若 captureRef 未就绪，回退到旧的 `querySelector('canvas')`
+ * 路径（此时可能黑屏，但至少不报错）。
+ *
+ * 暴露为 hook（父组件按需调用）和按钮组件（父组件直接放置）。
  */
 
 import { useCallback } from 'react';
+import type { MutableRefObject } from 'react';
 import { Download } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import {
@@ -20,49 +24,64 @@ import {
   TooltipContent,
   TooltipTrigger,
 } from '@/components/ui/tooltip';
+import { saveCanvasToFile } from '@/lib/nativeExport';
 import { toast } from 'sonner';
+import type { CaptureFn } from './Plot3DScene';
 
 /**
- * Returns a function that finds the WebGL `<canvas>` inside `wrapperRef`
- * and triggers a PNG download.
+ * 返回一个函数：调用 captureRef 强制渲染一帧并导出 PNG。
  */
 export function usePlot3DExport(
   wrapperRef: React.RefObject<HTMLElement | null>,
+  captureRef?: MutableRefObject<CaptureFn | null>,
 ) {
-  return useCallback(() => {
+  return useCallback(async () => {
+    // 优先用命令式 captureRef（T6：保证渲染后再读取）
+    if (captureRef?.current) {
+      const canvas = captureRef.current();
+      if (canvas) {
+        try {
+          await saveCanvasToFile(canvas, {
+            defaultName: `omnimath-3d-${Date.now()}`,
+            dpi: 1,
+            format: 'png',
+          });
+        } catch (err) {
+          console.error('[Plot3DExport] capture-ref export failed', err);
+        }
+        return;
+      }
+    }
+
+    // 回退：直接查询 canvas（可能黑屏，但兜底不崩溃）
     const canvas = wrapperRef.current?.querySelector('canvas');
     if (!canvas) {
       toast.error('3D 画布未就绪');
       return;
     }
     try {
-      // Force a fresh render so the buffer reflects the current scene.
-      // (preserveDrawingBuffer:true means we don't strictly need this, but
-      // it's a safety net for Safari's stricter WebGL behavior.)
-      const url = canvas.toDataURL('image/png');
-      const a = document.createElement('a');
-      a.href = url;
-      a.download = `omnimath-3d-${Date.now()}.png`;
-      document.body.appendChild(a);
-      a.click();
-      document.body.removeChild(a);
-      toast.success('已导出 3D PNG 图片');
+      await saveCanvasToFile(canvas, {
+        defaultName: `omnimath-3d-${Date.now()}`,
+        dpi: 1,
+        format: 'png',
+      });
     } catch (err) {
       console.error('[Plot3DExport] export failed', err);
-      toast.error('导出失败');
     }
-  }, [wrapperRef]);
+  }, [wrapperRef, captureRef]);
 }
 
 /**
- * A small button that wraps `usePlot3DExport` for convenience.
+ * 便捷按钮组件。
  */
 export function Plot3DExportButton({
   wrapperRef,
+  captureRef,
 }: {
   wrapperRef: React.RefObject<HTMLElement | null>;
+  captureRef?: MutableRefObject<CaptureFn | null>;
 }) {
-  const exportPNG = usePlot3DExport(wrapperRef);
+  const exportPNG = usePlot3DExport(wrapperRef, captureRef);
   return (
     <Tooltip>
       <TooltipTrigger asChild>

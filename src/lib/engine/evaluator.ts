@@ -10,7 +10,8 @@
  *   1. Configure a single mathjs instance (override log → base-10 default,
  *      add ln / lg / arctan / arcsin / arccos / taylor / limit / integrate /
  *      solve aliases).
- *   2. Maintain a module-level scope (variables, matrices, user functions).
+ *   2. Evaluate against the shared app-wide scope (variables, matrices,
+ *      user functions) from `./mathInstance`.
  *   3. Detect input type and dispatch: assignment / plot / polar /
  *      solve / calculus / matrix / plain scalar / auto-plot.
  *   4. Wrap results in an `EvalResult` envelope with LaTeX for KaTeX.
@@ -21,12 +22,12 @@
  *     message + optional hint, never throw to the caller.
  */
 
-import { create, all, type MathJsInstance } from 'mathjs';
 import type {
   EvalResult,
   InputMode,
   Scope,
   PlotType,
+  CalcType,
 } from './types';
 import {
   DEFAULT_CARTESIAN_RANGE,
@@ -41,65 +42,32 @@ import {
 } from './latex';
 
 /* ================================================================== *
- * mathjs instance — configured once
- * ================================================================== */
-const math: MathJsInstance = create(all);
-
-/* Save a reference to the ORIGINAL `log` before we override it, so the
- * override can delegate without infinite recursion (the previous engine
- * had `math.log` calling itself → stack overflow on `log(100)`). */
-const originalLog = (math as any).log.bind(math);
-
-/* Override `log` so `log(100)` returns 2 (base-10) instead of 4.605
- * (natural). Users can still call `log(8, 2)` for an explicit base.
- * `ln` is added as the natural-log alias for users coming from math
- * textbooks. */
-math.import(
-  {
-    log: function (x: any, base?: any) {
-      if (base === undefined) return originalLog(x, 10);
-      return originalLog(x, base);
-    },
-    ln: function (x: any) {
-      return originalLog(x, Math.E);
-    },
-    lg: function (x: any) {
-      return originalLog(x, 10);
-    },
-    // Friendly inverse-trig aliases that the symbol palette advertises.
-    arctan: function (x: any) {
-      return math.atan(x);
-    },
-    arcsin: function (x: any) {
-      return math.asin(x);
-    },
-    arccos: function (x: any) {
-      return math.acos(x);
-    },
-  },
-  { override: true }
-);
-
-/* ================================================================== *
- * Module-level scope
+ * mathjs instance + user scope — shared across the whole app
  * ================================================================== *
- * Plain object so mathjs can read/write user variables. Functions
- * stored as `mathjs FunctionNode`-evaluable objects work too — mathjs
- * treats any callable value in scope as a function.
+ * The configured instance (log → base-10, ln/lg/inverse-trig aliases)
+ * and the user scope live in `./mathInstance` so plots, 3D surfaces,
+ * analysis overlays and the blueprint pipeline all see the SAME
+ * functions and the SAME variables. `bumpScopeVersion()` notifies
+ * subscribers (plot components) after assignments so curves re-sample
+ * live when a variable changes.
  */
-let scope: Scope = {};
+import {
+  math,
+  getScope,
+  bumpScopeVersion,
+} from './mathInstance';
 
-export function getScope(): Scope {
-  return scope;
-}
-
-export function resetScope(): void {
-  scope = {};
-}
-
-export function setScopeVar(name: string, value: any): void {
-  scope[name] = value;
-}
+export {
+  getScope,
+  setScopeVar,
+  deleteScopeVar,
+  resetScope,
+  syncScope,
+  getScopeVersion,
+  subscribeScope,
+  getEvalScope,
+  bumpScopeVersion,
+} from './mathInstance';
 
 /* ================================================================== *
  * Main entry — evaluateExpression
@@ -146,6 +114,11 @@ export function evaluateExpression(
       return handlePlot(normalized, mode, 'cartesian');
     }
 
+    // ── 3D surface plot: plot3d(...) / surface(...) / surf(...) ──
+    if (/^\s*(?:plot3d|surface|surf)\s*\(/.test(normalized)) {
+      return handlePlot(normalized, mode, 'surface3d');
+    }
+
     // ── Equation solve ──────────────────────────────────────────
     if (/^\s*solve\s*\(/.test(normalized)) {
       return handleSolve(normalized, mode);
@@ -171,7 +144,7 @@ export function evaluateExpression(
     }
 
     // ── Auto-plot in simple mode (free `x` variable, no assignment) ──
-    if (mode === 'simple' && hasFreeVariableX(normalized, scope)) {
+    if (mode === 'simple' && hasFreeVariableX(normalized, getScope())) {
       return handlePlot(normalized, mode, 'cartesian', /* auto */ true);
     }
 
@@ -320,11 +293,12 @@ function handleAssignment(
       // Build a JS function that evaluates the body with the params in scope.
       const bodyNode = math.parse(rhs);
       const fn = (...args: any[]) => {
-        const localScope: Scope = { ...scope };
+        const localScope: Scope = { ...getScope() };
         params.forEach((p, i) => (localScope[p] = args[i]));
         return bodyNode.evaluate(localScope);
       };
-      scope[fname] = fn;
+      getScope()[fname] = fn;
+      bumpScopeVersion();
       const latex = `${fname}(${params.join(', ')}) = ${inputToLatex(rhs, mode)}`;
       return ok({
         result: `${fname}(${params.join(', ')}) = ${rhs}`,
@@ -343,8 +317,9 @@ function handleAssignment(
   }
 
   try {
-    const value = math.evaluate(rhs, scope);
-    scope[lhs] = value;
+    const value = math.evaluate(rhs, getScope());
+    getScope()[lhs] = value;
+    bumpScopeVersion();
 
     // Compose a friendly result string + LaTeX.
     let resultStr: string;
@@ -405,16 +380,26 @@ function handlePlot(
     // (e.g. `sin(x)`), there's no `plot(...)` wrapper.
     expr = normalized;
   } else {
-    const fnName = plotType === 'polar' ? 'polar(?:plot)?' : 'plot';
+    // 函数名提取：plot / polar / plot3d / surface / surf
+    const fnName =
+      plotType === 'polar'
+        ? 'polar(?:plot)?'
+        : plotType === 'surface3d'
+          ? '(?:plot3d|surface|surf)'
+          : 'plot';
     const args = extractArgs(normalized, fnName);
     if (!args || args.length === 0) {
-      return fail(`Invalid plot syntax. Try: plot(sin(x))`);
+      return fail(
+        `Invalid plot syntax. Try: ${
+          plotType === 'surface3d' ? 'plot3d(sin(x)*cos(y))' : 'plot(sin(x))'
+        }`,
+      );
     }
     expr = args[0];
     if (args.length >= 3) {
       try {
-        const lo = math.evaluate(args[1], scope);
-        const hi = math.evaluate(args[2], scope);
+        const lo = math.evaluate(args[1], getScope());
+        const hi = math.evaluate(args[2], getScope());
         if (typeof lo === 'number' && typeof hi === 'number') {
           range = [lo, hi];
         }
@@ -431,17 +416,22 @@ function handlePlot(
     ? latexExpr
     : plotType === 'polar'
       ? `r = ${latexExpr}`
-      : `y = ${latexExpr}`;
+      : plotType === 'surface3d'
+        ? `z = ${latexExpr}`
+        : `y = ${latexExpr}`;
   const resultStr = auto
     ? expr
     : plotType === 'polar'
       ? `r = ${expr}`
-      : `y = ${expr}`;
+      : plotType === 'surface3d'
+        ? `z = ${expr}`
+        : `y = ${expr}`;
 
   return ok({
     result: resultStr,
     latex: label,
-    type: plotType === 'polar' ? 'polar' : 'plot',
+    // CalcType 联合类型未包含 'surface3d'，但运行时一直返回该值；断言仅为对齐类型。
+    type: (plotType === 'polar' ? 'polar' : plotType === 'surface3d' ? 'surface3d' : 'plot') as CalcType,
     plotExpression: expr,
     plotRange: range,
     plotType,
@@ -470,8 +460,8 @@ function handleSolve(normalized: string, _mode: InputMode): EvalResult {
     const second = args[1].trim();
     if (first.startsWith('[') || first.startsWith('matrix(')) {
       try {
-        const A = math.evaluate(first, scope);
-        const b = math.evaluate(second, scope);
+        const A = math.evaluate(first, getScope());
+        const b = math.evaluate(second, getScope());
         const x = math.lusolve(A, b);
         return ok({
           result: `x = ${math.format(x, { precision: 6 })}`,
@@ -503,7 +493,7 @@ function handleSolve(normalized: string, _mode: InputMode): EvalResult {
 
   try {
     const node = math.parse(exprStr);
-    const roots = findRootsNumerically(node, varName, scope);
+    const roots = findRootsNumerically(node, varName);
     if (roots.length === 0) {
       return ok({
         result: `No real roots found for ${varName} in [-100, 100].`,
@@ -534,12 +524,11 @@ function handleSolve(normalized: string, _mode: InputMode): EvalResult {
 /** Scan [-100, 100] in 0.1 steps for sign changes; refine each by bisection. */
 function findRootsNumerically(
   node: any,
-  varName: string,
-  scope: Scope
+  varName: string
 ): number[] {
   const f = (x: number) => {
     try {
-      const v = node.evaluate({ ...scope, [varName]: x });
+      const v = node.evaluate({ ...getScope(), [varName]: x });
       return typeof v === 'number' ? v : NaN;
     } catch {
       return NaN;
@@ -658,15 +647,15 @@ function handleIntegrate(normalized: string, mode: InputMode): EvalResult {
   }
 
   try {
-    const a = math.evaluate(args[2], scope);
-    const b = math.evaluate(args[3], scope);
+    const a = math.evaluate(args[2], getScope());
+    const b = math.evaluate(args[3], getScope());
     if (typeof a !== 'number' || typeof b !== 'number') {
       return fail('Integration bounds must evaluate to numbers.');
     }
     const node = math.parse(expr);
     const f = (x: number) => {
       try {
-        const v = node.evaluate({ ...scope, [varName]: x });
+        const v = node.evaluate({ ...getScope(), [varName]: x });
         return typeof v === 'number' ? v : NaN;
       } catch {
         return NaN;
@@ -711,7 +700,7 @@ function handleLimit(normalized: string, mode: InputMode): EvalResult {
   }
   const expr = args[0];
   const varName = args[1].trim();
-  const point = math.evaluate(args[2], scope);
+  const point = math.evaluate(args[2], getScope());
   if (typeof point !== 'number') {
     return fail('limit point must be a number.');
   }
@@ -719,7 +708,7 @@ function handleLimit(normalized: string, mode: InputMode): EvalResult {
     const node = math.parse(expr);
     const f = (x: number) => {
       try {
-        const v = node.evaluate({ ...scope, [varName]: x });
+        const v = node.evaluate({ ...getScope(), [varName]: x });
         return typeof v === 'number' ? v : NaN;
       } catch {
         return NaN;
@@ -800,10 +789,15 @@ function handleTaylor(normalized: string, mode: InputMode): EvalResult {
   const order = parseInt(args[2].trim(), 10);
   const point =
     args.length >= 4
-      ? math.evaluate(args[3], scope)
+      ? math.evaluate(args[3], getScope())
       : 0;
   if (!Number.isInteger(order) || order < 0) {
     return fail('Taylor order must be a non-negative integer.');
+  }
+  // 防止 DoS：限制 Taylor 展开的最大阶数（高阶导计算成本随阶数指数增长）
+  const MAX_TAYLOR_ORDER = 50;
+  if (order > MAX_TAYLOR_ORDER) {
+    return fail(`Taylor order too large (max ${MAX_TAYLOR_ORDER}).`);
   }
   try {
     const node = math.parse(expr);
@@ -819,7 +813,7 @@ function handleTaylor(normalized: string, mode: InputMode): EvalResult {
       }
       let coeff: number;
       try {
-        const v = derivative.evaluate({ ...scope, [varName]: point });
+        const v = derivative.evaluate({ ...getScope(), [varName]: point });
         coeff = typeof v === 'number' ? v : NaN;
       } catch {
         continue;
@@ -870,7 +864,7 @@ function handleEigenvectors(normalized: string): EvalResult {
     return fail('eigenvectors() needs a matrix argument.');
   }
   try {
-    const M = math.evaluate(args[0], scope);
+    const M = math.evaluate(args[0], getScope());
     const eig = math.eigs(M);
     // mathjs returns { values, eigenvectors: [{ value, vector }] }
     const values = (eig as any).values;
@@ -903,7 +897,7 @@ function handlePlain(
 ): EvalResult {
   let value: any;
   try {
-    value = math.evaluate(normalized, scope);
+    value = math.evaluate(normalized, getScope());
   } catch (err) {
     return failWithHint(err as Error, original);
   }
@@ -956,7 +950,7 @@ function handlePlain(
   if (typeof value === 'string') {
     return ok({
       result: value,
-      latex: `\\text{${value}}`,
+      latex: `\\text{${escapeForLatexText(value)}}`,
       type: 'number',
     });
   }
@@ -1065,7 +1059,7 @@ function levenshtein(a: string, b: string): number {
  *  short label so the UI doesn't try to JSON-stringify them. */
 function snapshotScope(): Scope {
   const out: Scope = {};
-  for (const [k, v] of Object.entries(scope)) {
+  for (const [k, v] of Object.entries(getScope())) {
     if (typeof v === 'function') {
       out[k] = '<function>';
     } else {
@@ -1169,8 +1163,8 @@ export async function evaluateExpressionAsync(
     if (args && args.length === 5 && /['"]symbolic['"]/.test(args[4])) {
       const expr = args[0];
       const varName = args[1].trim();
-      const a = math.evaluate(args[2], scope);
-      const b = math.evaluate(args[3], scope);
+      const a = math.evaluate(args[2], getScope());
+      const b = math.evaluate(args[3], getScope());
       if (typeof a !== 'number' || typeof b !== 'number') {
         return fail('Integration bounds must evaluate to numbers.');
       }
@@ -1203,7 +1197,7 @@ export async function evaluateExpressionAsync(
         ? pointRaw
         : (() => {
             try {
-              return math.evaluate(pointRaw, scope) as number;
+              return math.evaluate(pointRaw, getScope()) as number;
             } catch {
               return pointRaw;
             }
@@ -1229,7 +1223,7 @@ export async function evaluateExpressionAsync(
       const varName = args[1].trim();
       const order = parseInt(args[2].trim(), 10);
       const point = args.length >= 4
-        ? (math.evaluate(args[3], scope) as number)
+        ? (math.evaluate(args[3], getScope()) as number)
         : 0;
       if (Number.isInteger(order) && order >= 0) {
         const { symbolicSeries } = await import('./symbolic');

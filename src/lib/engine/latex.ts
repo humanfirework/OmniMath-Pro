@@ -14,14 +14,16 @@
  * inside a Web Worker. KaTeX itself is rendered in the UI layer.
  */
 
-import { create, all, type MathNode } from 'mathjs';
+import type { MathNode } from 'mathjs';
 import type { InputMode } from './types';
 import { normalizeSymbols } from './symbols';
 import { preprocessForMode } from './parser';
+import { math } from './mathInstance';
 
-/* A throwaway mathjs instance for LaTeX conversion only — never has any
- * scope attached, so user variables don't leak into the LaTeX step. */
-const math = create(all);
+/* LaTeX conversion only ever PARSES expressions (`math.parse(...).toTex`)
+ * and formats values (`math.format`) — it never evaluates with a scope,
+ * so sharing the app-wide configured instance is safe and keeps parse
+ * semantics (e.g. the log/ln overrides) identical to the evaluator. */
 
 /* ------------------------------------------------------------------ *
  * formatNumber — smart scalar formatter
@@ -72,6 +74,31 @@ export function inputToLatex(input: string, mode: InputMode = 'simple'): string 
   if (!input || !input.trim()) return '';
   try {
     const normalized = normalizeSymbols(input);
+
+    // ── 检测 plot()/polar()/plot3d() 等绘图语法 ──────────────────
+    // 提取内部表达式，渲染为 y = ... / r = ... / z = ... 而非
+    // \mathrm{plot}(\sin(x)) 这样的函数调用形式。
+    const plotMatch = normalized.match(
+      /^\s*(?:plot|polar(?:plot)?|plot3d|surface|surf)\s*\(([\s\S]+)\)\s*$/,
+    );
+    if (plotMatch) {
+      const inner = plotMatch[1].trim();
+      // 取第一个参数（逗号前），忽略范围参数
+      const expr = inner.split(',')[0].trim();
+      const prefix = /polar/i.test(normalized)
+        ? 'r = '
+        : /(?:plot3d|surface|surf)/i.test(normalized)
+          ? 'z = '
+          : 'y = ';
+      try {
+        const preprocessed = preprocessForMode(expr, mode);
+        const node = math.parse(preprocessed);
+        return `${prefix}${node.toTex({ implicit: 'hide', parenthesis: 'keep' })}`;
+      } catch {
+        return `${prefix}\\texttt{${escapeLatex(expr)}}`;
+      }
+    }
+
     const preprocessed = preprocessForMode(normalized, mode);
     const node = math.parse(preprocessed);
     // `implicit: 'hide'` so `2*x` renders as `2 x` (hand-written form).

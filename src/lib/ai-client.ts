@@ -47,6 +47,8 @@ export interface AIChatOptions {
   temperature?: number;
   /** Abort the request (e.g. user clicked stop). */
   signal?: AbortSignal;
+  /** 最多保留的最近消息条数（防止超长对话触发 400/413）。默认 20。 */
+  maxHistoryMessages?: number;
 }
 
 /* ----------------------------- System prompt ----------------------------- */
@@ -151,10 +153,17 @@ export async function chatComplete(
   const model = opts.model ?? cfg.model;
   const temperature = opts.temperature ?? 0.7;
 
+  // 安全/稳定性防护：截断过长的历史消息，避免触发上下文窗口上限 (400/413)。
+  // 默认只保留最近 20 条（10 轮对话），system prompt 不计入。
+  const maxHistory = opts.maxHistoryMessages ?? 20;
+  const trimmed = messages.length > maxHistory
+    ? messages.slice(-maxHistory)
+    : messages;
+
   const payload = {
     model,
     temperature,
-    messages: [{ role: 'system', content: SYSTEM_PROMPT }, ...messages],
+    messages: [{ role: 'system', content: SYSTEM_PROMPT }, ...trimmed],
   };
 
   let res: Response;

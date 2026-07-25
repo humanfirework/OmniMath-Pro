@@ -12,12 +12,12 @@
  *   - sampleSurface(...)       — sample z = f(x, y) into a mesh (throws)
  *   - trySampleSurface(...)    — safe wrapper → Surface3DData | null
  *
- * Evaluation uses mathjs (same instance style as the engine).
+ * Evaluation uses the shared configured mathjs instance and merges the
+ * live user scope, so surfaces see console variables and slider changes
+ * (e.g. `plot3d(sin(a*x)*cos(y))` follows the `a` slider).
  */
 
-import { create, all, type MathJsInstance } from 'mathjs';
-
-const math: MathJsInstance = create(all);
+import { math, getEvalScope } from '@/lib/engine/mathInstance';
 
 /* ------------------------------------------------------------------ */
 /*  Types                                                             */
@@ -53,6 +53,10 @@ export interface Surface3DData {
   color: string;
   xRange: [number, number];
   yRange: [number, number];
+  /** T5: 实际采样到的 z 值范围 [zMin, zMax]（仅含有限值）。
+   * 用于让 3D 场景的 Z 轴范围贴合数据，而非机械地用 x/y 范围替代。
+   * 当 validTriangleCount === 0 时为 [0, 0]。 */
+  zRange: [number, number];
   expression: string;
   validTriangleCount: number;
 }
@@ -179,7 +183,7 @@ export function sampleSurface(
       const idx = i * N + j;
       let z: number;
       try {
-        z = toNumber(compiled.evaluate({ x, y }));
+        z = toNumber(compiled.evaluate(getEvalScope({ x, y })));
       } catch {
         z = NaN;
       }
@@ -265,6 +269,11 @@ export function sampleSurface(
     colors[i * 3 + 2] = b;
   }
 
+  // T5: 若没有任何有效 z 值（表达式全部求值失败），归一化为 [0, 0]，
+  // 避免 Infinity 进入后续的 axisSize 计算。
+  const finalZRange: [number, number] =
+    Number.isFinite(zMin) && Number.isFinite(zMax) ? [zMin, zMax] : [0, 0];
+
   return {
     vertices,
     normals,
@@ -273,6 +282,7 @@ export function sampleSurface(
     color,
     xRange,
     yRange,
+    zRange: finalZRange,
     expression: expr,
     validTriangleCount,
   };

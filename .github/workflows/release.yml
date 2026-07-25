@@ -41,11 +41,14 @@ jobs:
           node-version: 22
 
       - name: Install frontend dependencies
-        run: npm install --no-audit --no-fund
+        # 锁定依赖保证可复现性（package-lock.json 已在仓库中）
+        run: npm ci --no-audit --no-fund
 
       - name: Install Rust stable
         uses: dtolnay/rust-toolchain@stable
         with:
+          # 锁定 toolchain 保证可复现性
+          toolchain: "1.82.0"
           targets: ${{ matrix.args == '--target aarch64-apple-darwin' && 'aarch64-apple-darwin' || matrix.args == '--target x86_64-apple-darwin' && 'x86_64-apple-darwin' || '' }}
 
       - name: Rust cache
@@ -75,3 +78,28 @@ jobs:
           releaseDraft: false
           prerelease: false
           args: ${{ matrix.args }}
+
+      - name: Generate SHA256 checksums for release artifacts
+        if: startsWith(github.ref, 'refs/tags/v')
+        run: |
+          set -e
+          ARTIFACT_DIR="src-tauri/target/release/bundle"
+          if [ ! -d "$ARTIFACT_DIR" ]; then
+            echo "No bundle directory found, skipping checksums"
+            exit 0
+          fi
+          mkdir -p checksums
+          find "$ARTIFACT_DIR" -type f \( \
+            -name "*.exe" -o -name "*.msi" -o \
+            -name "*.dmg" -o -name "*.app" -o \
+            -name "*.deb" -o -name "*.AppImage" -o \
+            -name "*.rpm" \
+          \) -exec sh -c 'sha256sum "$1" | sed "s| .*/| |" >> checksums/SHA256SUMS.txt' _ {} \;
+          cat checksums/SHA256SUMS.txt
+        shell: bash
+
+      - name: Upload checksums to release
+        if: startsWith(github.ref, 'refs/tags/v')
+        uses: softprops/action-gh-release@v2
+        with:
+          files: checksums/SHA256SUMS.txt

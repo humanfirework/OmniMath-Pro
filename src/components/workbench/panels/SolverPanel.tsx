@@ -15,7 +15,6 @@
 
 import { useState, useMemo } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { create, all, type MathJsInstance } from 'mathjs';
 import {
   FunctionSquare,
   Sigma,
@@ -26,6 +25,7 @@ import {
   X,
   Sparkles,
   Lightbulb,
+  ChevronDown,
 } from 'lucide-react';
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs';
 import { Button } from '@/components/ui/button';
@@ -49,16 +49,25 @@ import {
   ToggleGroup,
   ToggleGroupItem,
 } from '@/components/ui/toggle-group';
+import {
+  DropdownMenu,
+  DropdownMenuTrigger,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuSeparator,
+} from '@/components/ui/dropdown-menu';
 import { FormulaRenderer } from '@/components/workbench/FormulaRenderer';
 import { evaluateExpression } from '@/lib/engine';
 import { t } from '@/lib/i18n';
 import { cn } from '@/lib/utils';
 import { toast } from 'sonner';
+import { ZoomLens, type ZoomStep } from '@/components/workbench/controls/ZoomLens';
 
 /* ------------------------------------------------------------------ *
- * mathjs instance for direct algebraic manipulation
+ * mathjs — shared configured instance (same semantics as the console)
  * ------------------------------------------------------------------ */
-const math: MathJsInstance = create(all);
+import { math } from '@/lib/engine/mathInstance';
 
 /* ------------------------------------------------------------------ *
  * Types
@@ -358,13 +367,23 @@ function findRealRoots(
  * Section 1 — Equation Solving
  * ================================================================== */
 
-const EQUATION_EXAMPLES = [
-  { label: 'x² − 5x + 6 = 0', expr: 'x^2 - 5*x + 6 = 0' },
-  { label: 'x³ − 6x² + 11x − 6 = 0', expr: 'x^3 - 6*x^2 + 11*x - 6 = 0' },
-  { label: '2x + 3 = 7', expr: '2*x + 3 = 7' },
-  { label: 'sin(x) = 0.5', expr: 'sin(x) = 0.5' },
-  { label: 'x² + 1 = 0', expr: 'x^2 + 1 = 0' },
-  { label: 'e^x = 2', expr: 'exp(x) = 2' },
+const EQUATION_EXAMPLE_GROUPS: ExampleGroup[] = [
+  {
+    title: '多项式方程',
+    items: [
+      { expr: 'x^2 - 5*x + 6 = 0', label: 'x² − 5x + 6 = 0', hint: '因式分解' },
+      { expr: 'x^3 - 6*x^2 + 11*x - 6 = 0', label: 'x³ − 6x² + 11x − 6 = 0', hint: '三次方程' },
+      { expr: '2*x + 3 = 7', label: '2x + 3 = 7', hint: '一次方程' },
+      { expr: 'x^2 + 1 = 0', label: 'x² + 1 = 0', hint: '复数根' },
+    ],
+  },
+  {
+    title: '超越方程',
+    items: [
+      { expr: 'sin(x) = 0.5', label: 'sin(x) = 0.5', hint: '数值求解' },
+      { expr: 'exp(x) = 2', label: 'eˣ = 2', hint: '对数解' },
+    ],
+  },
 ];
 
 function EquationSolverSection() {
@@ -594,21 +613,39 @@ function EquationSolverSection() {
         </ToggleGroup>
       </div>
 
-      {/* Examples */}
+      {/* Examples — 折叠下拉菜单 */}
       <div>
         <div className="text-[10.5px] text-muted-foreground mb-1">{t('solverExamples')}</div>
-        <div className="flex flex-wrap gap-1">
-          {EQUATION_EXAMPLES.map((ex) => (
-            <button
-              key={ex.expr}
-              type="button"
-              onClick={() => setEquation(ex.expr)}
-              className="h-5 px-2 text-[10px] font-mono rounded-full border border-border/60 bg-muted/30 hover:border-primary/40 hover:text-primary hover:bg-primary/5 transition-colors"
-            >
-              {ex.label}
-            </button>
-          ))}
-        </div>
+        <DropdownMenu>
+          <DropdownMenuTrigger asChild>
+            <Button variant="outline" size="sm" className="h-6 px-2 text-[10.5px] gap-1 w-full justify-between">
+              <span className="truncate">{equation || '选择示例…'}</span>
+              <ChevronDown className="size-3 opacity-60" />
+            </Button>
+          </DropdownMenuTrigger>
+          <DropdownMenuContent align="start" className="w-56">
+            {EQUATION_EXAMPLE_GROUPS.map((group, gi) => (
+              <div key={group.title}>
+                {gi > 0 && <DropdownMenuSeparator />}
+                <DropdownMenuLabel className="text-[10px] uppercase tracking-wide text-muted-foreground">
+                  {group.title}
+                </DropdownMenuLabel>
+                {group.items.map((item) => (
+                  <DropdownMenuItem
+                    key={item.expr}
+                    onClick={() => setEquation(item.expr)}
+                    className="flex items-center justify-between gap-2 text-[11px]"
+                  >
+                    <span className="font-mono">{item.label}</span>
+                    {item.hint && (
+                      <span className="text-[9px] text-muted-foreground">{item.hint}</span>
+                    )}
+                  </DropdownMenuItem>
+                ))}
+              </div>
+            ))}
+          </DropdownMenuContent>
+        </DropdownMenu>
       </div>
 
       <ResultBlock error={error} result={result ? (
@@ -691,9 +728,14 @@ function coeffsToLatex(coeffs: number[], varName: string): string {
  * Section 2 — System of Equations
  * ================================================================== */
 
-const SYSTEM_EXAMPLES = [
-  { label: '2×2 线性', text: 'x + y = 5\nx - y = 1' },
-  { label: '3×3 线性', text: 'x + y + z = 6\n2y + 5z = -4\n2x + 5y - z = 27' },
+const SYSTEM_EXAMPLE_GROUPS: ExampleGroup[] = [
+  {
+    title: '线性方程组',
+    items: [
+      { expr: 'x + y = 5\nx - y = 1', label: '2×2 线性', hint: '二元一次' },
+      { expr: 'x + y + z = 6\n2y + 5z = -4\n2x + 5y - z = 27', label: '3×3 线性', hint: '三元一次' },
+    ],
+  },
 ];
 
 function SystemSolverSection() {
@@ -817,18 +859,36 @@ function SystemSolverSection() {
 
       <div>
         <div className="text-[10.5px] text-muted-foreground mb-1">{t('solverExamples')}</div>
-        <div className="flex flex-wrap gap-1">
-          {SYSTEM_EXAMPLES.map((ex) => (
-            <button
-              key={ex.label}
-              type="button"
-              onClick={() => setText(ex.text)}
-              className="h-5 px-2 text-[10px] rounded-full border border-border/60 bg-muted/30 hover:border-primary/40 hover:text-primary hover:bg-primary/5 transition-colors"
-            >
-              {ex.label}
-            </button>
-          ))}
-        </div>
+        <DropdownMenu>
+          <DropdownMenuTrigger asChild>
+            <Button variant="outline" size="sm" className="h-6 px-2 text-[10.5px] gap-1 w-full justify-between">
+              <span className="truncate">{text.split('\n')[0] || '选择示例…'}</span>
+              <ChevronDown className="size-3 opacity-60" />
+            </Button>
+          </DropdownMenuTrigger>
+          <DropdownMenuContent align="start" className="w-56">
+            {SYSTEM_EXAMPLE_GROUPS.map((group, gi) => (
+              <div key={group.title}>
+                {gi > 0 && <DropdownMenuSeparator />}
+                <DropdownMenuLabel className="text-[10px] uppercase tracking-wide text-muted-foreground">
+                  {group.title}
+                </DropdownMenuLabel>
+                {group.items.map((item) => (
+                  <DropdownMenuItem
+                    key={item.label}
+                    onClick={() => setText(item.expr)}
+                    className="flex items-center justify-between gap-2 text-[11px]"
+                  >
+                    <span className="font-mono">{item.label}</span>
+                    {item.hint && (
+                      <span className="text-[9px] text-muted-foreground">{item.hint}</span>
+                    )}
+                  </DropdownMenuItem>
+                ))}
+              </div>
+            ))}
+          </DropdownMenuContent>
+        </DropdownMenu>
       </div>
 
       <ResultBlock error={error} result={result ? (
@@ -1017,11 +1077,86 @@ function expandToMonomials(node: unknown): Monomial[] | null {
  * Section 3 — Calculus
  * ================================================================== */
 
-const CALC_EXAMPLES = {
-  deriv: ['x^3 + 2*x^2', 'sin(x)*cos(x)', 'e^x * ln(x)', '1 / (1 + x^2)'],
-  integral: ['x^2', 'sin(x)', 'e^x', '1 / x'],
-  limit: ['sin(x)/x', '(1 + x)^(1/x)', '(e^x - 1) / x', '1/x'],
-  taylor: ['sin(x)', 'cos(x)', 'e^x', 'ln(1 + x)'],
+type CalcMode = 'deriv' | 'integral' | 'limit' | 'taylor';
+
+interface ExampleGroup {
+  title: string;
+  items: Array<{ expr: string; label: string; hint?: string }>;
+}
+
+const CALC_EXAMPLE_GROUPS: Record<CalcMode, ExampleGroup[]> = {
+  deriv: [
+    {
+      title: '多项式',
+      items: [
+        { expr: 'x^3 + 2*x^2', label: 'x³ + 2x²', hint: '多项式求导' },
+        { expr: '1 / (1 + x^2)', label: '1/(1+x²)', hint: '链式法则' },
+      ],
+    },
+    {
+      title: '复合函数',
+      items: [
+        { expr: 'sin(x)*cos(x)', label: 'sin(x)·cos(x)', hint: '乘积法则' },
+        { expr: 'e^x * ln(x)', label: 'eˣ·ln(x)', hint: '乘积法则' },
+      ],
+    },
+  ],
+  integral: [
+    {
+      title: '基本积分',
+      items: [
+        { expr: 'x^2', label: 'x²', hint: '幂函数积分' },
+        { expr: 'sin(x)', label: 'sin(x)', hint: '三角函数积分' },
+      ],
+    },
+    {
+      title: '特殊积分',
+      items: [
+        { expr: 'e^x', label: 'eˣ', hint: '指数函数积分' },
+        { expr: '1 / x', label: '1/x', hint: '对数积分' },
+      ],
+    },
+  ],
+  limit: [
+    {
+      title: '经典极限',
+      items: [
+        { expr: 'sin(x)/x', label: 'sin(x)/x', hint: 'x→0 经典极限' },
+        { expr: '(1 + x)^(1/x)', label: '(1+x)^(1/x)', hint: 'e 的定义' },
+        { expr: '(e^x - 1) / x', label: '(eˣ-1)/x', hint: 'x→0' },
+      ],
+    },
+    {
+      title: '无穷极限',
+      items: [
+        { expr: '1/x', label: '1/x', hint: 'x→∞' },
+      ],
+    },
+  ],
+  taylor: [
+    {
+      title: '三角函数',
+      items: [
+        { expr: 'sin(x)', label: 'sin(x)', hint: '麦克劳林级数' },
+        { expr: 'cos(x)', label: 'cos(x)', hint: '麦克劳林级数' },
+      ],
+    },
+    {
+      title: '指数与对数',
+      items: [
+        { expr: 'e^x', label: 'eˣ', hint: '泰勒展开' },
+        { expr: 'ln(1 + x)', label: 'ln(1+x)', hint: '泰勒展开' },
+      ],
+    },
+  ],
+};
+
+// 保持向后兼容：switchMode 使用每个模式的第一个示例
+const CALC_EXAMPLES: Record<CalcMode, string[]> = {
+  deriv: CALC_EXAMPLE_GROUPS.deriv.flatMap((g) => g.items.map((i) => i.expr)),
+  integral: CALC_EXAMPLE_GROUPS.integral.flatMap((g) => g.items.map((i) => i.expr)),
+  limit: CALC_EXAMPLE_GROUPS.limit.flatMap((g) => g.items.map((i) => i.expr)),
+  taylor: CALC_EXAMPLE_GROUPS.taylor.flatMap((g) => g.items.map((i) => i.expr)),
 };
 
 function CalculusSection() {
@@ -1191,21 +1326,39 @@ function CalculusSection() {
         {t('solverCalcCompute')}
       </Button>
 
-      {/* Examples */}
+      {/* Examples — 折叠下拉菜单 */}
       <div>
         <div className="text-[10.5px] text-muted-foreground mb-1">{t('solverExamples')}</div>
-        <div className="flex flex-wrap gap-1">
-          {CALC_EXAMPLES[mode].map((ex) => (
-            <button
-              key={ex}
-              type="button"
-              onClick={() => setExpr(ex)}
-              className="h-5 px-2 text-[10px] font-mono rounded-full border border-border/60 bg-muted/30 hover:border-primary/40 hover:text-primary hover:bg-primary/5 transition-colors"
-            >
-              {ex}
-            </button>
-          ))}
-        </div>
+        <DropdownMenu>
+          <DropdownMenuTrigger asChild>
+            <Button variant="outline" size="sm" className="h-6 px-2 text-[10.5px] gap-1 w-full justify-between">
+              <span className="truncate">{expr || '选择示例…'}</span>
+              <ChevronDown className="size-3 opacity-60" />
+            </Button>
+          </DropdownMenuTrigger>
+          <DropdownMenuContent align="start" className="w-56">
+            {CALC_EXAMPLE_GROUPS[mode].map((group, gi) => (
+              <div key={group.title}>
+                {gi > 0 && <DropdownMenuSeparator />}
+                <DropdownMenuLabel className="text-[10px] uppercase tracking-wide text-muted-foreground">
+                  {group.title}
+                </DropdownMenuLabel>
+                {group.items.map((item) => (
+                  <DropdownMenuItem
+                    key={item.expr}
+                    onClick={() => setExpr(item.expr)}
+                    className="flex items-center justify-between gap-2 text-[11px]"
+                  >
+                    <span className="font-mono">{item.label}</span>
+                    {item.hint && (
+                      <span className="text-[9px] text-muted-foreground">{item.hint}</span>
+                    )}
+                  </DropdownMenuItem>
+                ))}
+              </div>
+            ))}
+          </DropdownMenuContent>
+        </DropdownMenu>
       </div>
 
       <ResultBlock error={error} result={result ? (
@@ -1227,8 +1380,166 @@ function CalculusSection() {
               </div>
             </details>
           )}
+          {mode === 'limit' && !error && (
+            <LimitZoomViewer
+              expr={expr}
+              point={point}
+              limitValue={result.latex.split('=').pop()?.trim().replace(/\\/g, '')}
+            />
+          )}
         </div>
       ) : null} />
+    </div>
+  );
+}
+
+/* ================================================================== *
+ * LimitZoomViewer — 极限求解分步放大观察
+ * ================================================================== *
+ * 在极限模式下，生成 6 个逐步缩小的 x 范围，观察 f(x) 在趋近点的行为。
+ * 每步显示当前 x 范围、对应 f(point) 近似值和与极限的差距。
+ */
+function LimitZoomViewer({
+  expr,
+  point,
+  limitValue,
+}: {
+  expr: string;
+  point: number;
+  limitValue?: string;
+}) {
+  const [step, setStep] = useState(0);
+
+  // 生成 6 个放大步骤：从全局 ±5 到极近 ±0.001
+  const steps: ZoomStep[] = useMemo(() => {
+    const isInf = !isFinite(point);
+    const center = isInf ? 0 : point;
+    const deltas = [5, 1, 0.5, 0.1, 0.01, 0.001];
+    return deltas.map((delta, i) => {
+      const range: [number, number] = [center - delta, center + delta];
+      // 计算 f(center + delta/2) 近似值
+      let approxVal = '—';
+      try {
+        const testX = isInf ? 1000 * Math.sign(point || 1) : center + delta / 2;
+        const res = evaluateExpression(`${expr}`.replace(/x/g, `(${testX})`), 'matlab') as ReturnType<typeof evaluateExpression> & { value?: unknown };
+        if (res.success && res.value !== undefined) {
+          const numVal = typeof res.value === 'number' ? res.value : parseFloat(String(res.value));
+          if (isFinite(numVal)) {
+            approxVal = numVal.toPrecision(6);
+          }
+        }
+      } catch {
+        // 评估失败，保持 '—'
+      }
+      return {
+        label: `第 ${i + 1} 步: x ∈ [${range[0]}, ${range[1]}]`,
+        description: `δ = ${delta}  ·  f(x) ≈ ${approxVal}`,
+        range,
+        delta,
+        approxVal,
+      };
+    });
+  }, [expr, point]);
+
+  // 在每个步骤范围内采样函数值用于简单可视化
+  const currentStepData = steps[step] as (ZoomStep & { range: [number, number]; delta: number }) | undefined;
+  const samples = useMemo(() => {
+    if (!currentStepData) return [] as Array<{ x: number; y: number }>;
+    const [x0, x1] = currentStepData.range;
+    const n = 60;
+    const out: Array<{ x: number; y: number }> = [];
+    for (let i = 0; i <= n; i++) {
+      const x = x0 + ((x1 - x0) * i) / n;
+      let y = NaN;
+      try {
+        const res = evaluateExpression(expr.replace(/x/g, `(${x})`), 'matlab') as ReturnType<typeof evaluateExpression> & { value?: unknown };
+        if (res.success && res.value !== undefined) {
+          const v = typeof res.value === 'number' ? res.value : parseFloat(String(res.value));
+          if (isFinite(v)) y = v;
+        }
+      } catch {
+        // skip
+      }
+      out.push({ x, y });
+    }
+    return out;
+  }, [expr, currentStepData]);
+
+  // 计算采样点的 y 范围
+  const validSamples = samples.filter((s) => isFinite(s.y));
+  const yMin = validSamples.length ? Math.min(...validSamples.map((s) => s.y)) : -1;
+  const yMax = validSamples.length ? Math.max(...validSamples.map((s) => s.y)) : 1;
+  const yPad = (yMax - yMin) * 0.15 || 1;
+  const yLo = yMin - yPad;
+  const yHi = yMax + yPad;
+
+  // SVG 绘图参数
+  const W = 280, H = 160, padL = 36, padR = 12, padT = 10, padB = 24;
+  const plotW = W - padL - padR, plotH = H - padT - padB;
+  const [x0, x1] = currentStepData?.range ?? [-1, 1];
+  const sx = (x: number) => padL + ((x - x0) / (x1 - x0 || 1)) * plotW;
+  const sy = (y: number) => padT + (1 - (y - yLo) / (yHi - yLo || 1)) * plotH;
+  const pathD = validSamples
+    .map((s, i) => `${i === 0 ? 'M' : 'L'} ${sx(s.x).toFixed(1)} ${sy(s.y).toFixed(1)}`)
+    .join(' ');
+
+  // 极限点位置（如果在当前范围内）
+  const pointInRange = isFinite(point) && point >= x0 && point <= x1;
+  const pointX = pointInRange ? sx(point) : -1;
+
+  return (
+    <div className="rounded-lg border border-primary/30 bg-primary/5 p-2 mt-2">
+      <div className="text-[10.5px] font-medium text-primary mb-1 flex items-center gap-1">
+        <Target className="size-3" />
+        分步放大观察极限
+      </div>
+      <ZoomLens
+        steps={steps}
+        currentStep={step}
+        onStepChange={setStep}
+        className="bg-transparent border-border/40"
+      >
+        {() => (
+          <div className="p-1">
+            <svg width="100%" viewBox={`0 0 ${W} ${H}`} className="bg-background/60 rounded">
+              {/* 网格 */}
+              <line x1={padL} y1={sy(0)} x2={W - padR} y2={sy(0)} stroke="currentColor" strokeWidth={0.5} className="text-muted-foreground/30" />
+              <line x1={sx(0)} y1={padT} x2={sx(0)} y2={H - padB} stroke="currentColor" strokeWidth={0.5} className="text-muted-foreground/30" />
+              {/* 极限参考线 */}
+              {limitValue && (
+                <line
+                  x1={padL}
+                  y1={sy(parseFloat(limitValue) || 0)}
+                  x2={W - padR}
+                  y2={sy(parseFloat(limitValue) || 0)}
+                  stroke="oklch(0.72 0.19 70)"
+                  strokeWidth={1}
+                  strokeDasharray="4 2"
+                  opacity={0.6}
+                />
+              )}
+              {/* 函数曲线 */}
+              {pathD && <path d={pathD} fill="none" stroke="oklch(0.72 0.19 70)" strokeWidth={1.8} />}
+              {/* 极限点标记 */}
+              {pointInRange && (
+                <>
+                  <line x1={pointX} y1={padT} x2={pointX} y2={H - padB} stroke="oklch(0.65 0.2 25)" strokeWidth={0.8} strokeDasharray="3 3" />
+                  <circle cx={pointX} cy={sy(parseFloat(limitValue || '0') || 0)} r={3} fill="oklch(0.65 0.2 25)" />
+                </>
+              )}
+              {/* 坐标轴标签 */}
+              <text x={padL} y={H - 6} fontSize={8} fill="currentColor" className="text-muted-foreground">{x0.toFixed(2)}</text>
+              <text x={W - padR - 20} y={H - 6} fontSize={8} fill="currentColor" className="text-muted-foreground">{x1.toFixed(2)}</text>
+              <text x={2} y={padT + 6} fontSize={8} fill="currentColor" className="text-muted-foreground">{yHi.toFixed(2)}</text>
+              <text x={2} y={H - padB - 2} fontSize={8} fill="currentColor" className="text-muted-foreground">{yLo.toFixed(2)}</text>
+            </svg>
+            <div className="text-[10px] text-muted-foreground mt-1 text-center">
+              {currentStepData?.description}
+              {limitValue && `  ·  极限 = ${limitValue}`}
+            </div>
+          </div>
+        )}
+      </ZoomLens>
     </div>
   );
 }

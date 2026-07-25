@@ -14,7 +14,7 @@
  * Used by the preview panel, history cards, formula library, etc.
  */
 
-import { useMemo, useState, useRef, useLayoutEffect } from 'react';
+import { useMemo, useState, useRef, useLayoutEffect, useCallback } from 'react';
 import katex from 'katex';
 import {
   Check,
@@ -23,9 +23,23 @@ import {
   ZoomOut,
   ChevronDown,
   ChevronUp,
+  Download,
+  FileImage,
+  FileCode,
+  FileText,
 } from 'lucide-react';
+import {
+  DropdownMenu,
+  DropdownMenuTrigger,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuSeparator,
+} from '@/components/ui/dropdown-menu';
 import { cn } from '@/lib/utils';
 import { t } from '@/lib/i18n';
+import { useWorkbenchStore } from '@/lib/store/workbench';
+import { exportFormula, type FormulaFormat } from '@/lib/formulaExport';
 
 interface FormulaRendererProps {
   /** LaTeX source string. Empty strings render nothing. */
@@ -34,6 +48,8 @@ interface FormulaRendererProps {
   displayMode?: boolean;
   /** Show a copy-Latex button in the top-right corner. */
   showCopy?: boolean;
+  /** Show an export dropdown (PNG / SVG / LaTeX) in the top-right corner. */
+  showExport?: boolean;
   /** Optional className for the outer wrapper. */
   className?: string;
   /** Optional title shown above the rendered formula. */
@@ -55,6 +71,7 @@ export function FormulaRenderer({
   latex,
   displayMode = true,
   showCopy = false,
+  showExport = false,
   className,
   title,
   collapsible = false,
@@ -65,7 +82,9 @@ export function FormulaRenderer({
   const [scale, setScale] = useState(1);
   const [isCollapsed, setIsCollapsed] = useState(defaultCollapsed);
   const [canCollapse, setCanCollapse] = useState(false);
+  const [exporting, setExporting] = useState(false);
   const contentRef = useRef<HTMLDivElement>(null);
+  const theme = useWorkbenchStore((s) => s.theme);
 
   const html = useMemo(() => {
     if (!latex) return '';
@@ -113,9 +132,30 @@ export function FormulaRenderer({
   const handleZoomOut = () => setScale((s) => Math.max(MIN_SCALE, s - SCALE_STEP));
   const handleResetZoom = () => setScale(1);
 
+  const handleExport = useCallback(
+    async (format: FormulaFormat) => {
+      if (exporting) return;
+      setExporting(true);
+      try {
+        // 导出字号随当前缩放联动（28px × scale），保证导出与所见一致
+        await exportFormula(latex, {
+          format,
+          defaultName: `omnimath-formula-${Date.now()}`,
+          dpi: 2,
+          displayMode,
+          theme,
+          fontSize: Math.round(28 * scale),
+        });
+      } finally {
+        setExporting(false);
+      }
+    },
+    [latex, displayMode, theme, scale, exporting],
+  );
+
   if (!latex) return null;
 
-  const showToolbar = displayMode && (collapsible || showCopy);
+  const showToolbar = displayMode && (collapsible || showCopy || showExport);
 
   const fontModeClassName = fontMode === 'stix' ? 'stix-mode' : undefined;
   const fontModeStyle =
@@ -200,6 +240,48 @@ export function FormulaRenderer({
               )}
               {copied ? t('commonCopied') : t('commonCopy')}
             </button>
+          )}
+          {showExport && (
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <button
+                  type="button"
+                  disabled={exporting}
+                  className="inline-flex items-center gap-1 rounded-md px-2 py-1 text-[10.5px] font-medium text-muted-foreground hover:text-foreground hover:bg-accent transition-colors disabled:opacity-40"
+                  aria-label={t('formulaExport')}
+                >
+                  <Download className="size-3" />
+                  {t('formulaExport')}
+                </button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end" className="w-44">
+                <DropdownMenuLabel className="text-xs text-muted-foreground">
+                  {t('formulaExportHint')}
+                </DropdownMenuLabel>
+                <DropdownMenuSeparator />
+                <DropdownMenuItem
+                  onClick={() => handleExport('png')}
+                  className="gap-2 cursor-pointer"
+                >
+                  <FileImage className="size-3.5 text-primary" />
+                  <span className="text-xs">{t('formulaExportPNG')}</span>
+                </DropdownMenuItem>
+                <DropdownMenuItem
+                  onClick={() => handleExport('svg')}
+                  className="gap-2 cursor-pointer"
+                >
+                  <FileCode className="size-3.5 text-primary" />
+                  <span className="text-xs">{t('formulaExportSVG')}</span>
+                </DropdownMenuItem>
+                <DropdownMenuItem
+                  onClick={() => handleExport('latex')}
+                  className="gap-2 cursor-pointer"
+                >
+                  <FileText className="size-3.5 text-primary" />
+                  <span className="text-xs">{t('formulaExportLatex')}</span>
+                </DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
           )}
         </div>
       )}

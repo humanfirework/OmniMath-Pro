@@ -36,6 +36,7 @@ import {
 } from 'lucide-react';
 import { useWorkbenchStore } from '@/lib/store/workbench';
 import { sampleSurface, trySampleSurface, type Surface3DData } from '@/lib/plots/plot3d';
+import { useScopeVersion } from '@/lib/hooks/useScopeVersion';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -51,6 +52,14 @@ import {
   ToggleGroup,
   ToggleGroupItem,
 } from '@/components/ui/toggle-group';
+import {
+  DropdownMenu,
+  DropdownMenuTrigger,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuSeparator,
+} from '@/components/ui/dropdown-menu';
 import { usePlot3DExport } from './Plot3DExport';
 import { toast } from 'sonner';
 
@@ -132,7 +141,11 @@ export function Plot3DPanel() {
 
   // Sample them into Surface3DData. Re-sample only when expression / range /
   // resolution changes — NOT on every theme / wireframe / etc. toggle.
+  // `scopeVersion` also re-samples when a slider / variable changes so
+  // surfaces like `sin(a*x)*cos(y)` follow the Variables panel live.
+  const scopeVersion = useScopeVersion();
   const surfaces: Surface3DData[] = useMemo(() => {
+    void scopeVersion;
     const out: Surface3DData[] = [];
     for (let i = 0; i < surface3dPlots.length; i++) {
       const p = surface3dPlots[i];
@@ -147,7 +160,8 @@ export function Plot3DPanel() {
       if (data) out.push(data);
     }
     return out;
-  }, [surface3dPlots, resolution]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [surface3dPlots, resolution, scopeVersion]);
 
   /* --------------------- Add surface ------------------------------- */
   const handleAddSurface = useCallback(() => {
@@ -203,7 +217,11 @@ export function Plot3DPanel() {
 
   /* --------------------- Export PNG -------------------------------- */
   const canvasWrapperRef = useRef<HTMLDivElement>(null);
-  const exportPNG = usePlot3DExport(canvasWrapperRef);
+  // T6: 命令式截图 ref — 由 Plot3DScene 内部 CaptureBridge 注册。
+  // 主面板和展开对话框共用同一个 ref（二者不会同时挂载），所以导出
+  // 按钮始终捕获当前可见的那个场景。
+  const captureRef = useRef<(() => HTMLCanvasElement | null) | null>(null);
+  const exportPNG = usePlot3DExport(canvasWrapperRef, captureRef);
 
   /* --------------------- Range change handlers --------------------- */
   // Clamp xMin < xMax at the onChange site instead of in an effect, so we
@@ -448,32 +466,44 @@ export function Plot3DPanel() {
             </div>
           )}
 
-          {/* Example chips — grouped into basic / advanced */}
-          <div className="flex flex-wrap items-center gap-1 pt-0.5">
-            <span className="flex items-center gap-1 text-[10px] text-muted-foreground">
-              <Sparkles className="h-3 w-3" /> 示例
-            </span>
-            {EXAMPLE_GROUPS.map((group, gi) => (
-              <div key={group.title} className="contents">
-                {gi > 0 && (
-                  <span className="mx-1 h-3 w-px self-center bg-border/60" aria-hidden />
-                )}
-                <span className="text-[10px] font-medium uppercase tracking-wide text-muted-foreground/70">
-                  {group.title}
-                </span>
-                {group.items.map((ex) => (
-                  <button
-                    key={ex.expr}
-                    type="button"
-                    onClick={() => handleAddExample(ex.expr)}
-                    className="rounded-full border border-border/60 bg-background/40 px-2 py-0.5 font-mono text-[10px] text-foreground/80 transition-theme hover:border-primary/60 hover:text-primary"
-                    title={ex.hint}
-                  >
-                    {ex.label}
-                  </button>
+          {/* Example dropdown — collapsed by default to avoid clutter.
+              Previously 6 chips spread across the top bar; now a single
+              "示例" button that opens a grouped dropdown menu. */}
+          <div className="flex items-center gap-1.5 pt-0.5">
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <button
+                  type="button"
+                  className="flex items-center gap-1 rounded-md border border-border/60 bg-background/40 px-2 py-0.5 text-[10px] text-foreground/80 transition-theme hover:border-primary/60 hover:text-primary"
+                  aria-label="打开示例菜单"
+                >
+                  <Sparkles className="h-3 w-3" />
+                  示例
+                </button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="start" className="w-56">
+                {EXAMPLE_GROUPS.map((group, gi) => (
+                  <div key={group.title}>
+                    {gi > 0 && <DropdownMenuSeparator />}
+                    <DropdownMenuLabel className="text-[10px] uppercase tracking-wide text-muted-foreground">
+                      {group.title}
+                    </DropdownMenuLabel>
+                    {group.items.map((ex) => (
+                      <DropdownMenuItem
+                        key={ex.expr}
+                        onClick={() => handleAddExample(ex.expr)}
+                        className="cursor-pointer font-mono text-[11px]"
+                      >
+                        <div className="flex flex-col gap-0.5">
+                          <span>{ex.label}</span>
+                          <span className="text-[9px] text-muted-foreground">{ex.hint}</span>
+                        </div>
+                      </DropdownMenuItem>
+                    ))}
+                  </div>
                 ))}
-              </div>
-            ))}
+              </DropdownMenuContent>
+            </DropdownMenu>
           </div>
 
           {/* Surface list */}
@@ -559,6 +589,7 @@ export function Plot3DPanel() {
               colorMode={colorMode}
               upAxis={upAxis}
               resetSignal={resetSignal}
+              captureRef={captureRef}
             />
           )}
 
@@ -649,6 +680,7 @@ export function Plot3DPanel() {
                 colorMode={colorMode}
                 upAxis={upAxis}
                 resetSignal={resetSignal}
+                captureRef={captureRef}
               />
             </div>
           </div>

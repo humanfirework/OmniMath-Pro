@@ -46,6 +46,7 @@ import {
   TooltipTrigger,
 } from '@/components/ui/tooltip';
 import { useWorkbenchStore, STORAGE_KEY } from '@/lib/store/workbench';
+import { useFileSystemStore } from '@/lib/store/fileSystemStore';
 import {
   evaluateExpressionAsync,
   getScope,
@@ -63,6 +64,7 @@ import { FormulaRenderer } from '@/components/workbench/FormulaRenderer';
 
 const DEFAULT_SCRIPT = `# OmniMath Pro — 示例脚本
 # 按 Enter 运行，Shift+Enter 换行
+# 用 --- 分隔不同计算块（重置变量）
 
 # 矩阵运算
 A = [1, 2; 3, 4]
@@ -74,8 +76,14 @@ solve(x^2 - 5*x + 6, x)
 # 符号积分
 integrate(x^2, x)
 
-# 绘图
-plot(sin(x))`;
+# 2D 绘图
+plot(sin(x))
+
+---
+
+# 新的计算块（上面的变量已重置）
+# 3D 曲面绘图
+plot3d(sin(x)*cos(y))`;
 
 const MODES: Array<{ id: InputMode; labelKey: 'editorModeSimple' | 'editorModePython' | 'editorModeMatlab' }> = [
   { id: 'simple', labelKey: 'editorModeSimple' },
@@ -124,6 +132,45 @@ export function EditorPanel() {
     }
   }, [editorContent, setEditorContent]);
 
+  /* ─── File system integration ──────────────────────────────────── */
+  // Load the file system on mount (async, IndexedDB).
+  const activeFileId = useFileSystemStore((s) => s.activeFileId);
+  const loadFromStorage = useFileSystemStore((s) => s.loadFromStorage);
+  const fsLoaded = useFileSystemStore((s) => s.loaded);
+
+  useEffect(() => {
+    if (!fsLoaded) void loadFromStorage();
+  }, [fsLoaded, loadFromStorage]);
+
+  // When the active file changes, load its content into the editor.
+  // We use a ref to skip the auto-save effect during programmatic loads
+  // so we don't immediately write back the same content.
+  const skipNextSaveRef = useRef(false);
+  useEffect(() => {
+    if (!activeFileId) return;
+    const file = useFileSystemStore.getState().nodes[activeFileId];
+    if (file?.type === 'file' && file.content !== undefined) {
+      skipNextSaveRef.current = true;
+      setEditorContent(file.content);
+      if (file.language) setInputMode(file.language);
+    }
+  }, [activeFileId, setEditorContent, setInputMode]);
+
+  // When editor content changes AND there's an active file, auto-save to
+  // the file system store (debounced). Skip if this change was triggered
+  // by loading the active file (skipNextSaveRef).
+  useEffect(() => {
+    if (!activeFileId) return;
+    if (skipNextSaveRef.current) {
+      skipNextSaveRef.current = false;
+      return;
+    }
+    const timer = setTimeout(() => {
+      useFileSystemStore.getState().updateFileContent(activeFileId, editorContent);
+    }, 500);
+    return () => clearTimeout(timer);
+  }, [editorContent, activeFileId]);
+
   // Clean up the preview debounce timer on unmount.
   useEffect(() => {
     return () => {
@@ -157,11 +204,22 @@ export function EditorPanel() {
         let plotAdded = false;
         let surface3dAdded = false;
         let matrixSeen = false;
+        let resultCount = 0;
         const PLOT_COLORS = ['#2dd4bf', '#fbbf24', '#fb7185', '#34d399', '#a78bfa', '#fb923c'];
         let plotColorIdx = 0;
 
         for (let i = 0; i < lines.length; i++) {
           const line = lines[i].trim();
+
+          // ── 计算块分隔符：--- 重置 scope，允许在同一文件中写多个独立计算块 ──
+          if (line === '---' || line === '%%%') {
+            resetScope();
+            // Also clear the panel so it doesn't show variables that no
+            // longer exist in the engine scope.
+            clearVariables();
+            continue;
+          }
+
           if (!line || line.startsWith('#') || line.startsWith('//')) continue;
 
           // Use async evaluator to support symbolic operations (algebrite).
@@ -183,6 +241,7 @@ export function EditorPanel() {
           };
           addResult(calcResult);
           lastResult = calcResult;
+          resultCount++;
 
           if (result.isMatrix) matrixSeen = true;
 
@@ -214,12 +273,20 @@ export function EditorPanel() {
 
         if (lastResult) setCurrentResult(lastResult);
 
-        // Auto-switch preview tab
-        if (surface3dAdded) setActivePreviewTab('plot3d');
-        else if (plotAdded) setActivePreviewTab('plot2d');
-        else if (matrixSeen) setActivePreviewTab('formula');
+        // ── 自动切换预览标签 ──────────────────────────────────────────
+        // 优先级：3D 图 > 2D 图 > 多结果(日志) > 矩阵(公式) > 单结果(公式)
+        if (surface3dAdded) {
+          setActivePreviewTab('plot3d');
+        } else if (plotAdded) {
+          setActivePreviewTab('plot2d');
+        } else if (resultCount > 1) {
+          // 多行结果时切换到日志，让用户看到所有步骤
+          setActivePreviewTab('log');
+        } else if (matrixSeen) {
+          setActivePreviewTab('formula');
+        }
 
-        toast.success('运行完成', { duration: 1200 });
+        toast.success(`运行完成 · ${resultCount} 个结果`, { duration: 1200 });
       } catch (err) {
         toast.error('运行出错', { description: (err as Error).message });
       } finally {
@@ -233,6 +300,7 @@ export function EditorPanel() {
     addResult,
     setCurrentResult,
     setVariable,
+    clearVariables,
     addPlot,
     setActivePreviewTab,
   ]);
@@ -246,12 +314,16 @@ export function EditorPanel() {
 
   /* ─── Reset scope ──────────────────────────────────────────────── */
   const handleReset = useCallback(() => {
-    resetScope();
-    clearHistory();
-    clearVariables();
-    clearPlots();
-    setEditorContent(DEFAULT_SCRIPT);
-    toast.success(t('commonReset'));
+    try {
+      resetScope();
+      clearHistory();
+      clearVariables();
+      clearPlots();
+      setEditorContent(DEFAULT_SCRIPT);
+      toast.success(t('commonReset'));
+    } catch (err) {
+      toast.error('重置出错', { description: (err as Error).message });
+    }
   }, [clearHistory, clearVariables, clearPlots, setEditorContent]);
 
   const handleClear = useCallback(() => {
@@ -378,18 +450,18 @@ export function EditorPanel() {
 
       {/* Live preview bar (simple mode only) */}
       {inputMode === 'simple' && (
-        <div className="shrink-0 h-8 flex items-center gap-2 px-2.5 border-b border-border/60 bg-muted/30 border-l-2 border-l-primary/60 overflow-hidden">
-          <span className="text-[10.5px] font-medium text-muted-foreground shrink-0">
+        <div className="shrink-0 min-h-10 max-h-48 flex items-start gap-2 px-2.5 py-2 border-b border-border/60 bg-muted/30 border-l-2 border-l-primary/60 overflow-x-auto overflow-y-auto">
+          <span className="text-[12px] font-medium text-muted-foreground shrink-0 mt-0.5">
             预览:
           </span>
           {previewLatex ? (
             <FormulaRenderer
               latex={previewLatex}
-              displayMode={false}
-              className="overflow-hidden text-[11px]"
+              displayMode
+              className="min-w-0 flex-1 text-[13px]"
             />
           ) : (
-            <span className="text-[10.5px] text-muted-foreground/70 truncate">
+            <span className="text-[12px] text-muted-foreground/70 mt-0.5">
               输入表达式查看实时预览
             </span>
           )}

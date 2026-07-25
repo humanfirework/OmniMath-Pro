@@ -21,8 +21,20 @@ import { useWorkbenchStore } from '@/lib/store/workbench';
 import { Plot2DCanvas, type Plot2DCanvasProps } from './Plot2DCanvas';
 import { PlotToolbar } from './PlotToolbar';
 import { PlotExpandDialog } from './PlotExpandDialog';
+import { ExportDialog } from './ExportDialog';
+import { RegionZoom } from './RegionZoom';
+import { ViewControls } from '@/components/workbench/controls/ViewControls';
+import {
+  Plot2DAdvancedPanel,
+  type RangeMode,
+  type AdvancedOverlays,
+  type CompareMode,
+} from './Plot2DAdvancedPanel';
+import { FacetGrid } from './FacetGrid';
 import { inputToLatex } from '@/lib/engine';
-import { autoYRange, sampleFunction } from '@/lib/plots/plot2d';
+import { sampleFunction } from '@/lib/plots/plot2d';
+import { coordinatedYRange, smartYRange, type CoordinatedRangeResult } from '@/lib/plots/smartRange';
+import { useScopeVersion } from '@/lib/hooks/useScopeVersion';
 import { toast } from 'sonner';
 
 /* ----------------------- Defaults ---------------------------- */
@@ -38,41 +50,36 @@ interface ViewBox {
   y: [number, number];
 }
 
-/** Auto-derive a sensible Y range from the current plots sampled over the
- *  given X view range. Using the visible X range (instead of each plot's
- *  full stored range) prevents fast-growing functions like `e^x` from
- *  blowing up the Y axis when the user is only looking at a narrow window.
- *  We take the union of all autoYRange results plus a little vertical padding
- *  so the curve never touches the top/bottom edge. */
-function deriveDefaultY(
+/**
+ * Auto-derive a sensible Y range from the current plots sampled over the
+ * given X view range, using the smart coordinated range algorithm.
+ *
+ * Unlike the legacy `autoYRange` (which took raw min/max and let e^x
+ * crush sin x), this uses P5/P95 quantiles and outlier detection so
+ * exponential curves don't dominate the shared Y axis.
+ *
+ * Returns the coordinated result including `outliers` (curve labels that
+ * were clipped) and `fullRange` (for the "full range mode" toggle).
+ */
+function deriveSmartY(
   plots: ReturnType<typeof useWorkbenchStore.getState>['plots'],
   xRange: [number, number],
-): [number, number] {
-  if (plots.length === 0) return DEFAULT_Y;
-  const ranges: [number, number][] = [];
-  for (const p of plots) {
+): CoordinatedRangeResult {
+  if (plots.length === 0) {
+    return { range: DEFAULT_Y, outliers: [], fullRange: DEFAULT_Y };
+  }
+  const sampled = plots.map((p) => {
     const plotType2d = (p.plotType === 'surface3d' ? 'cartesian' : p.plotType ?? 'cartesian') as
       | 'cartesian' | 'polar' | 'parametric';
-    // Sample over the requested X view range so the Y scale matches what is
-    // actually on screen. For polar/parametric this still gives a reasonable
-    // bounding estimate because the parameter range maps to the same window.
-    const samples = sampleFunction(
-      p.expression,
-      xRange,
-      plotType2d,
-      300,
-    );
-    ranges.push(autoYRange(samples));
-  }
-  let min = Infinity;
-  let max = -Infinity;
-  for (const [lo, hi] of ranges) {
-    if (Number.isFinite(lo) && lo < min) min = lo;
-    if (Number.isFinite(hi) && hi > max) max = hi;
-  }
-  if (!Number.isFinite(min) || !Number.isFinite(max)) return DEFAULT_Y;
-  const pad = Math.max(0.5, (max - min) * 0.12);
-  return [min - pad, max + pad];
+    const samples = sampleFunction(p.expression, xRange, plotType2d, 300);
+    return { samples, label: p.expression };
+  });
+  return coordinatedYRange(sampled, {
+    lowerQuantile: 0.05,
+    upperQuantile: 0.95,
+    includeZero: true,
+    padding: 0.1,
+  });
 }
 
 /* =================================================================== */
@@ -80,7 +87,15 @@ function deriveDefaultY(
 /* =================================================================== */
 
 export function Plot2DPanel() {
-  const plots = useWorkbenchStore((s) => s.plots);
+  const allPlots = useWorkbenchStore((s) => s.plots);
+  // ── 过滤掉 3D 曲面图 ──────────────────────────────────────────
+  // surface3d 类型的图应在 Plot3DPanel 中渲染。之前没有过滤，导致
+  // plot3d(sin(x)*cos(y)) 被当作 2D cartesian 图采样，而 sin(x)*cos(y)
+  // 中的 y 变量未定义，采样失败，3D 图也无法正确跳转到 3D 面板。
+  const plots = useMemo(
+    () => allPlots.filter((p) => p.plotType !== 'surface3d'),
+    [allPlots],
+  );
   const theme = useWorkbenchStore((s) => s.theme);
   const removePlot = useWorkbenchStore((s) => s.removePlot);
   const togglePlotVisibility = useWorkbenchStore((s) => s.togglePlotVisibility);
@@ -92,29 +107,99 @@ export function Plot2DPanel() {
   // default (no ref access during render, no useEffect cascade).
   const [userView, setUserView] = useState<{ view: ViewBox; plotCount: number } | null>(null);
 
-  // Derived default view from the current set of plots (memoized).
-  const defaultView = useMemo<ViewBox>(() => {
-    if (plots.length === 0) return { x: DEFAULT_X, y: DEFAULT_Y };
+  // Range mode: 'smart' (default, quantile-based w/ outlier clipping),
+  // 'full' (show every curve including e^x), or 'manual' (user-set Y).
+  const [rangeMode, setRangeMode] = useState<RangeMode>('smart');
+
+  // Equal aspect ratio: keep X/Y scale 1:1 so circles stay circular.
+  // Default true (math-standard). User can disable in advanced panel.
+  const [equalAspect, setEqualAspect] = useState(true);
+
+  // Compare mode: 'facet' (default for multi-plot) renders each curve in its
+  // own mini-plot with an independent Y axis so functions with wildly
+  // different magnitudes (x², sin x, eˣ) can be compared clearly.
+  // 'overlay' draws all curves on a single shared-Y axis (legacy behavior).
+  // Single-plot mode always falls back to 'overlay' since facetting one curve
+  // is pointless.
+  const [userCompareMode, setUserCompareMode] = useState<CompareMode>('facet');
+  const compareMode: CompareMode = plots.length > 1 ? userCompareMode : 'overlay';
+
+  // Advanced-feature overlays (intersections / tangent / derivative)
+  // computed by the Plot2DAdvancedPanel.
+  const [overlays, setOverlays] = useState<AdvancedOverlays>({
+    intersections: [],
+    tangent: null,
+    derivativeSamples: [],
+    derivativeOrder: 1,
+  });
+
+  // Derived smart Y range from the current set of plots (memoized).
+  // This computes both the clipped `range` (outliers excluded) and the
+  // `fullRange` (all curves included) so the user can toggle between them.
+  // `scopeVersion` re-derives when a slider / variable changes the curves.
+  const scopeVersion = useScopeVersion();
+  const smartY = useMemo<CoordinatedRangeResult>(() => {
+    void scopeVersion;
+    if (plots.length === 0) {
+      return { range: DEFAULT_Y, outliers: [], fullRange: DEFAULT_Y };
+    }
     const hasPolar = plots.some((p) => p.plotType === 'polar');
     if (hasPolar) {
       const r = 4;
-      return { x: [-r, r], y: [-r, r] };
+      return { range: [-r, r], outliers: [], fullRange: [-r, r] };
     }
     const latest = plots[plots.length - 1];
     const x = (latest?.xRange ?? DEFAULT_X) as [number, number];
-    return {
-      x,
-      y: deriveDefaultY(plots, x),
-    };
-  }, [plots]);
+    return deriveSmartY(plots, x);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [plots, scopeVersion]);
+
+  // The default view picks Y based on the current range mode.
+  const defaultView = useMemo<ViewBox>(() => {
+    if (plots.length === 0) return { x: DEFAULT_X, y: DEFAULT_Y };
+    const latest = plots[plots.length - 1];
+    const x = (latest?.xRange ?? DEFAULT_X) as [number, number];
+    const y =
+      rangeMode === 'full' ? smartY.fullRange : smartY.range;
+    return { x, y };
+  }, [plots, rangeMode, smartY]);
 
   // If the plot count has changed since the user set their view, drop the
   // override so the derived default takes over.
   const effectiveUserView =
     userView && userView.plotCount === plots.length ? userView.view : null;
 
+  // 'manual' range mode uses the user-set Y if present; otherwise falls
+  // back to the smart/full range from defaultView.
   const effectiveX = effectiveUserView?.x ?? defaultView.x;
-  const effectiveY = effectiveUserView?.y ?? defaultView.y;
+  const effectiveY =
+    rangeMode === 'manual' && effectiveUserView
+      ? effectiveUserView.y
+      : defaultView.y;
+
+  // Per-plot independent Y ranges for facet mode. Each curve gets its own
+  // smartYRange (P5/P95 quantile based) so x², sin x, eˣ each get a
+  // sensibly-scaled mini-plot instead of being crushed onto a shared axis.
+  // NOTE: must be declared after `effectiveX` since it depends on it
+  // (Temporal Dead Zone — referencing a `const` before its declaration
+  // throws ReferenceError at runtime).
+  const facetYRanges = useMemo<[number, number][]>(() => {
+    void scopeVersion;
+    if (compareMode !== 'facet') return [];
+    return plots.map((p) => {
+      const plotType2d = (p.plotType === 'surface3d' ? 'cartesian' : p.plotType ?? 'cartesian') as
+        | 'cartesian' | 'polar' | 'parametric';
+      if (plotType2d === 'polar') return [-4, 4] as [number, number];
+      const samples = sampleFunction(p.expression, effectiveX, plotType2d, 300);
+      return smartYRange(samples, {
+        lowerQuantile: 0.05,
+        upperQuantile: 0.95,
+        includeZero: true,
+        padding: 0.1,
+      });
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [plots, effectiveX, compareMode, scopeVersion]);
 
   /* ----------------------- View controls ---------------------------- */
   // All view mutations write to `userView` so the derived default is preserved
@@ -135,10 +220,15 @@ export function Plot2DPanel() {
   }, [defaultView, plots.length]);
   const handleReset = useCallback(() => {
     setUserView(null);
+    setRangeMode('smart');
   }, []);
 
   const handleRangeChange = useCallback(
     (which: 'x' | 'y', index: 0 | 1, value: number) => {
+      // Manually editing the Y range switches to 'manual' mode so the
+      // user's value is respected instead of being overwritten by the
+      // smart / full range.
+      if (which === 'y') setRangeMode('manual');
       setUserView((prev) => {
         const baseX = prev?.view.x ?? defaultView.x;
         const baseY = prev?.view.y ?? defaultView.y;
@@ -168,28 +258,15 @@ export function Plot2DPanel() {
   /* ----------------------- Expand dialog ---------------------------- */
   const [expandOpen, setExpandOpen] = useState(false);
 
+  /* ----------------------- Export dialog ---------------------------- */
+  const [exportOpen, setExportOpen] = useState(false);
+
   /* ----------------------- Export handlers -------------------------- */
   const canvasWrapperRef = useRef<HTMLDivElement>(null);
 
   const handleExportPNG = useCallback(() => {
-    const canvas = canvasWrapperRef.current?.querySelector('canvas');
-    if (!canvas) {
-      toast.error('画布未就绪');
-      return;
-    }
-    try {
-      const url = canvas.toDataURL('image/png');
-      const a = document.createElement('a');
-      a.href = url;
-      a.download = `omnimath-plot-${Date.now()}.png`;
-      document.body.appendChild(a);
-      a.click();
-      document.body.removeChild(a);
-      toast.success('已导出 PNG 图片');
-    } catch (err) {
-      console.error(err);
-      toast.error('导出失败');
-    }
+    // 打开导出对话框（统一走 Tauri 原生保存对话框 + DPI 选项）
+    setExportOpen(true);
   }, []);
 
   const handleCopyLatex = useCallback(() => {
@@ -237,8 +314,10 @@ export function Plot2DPanel() {
       onInsertExample: handleInsertExample,
       showGrid: true,
       showMarkers: true,
+      equalAspect,
+      overlays,
     }),
-    [plots, theme, effectiveX, effectiveY, handleViewChange, handleResetView, handleInsertExample],
+    [plots, theme, effectiveX, effectiveY, handleViewChange, handleResetView, handleInsertExample, equalAspect, overlays],
   );
 
   /* ----------------------- Render ----------------------------------- */
@@ -258,10 +337,56 @@ export function Plot2DPanel() {
         onCopyLatex={handleCopyLatex}
         onExpand={() => setExpandOpen(true)}
       />
+      <Plot2DAdvancedPanel
+        plots={plots}
+        xRange={effectiveX}
+        yRange={effectiveY}
+        outliers={smartY.outliers}
+        rangeMode={rangeMode}
+        onRangeModeChange={setRangeMode}
+        compareMode={compareMode}
+        onCompareModeChange={setUserCompareMode}
+        onOverlaysChange={setOverlays}
+        equalAspect={equalAspect}
+        onEqualAspectChange={setEqualAspect}
+      />
       <div ref={canvasWrapperRef} className="relative min-h-0 flex-1">
-        <Plot2DCanvas {...canvasProps} />
+        {compareMode === 'facet' && plots.length > 1 ? (
+          <FacetGrid
+            plots={plots}
+            xRange={effectiveX}
+            facetYRanges={facetYRanges}
+            theme={theme}
+          />
+        ) : (
+          <>
+            <Plot2DCanvas {...canvasProps} />
+            <RegionZoom
+              wrapperRef={canvasWrapperRef}
+              xRange={effectiveX}
+              yRange={effectiveY}
+              onViewChange={handleViewChange}
+            />
+            <ViewControls
+              onZoomIn={handleZoomIn}
+              onZoomOut={handleZoomOut}
+              onReset={handleReset}
+              onCenter={handleReset}
+              compact
+            />
+          </>
+        )}
       </div>
       <PlotExpandDialog open={expandOpen} onClose={() => setExpandOpen(false)} />
+
+      <ExportDialog
+        open={exportOpen}
+        onOpenChange={setExportOpen}
+        canvasRef={canvasWrapperRef}
+        defaultName={`omnimath-plot-${Date.now()}`}
+        title="导出 2D 图像"
+        description="选择分辨率后导出 PNG 图像"
+      />
     </div>
   );
 }

@@ -5,14 +5,22 @@
  * flow data between output ports → input ports. `executePipeline` does a
  * topological sort and evaluates each node in order, propagating outputs.
  *
- * Uses a SEPARATE mathjs instance so pipeline evaluations never pollute
- * the main workbench engine scope (and vice versa).
+ * Uses the SHARED configured mathjs instance (same log/ln semantics as
+ * the console). Pipeline evaluations still cannot pollute the user scope
+ * because every `evaluate` call gets an explicit throwaway scope built
+ * by `getEvalScope(...)` — a shallow copy layered over the live user
+ * scope, so blueprint expressions can reference console variables
+ * (e.g. a `sin(a*x)` plot node follows the `a` slider).
  */
 
-import { create, all, type MathNode } from 'mathjs';
+import type { MathNode } from 'mathjs';
+import { math, getEvalScope } from '@/lib/engine/mathInstance';
+import { scanVariables } from '@/lib/engine/variableScanner';
 import type { TranslationDict } from '@/lib/i18n';
 
-const math = create(all);
+// 打包器（webpack/Turbopack）在客户端 bundle 中支持 CommonJS require；
+// 这里仅补充类型声明，不改变运行时行为。
+declare const require: (id: string) => unknown;
 
 /* ------------------------------------------------------------------ *
  * Types
@@ -40,8 +48,12 @@ export type NodeType =
   | 'matrix-input'
   | 'matrix-op'
   | 'matrix-multiply'
+  | 'matrix-decompose'
   | 'derivative'
   | 'integrate'
+  | 'symbolic-integrate'
+  | 'simplify'
+  | 'solve-equation'
   | 'evaluate'
   | 'display';
 
@@ -96,8 +108,10 @@ export interface NodeTypeDef {
 }
 
 /* ------------------------------------------------------------------ *
- * Layout constants — port positions are computed deterministically
- * from these so the SVG edge layer never needs to measure the DOM.
+ * Layout constants — used as initial estimates before DOM measurement
+ * runs. The `getPortPosition` function prefers DOM-measured offsets
+ * (from DomMeasuredNode.tsx's PortPositionsProvider) when available,
+ * and falls back to these constants for the first render.
  * ------------------------------------------------------------------ */
 export const NODE_WIDTH = 248;
 export const NODE_HEADER_H = 34;
@@ -114,17 +128,40 @@ export function portCenterY(index: number): number {
   return NODE_HEADER_H + PORTS_PAD_TOP + PORT_ROW_H / 2 + index * PORT_ROW_H;
 }
 
+/**
+ * Port offset relative to a node card's top-left, keyed by
+ * `${nodeId}:${portId}:${'in'|'out'}`. Populated by DomMeasuredNode's
+ * PortPositionsProvider at runtime.
+ */
+export type PortOffsetsMap = Map<string, { x: number; y: number }>;
+
 /** Port center in canvas-content coordinates. */
 export function getPortPosition(
   node: PipelineNode,
   portId: string,
   isOutput: boolean,
+  portOffsets?: PortOffsetsMap,
 ): { x: number; y: number } | null {
   const def = NODE_TYPES[node.type];
   if (!def) return null;
   const ports = isOutput ? def.outputs : def.inputs;
   const idx = ports.findIndex((p) => p.id === portId);
   if (idx < 0) return null;
+
+  // Prefer DOM-measured offset (accurate even when content overflows the
+  // fixed NODE_WIDTH estimate or when the config UI grows the card).
+  if (portOffsets) {
+    const key = `${node.id}:${portId}:${isOutput ? 'out' : 'in'}`;
+    const measured = portOffsets.get(key);
+    if (measured) {
+      return {
+        x: node.position.x + measured.x,
+        y: node.position.y + measured.y,
+      };
+    }
+  }
+
+  // Fallback: estimate from fixed constants.
   return {
     x: node.position.x + (isOutput ? NODE_WIDTH - PORT_INSET_X : PORT_INSET_X),
     y: node.position.y + portCenterY(idx),
@@ -141,6 +178,16 @@ export function portsSectionHeight(node: PipelineNode): number {
 /* ------------------------------------------------------------------ *
  * Math helpers
  * ------------------------------------------------------------------ */
+
+/** Format a number as a LaTeX-safe string (for building integral/derivative LaTeX). */
+function formatNumTex(v: number): string {
+  if (typeof v !== 'number' || !Number.isFinite(v)) {
+    return Number.isNaN(v) ? '\\text{NaN}' : String(v);
+  }
+  const rounded = Math.round(v);
+  if (Math.abs(v - rounded) < 1e-9) return String(rounded);
+  return parseFloat(v.toPrecision(8)).toString();
+}
 
 function toNumber(v: unknown): number {
   if (typeof v === 'number') return v;
@@ -305,7 +352,7 @@ export const NODE_TYPES: Record<NodeType, NodeTypeDef> = {
       let r: number;
       if (fn === 'custom') {
         const expr = String(config.customExpr ?? 'x');
-        r = Number(math.evaluate(expr, { x }));
+        r = Number(math.evaluate(expr, getEvalScope({ x })));
       } else {
         const fnMap: Record<string, (v: number) => number> = {
           sin: Math.sin, cos: Math.cos, tan: Math.tan,
@@ -343,7 +390,7 @@ export const NODE_TYPES: Record<NodeType, NodeTypeDef> = {
       for (let i = 0; i <= N; i++) {
         const xv = xMin + ((xMax - xMin) * i) / N;
         try {
-          const yv = Number(math.evaluate(expr, { x: xv }));
+          const yv = Number(math.evaluate(expr, getEvalScope({ x: xv })));
           samples.push([xv, Number.isFinite(yv) ? yv : NaN]);
         } catch {
           samples.push([xv, NaN]);
@@ -426,6 +473,53 @@ export const NODE_TYPES: Record<NodeType, NodeTypeDef> = {
     },
   },
 
+  'matrix-decompose': {
+    type: 'matrix-decompose',
+    category: 'matrix',
+    labelKey: 'npMatrixDecompose',
+    icon: 'Split',
+    color: 'emerald',
+    inputs: [{ id: 'matrix', labelKey: 'npPortMatrix', type: 'matrix' }],
+    outputs: [{ id: 'result', labelKey: 'npPortResult', type: 'any' }],
+    defaultConfig: { method: 'lu' },
+    execute: (inputs, config) => {
+      const m = toMatrix(inputs.matrix);
+      const method = String(config.method ?? 'lu');
+      try {
+        if (method === 'lu') {
+          // mathjs lu returns { L, U, P }.
+          const lu = math.lup(m) as unknown as { L: unknown; U: unknown; P: unknown };
+          return {
+            result: { L: lu.L, U: lu.U, P: lu.P },
+            latex: 'A = L \\cdot U',
+          };
+        }
+        if (method === 'qr') {
+          const qr = math.qr(m) as { Q: unknown; R: unknown };
+          return {
+            result: { Q: qr.Q, R: qr.R },
+            latex: 'A = Q \\cdot R',
+          };
+        }
+        if (method === 'eigen') {
+          const eigs = math.eigs(m) as { values: unknown; eigenvectors: unknown };
+          return {
+            result: { values: eigs.values, vectors: eigs.eigenvectors },
+            latex: 'A v = \\lambda v',
+          };
+        }
+        if (method === 'cholesky') {
+          // mathjs v15 的类型定义未包含 cholesky，保留原调用并断言其存在。
+          const chol = (math as unknown as { cholesky: (x: unknown) => unknown }).cholesky(m) as unknown;
+          return { result: { L: chol }, latex: 'A = L L^{T}' };
+        }
+        return { result: 'unknown method', latex: '' };
+      } catch (err) {
+        return { result: 'decompose failed', latex: '', error: (err as Error).message };
+      }
+    },
+  },
+
   /* ── Calculus category ──────────────────────────────────────── */
   derivative: {
     type: 'derivative',
@@ -435,12 +529,26 @@ export const NODE_TYPES: Record<NodeType, NodeTypeDef> = {
     color: 'orange',
     inputs: [{ id: 'expr', labelKey: 'npPortExpr', type: 'expression' }],
     outputs: [{ id: 'result', labelKey: 'npPortResult', type: 'expression' }],
-    defaultConfig: { variable: 'x' },
+    defaultConfig: { variable: 'x', showSteps: false },
     execute: (inputs, config) => {
       const expr = toExprString(inputs.expr) || 'x';
       const variable = String(config.variable ?? 'x');
       const d = math.derivative(expr, variable) as MathNode;
-      return { result: d };
+      // Build a LaTeX representation so the node footer can render the
+      // result as a proper formula instead of a raw mathjs node string.
+      let latex = '';
+      try {
+        const exprTex = math.parse(expr).toTex({ implicit: 'hide' });
+        const derivTex = d.toTex({ implicit: 'hide' });
+        latex = `\\frac{d}{d${variable}}\\left[${exprTex}\\right] = ${derivTex}`;
+      } catch {
+        latex = '';
+      }
+      // When showSteps is true, also attach the original expression so
+      // downstream display nodes can show "f(x) → f'(x)".
+      return config.showSteps
+        ? { result: d, latex, original: expr }
+        : { result: d, latex };
     },
   },
 
@@ -461,19 +569,157 @@ export const NODE_TYPES: Record<NodeType, NodeTypeDef> = {
       const N = 200;
       const h = (b - a) / N;
       let sum = 0;
+      let numerical = NaN;
       try {
-        const fa = Number(math.evaluate(expr, { x: a }));
-        const fb = Number(math.evaluate(expr, { x: b }));
+        const fa = Number(math.evaluate(expr, getEvalScope({ x: a })));
+        const fb = Number(math.evaluate(expr, getEvalScope({ x: b })));
         sum = fa + fb;
         for (let i = 1; i < N; i++) {
           const xv = a + i * h;
-          const yv = Number(math.evaluate(expr, { x: xv }));
+          const yv = Number(math.evaluate(expr, getEvalScope({ x: xv })));
           sum += (i % 2 === 0 ? 2 : 4) * yv;
         }
+        numerical = (sum * h) / 3;
       } catch {
-        return { result: NaN };
+        numerical = NaN;
       }
-      return { result: (sum * h) / 3 };
+      // Build LaTeX: ∫_a^b expr dx ≈ numerical
+      let latex = '';
+      try {
+        const exprTex = math.parse(expr).toTex({ implicit: 'hide' });
+        const aTex = formatNumTex(a);
+        const bTex = formatNumTex(b);
+        const valTex = formatNumTex(numerical);
+        latex = `\\int_{${aTex}}^{${bTex}} ${exprTex} \\, d${String(config.variable ?? 'x')} \\approx ${valTex}`;
+      } catch {
+        latex = '';
+      }
+      return { result: numerical, latex };
+    },
+  },
+
+  'symbolic-integrate': {
+    type: 'symbolic-integrate',
+    category: 'calculus',
+    labelKey: 'npSymbolicIntegrate',
+    icon: 'Activity',
+    color: 'orange',
+    inputs: [{ id: 'expr', labelKey: 'npPortExpr', type: 'expression' }],
+    outputs: [{ id: 'result', labelKey: 'npPortResult', type: 'expression' }],
+    defaultConfig: { variable: 'x' },
+    execute: (inputs, config) => {
+      const expr = toExprString(inputs.expr) || 'x';
+      const variable = String(config.variable ?? 'x');
+      // Use algebrite for symbolic integration (already a dependency).
+      // algebrite.integral returns the antiderivative as a string.
+      let integralStr = '';
+      let latex = '';
+      try {
+        // Lazy import to avoid loading algebrite until first use.
+        // eslint-disable-next-line @typescript-eslint/no-require-imports
+        // algebrite 运行时通过动态循环导出 integral，allowJs 推断不出该属性，断言补充。
+        const algebrite = require('algebrite') as typeof import('algebrite') & {
+          integral: (expr: string, variable: string) => unknown;
+        };
+        integralStr = String(algebrite.integral(expr, variable));
+        // Convert to LaTeX via mathjs parse (algebrite's toLatex can be flaky).
+        try {
+          const tex = math.parse(integralStr).toTex({ implicit: 'hide' });
+          const exprTex = math.parse(expr).toTex({ implicit: 'hide' });
+          latex = `\\int ${exprTex} \\, d${variable} = ${tex} + C`;
+        } catch {
+          latex = `\\int ${expr} \\, d${variable} = ${integralStr} + C`;
+        }
+      } catch (err) {
+        return { result: 'integral failed', latex: '' , error: (err as Error).message };
+      }
+      return { result: integralStr, latex };
+    },
+  },
+
+  simplify: {
+    type: 'simplify',
+    category: 'calculus',
+    labelKey: 'npSimplify',
+    icon: 'Sigma',
+    color: 'orange',
+    inputs: [{ id: 'expr', labelKey: 'npPortExpr', type: 'expression' }],
+    outputs: [{ id: 'result', labelKey: 'npPortResult', type: 'expression' }],
+    defaultConfig: {},
+    execute: (inputs) => {
+      const expr = toExprString(inputs.expr) || 'x';
+      try {
+        const node = math.simplify(expr);
+        const latex = node.toTex({ implicit: 'hide' });
+        return { result: node, latex };
+      } catch (err) {
+        return { result: expr, latex: '', error: (err as Error).message };
+      }
+    },
+  },
+
+  'solve-equation': {
+    type: 'solve-equation',
+    category: 'calculus',
+    labelKey: 'npSolveEquation',
+    icon: 'Equal',
+    color: 'orange',
+    inputs: [
+      { id: 'expr', labelKey: 'npPortExpr', type: 'expression' },
+    ],
+    outputs: [{ id: 'result', labelKey: 'npPortResult', type: 'any' }],
+    defaultConfig: { variable: 'x' },
+    execute: (inputs, config) => {
+      // Expects an equation like "x^2 - 4 = 0" or expression "x^2 - 4"
+      // (assumed = 0). mathjs.solve returns roots for polynomials.
+      const expr = toExprString(inputs.expr) || 'x';
+      const variable = String(config.variable ?? 'x');
+      try {
+        // mathjs `simplify` + `derivative` can find polynomial roots via
+        // solve; for non-polynomial, fall back to numeric root finding.
+        const eq = expr.includes('=') ? expr : `${expr} = 0`;
+        // mathjs doesn't expose `solve` directly; use parse + simplify
+        // for low-degree polynomials.
+        const node = math.parse(eq);
+        // Try algebraic solve via mathjs's `simplify` for linear/quadratic.
+        // For now, use a numeric Newton's method fallback for robustness.
+        // mathjs 运行时 evaluate 支持 MathNode（类型定义仅列出 MathExpression | Matrix），断言保留原调用。
+        const f = (xv: number) => Number(math.evaluate(node as unknown as string, getEvalScope({ [variable]: xv })));
+        const roots: number[] = [];
+        // Sample 200 points in [-20, 20], look for sign changes.
+        const N = 200;
+        const lo = -20;
+        const hi = 20;
+        const step = (hi - lo) / N;
+        let prev = f(lo);
+        for (let i = 1; i <= N; i++) {
+          const xv = lo + i * step;
+          const cur = f(xv);
+          if (Number.isFinite(prev) && Number.isFinite(cur) && prev * cur < 0) {
+            // Bisection refinement between xv - step and xv.
+            let a2 = xv - step;
+            let b2 = xv;
+            for (let k = 0; k < 50; k++) {
+              const m = (a2 + b2) / 2;
+              const fm = f(m);
+              if (Math.abs(fm) < 1e-9) { a2 = m; b2 = m; break; }
+              if (f(a2) * fm < 0) b2 = m; else a2 = m;
+            }
+            const root = (a2 + b2) / 2;
+            if (!roots.some((r) => Math.abs(r - root) < 1e-6)) {
+              roots.push(parseFloat(root.toPrecision(8)));
+            }
+          }
+          prev = cur;
+        }
+        const rootLatex = roots.map((r) => math.format(r)).join(', ');
+        const latex = `${variable} \\in \\{ ${roots
+          .map((r) => formatNumTex(r))
+          .join(', ')} \\}`;
+        return { result: roots.length > 0 ? rootLatex : 'no real roots', latex, roots };
+      } catch (err) {
+        return { result: 'solve failed', latex: '', error: (err as Error).message };
+      }
     },
   },
 
@@ -493,7 +739,7 @@ export const NODE_TYPES: Record<NodeType, NodeTypeDef> = {
       const expr = toExprString(inputs.expr) || 'x';
       const x = toNumber(inputs.x);
       try {
-        const r = Number(math.evaluate(expr, { x }));
+        const r = Number(math.evaluate(expr, getEvalScope({ x })));
         return { result: r };
       } catch {
         return { result: NaN };
@@ -524,6 +770,107 @@ export function canConnect(
 ): boolean {
   if (toType === 'any' || fromType === 'any') return true;
   return fromType === toType;
+}
+
+/* ------------------------------------------------------------------ *
+ * Variable dependency tracking (N1 integration)
+ * ------------------------------------------------------------------ *
+ * 下列函数把 variableScanner 接入蓝图：
+ *   - `getNodeExpression`       抽取节点 config 中的表达式串
+ *   - `getNodeVariableDeps`     扫描单个节点依赖哪些用户变量
+ *   - `findVariableDependents`  反向查询：某变量被哪些节点引用
+ *
+ * 用途：
+ *   - Inspector 中显示 "依赖: a, b"
+ *   - 删除变量前弹警告 "被 N 个节点引用"
+ *   - （未来）变量变化时只重算受影响子图（当前 auto-execute 已全量重算）
+ *
+ * 注意：只扫描节点自身 config 中的表达式，不递归上游节点 ——
+ * 上游节点的输出已经通过 edge 传播，不需要重复扫描。
+ */
+
+/**
+ * 抽取节点 config 中的表达式串（用于变量扫描）。
+ * 没有表达式的节点类型返回空串。
+ */
+export function getNodeExpression(node: PipelineNode): string {
+  const cfg = node.config;
+  switch (node.type) {
+    case 'expression-input':
+      return String(cfg.expr ?? '');
+    case 'function-apply':
+      // 自定义函数表达式才扫描；预设函数 (sin/cos/...) 不含用户变量
+      if (String(cfg.fn ?? '') === 'custom') {
+        return String(cfg.customExpr ?? '');
+      }
+      return '';
+    case 'plot-output':
+      // plot-output 的 expr 来自上游 expression-input，
+      // 但 config 中也可能有 xMin/xMax 表达式（罕见，先不扫）
+      return '';
+    case 'derivative':
+    case 'integrate':
+    case 'symbolic-integrate':
+    case 'solve-equation':
+      // 这些节点的 expr 来自上游，自身 config 仅有 variable 名（不算依赖）
+      return '';
+    case 'evaluate':
+      // 同上，expr 来自上游
+      return '';
+    case 'variable':
+      // variable 节点的 config.name 就是它引用的变量名 —— 这是最直接的依赖
+      return String(cfg.name ?? '');
+    case 'simplify':
+      return '';
+    default:
+      return '';
+  }
+}
+
+/**
+ * 扫描单个节点依赖 `knownVars` 中的哪些变量。
+ * 返回的变量名顺序与 knownVars 一致。
+ */
+export function getNodeVariableDeps(
+  node: PipelineNode,
+  knownVars: string[],
+): string[] {
+  const expr = getNodeExpression(node);
+  if (!expr) return [];
+  return scanVariables(expr, knownVars);
+}
+
+/**
+ * 反向索引：给定变量名，返回引用它的节点 id 列表。
+ * 用于"删除变量前警告影响范围"。
+ */
+export function findVariableDependents(
+  nodes: PipelineNode[],
+  varName: string,
+  knownVars: string[],
+): string[] {
+  if (!knownVars.includes(varName)) return [];
+  const out: string[] = [];
+  for (const n of nodes) {
+    const deps = getNodeVariableDeps(n, knownVars);
+    if (deps.includes(varName)) out.push(n.id);
+  }
+  return out;
+}
+
+/**
+ * 构建全图变量依赖索引：nodeId → 依赖的变量名列表。
+ * 用于 Inspector 批量显示 + 未来按需重算。
+ */
+export function buildPipelineDependencyIndex(
+  nodes: PipelineNode[],
+  knownVars: string[],
+): Map<string, string[]> {
+  const out = new Map<string, string[]>();
+  for (const n of nodes) {
+    out.set(n.id, getNodeVariableDeps(n, knownVars));
+  }
+  return out;
 }
 
 /* ------------------------------------------------------------------ *
@@ -613,10 +960,37 @@ export function executePipeline(
     }
     // Gather inputs from incoming edges.
     const ins: Record<string, unknown> = {};
+    let hasAnyInput = false;
     for (const e of edges) {
       if (e.to !== id) continue;
       const fromOut = outputs.get(e.from) ?? {};
       ins[e.toPort] = fromOut[e.fromPort];
+      hasAnyInput = true;
+    }
+    // Skip execution for nodes that declare inputs but have no incoming
+    // edges (e.g. freshly added, not yet connected). This prevents
+    // spurious error messages on the node card before the user has wired
+    // anything up — the node simply shows "待连接" instead of an error.
+    if (def.inputs.length > 0 && !hasAnyInput) {
+      node.result = null;
+      node.outputs = {};
+      node.error = undefined;
+      outputs.set(id, {});
+      continue;
+    }
+    // Also skip if some inputs are connected but not ALL declared inputs
+    // have values yet (e.g. a node with 2 inputs where only 1 is wired).
+    // This prevents partially-connected nodes from throwing on undefined
+    // inputs (e.g. math.inv(undefined), math.derivative(undefined)).
+    if (def.inputs.length > 0 && hasAnyInput) {
+      const allInputsReady = def.inputs.every((port) => ins[port.id] !== undefined);
+      if (!allInputsReady) {
+        node.result = null;
+        node.outputs = {};
+        node.error = undefined;
+        outputs.set(id, {});
+        continue;
+      }
     }
     try {
       const out = def.execute(ins, node.config, ctx);

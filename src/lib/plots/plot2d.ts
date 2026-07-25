@@ -9,16 +9,28 @@
  *   - PlotSample            — a single sampled point { x, y } (NaN = gap)
  *   - niceNumber(range, n)  — "nice" tick step + tick values for a range
  *   - formatCoord(x, y)     — human-readable "(x, y)" coordinate string
- *   - autoYRange(samples)   — auto-computed Y range with padding
+ *   - autoYRange(samples)   — auto-computed Y range with padding (legacy)
+ *   - smartYRange(...)      — quantile-based smart Y range (P5/P95)
+ *   - coordinatedYRange(..) — multi-curve coordinated Y range w/ outlier detection
  *   - sampleFunction(...)   — sample y = f(x) (cartesian / polar / parametric)
  *   - findExtrema(samples)  — local maxima, minima, and zero crossings
  *
- * Evaluation is done with mathjs (same instance style as the engine).
+ * Evaluation uses the shared configured mathjs instance and merges the
+ * live user scope, so plots see console variables (`a = 3` →
+ * `plot(sin(a*x))` works) and the log/ln semantics match the console.
  */
 
-import { create, all, type MathJsInstance } from 'mathjs';
+import { math, getEvalScope } from '@/lib/engine/mathInstance';
 
-const math: MathJsInstance = create(all);
+// Re-export the smart-range algorithm so callers can import everything
+// from a single module (`@/lib/plots/plot2d`).
+export {
+  smartYRange,
+  coordinatedYRange,
+  isOutlierCurve,
+  type SmartRangeOptions,
+  type CoordinatedRangeResult,
+} from './smartRange';
 
 /* ------------------------------------------------------------------ */
 /*  Types                                                             */
@@ -197,12 +209,12 @@ export function sampleFunction(
     try {
       if (plotType === 'polar') {
         // r = f(θ), θ = x. Convert to cartesian for rendering.
-        const r = toNumber(compiled.evaluate({ x: t, t }));
+        const r = toNumber(compiled.evaluate(getEvalScope({ x: t, t })));
         xVal = r * Math.cos(t);
         yVal = r * Math.sin(t);
       } else if (plotType === 'parametric') {
         // Expression should evaluate to [x(t), y(t)].
-        const v = compiled.evaluate({ t, x: t });
+        const v = compiled.evaluate(getEvalScope({ t, x: t }));
         if (Array.isArray(v) && v.length >= 2) {
           xVal = toNumber(v[0]);
           yVal = toNumber(v[1]);
@@ -213,7 +225,7 @@ export function sampleFunction(
       } else {
         // cartesian: y = f(x)
         xVal = t;
-        yVal = toNumber(compiled.evaluate({ x: t }));
+        yVal = toNumber(compiled.evaluate(getEvalScope({ x: t })));
       }
     } catch {
       xVal = NaN;

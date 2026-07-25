@@ -58,6 +58,7 @@ export function TitleBar() {
 
   return (
     <header
+      data-tauri-drag-region
       className={cn(
         'relative h-10 shrink-0 flex items-center justify-between px-3 gap-4',
         'glass border-b border-border',

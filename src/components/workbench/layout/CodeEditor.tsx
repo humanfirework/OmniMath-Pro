@@ -14,7 +14,7 @@
  *   • Custom keymap: Enter=run, Shift+Enter=newline, Tab=indent, Ctrl+/=comment
  */
 
-import { useEffect, useRef } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { EditorState, EditorSelection, Compartment } from '@codemirror/state';
 import { EditorView, keymap, lineNumbers, highlightActiveLine, highlightActiveLineGutter } from '@codemirror/view';
 import { defaultKeymap, historyKeymap, history } from '@codemirror/commands';
@@ -26,6 +26,11 @@ import { python } from '@codemirror/lang-python';
 import { tags as t } from '@lezer/highlight';
 import { math } from '@/lib/editor/mathLanguage';
 import { checkSyntax } from '@/lib/editor/syntaxCheck';
+
+/** Font size bounds for Ctrl+wheel zoom (VSCode-style). */
+const MIN_FONT_PX = 10;
+const MAX_FONT_PX = 24;
+const DEFAULT_FONT_PX = 13.5;
 
 export interface CodeEditorProps {
   value: string;
@@ -47,9 +52,19 @@ export function CodeEditor({
   const containerRef = useRef<HTMLDivElement>(null);
   const viewRef = useRef<EditorView | null>(null);
   const langCompartment = useRef(new Compartment());
+  const themeCompartment = useRef(new Compartment());
   const onChangeRef = useRef(onChange);
   const onRunRef = useRef(onRun);
   const onCursorChangeRef = useRef(onCursorChange);
+
+  // Font size for Ctrl+wheel zoom (VSCode-style). Persisted to localStorage
+  // so the user's zoom preference survives reloads. History/variables bar
+  // is NOT affected — only the code editor.
+  const [fontPx, setFontPx] = useState<number>(() => {
+    if (typeof window === 'undefined') return DEFAULT_FONT_PX;
+    const saved = parseFloat(localStorage.getItem('omnimath-editor-fontpx') || '');
+    return Number.isFinite(saved) ? Math.min(MAX_FONT_PX, Math.max(MIN_FONT_PX, saved)) : DEFAULT_FONT_PX;
+  });
 
   // Keep refs in sync without re-creating the editor.
   useEffect(() => {
@@ -74,10 +89,16 @@ export function CodeEditor({
     { tag: t.punctuation, color: '#9ca3af' },
   ]);
 
-  /* ─── Theme ──────────────────────────────────────────────────── */
+  /* ─── Theme (depends on fontPx for zoom) ─────────────────────── */
+  // NOTE: The buggy `backgroundImage` + `backgroundSize: '2ch 100%'` that
+  // previously lived on `.cm-line` has been REMOVED. It rendered a vertical
+  // stripe every 2ch which the user perceived as "horizontal lines turning
+  // into vertical lines". CodeMirror 6 has no first-party indent-guide
+  // extension; `indentUnit.of('  ')` + `indentOnInput()` handle indentation
+  // behavior without visual artifacts.
   const editorTheme = EditorView.theme({
     '&': {
-      fontSize: '13.5px',
+      fontSize: `${fontPx}px`,
       height: '100%',
       backgroundColor: 'transparent',
     },
@@ -91,18 +112,15 @@ export function CodeEditor({
       borderRight: '1px solid var(--border, rgba(255,255,255,0.1))',
       color: 'var(--muted-foreground, #888)',
     },
-    '.cm-activeLine': { backgroundColor: 'rgba(45, 212, 191, 0.04)' },
-    '.cm-activeLineGutter': { color: 'var(--primary, #2dd4bf)' },
-    // Indent guide lines — visible vertical line every 2 spaces.
-    // Uses repeating linear-gradient so the line stays aligned with each
-    // 2-character indent step. `backgroundAttachment: local` keeps the
-    // guides aligned when the editor scrolls horizontally.
-    '.cm-line': {
-      backgroundImage:
-        'linear-gradient(to right, transparent 0, transparent calc(2ch - 1px), var(--indent-guide, rgba(255,255,255,0.06)) calc(2ch - 1px), var(--indent-guide, rgba(255,255,255,0.06)) 2ch, transparent 2ch)',
-      backgroundSize: '2ch 100%',
-      backgroundAttachment: 'local',
-      backgroundPosition: 'left top',
+    // VSCode-style active line highlight: subtle teal background on both
+    // the line content and the gutter. 0.08 is visible but not distracting.
+    '.cm-activeLine': {
+      backgroundColor: 'rgba(45, 212, 191, 0.08)',
+      borderRadius: '2px',
+    },
+    '.cm-activeLineGutter': {
+      backgroundColor: 'rgba(45, 212, 191, 0.08)',
+      color: 'var(--primary, #2dd4bf)',
     },
     '.cm-foldPlaceholder': {
       backgroundColor: 'rgba(45, 212, 191, 0.1)',
@@ -181,7 +199,9 @@ export function CodeEditor({
         codeFolding(),
         lintGutter(),
         syntaxHighlighting(mathHighlightStyle),
-        editorTheme,
+        // Theme wrapped in a compartment so font-size zoom can reconfigure
+        // it without recreating the entire editor.
+        themeCompartment.current.of(editorTheme),
         EditorView.lineWrapping,
         runKeymap,
         keymap.of([
@@ -207,6 +227,38 @@ export function CodeEditor({
       viewRef.current = null;
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  /* ─── Reconfigure theme when font size changes (Ctrl+wheel zoom) ─ */
+  useEffect(() => {
+    const view = viewRef.current;
+    if (!view) return;
+    view.dispatch({
+      effects: themeCompartment.current.reconfigure(editorTheme),
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [fontPx]);
+
+  /* ─── Ctrl+wheel zoom (VSCode-style, editor only) ────────────── */
+  // History/variables bar is NOT affected — this listener is scoped to the
+  // editor container only.
+  useEffect(() => {
+    const el = containerRef.current;
+    if (!el) return;
+    const onWheel = (e: WheelEvent) => {
+      if (!e.ctrlKey) return;
+      e.preventDefault();
+      setFontPx((prev) => {
+        const next = prev + (e.deltaY > 0 ? -1 : 1);
+        const clamped = Math.min(MAX_FONT_PX, Math.max(MIN_FONT_PX, next));
+        if (clamped !== prev) {
+          localStorage.setItem('omnimath-editor-fontpx', String(clamped));
+        }
+        return clamped;
+      });
+    };
+    el.addEventListener('wheel', onWheel, { passive: false });
+    return () => el.removeEventListener('wheel', onWheel);
   }, []);
 
   /* ─── Sync external value changes ────────────────────────────── */
@@ -260,7 +312,11 @@ function toggleComment(view: EditorView) {
     const newText = newLines.join('\n');
     return {
       changes: { from: lineStart, to: lineEnd, insert: newText },
-      range: EditorSelection.rangeFor(newText, range.from - lineStart, range.to - lineStart),
+      // `rangeFor` 不在当前安装的 @codemirror/state 的类型定义中，
+      // 用断言保留原有调用，不改变运行行为。
+      range: (EditorSelection as unknown as {
+        rangeFor(text: string, from: number, to: number): EditorSelection['ranges'][number];
+      }).rangeFor(newText, range.from - lineStart, range.to - lineStart),
     };
   });
   view.dispatch(changes);

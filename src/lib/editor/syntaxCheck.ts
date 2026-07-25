@@ -56,6 +56,9 @@ export function checkSyntax(
       continue;
     }
 
+    // Skip calculation-block separators (--- or %%%)
+    if (trimmed === '---' || trimmed === '%%%') continue;
+
     // Extract RHS of assignment if present.
     // Supports: `a = ...`, `A = [...]`, `f(x) = ...`, `a := ...`
     const rhs = extractRhs(trimmed);

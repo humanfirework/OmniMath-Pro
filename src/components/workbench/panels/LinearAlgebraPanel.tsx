@@ -1,4 +1,4 @@
-'use client';
+﻿﻿'use client';
 
 /**
  * OmniMath Pro — Linear Algebra Panel (Task 5-b, Part 1)
@@ -15,7 +15,6 @@
 
 import { useState, useMemo, useCallback, useEffect, type ClipboardEvent, type CSSProperties } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { create, all, type MathJsInstance } from 'mathjs';
 import {
   Grid3x3,
   Plus,
@@ -33,11 +32,12 @@ import {
   Activity,
   Play,
   Pause,
-  Square,
 } from 'lucide-react';
+import { ZoomLens, type ZoomStep } from '@/components/workbench/controls/ZoomLens';
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
+import { MatrixTransformViz } from '@/components/workbench/linalg/MatrixTransformViz';
 import {
   Select,
   SelectContent,
@@ -60,6 +60,7 @@ import {
   TooltipTrigger,
 } from '@/components/ui/tooltip';
 import { FormulaRenderer } from '@/components/workbench/FormulaRenderer';
+import { GaussianEliminationView } from '@/components/workbench/panels/GaussianEliminationView';
 import { useWorkbenchStore, type VariableEntry } from '@/lib/store/workbench';
 import { setScopeVar } from '@/lib/engine';
 import { t } from '@/lib/i18n';
@@ -67,9 +68,9 @@ import { cn } from '@/lib/utils';
 import { toast } from 'sonner';
 
 /* ------------------------------------------------------------------ *
- * mathjs instance for matrix operations
+ * mathjs — shared configured instance (same semantics as the console)
  * ------------------------------------------------------------------ */
-const math: MathJsInstance = create(all);
+import { math } from '@/lib/engine/mathInstance';
 
 /* ------------------------------------------------------------------ *
  * Types
@@ -481,7 +482,7 @@ export function LinearAlgebraPanel() {
         </TabsContent>
 
         <TabsContent value="transform" className="flex-1 min-h-0 overflow-hidden">
-          <LinearTransformAnimation />
+          <MatrixTransformViz />
         </TabsContent>
       </Tabs>
     </div>
@@ -1975,23 +1976,12 @@ function LinearSystemTab({ defaultMatrix }: { defaultMatrix: Matrix | undefined 
                   </div>
                 )}
 
-              {/* Gaussian elimination steps */}
+              {/* Gaussian elimination steps — 可视化时间线 */}
               {solution.steps.length > 0 && (
-                <details className="group">
-                  <summary className="cursor-pointer text-[10.5px] text-muted-foreground hover:text-foreground select-none">
-                    {t('linalgGaussSteps')} ({solution.steps.length})
-                  </summary>
-                  <div className="mt-1.5 space-y-1.5 overflow-x-auto max-h-60 overflow-y-auto pr-1">
-                    {solution.steps.map((s, i) => (
-                      <div
-                        key={i}
-                        className="text-[11px] text-foreground/85 rounded border border-border/40 bg-muted/20 px-1.5 py-1"
-                      >
-                        <FormulaRenderer latex={s} displayMode />
-                      </div>
-                    ))}
-                  </div>
-                </details>
+                <GaussianEliminationView
+                  steps={solution.steps}
+                  defaultExpandedCount={6}
+                />
               )}
             </motion.div>
           )}
@@ -2219,10 +2209,12 @@ function LinearTransformAnimation() {
   const [showGrid, setShowGrid] = useState(true);
   const [showCircle, setShowCircle] = useState(true);
   const [showSquare, setShowSquare] = useState(true);
+  const [stepMode, setStepMode] = useState(false);
+  const [stepIndex, setStepIndex] = useState(0);
 
   // Animation loop — ease-in-out over 1.5s.
   useEffect(() => {
-    if (!playing) return;
+    if (!playing || stepMode) return;
     let raf = 0;
     const start = performance.now();
     const duration = 1500;
@@ -2236,9 +2228,26 @@ function LinearTransformAnimation() {
     };
     raf = requestAnimationFrame(tick);
     return () => cancelAnimationFrame(raf);
-  }, [playing]);
+  }, [playing, stepMode]);
 
-  const [a, b, c, d] = lerpMatrix(matrix, progress);
+  // 分步模式的步骤定义
+  const stepDefs: ZoomStep[] = useMemo(() => {
+    const fractions = [0, 0.25, 0.5, 0.75, 1];
+    return fractions.map((f) => {
+      const m = lerpMatrix(matrix, f);
+      const d = m[0] * m[3] - m[1] * m[2];
+      return {
+        label: `进度 ${Math.round(f * 100)}%`,
+        description: `det = ${d.toFixed(3)}  ·  [[${m[0].toFixed(2)}, ${m[1].toFixed(2)}], [${m[2].toFixed(2)}, ${m[3].toFixed(2)}]]`,
+        fraction: f,
+      };
+    });
+  }, [matrix]);
+
+  // 分步模式下，进度由 stepIndex 决定
+  const effectiveProgress = stepMode ? ((stepDefs[stepIndex]?.fraction as number | undefined) ?? 0) : progress;
+
+  const [a, b, c, d] = lerpMatrix(matrix, effectiveProgress);
   const det = a * d - b * c;
 
   // Grid lines (every 0.5 unit from -3 to 3). Each line is transformed
@@ -2360,18 +2369,20 @@ function LinearTransformAnimation() {
           <span className="text-[10px] text-muted-foreground font-mono">]]</span>
         </div>
 
-        {/* Play / Reset */}
+        {/* Play / Reset / Step mode toggle */}
         <div className="flex items-center gap-0.5">
-          <Button
-            size="sm"
-            variant="default"
-            onClick={handlePlay}
-            disabled={playing}
-            className="h-6 px-2 text-[10.5px] gap-1"
-          >
-            {playing ? <Pause className="size-3" /> : <Play className="size-3" />}
-            {playing ? '播放中' : '播放'}
-          </Button>
+          {!stepMode && (
+            <Button
+              size="sm"
+              variant="default"
+              onClick={handlePlay}
+              disabled={playing}
+              className="h-6 px-2 text-[10.5px] gap-1"
+            >
+              {playing ? <Pause className="size-3" /> : <Play className="size-3" />}
+              {playing ? '播放中' : '播放'}
+            </Button>
+          )}
           <Button
             size="sm"
             variant="outline"
@@ -2381,18 +2392,29 @@ function LinearTransformAnimation() {
             <RotateCcw className="size-3" />
             重置
           </Button>
+          <Button
+            size="sm"
+            variant={stepMode ? 'default' : 'outline'}
+            onClick={() => { setStepMode(!stepMode); setPlaying(false); }}
+            className="h-6 px-2 text-[10.5px] gap-1"
+            title="切换分步/连续动画模式"
+          >
+            {stepMode ? '分步' : '连续'}
+          </Button>
         </div>
 
-        {/* Progress slider */}
-        <input
-          type="range"
-          min="0"
-          max="1"
-          step="0.01"
-          value={progress}
-          onChange={(e) => { setPlaying(false); setProgress(parseFloat(e.target.value)); }}
-          className="flex-1 min-w-[80px] h-1 accent-primary"
-        />
+        {/* Progress slider (连续模式) */}
+        {!stepMode && (
+          <input
+            type="range"
+            min="0"
+            max="1"
+            step="0.01"
+            value={progress}
+            onChange={(e) => { setPlaying(false); setProgress(parseFloat(e.target.value)); }}
+            className="flex-1 min-w-[80px] h-1 accent-primary"
+          />
+        )}
 
         {/* Toggles */}
         <div className="flex items-center gap-1 text-[10px]">
@@ -2522,7 +2544,7 @@ function LinearTransformAnimation() {
           </div>
           <div className="flex justify-between">
             <span className="text-muted-foreground">进度</span>
-            <span className="font-mono">{Math.round(progress * 100)}%</span>
+            <span className="font-mono">{Math.round(effectiveProgress * 100)}%</span>
           </div>
           {Math.abs(det) < 0.01 && (
             <div className="mt-1 px-1.5 py-1 rounded bg-destructive/10 text-destructive text-[9.5px] leading-tight">
@@ -2538,6 +2560,24 @@ function LinearTransformAnimation() {
           </div>
         </div>
       </div>
+
+      {/* 分步模式控制条 */}
+      {stepMode && (
+        <div className="shrink-0">
+          <ZoomLens
+            steps={stepDefs}
+            currentStep={stepIndex}
+            onStepChange={setStepIndex}
+            defaultCollapsed={false}
+          >
+            {({ step }) => (
+              <div className="text-[10px] text-muted-foreground text-center py-1">
+                {step.description}
+              </div>
+            )}
+          </ZoomLens>
+        </div>
+      )}
     </div>
   );
 }

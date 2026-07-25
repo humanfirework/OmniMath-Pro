@@ -45,6 +45,7 @@ import {
   Workflow,
   X,
   Hash,
+  Info,
   Type,
   Variable,
   FunctionSquare,
@@ -56,6 +57,8 @@ import {
   Equal,
   Monitor,
   AlertCircle,
+  Split,
+  Wand2,
   type LucideIcon,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
@@ -84,8 +87,8 @@ import {
 import { cn } from '@/lib/utils';
 import { t } from '@/lib/i18n';
 import type { TranslationDict } from '@/lib/i18n';
+import { toast } from 'sonner';
 import { useWorkbenchStore } from '@/lib/store/workbench';
-import { FormulaRenderer } from '@/components/workbench/FormulaRenderer';
 import {
   NODE_TYPES,
   NODE_WIDTH,
@@ -97,6 +100,7 @@ import {
   canConnect,
   executePipeline,
   exportPipelineToScript,
+  getNodeVariableDeps,
   type PipelineNode,
   type PipelineEdge,
   type NodeType,
@@ -105,6 +109,14 @@ import {
   type PortDataType,
 } from './pipelineEngine';
 import { PIPELINE_TEMPLATES, loadTemplate } from './pipelineTemplates';
+import {
+  PortPositionsProvider,
+  usePortPositions,
+  usePortReporter,
+  portKey,
+} from './DomMeasuredNode';
+import { EdgeRenderer } from './EdgeRenderer';
+import { MathRender } from './MathRender';
 
 /* ------------------------------------------------------------------ *
  * Icon map — node type → lucide component
@@ -112,6 +124,7 @@ import { PIPELINE_TEMPLATES, loadTemplate } from './pipelineTemplates';
 const ICONS: Record<string, LucideIcon> = {
   Hash, Type, Variable, Plus, FunctionSquare, LineChart,
   Grid3x3, Calculator, Sigma, Activity, Equal, Monitor,
+  Split, Wand2,
 };
 
 /* ------------------------------------------------------------------ *
@@ -140,7 +153,11 @@ const CATEGORY_LABEL_KEY: Record<NodeCategory, keyof TranslationDict> = {
 /* ------------------------------------------------------------------ *
  * Persistence
  * ------------------------------------------------------------------ */
+// P8: schemaVersion 用于未来 schema 变更时的迁移/拒绝。当前为 2。
+//   v1 → v2: 新增 schemaVersion 字段 + 环预防（连接时阻止）。
+// 加载时若版本缺失或更高，回退到空状态而非冒险加载不兼容数据。
 const STORAGE_KEY = 'omnimath-pipeline-v1';
+const SCHEMA_VERSION = 2;
 
 interface PersistedState {
   nodes: PipelineNode[];
@@ -153,10 +170,61 @@ function loadState(): PersistedState | null {
     const raw = localStorage.getItem(STORAGE_KEY);
     if (!raw) return null;
     const data = JSON.parse(raw);
-    return {
-      nodes: Array.isArray(data.nodes) ? data.nodes : [],
-      edges: Array.isArray(data.edges) ? data.edges : [],
-    };
+    if (!data || typeof data !== 'object') return null;
+
+    // P8: 版本检查 — 缺失版本（v1 旧数据）或版本不匹配时，直接放弃
+    // 加载，避免旧 schema 字段污染新代码。用户会看到空画布而非崩溃。
+    if (typeof data.schemaVersion !== 'number' || data.schemaVersion > SCHEMA_VERSION) {
+      console.warn(
+        `[NodePipeline] storage schema version ${data.schemaVersion} (expected <= ${SCHEMA_VERSION}), discarding`,
+      );
+      return null;
+    }
+
+    // ── Schema 验证：过滤掉无效/损坏的 node 和 edge ──────────────
+    // 防止 localStorage 中的旧版本数据（node.type 已删除/重命名）或
+    // 损坏数据进入渲染流程，导致 NodeCard 解引用 undefined 而白屏崩溃。
+    const validNodes: PipelineNode[] = [];
+    if (Array.isArray(data.nodes)) {
+      for (const n of data.nodes) {
+        if (!n || typeof n !== 'object') continue;
+        // node.type 必须存在于 NODE_TYPES 注册表中
+        if (typeof n.type !== 'string' || !(n.type in NODE_TYPES)) continue;
+        // 必须有 id 和 position
+        if (typeof n.id !== 'string') continue;
+        if (!n.position || typeof n.position.x !== 'number' || typeof n.position.y !== 'number') continue;
+        // config 必须是对象（可为空）
+        const config = (n.config && typeof n.config === 'object') ? n.config : {};
+        validNodes.push({
+          id: n.id,
+          type: n.type as NodeType,
+          position: { x: n.position.x, y: n.position.y },
+          config,
+        });
+      }
+    }
+
+    // 收集有效 node id 集合，用于过滤悬空 edge
+    const validIds = new Set(validNodes.map((n) => n.id));
+    const validEdges: PipelineEdge[] = [];
+    if (Array.isArray(data.edges)) {
+      for (const e of data.edges) {
+        if (!e || typeof e !== 'object') continue;
+        if (typeof e.id !== 'string') continue;
+        if (typeof e.from !== 'string' || typeof e.to !== 'string') continue;
+        if (!validIds.has(e.from) || !validIds.has(e.to)) continue;
+        if (typeof e.fromPort !== 'string' || typeof e.toPort !== 'string') continue;
+        validEdges.push({
+          id: e.id,
+          from: e.from,
+          fromPort: e.fromPort,
+          to: e.to,
+          toPort: e.toPort,
+        });
+      }
+    }
+
+    return { nodes: validNodes, edges: validEdges };
   } catch {
     return null;
   }
@@ -176,7 +244,11 @@ function saveState(nodes: PipelineNode[], edges: PipelineEdge[]) {
     }));
     localStorage.setItem(
       STORAGE_KEY,
-      JSON.stringify({ nodes: serialisableNodes, edges }),
+      JSON.stringify({
+        schemaVersion: SCHEMA_VERSION,
+        nodes: serialisableNodes,
+        edges,
+      }),
     );
   } catch {
     // ignore quota / serialisation errors
@@ -196,6 +268,18 @@ function makeEdgeId(): string {
 
 function createNode(type: NodeType, x: number, y: number): PipelineNode {
   const def = NODE_TYPES[type];
+  if (!def) {
+    // 防御：type 无效时不应发生（palette 只传已知类型），
+    // 但作为兜底，创建一个 number-input 节点而非崩溃。
+    console.error(`[NodePipeline] createNode: unknown node type "${type}", falling back to number-input`);
+    const fallback = NODE_TYPES['number-input'];
+    return {
+      id: makeId(),
+      type: 'number-input',
+      position: { x, y },
+      config: { ...fallback.defaultConfig },
+    };
+  }
   return {
     id: makeId(),
     type,
@@ -236,10 +320,59 @@ function fitViewFor(
   return { x, y, scale };
 }
 
+/**
+ * P4: 环检测 — 判断添加 from→to 这条边后是否会产生回路。
+ *
+ * 思路：添加边后，若从 `to` 出发能沿现有边（含新边）回到 `from`，
+ * 说明成环。等价于：在现有边集上，从 `to` 做 DFS，看能否到达 `from`。
+ * 若能到达，再加 to←from 的反向回流就闭合成环。
+ *
+ * 实际边方向是 from→to（数据流），所以"从 to 能否回到 from"
+ * = 在现有边上从 to 反向 DFS（沿 to 的入边往上找）能否到达 from。
+ * 但更简单的等价：正向 DFS 从 from 出发（沿出边），若能到达 to，
+ * 则再加 from→to 就是环。这里用正向 DFS。
+ */
+function wouldCreateCycle(
+  edges: PipelineEdge[],
+  from: string,
+  to: string,
+): boolean {
+  if (from === to) return true;
+  // 邻接表：from → [to, to, ...]
+  const adj = new Map<string, string[]>();
+  for (const e of edges) {
+    if (!adj.has(e.from)) adj.set(e.from, []);
+    adj.get(e.from)!.push(e.to);
+  }
+  // BFS/DFS 从 `to` 出发，看能否回到 `from`。
+  // （因为新边是 from→to，若 to 已经能到达 from，就成环。）
+  const visited = new Set<string>();
+  const stack = [to];
+  while (stack.length) {
+    const cur = stack.pop()!;
+    if (cur === from) return true;
+    if (visited.has(cur)) continue;
+    visited.add(cur);
+    const next = adj.get(cur);
+    if (next) for (const n of next) stack.push(n);
+  }
+  return false;
+}
+
 /* ================================================================== *
  * Main component
  * ================================================================== */
 export function NodePipeline() {
+  // PortPositionsProvider lives outside so the inner component can read
+  // measured port offsets via usePortPositions() for accurate edge routing.
+  return (
+    <PortPositionsProvider>
+      <NodePipelineInner />
+    </PortPositionsProvider>
+  );
+}
+
+function NodePipelineInner() {
   const setEditorContent = useWorkbenchStore((s) => s.setEditorContent);
   const addPlot = useWorkbenchStore((s) => s.addPlot);
   const addResult = useWorkbenchStore((s) => s.addResult);
@@ -247,10 +380,33 @@ export function NodePipeline() {
   const setViewMode = useWorkbenchStore((s) => s.setViewMode);
   const setActivePreviewTab = useWorkbenchStore((s) => s.setActivePreviewTab);
 
+  // DOM-measured port offsets (populated by PortLabel via usePortReporter).
+  // Falls back to fixed-constant estimates before measurements arrive.
+  const portPositions = usePortPositions();
+  // Mirror to a ref so event-handler callbacks (which only need the value
+  // at event time, not reactively) don't have to list portPositions in
+  // their deps — that would invalidate them on every measurement update.
+  const portPositionsRef = useRef(portPositions);
+  useEffect(() => { portPositionsRef.current = portPositions; }, [portPositions]);
+
   // Pipeline state — lazy-init from localStorage (safe on client).
-  const [nodes, setNodes] = useState<PipelineNode[]>(() => loadState()?.nodes ?? []);
-  const [edges, setEdges] = useState<PipelineEdge[]>(() => loadState()?.edges ?? []);
+  // P9: 用 useMemo 把 loadState() 的结果缓存一次，再交给两个 useState
+  // 惰性初始化。否则两个 useState 各自调一次 loadState()，会读两次
+  // localStorage + 解析两次 JSON（旧数据量大时有性能开销）。
+  const initialState = useMemo(() => loadState(), []);
+  const [nodes, setNodes] = useState<PipelineNode[]>(() => initialState?.nodes ?? []);
+  const [edges, setEdges] = useState<PipelineEdge[]>(() => initialState?.edges ?? []);
   const [selectedId, setSelectedId] = useState<string | null>(null);
+  // P6: 选中的边 id（用于高亮 + Delete 键删除）。
+  const [selectedEdgeId, setSelectedEdgeId] = useState<string | null>(null);
+
+  // 拖拽/平移过程中若组件卸载，window 级 pointer 监听器可能残留。
+  // 这里在卸载时统一兜底清理，并移除 body 上的拖拽样式类。
+  useEffect(() => {
+    return () => {
+      document.body.classList.remove('dragging');
+    };
+  }, []);
   // Multi-selection set. `selectedId` is kept in sync as the "anchor" /
   // primary selection for Inspector compatibility and edge highlighting.
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
@@ -286,6 +442,9 @@ export function NodePipeline() {
   // Palette (add-node drawer).
   const [paletteOpen, setPaletteOpen] = useState(false);
   const [palettePos, setPalettePos] = useState<{ x: number; y: number } | null>(null);
+
+  // 操作提示折叠状态（默认折叠，仅显示图标，点击展开文字）
+  const [hintsOpen, setHintsOpen] = useState(false);
 
   // Computing pulse — bumps on every execute to trigger node glow.
   const [computeTick, setComputeTick] = useState(0);
@@ -388,8 +547,10 @@ export function NodePipeline() {
 
   // Push every plot-output node's curve to the workbench store so the
   // 2D panel renders it. Used both by manual run and auto-execute.
+  // Returns the number of plots pushed (P2: 用于判断是否要切到 plot2d tab).
   const pushPlotsToWorkbench = useCallback(
-    (executed: PipelineNode[]) => {
+    (executed: PipelineNode[]): number => {
+      let pushed = 0;
       for (const n of executed) {
         if (n.type === 'plot-output' && n.outputs?.plot) {
           const plot = n.outputs.plot as {
@@ -407,93 +568,155 @@ export function NodePipeline() {
             visible: true,
             width: 2,
           });
+          pushed++;
         }
       }
+      return pushed;
     },
     [addPlot, computeYRange],
   );
 
   const runPipeline = useCallback(() => {
-    const ctx = {
-      variables: Object.fromEntries(
-        Object.entries(variables).map(([k, v]) => [k, v.value]),
-      ),
-    };
-    const executed = executePipeline(nodes, edges, ctx);
-    setNodes(executed);
-    setComputeTick((n) => n + 1);
-
-    // Side-effects: plot-output nodes push plots to the workbench store;
-    // display nodes push results to history.
-    pushPlotsToWorkbench(executed);
-    for (const n of executed) {
-      if (n.type === 'display' && n.result !== undefined && n.result !== null) {
-        const r = n.result;
-        let output = '';
-        let latex = '';
-        let type = 'number';
-        try {
-          if (typeof r === 'number') {
-            output = String(r);
-            latex = String(r);
-          } else if (r && typeof r === 'object' && 'toTex' in (r as object)) {
-            output = String(r);
-            latex = (r as { toTex: () => string }).toTex();
-            type = 'symbolic';
-          } else {
-            output = String(r);
-            latex = `\\text{${String(r)}}`;
-          }
-        } catch {
-          output = String(r);
-        }
-        addResult({
-          id: `np_${n.id}_${Date.now()}`,
-          input: `[pipeline] ${n.id.slice(0, 8)}`,
-          output,
-          latex,
-          timestamp: Date.now(),
-          type,
-        });
-      }
-    }
-  }, [nodes, edges, variables, pushPlotsToWorkbench, addResult]);
-
-  /* ── Auto-execute on graph / config change (debounced) ───────── */
-  useEffect(() => {
-    const id = setTimeout(() => {
+    try {
       const ctx = {
         variables: Object.fromEntries(
           Object.entries(variables).map(([k, v]) => [k, v.value]),
         ),
       };
       const executed = executePipeline(nodes, edges, ctx);
-      // Only update if results actually changed — otherwise the
-      // feedback loop (setNodes → effect → setNodes …) prevents the
-      // debounced localStorage save from ever firing.
-      setNodes((prev) => {
-        let changed = false;
-        const next = prev.map((n) => {
-          const updated = executed.find((e) => e.id === n.id);
-          if (!updated) return n;
-          const oldKey = resultKey(n.result) + '|' + (n.error ?? '');
-          const newKey = resultKey(updated.result) + '|' + (updated.error ?? '');
-          if (oldKey !== newKey) {
-            changed = true;
-            return {
-              ...n,
-              result: updated.result,
-              outputs: updated.outputs,
-              error: updated.error,
-            };
+      setNodes(executed);
+      setComputeTick((n) => n + 1);
+
+      // Side-effects: plot-output nodes push plots to the workbench store;
+      // display nodes push results to history.
+      const plotsPushed = pushPlotsToWorkbench(executed);
+      for (const n of executed) {
+        if (n.type === 'display' && n.result !== undefined && n.result !== null) {
+          const r = n.result;
+          let output = '';
+          let latex = '';
+          let type = 'number';
+          try {
+            if (typeof r === 'number') {
+              output = String(r);
+              latex = String(r);
+            } else if (r && typeof r === 'object' && 'toTex' in (r as object)) {
+              output = String(r);
+              latex = (r as { toTex: () => string }).toTex();
+              type = 'symbolic';
+            } else {
+              output = String(r);
+              latex = `\\text{${String(r)}}`;
+            }
+          } catch {
+            output = String(r);
           }
-          return n;
-        });
-        return changed ? next : prev;
+          addResult({
+            id: `np_${n.id}_${Date.now()}`,
+            input: `[pipeline] ${n.id.slice(0, 8)}`,
+            output,
+            latex,
+            timestamp: Date.now(),
+            type,
+          });
+        }
+      }
+
+      // P2: 若有 plot 输出，自动切回 workbench 视图并选中 plot2d tab，
+      // 让用户立刻看到结果，而不用手动找预览面板。
+      if (plotsPushed > 0) {
+        setViewMode('workbench');
+        setActivePreviewTab('plot2d');
+      }
+    } catch (err) {
+      console.error('[NodePipeline] runPipeline error:', err);
+      toast.error('流水线执行失败', {
+        description: (err as Error).message,
+        duration: 4000,
       });
-    }, 120);
+    }
+  }, [nodes, edges, variables, pushPlotsToWorkbench, addResult, setViewMode, setActivePreviewTab]);
+
+  /* ── Auto-execute on graph / config change (debounced) ───────── */
+  useEffect(() => {
+    const id = setTimeout(() => {
+      try {
+        const ctx = {
+          variables: Object.fromEntries(
+            Object.entries(variables).map(([k, v]) => [k, v.value]),
+          ),
+        };
+        const executed = executePipeline(nodes, edges, ctx);
+        // Only update if results actually changed — otherwise the
+        // feedback loop (setNodes → effect → setNodes …) prevents the
+        // debounced localStorage save from ever firing.
+        setNodes((prev) => {
+          let changed = false;
+          const next = prev.map((n) => {
+            const updated = executed.find((e) => e.id === n.id);
+            if (!updated) return n;
+            const oldKey = resultKey(n.result) + '|' + (n.error ?? '');
+            const newKey = resultKey(updated.result) + '|' + (updated.error ?? '');
+            if (oldKey !== newKey) {
+              changed = true;
+              return {
+                ...n,
+                result: updated.result,
+                outputs: updated.outputs,
+                error: updated.error,
+              };
+            }
+            return n;
+          });
+          return changed ? next : prev;
+        });
+      } catch (err) {
+        // Auto-execute failures should be silent — the user didn't trigger
+        // them, and frequent toasts would be annoying. Log for debugging.
+        console.warn('[NodePipeline] auto-execute error:', err);
+      }
+    }, 180);
     return () => clearTimeout(id);
   }, [nodes, edges, variables]);
+
+  /* ── Helper: pan viewport so a node becomes visible ─────────── */
+  const ensureNodeVisible = useCallback(
+    (node: PipelineNode) => {
+      const v = viewRef.current;
+      // Guard: if the canvas hasn't been measured yet (panel collapsed or
+      // first paint), skip panning — the math below would produce NaN/Infinity
+      // and shove the node off-screen.
+      if (canvasSize.w < 10 || canvasSize.h < 10) return;
+      if (!Number.isFinite(v.scale) || v.scale === 0) return;
+      const nodeLeft = node.position.x;
+      const nodeTop = node.position.y;
+      const nodeRight = node.position.x + NODE_WIDTH;
+      const nodeBottom = node.position.y + APPROX_NODE_H;
+      // 当前视口在世界坐标的范围
+      const viewLeft = -v.x / v.scale;
+      const viewTop = -v.y / v.scale;
+      const viewRight = viewLeft + canvasSize.w / v.scale;
+      const viewBottom = viewTop + canvasSize.h / v.scale;
+
+      let newX = v.x;
+      let newY = v.y;
+      // 若节点完全在视口外或部分超出，平移使节点居中
+      const outX = nodeLeft < viewLeft || nodeRight > viewRight;
+      const outY = nodeTop < viewTop || nodeBottom > viewBottom;
+      if (outX) {
+        newX = canvasSize.w / 2 - (nodeLeft + NODE_WIDTH / 2) * v.scale;
+      }
+      if (outY) {
+        newY = canvasSize.h / 2 - (nodeTop + APPROX_NODE_H / 2) * v.scale;
+      }
+      // Sanity: don't commit NaN/Infinity view — leave the viewport as-is.
+      if (!Number.isFinite(newX) || !Number.isFinite(newY)) return;
+      if (newX !== v.x || newY !== v.y) {
+        setView({ ...v, x: newX, y: newY });
+      }
+    },
+    [canvasSize],
+  );
 
   /* ── Add a node (optionally at a position) ───────────────────── */
   const addNode = useCallback(
@@ -514,15 +737,23 @@ export function NodePipeline() {
       setSelectedId(node.id);
       setSelectedIds(new Set([node.id]));
       lastSelectedId.current = node.id;
+
+      // 自动平移使新节点可见（仅在通过工具栏添加、无 atLocal 时）
+      if (!atLocal) {
+        ensureNodeVisible({ ...node, position: { x, y } } as PipelineNode);
+      }
+
       setPaletteOpen(false);
       setPalettePos(null);
     },
-    [nodes.length],
+    [nodes.length, canvasSize, ensureNodeVisible],
   );
 
   /* ── Multi-select aware node selection ───────────────────────── */
   const selectNode = useCallback(
     (nodeId: string, e: React.PointerEvent | React.MouseEvent) => {
+      // P6: 选节点时清除边选中，避免两者同时高亮造成歧义。
+      setSelectedEdgeId(null);
       if (e.ctrlKey || e.metaKey) {
         // Toggle this node in the selection set.
         setSelectedIds((prev) => {
@@ -636,7 +867,7 @@ export function NodePipeline() {
       e.stopPropagation();
       const node = nodes.find((n) => n.id === nodeId);
       if (!node) return;
-      const pos = getPortPosition(node, portId, true);
+      const pos = getPortPosition(node, portId, true, portPositionsRef.current);
       if (!pos) return;
       setConnecting({ fromNode: nodeId, fromPort: portId, cursor: pos });
     },
@@ -654,6 +885,17 @@ export function NodePipeline() {
       if (!canConnect(fromPortDef.type, toType)) return;
       // Don't allow self-edges or duplicate edges into the same port.
       if (toNode === connecting.fromNode) return;
+      // P4: 环预防 — 若添加 fromNode→toNode 后存在回路（toNode 能沿现有
+      // 边回到 fromNode），则拒绝连接。否则环会让 Kahn 拓扑排序把整条
+      // 链路上的节点都标成 'Cycle detected'，用户得删边才能恢复。
+      if (wouldCreateCycle(edges, connecting.fromNode, toNode)) {
+        toast.warning('该连接会形成回路，已阻止', {
+          description: '蓝图不支持循环依赖，请调整连接方向',
+          duration: 3000,
+        });
+        setConnecting(null);
+        return;
+      }
       setEdges((prev) => {
         const filtered = prev.filter((e) => !(e.to === toNode && e.toPort === toPort));
         return [
@@ -669,7 +911,7 @@ export function NodePipeline() {
       });
       setConnecting(null);
     },
-    [connecting, nodes],
+    [connecting, nodes, edges],
   );
 
   /* ── Node drag (pointer events) ──────────────────────────────── */
@@ -815,6 +1057,7 @@ export function NodePipeline() {
       // ── Default: pan the canvas ─────────────────────────────────
       setSelectedId(null);
       setSelectedIds(new Set());
+      setSelectedEdgeId(null);
       if (connecting) {
         setConnecting(null);
         return;
@@ -860,12 +1103,12 @@ export function NodePipeline() {
       if (n.id === connecting.fromNode) continue;
       const def = NODE_TYPES[n.type];
       for (const port of def.inputs) {
-        const pos = getPortPosition(n, port.id, false);
+        const pos = getPortPosition(n, port.id, false, portPositions);
         if (pos) ports.push({ nodeId: n.id, portId: port.id, x: pos.x, y: pos.y, type: port.type });
       }
     }
     return ports;
-  }, [nodes, connecting]);
+  }, [nodes, connecting, portPositions]);
 
   const allInputPortsRef = useRef(allInputPorts);
   useEffect(() => { allInputPortsRef.current = allInputPorts; }, [allInputPorts]);
@@ -876,7 +1119,7 @@ export function NodePipeline() {
   /* ── Connecting: follow cursor + snap to nearby input ports ──── */
   useEffect(() => {
     if (!connecting) return;
-    const SNAP_DIST = 14; // local-space px — snaps when cursor within this.
+    const SNAP_DIST = 20; // local-space px — snaps when cursor within this.
     const moveHandler = (e: PointerEvent) => {
       const local = screenToLocal(e.clientX, e.clientY);
       let nearest: { nodeId: string; portId: string; x: number; y: number; type: PortDataType } | null = null;
@@ -936,7 +1179,12 @@ export function NodePipeline() {
       const target = e.target as HTMLElement;
       if (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA' || target.isContentEditable) return;
       if (e.key === 'Delete' || e.key === 'Backspace') {
-        if (selectedIds.size > 0) {
+        // P6: 优先删除选中的边，其次删除选中的节点。
+        if (selectedEdgeId) {
+          e.preventDefault();
+          setEdges((prev) => prev.filter((ed) => ed.id !== selectedEdgeId));
+          setSelectedEdgeId(null);
+        } else if (selectedIds.size > 0) {
           e.preventDefault();
           deleteSelected();
         } else if (selectedId) {
@@ -947,8 +1195,24 @@ export function NodePipeline() {
       if (e.key === 'Escape') {
         setSelectedId(null);
         setSelectedIds(new Set());
+        setSelectedEdgeId(null);
         setConnecting(null);
         setPaletteOpen(false);
+      }
+      // Tab / Shift+Tab 在节点间循环导航
+      if (e.key === 'Tab' && nodes.length > 0) {
+        e.preventDefault();
+        const dir = e.shiftKey ? -1 : 1;
+        const currentIdx = selectedId
+          ? nodes.findIndex((n) => n.id === selectedId)
+          : -1;
+        const nextIdx =
+          currentIdx === -1 ? 0 : (currentIdx + dir + nodes.length) % nodes.length;
+        const nextNode = nodes[nextIdx];
+        setSelectedId(nextNode.id);
+        setSelectedIds(new Set([nextNode.id]));
+        lastSelectedId.current = nextNode.id;
+        ensureNodeVisible(nextNode);
       }
       // Arrow keys pan the canvas (up/down/left/right view control).
       if (['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight'].includes(e.key)) {
@@ -967,7 +1231,7 @@ export function NodePipeline() {
     };
     window.addEventListener('keydown', handler);
     return () => window.removeEventListener('keydown', handler);
-  }, [selectedId, selectedIds, deleteNode, deleteSelected, setView]);
+  }, [selectedId, selectedIds, selectedEdgeId, nodes, deleteNode, deleteSelected, ensureNodeVisible, setView, setEdges]);
 
   /* ── Double-click canvas → open palette at cursor ────────────── */
   const onCanvasDoubleClick = useCallback(
@@ -1005,22 +1269,22 @@ export function NodePipeline() {
         const from = nodeById.get(e.from);
         const to = nodeById.get(e.to);
         if (!from || !to) return null;
-        const p1 = getPortPosition(from, e.fromPort, true);
-        const p2 = getPortPosition(to, e.toPort, false);
+        const p1 = getPortPosition(from, e.fromPort, true, portPositions);
+        const p2 = getPortPosition(to, e.toPort, false, portPositions);
         if (!p1 || !p2) return null;
         return { edge: e, from: p1, to: p2 };
       })
       .filter((x): x is { edge: PipelineEdge; from: { x: number; y: number }; to: { x: number; y: number } } => x !== null);
-  }, [edges, nodeById]);
+  }, [edges, nodeById, portPositions]);
 
   const pendingPath = useMemo(() => {
     if (!connecting) return null;
     const from = nodeById.get(connecting.fromNode);
     if (!from) return null;
-    const p1 = getPortPosition(from, connecting.fromPort, true);
+    const p1 = getPortPosition(from, connecting.fromPort, true, portPositions);
     if (!p1) return null;
     return { from: p1, to: connecting.cursor };
-  }, [connecting, nodeById]);
+  }, [connecting, nodeById, portPositions]);
 
   /* ── Render ──────────────────────────────────────────────────── */
   return (
@@ -1033,6 +1297,7 @@ export function NodePipeline() {
         onZoomIn={() => setView((v) => ({ ...v, scale: Math.min(2, v.scale * 1.2) }))}
         onZoomOut={() => setView((v) => ({ ...v, scale: Math.max(0.4, v.scale / 1.2) }))}
         onResetView={() => setView({ x: 40, y: 40, scale: 1 })}
+        onCenter={fitView}
         onAddNode={() => { setPalettePos(null); setPaletteOpen(true); }}
         onDeleteSelected={deleteSelected}
         nodeCount={nodes.length}
@@ -1064,62 +1329,20 @@ export function NodePipeline() {
             height: 1,
           }}
         >
-          {/* Edge layer */}
-          <svg
-            className="absolute top-0 left-0 overflow-visible pointer-events-none"
-            width={1}
-            height={1}
-            style={{ zIndex: 1 }}
-          >
-            <defs>
-              <linearGradient id="edge-gradient" x1="0%" y1="0%" x2="100%" y2="0%">
-                <stop offset="0%" stopColor="oklch(0.7 0.15 165)" stopOpacity={0.9} />
-                <stop offset="100%" stopColor="oklch(0.78 0.15 75)" stopOpacity={0.9} />
-              </linearGradient>
-              <linearGradient id="edge-gradient-active" x1="0%" y1="0%" x2="100%" y2="0%">
-                <stop offset="0%" stopColor="oklch(0.7 0.15 165)" stopOpacity={1} />
-                <stop offset="100%" stopColor="oklch(0.7 0.15 165)" stopOpacity={1} />
-              </linearGradient>
-            </defs>
-
-            {edgePaths.map(({ edge, from, to }) => (
-              <EdgePath
-                key={edge.id}
-                edge={edge}
-                from={from}
-                to={to}
-                onDelete={() => setEdges((prev) => prev.filter((e) => e.id !== edge.id))}
-                selected={selectedId === edge.from || selectedId === edge.to}
-              />
-            ))}
-
-            {pendingPath && (
-              <path
-                d={bezierPath(pendingPath.from, pendingPath.to)}
-                fill="none"
-                stroke="oklch(0.7 0.15 165)"
-                strokeWidth={2}
-                strokeDasharray="6 4"
-                className="animate-pulse-subtle"
-                opacity={0.85}
-              />
-            )}
-
-            {/* Marquee selection rectangle (Shift+drag on empty canvas) */}
-            {marquee && (
-              <rect
-                x={Math.min(marquee.start.x, marquee.current.x)}
-                y={Math.min(marquee.start.y, marquee.current.y)}
-                width={Math.abs(marquee.current.x - marquee.start.x)}
-                height={Math.abs(marquee.current.y - marquee.start.y)}
-                fill="oklch(0.7 0.15 165 / 0.08)"
-                stroke="oklch(0.7 0.15 165 / 0.7)"
-                strokeWidth={1 / view.scale}
-                strokeDasharray={`${4 / view.scale} ${2 / view.scale}`}
-                className="pointer-events-none"
-              />
-            )}
-          </svg>
+          {/* Edge layer (memoized — see EdgeRenderer.tsx) */}
+          <EdgeRenderer
+            edges={edgePaths}
+            pendingPath={pendingPath}
+            selectedNodeId={selectedId}
+            selectedEdgeId={selectedEdgeId}
+            viewScale={view.scale}
+            marquee={marquee}
+            onDeleteEdge={(id) => {
+              setEdges((prev) => prev.filter((e) => e.id !== id));
+              setSelectedEdgeId(null);
+            }}
+            onSelectEdge={(id) => setSelectedEdgeId(id)}
+          />
 
           {/* Nodes */}
           <div className="absolute top-0 left-0" style={{ zIndex: 2 }}>
@@ -1180,13 +1403,30 @@ export function NodePipeline() {
           )}
         </AnimatePresence>
 
-        {/* Zoom indicator + control hints */}
-        <div className="absolute bottom-3 right-3 flex items-center gap-1.5 px-2 py-1 rounded-md glass border border-border text-[11px] text-muted-foreground pointer-events-none">
+        {/* Zoom indicator (click to reset) + collapsible control hints */}
+        <button
+          type="button"
+          onPointerDown={(e) => e.stopPropagation()}
+          onClick={() => setView({ x: 40, y: 40, scale: 1 })}
+          className="absolute bottom-3 right-3 flex items-center gap-1.5 px-2 py-1 rounded-md glass border border-border text-[11px] text-muted-foreground hover:bg-accent hover:text-foreground transition-colors cursor-pointer"
+          title="点击重置视图到 100%"
+        >
           <ZoomIn className="size-3" />
           <span className="font-mono">{Math.round(view.scale * 100)}%</span>
-        </div>
-        <div className="absolute bottom-3 left-3 hidden sm:flex items-center gap-1.5 px-2 py-1 rounded-md glass border border-border text-[10px] text-muted-foreground/80 pointer-events-none">
-          <span>滚轮缩放 · Shift+滚轮上下平移 · 方向键移动</span>
+        </button>
+        <div className="absolute bottom-3 left-3 hidden sm:flex items-center gap-1.5 px-2 py-1 rounded-md glass border border-border text-[10px] text-muted-foreground/80">
+          <button
+            type="button"
+            onPointerDown={(e) => e.stopPropagation()}
+            onClick={() => setHintsOpen((v) => !v)}
+            className="grid place-items-center size-4 rounded hover:bg-accent hover:text-foreground transition-colors"
+            title={hintsOpen ? '收起提示' : '展开操作提示'}
+          >
+            <Info className="size-3" />
+          </button>
+          {hintsOpen && (
+            <span>滚轮缩放 · Shift+滚轮上下平移 · 方向键移动</span>
+          )}
         </div>
       </div>
     </div>
@@ -1204,6 +1444,7 @@ interface ToolbarProps {
   onZoomIn: () => void;
   onZoomOut: () => void;
   onResetView: () => void;
+  onCenter: () => void;
   onAddNode: () => void;
   onDeleteSelected: () => void;
   nodeCount: number;
@@ -1213,7 +1454,7 @@ interface ToolbarProps {
 
 function PipelineToolbar({
   onBack, onRun, onClear, onExport,
-  onZoomIn, onZoomOut, onResetView, onAddNode, onDeleteSelected,
+  onZoomIn, onZoomOut, onResetView, onCenter, onAddNode, onDeleteSelected,
   nodeCount, edgeCount, selectedCount,
 }: ToolbarProps) {
   return (
@@ -1308,6 +1549,14 @@ function PipelineToolbar({
         </Tooltip>
         <Tooltip>
           <TooltipTrigger asChild>
+            <Button variant="ghost" size="sm" className="h-8 w-8 p-0" onClick={onCenter}>
+              <Scan className="size-3.5" />
+            </Button>
+          </TooltipTrigger>
+          <TooltipContent side="bottom">居中所有节点</TooltipContent>
+        </Tooltip>
+        <Tooltip>
+          <TooltipTrigger asChild>
             <Button variant="ghost" size="sm" className="h-8 w-8 p-0" onClick={onResetView}>
               <Maximize2 className="size-3.5" />
             </Button>
@@ -1360,6 +1609,44 @@ function NodeCard({
   variables, onPlotOpen,
 }: NodeCardProps) {
   const def = NODE_TYPES[node.type];
+  // ── 防御性渲染：如果 node.type 不在注册表中（脏数据/旧版本数据），
+  // 显示错误卡片而不是崩溃白屏。用户可看到错误并删除该节点。
+  if (!def) {
+    return (
+      <motion.div
+        initial={{ opacity: 0, scale: 0.92 }}
+        animate={{ opacity: 1, scale: 1 }}
+        exit={{ opacity: 0, scale: 0.9 }}
+        className="absolute node-card border-2 border-destructive/50 rounded-[10px] bg-destructive/5 p-3"
+        style={{
+          width: NODE_WIDTH,
+          left: node.position.x,
+          top: node.position.y,
+          zIndex: 20,
+        }}
+        onPointerDown={(e) => { e.stopPropagation(); onSelect(e as unknown as React.PointerEvent); }}
+      >
+        <div className="flex items-center gap-2 text-destructive">
+          <AlertCircle className="size-4 shrink-0" />
+          <span className="text-[12px] font-medium">未知节点类型</span>
+        </div>
+        <div className="mt-1.5 text-[11px] text-muted-foreground font-mono break-all">
+          {String(node.type)}
+        </div>
+        <div className="mt-1.5 text-[10.5px] text-muted-foreground">
+          该节点可能来自旧版本数据，请删除后重新添加。
+        </div>
+        <button
+          type="button"
+          onPointerDown={(e) => e.stopPropagation()}
+          onClick={(e) => { e.stopPropagation(); onDelete(); }}
+          className="mt-2 h-6 px-2 rounded text-[11px] bg-destructive/10 text-destructive hover:bg-destructive/20 transition-colors"
+        >
+          删除此节点
+        </button>
+      </motion.div>
+    );
+  }
   const cat = CATEGORY_COLOR[def.category];
   const Icon = ICONS[def.icon] ?? Hash;
   const portsH = portsSectionHeight(node);
@@ -1392,7 +1679,7 @@ function NodeCard({
       exit={{ opacity: 0, scale: 0.9 }}
       transition={{ duration: 0.22, ease: [0.2, 0.8, 0.2, 1] }}
       className={cn(
-        'absolute node-card group',
+        'absolute node-card group overflow-visible',
         selected && 'selected',
         multiSelected && 'ring-2 ring-blue-500 ring-offset-0',
       )}
@@ -1440,6 +1727,7 @@ function NodeCard({
         {def.inputs.map((port, i) => (
           <PortLabel
             key={port.id}
+            nodeId={node.id}
             port={port}
             isOutput={false}
             y={i * PORT_ROW_H}
@@ -1453,6 +1741,7 @@ function NodeCard({
         {def.outputs.map((port, i) => (
           <PortLabel
             key={port.id}
+            nodeId={node.id}
             port={port}
             isOutput
             y={i * PORT_ROW_H}
@@ -1469,6 +1758,12 @@ function NodeCard({
       <div className="px-3 pb-2 pt-1">
         <NodeConfig node={node} onConfigChange={onConfigChange} variables={variables} />
       </div>
+
+      {/* Variable dependency badge (N1 integration)
+          仅当节点表达式引用了用户变量时才显示。
+          例如 expression-input 写了 "a*x+b"，且 a/b 是用户变量，
+          这里显示 "依赖: a, b"。让用户直观看到节点和变量的联动关系。 */}
+      <NodeDependencyBadge node={node} variables={variables} />
 
       {/* Result footer */}
       <div
@@ -1487,6 +1782,7 @@ function NodeCard({
  * Port label + socket
  * ================================================================== */
 interface PortLabelProps {
+  nodeId: string;
   port: PortDef;
   isOutput: boolean;
   y: number;
@@ -1498,10 +1794,15 @@ interface PortLabelProps {
 }
 
 function PortLabel({
-  port, isOutput, y, connected, isConnecting, snapped,
+  nodeId, port, isOutput, y, connected, isConnecting, snapped,
   onStartConnection, onCompleteConnection,
 }: PortLabelProps) {
   const [hover, setHover] = useState(false);
+  // Measure this port dot's center offset relative to its ancestor
+  // .node-card, and report it to the PortPositionsProvider context so
+  // edge routing + snap detection use real DOM positions (not estimates).
+  const dotRef = useRef<HTMLDivElement>(null);
+  usePortReporter(nodeId, port.id, isOutput, dotRef);
   return (
     <div
       className={cn(
@@ -1511,9 +1812,11 @@ function PortLabel({
       style={{ top: y, height: PORT_ROW_H }}
     >
       <div
+        ref={dotRef}
         role="button"
         tabIndex={0}
         aria-label={t(port.labelKey)}
+        data-port-id={portKey(nodeId, port.id, isOutput)}
         onPointerDown={(e) => {
           if (isOutput) onStartConnection(port.id, e);
         }}
@@ -1556,6 +1859,43 @@ interface NodeConfigProps {
   node: PipelineNode;
   onConfigChange: (patch: Record<string, unknown>) => void;
   variables: string[];
+}
+
+/**
+ * N1 集成：在 NodeCard 底部显示节点依赖的用户变量。
+ *
+ * - 调用 getNodeVariableDeps 扫描节点表达式中的变量引用。
+ * - 仅当 deps 非空时渲染，避免无表达式的节点（如 number-input）显示空徽章。
+ * - 点击徽章中的变量名可跳转到 Variables 面板（暂未实现，预留 onClick）。
+ */
+function NodeDependencyBadge({
+  node,
+  variables,
+}: {
+  node: PipelineNode;
+  variables: string[];
+}) {
+  // useMemo 避免每次 NodeCard 重渲染都重扫 —— 只有 node.config 或 variables 变化时才重扫。
+  const deps = useMemo(
+    () => getNodeVariableDeps(node, variables),
+    [node, variables],
+  );
+  if (deps.length === 0) return null;
+  return (
+    <div className="px-3 pb-1.5 -mt-0.5 flex items-center gap-1 flex-wrap">
+      <span className="text-[10px] text-muted-foreground/70 select-none">
+        {t('npDependsOn')}:
+      </span>
+      {deps.map((v) => (
+        <span
+          key={v}
+          className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-primary/10 text-primary/90 border border-primary/15"
+        >
+          {v}
+        </span>
+      ))}
+    </div>
+  );
 }
 
 function NodeConfig({ node, onConfigChange, variables }: NodeConfigProps) {
@@ -1772,6 +2112,63 @@ function NodeConfig({ node, onConfigChange, variables }: NodeConfigProps) {
           </div>
         </div>
       );
+    case 'matrix-decompose':
+      return (
+        <div className="space-y-1">
+          <label className="text-[10px] text-muted-foreground/80 uppercase tracking-wider">
+            {t('npDecompMethod')}
+          </label>
+          <Select
+            value={String(node.config.method ?? 'lu')}
+            onValueChange={(v) => onConfigChange({ method: v })}
+          >
+            <SelectTrigger className="h-7 text-[12px] font-mono"><SelectValue /></SelectTrigger>
+            <SelectContent>
+              {['lu', 'qr', 'eigen', 'cholesky'].map((m) => (
+                <SelectItem key={m} value={m}>{m.toUpperCase()}</SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
+      );
+    case 'symbolic-integrate':
+      return (
+        <div className="space-y-1">
+          <label className="text-[10px] text-muted-foreground/80 uppercase tracking-wider">
+            {t('npVariable_')}
+          </label>
+          <Input
+            type="text"
+            value={String(node.config.variable ?? 'x')}
+            onChange={(e) => onConfigChange({ variable: e.target.value })}
+            className="h-7 text-[12px] font-mono"
+          />
+        </div>
+      );
+    case 'solve-equation':
+      return (
+        <div className="space-y-1">
+          <label className="text-[10px] text-muted-foreground/80 uppercase tracking-wider">
+            {t('npSearchRange')}
+          </label>
+          <div className="grid grid-cols-2 gap-2">
+            <Input
+              type="number"
+              value={String(node.config.xMin ?? -10)}
+              onChange={(e) => onConfigChange({ xMin: Number(e.target.value) })}
+              className="h-7 text-[12px] font-mono"
+            />
+            <Input
+              type="number"
+              value={String(node.config.xMax ?? 10)}
+              onChange={(e) => onConfigChange({ xMax: Number(e.target.value) })}
+              className="h-7 text-[12px] font-mono"
+            />
+          </div>
+        </div>
+      );
+    case 'simplify':
+      return null;
     case 'evaluate':
     case 'matrix-multiply':
     case 'display':
@@ -1887,74 +2284,14 @@ function NodeResultFooter({
       </div>
     );
   }
-  if (node.result === undefined || node.result === null) {
-    return <span className="text-[11px] text-muted-foreground/60">—</span>;
-  }
-
-  const r = node.result;
-
-  // Number → big bold display
-  if (typeof r === 'number') {
-    return (
-      <div className="text-center w-full">
-        <div className={cn(
-          'font-mono font-semibold text-[15px]',
-          Number.isNaN(r) ? 'text-destructive' : 'text-foreground',
-        )}>
-          {Number.isNaN(r) ? 'NaN' : formatShort(r)}
-        </div>
-      </div>
-    );
-  }
-
   // Plot output → mini sparkline (click to open in 2D panel)
   if (node.type === 'plot-output' && node.outputs?.plot) {
     const plot = node.outputs.plot as { samples: Array<[number, number]> };
     return <Sparkline samples={plot.samples} onClick={onPlotOpen} />;
   }
-
-  // MathNode (derivative) → KaTeX
-  if (r && typeof r === 'object' && 'toTex' in (r as object)) {
-    let latex = '';
-    let valid = false;
-    try {
-      latex = (r as { toTex: (opts?: object) => string }).toTex({ implicit: 'hide' });
-      valid = true;
-    } catch {
-      valid = false;
-    }
-    if (valid && latex) {
-      return (
-        <div className="w-full overflow-x-auto scrollbar-none">
-          <FormulaRenderer latex={latex} displayMode={false} className="text-[12px] text-center" />
-        </div>
-      );
-    }
-    return <span className="text-[11px] font-mono text-muted-foreground truncate">{String(r)}</span>;
-  }
-
-  // Matrix → small label
-  if (r && typeof r === 'object') {
-    const str = String(r);
-    if (str.length < 40) {
-      return <span className="text-[11px] font-mono text-foreground/80 truncate">{str}</span>;
-    }
-    return <span className="text-[11px] text-muted-foreground">matrix</span>;
-  }
-
-  // String fallback
-  return <span className="text-[11px] font-mono text-foreground/80 truncate">{String(r)}</span>;
-}
-
-function formatShort(n: number): string {
-  if (!Number.isFinite(n)) return n > 0 ? '∞' : '-∞';
-  const abs = Math.abs(n);
-  if (abs !== 0 && (abs < 1e-4 || abs >= 1e6)) {
-    return n.toExponential(3);
-  }
-  const rounded = Math.round(n);
-  if (Math.abs(n - rounded) < 1e-9) return String(rounded);
-  return parseFloat(n.toPrecision(6)).toString();
+  // All other results (number / string / MathNode / matrix / {latex}) →
+  // unified MathRender (see MathRender.tsx).
+  return <MathRender value={node.result} />;
 }
 
 /** Stable string key for a node result — used to detect meaningful changes. */
@@ -2058,69 +2395,6 @@ function Sparkline({
 }
 
 /* ================================================================== *
- * Edge path
- * ================================================================== */
-function EdgePath({
-  edge, from, to, selected, onDelete,
-}: {
-  edge: PipelineEdge;
-  from: { x: number; y: number };
-  to: { x: number; y: number };
-  selected: boolean;
-  onDelete: () => void;
-}) {
-  const [hover, setHover] = useState(false);
-  const d = bezierPath(from, to);
-  // Midpoint for the click target (small circle).
-  const mid = { x: (from.x + to.x) / 2, y: (from.y + to.y) / 2 };
-
-  return (
-    <g
-      onPointerEnter={() => setHover(true)}
-      onPointerLeave={() => setHover(false)}
-      style={{ pointerEvents: 'auto', cursor: 'pointer' }}
-    >
-      {/* Invisible thick hit area */}
-      <path
-        d={d}
-        fill="none"
-        stroke="transparent"
-        strokeWidth={14}
-        onPointerUp={(e) => { e.stopPropagation(); onDelete(); }}
-      />
-      {/* Visible path */}
-      <path
-        d={d}
-        fill="none"
-        stroke={hover || selected ? 'url(#edge-gradient-active)' : 'url(#edge-gradient)'}
-        strokeWidth={hover || selected ? 2.5 : 2}
-        className="node-connector animated"
-        style={{ opacity: hover || selected ? 1 : 0.85 }}
-      />
-      {/* Delete handle on hover */}
-      {(hover || selected) && (
-        <g onPointerUp={(e) => { e.stopPropagation(); onDelete(); }}>
-          <circle cx={mid.x} cy={mid.y} r={7} fill="oklch(0.7 0.2 22)" />
-          <path
-            d={`M ${mid.x - 3} ${mid.y - 3} L ${mid.x + 3} ${mid.y + 3} M ${mid.x + 3} ${mid.y - 3} L ${mid.x - 3} ${mid.y + 3}`}
-            stroke="white"
-            strokeWidth={1.4}
-            strokeLinecap="round"
-          />
-        </g>
-      )}
-      {/* Suppress unused-var lint on `edge` — it's used as a React key. */}
-      <g data-edge-id={edge.id} style={{ display: 'none' }} />
-    </g>
-  );
-}
-
-function bezierPath(from: { x: number; y: number }, to: { x: number; y: number }): string {
-  const dx = Math.max(Math.abs(to.x - from.x) * 0.5, 30);
-  return `M ${from.x} ${from.y} C ${from.x + dx} ${from.y}, ${to.x - dx} ${to.y}, ${to.x} ${to.y}`;
-}
-
-/* ================================================================== *
  * Node palette (add-node drawer)
  * ================================================================== */
 const PALETTE_GROUPS: Array<{ category: NodeCategory; types: NodeType[] }> = [
@@ -2128,8 +2402,8 @@ const PALETTE_GROUPS: Array<{ category: NodeCategory; types: NodeType[] }> = [
   { category: 'operation', types: ['arithmetic'] },
   { category: 'function', types: ['function-apply'] },
   { category: 'plot', types: ['plot-output'] },
-  { category: 'matrix', types: ['matrix-input', 'matrix-op', 'matrix-multiply'] },
-  { category: 'calculus', types: ['derivative', 'integrate', 'evaluate'] },
+  { category: 'matrix', types: ['matrix-input', 'matrix-op', 'matrix-multiply', 'matrix-decompose'] },
+  { category: 'calculus', types: ['derivative', 'integrate', 'symbolic-integrate', 'simplify', 'solve-equation', 'evaluate'] },
   { category: 'output', types: ['display'] },
 ];
 

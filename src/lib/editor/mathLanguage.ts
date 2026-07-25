@@ -10,34 +10,11 @@
  */
 
 import { tags as t } from '@lezer/highlight';
-
-export interface StreamLanguageSpec {
-  name: string;
-  startState: () => State;
-  /** Return string tag names; StreamLanguage maps them to lezer Tag objects. */
-  token: (stream: TokenStream, state: State) => string | null;
-  languageData: {
-    commentTokens: { line: string };
-    closeBrackets: string[];
-  };
-}
+import type { StreamParser } from '@codemirror/language';
 
 interface State {
   inString: boolean;
   stringChar: string;
-}
-
-interface TokenStream {
-  next(): string;
-  peek(): string;
-  skipTo(str: string): boolean;
-  eat(ch: string): boolean;
-  eatWhile(re: RegExp): boolean;
-  match(pattern: string | RegExp, consume?: boolean): boolean | string[];
-  sol(): boolean;
-  eol(): boolean;
-  backUp(n: number): void;
-  current(): string;
 }
 
 const KEYWORDS = [
@@ -61,7 +38,7 @@ const FUNCTIONS = [
   'simplify', 'rationalize', 'derivative',
 ];
 
-export const math: StreamLanguageSpec = {
+export const math: StreamParser<State> = {
   name: 'math',
 
   startState: () => ({

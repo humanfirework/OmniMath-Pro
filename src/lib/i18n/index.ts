@@ -93,6 +93,39 @@ export interface TranslationDict {
   previewSteps: string;
   previewType: string;
 
+  /* ---------------- Formula export ---------------- */
+  formulaExport: string;
+  formulaExportPNG: string;
+  formulaExportSVG: string;
+  formulaExportLatex: string;
+  formulaExportHint: string;
+
+  /* ---------------- Layout switching ---------------- */
+  layoutSwitch: string;
+  layoutRight: string;
+  layoutBottom: string;
+  layoutCompact: string;
+  layoutLarge: string;
+  layoutSize: string;
+
+  /* ---------------- Settings panel ---------------- */
+  settingsTitle: string;
+  settingsAppearance: string;
+  settingsEditor: string;
+  settingsLayout: string;
+  settingsExport: string;
+  settingsLanguage: string;
+  settingsTheme: string;
+  settingsActivityBar: string;
+  settingsActivityBarPosition: string;
+  settingsActivityBarLocked: string;
+  settingsActivityBarAutoHide: string;
+  settingsDefaultExportDpi: string;
+  settingsFormulaFontSize: string;
+  settingsUseMathFont: string;
+  settingsResetAll: string;
+  settingsResetConfirm: string;
+
   /* ---------------- Side panel tabs ---------------- */
   tabHistory: string;
   tabVariables: string;
@@ -156,6 +189,11 @@ export interface TranslationDict {
   statusChars: string;
   statusWords: string;
   statusLang: string;
+  statusConflicts: string;
+  statusConflictTooltip: string;
+  statusNoConflicts: string;
+  statusConflictFix: string;
+  statusConflictDismiss: string;
 
   /* ---------------- Language label ---------------- */
   languageLabel: string;
@@ -470,6 +508,12 @@ export interface TranslationDict {
   npMatrixOp: string;
   npDerivative: string;
   npIntegrate: string;
+  npMatrixDecompose: string;
+  npSymbolicIntegrate: string;
+  npSimplify: string;
+  npSolveEquation: string;
+  npDecompMethod: string;
+  npSearchRange: string;
   npEvaluate: string;
   npDisplay: string;
   npPortValue: string;
@@ -487,6 +531,7 @@ export interface TranslationDict {
   npExpression: string;
   npVarName: string;
   npNoVariables: string;
+  npDependsOn: string;
   npOperator: string;
   npFunction: string;
   npCustom: string;
@@ -743,6 +788,39 @@ const zhCN: TranslationDict = {
   previewSteps: "步骤",
   previewType: "类型",
 
+  /* Formula export */
+  formulaExport: "导出公式",
+  formulaExportPNG: "导出为 PNG",
+  formulaExportSVG: "导出为 SVG",
+  formulaExportLatex: "导出为 LaTeX",
+  formulaExportHint: "选择导出格式",
+
+  /* Layout switching */
+  layoutSwitch: "切换布局",
+  layoutRight: "预览在右侧",
+  layoutBottom: "预览在下方",
+  layoutCompact: "紧凑尺寸",
+  layoutLarge: "大尺寸预览",
+  layoutSize: "预览尺寸",
+
+  /* Settings panel */
+  settingsTitle: "设置",
+  settingsAppearance: "外观",
+  settingsEditor: "编辑器",
+  settingsLayout: "布局",
+  settingsExport: "导出",
+  settingsLanguage: "语言",
+  settingsTheme: "主题",
+  settingsActivityBar: "任务栏",
+  settingsActivityBarPosition: "任务栏位置",
+  settingsActivityBarLocked: "锁定任务栏",
+  settingsActivityBarAutoHide: "自动隐藏",
+  settingsDefaultExportDpi: "默认导出分辨率",
+  settingsFormulaFontSize: "公式字号",
+  settingsUseMathFont: "使用数学字体",
+  settingsResetAll: "重置全部设置",
+  settingsResetConfirm: "确定要重置所有设置吗？此操作不可撤销。",
+
   /* Tabs */
   tabHistory: "历史",
   tabVariables: "变量",
@@ -806,6 +884,11 @@ const zhCN: TranslationDict = {
   statusChars: "字符",
   statusWords: "词",
   statusLang: "语言",
+  statusConflicts: "冲突",
+  statusConflictTooltip: "检测到状态冲突",
+  statusNoConflicts: "无冲突",
+  statusConflictFix: "修复",
+  statusConflictDismiss: "忽略",
 
   /* Language */
   languageLabel: "语言",
@@ -1120,6 +1203,12 @@ const zhCN: TranslationDict = {
   npMatrixOp: "矩阵运算",
   npDerivative: "求导",
   npIntegrate: "积分",
+  npMatrixDecompose: "矩阵分解",
+  npSymbolicIntegrate: "符号积分",
+  npSimplify: "化简",
+  npSolveEquation: "解方程",
+  npDecompMethod: "分解方法",
+  npSearchRange: "搜索范围",
   npEvaluate: "求值",
   npDisplay: "输出/显示",
   npPortValue: "值",
@@ -1137,6 +1226,7 @@ const zhCN: TranslationDict = {
   npExpression: "表达式",
   npVarName: "变量名",
   npNoVariables: "无变量",
+  npDependsOn: "依赖",
   npOperator: "运算符",
   npFunction: "函数",
   npCustom: "自定义",
@@ -1390,6 +1480,39 @@ const en: TranslationDict = {
   previewSteps: "Steps",
   previewType: "Type",
 
+  /* Formula export */
+  formulaExport: "Export Formula",
+  formulaExportPNG: "Export as PNG",
+  formulaExportSVG: "Export as SVG",
+  formulaExportLatex: "Export as LaTeX",
+  formulaExportHint: "Choose export format",
+
+  /* Layout switching */
+  layoutSwitch: "Switch Layout",
+  layoutRight: "Preview on Right",
+  layoutBottom: "Preview on Bottom",
+  layoutCompact: "Compact Size",
+  layoutLarge: "Large Preview",
+  layoutSize: "Preview Size",
+
+  /* Settings panel */
+  settingsTitle: "Settings",
+  settingsAppearance: "Appearance",
+  settingsEditor: "Editor",
+  settingsLayout: "Layout",
+  settingsExport: "Export",
+  settingsLanguage: "Language",
+  settingsTheme: "Theme",
+  settingsActivityBar: "Activity Bar",
+  settingsActivityBarPosition: "Position",
+  settingsActivityBarLocked: "Lock",
+  settingsActivityBarAutoHide: "Auto-hide",
+  settingsDefaultExportDpi: "Default Export DPI",
+  settingsFormulaFontSize: "Formula Font Size",
+  settingsUseMathFont: "Use Math Font",
+  settingsResetAll: "Reset All Settings",
+  settingsResetConfirm: "Are you sure you want to reset all settings? This cannot be undone.",
+
   /* Tabs */
   tabHistory: "History",
   tabVariables: "Variables",
@@ -1453,6 +1576,11 @@ const en: TranslationDict = {
   statusChars: "chars",
   statusWords: "words",
   statusLang: "Language",
+  statusConflicts: "conflicts",
+  statusConflictTooltip: "State conflicts detected",
+  statusNoConflicts: "No conflicts",
+  statusConflictFix: "Fix",
+  statusConflictDismiss: "Dismiss",
 
   /* Language */
   languageLabel: "Language",
@@ -1767,6 +1895,12 @@ const en: TranslationDict = {
   npMatrixOp: "Matrix op",
   npDerivative: "Derivative",
   npIntegrate: "Integrate",
+  npMatrixDecompose: "Matrix decompose",
+  npSymbolicIntegrate: "Symbolic integrate",
+  npSimplify: "Simplify",
+  npSolveEquation: "Solve equation",
+  npDecompMethod: "Method",
+  npSearchRange: "Search range",
   npEvaluate: "Evaluate",
   npDisplay: "Display",
   npPortValue: "value",
@@ -1784,6 +1918,7 @@ const en: TranslationDict = {
   npExpression: "Expression",
   npVarName: "Variable name",
   npNoVariables: "No variables",
+  npDependsOn: "Depends on",
   npOperator: "Operator",
   npFunction: "Function",
   npCustom: "Custom",

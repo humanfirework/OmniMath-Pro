@@ -97,17 +97,11 @@ export function CommandPalette() {
   const setActivityBarAutoHide = useWorkbenchStore((s) => s.setActivityBarAutoHide);
   const toggleActivityBarHidden = useWorkbenchStore((s) => s.toggleActivityBarHidden);
 
-  // Global hotkeys — Ctrl+Shift+P / Ctrl+K
+  // Global hotkeys — Ctrl+K (secondary). Ctrl+Shift+P is handled by the
+  // global shortcutsStore (openPalette action) registered in Workbench.
   useEffect(() => {
     const handler = (e: KeyboardEvent) => {
-      if (
-        (e.ctrlKey || e.metaKey) &&
-        (e.key === 'p' || e.key === 'P') &&
-        e.shiftKey
-      ) {
-        e.preventDefault();
-        setOpen(true);
-      } else if ((e.ctrlKey || e.metaKey) && e.key === 'k') {
+      if ((e.ctrlKey || e.metaKey) && e.key === 'k') {
         e.preventDefault();
         setOpen(true);
       }

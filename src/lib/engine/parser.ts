@@ -184,7 +184,7 @@ function wrapFunctionSpaceArgument(s: string): string {
   const namePattern = names.map(escapeRegex).join('|');
   // Match: function-name, then 1+ spaces, then a non-operator char.
   // We do NOT match if followed by `(` already (that's already a call).
-  const re = new RegExp(`\\b(${namePattern})(\\s+)([A-Za-z0-9_\.])`, 'g');
+  const re = new RegExp(`\\b(${namePattern})(\\s+)([A-Za-z0-9_\\.])`, 'g');
 
   let out = '';
   let lastIdx = 0;

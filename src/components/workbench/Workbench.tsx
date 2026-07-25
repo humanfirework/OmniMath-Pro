@@ -29,6 +29,8 @@ import {
   ResizableHandle,
 } from '@/components/ui/resizable';
 import { useWorkbenchStore } from '@/lib/store/workbench';
+import { useLayoutStore } from '@/lib/store/layoutStore';
+import { useSettingsStore } from '@/lib/store/settingsStore';
 import { setLocale as setI18nLocale, getLocale, t } from '@/lib/i18n';
 import { useIsMobile } from '@/hooks/use-mobile';
 import { TitleBar } from '@/components/workbench/layout/TitleBar';
@@ -41,6 +43,10 @@ import { CommandPalette } from '@/components/workbench/panels/CommandPalette';
 import { GlobalCalcBar } from '@/components/workbench/panels/GlobalCalcBar';
 import { MobileWorkbench } from '@/components/workbench/MobileWorkbench';
 import { NodePipeline } from '@/components/workbench/nodes/NodePipeline';
+import { SettingsPanel } from '@/components/workbench/panels/SettingsPanel';
+import { ErrorBoundary } from '@/components/ErrorBoundary';
+import { useShortcutsStore, SHORTCUTS_KEY } from '@/lib/store/shortcutsStore';
+import { useGlobalShortcuts, registerShortcutHandler } from '@/lib/hooks/useGlobalShortcuts';
 
 export function Workbench() {
   const loadFromStorage = useWorkbenchStore((s) => s.loadFromStorage);
@@ -55,10 +61,27 @@ export function Workbench() {
   const setEditorVisible = useWorkbenchStore((s) => s.setEditorVisible);
   const setPreviewVisible = useWorkbenchStore((s) => s.setPreviewVisible);
   const toggleActivityBarHidden = useWorkbenchStore((s) => s.toggleActivityBarHidden);
+  const toggleSidePanel = useWorkbenchStore((s) => s.toggleSidePanel);
+  const setEditorContent = useWorkbenchStore((s) => s.setEditorContent);
+  const setCommandPaletteOpen = useWorkbenchStore((s) => s.setCommandPaletteOpen);
+
+  // 布局状态（预览位置 / 尺寸）
+  const previewPosition = useLayoutStore((s) => s.previewPosition);
+  const previewSize = useLayoutStore((s) => s.previewSize);
+  const loadLayoutFromStorage = useLayoutStore((s) => s.loadFromStorage);
+
+  // 快捷键
+  const loadShortcutsFromStorage = useShortcutsStore((s) => s.loadFromStorage);
+  const setSettingsOpen = useSettingsStore((s) => s.setOpen);
+
+  // 激活全局快捷键监听（在 Workbench 挂载一次）
+  useGlobalShortcuts();
 
   // Mount: load persisted state once + install global error guards.
   useEffect(() => {
     loadFromStorage();
+    loadLayoutFromStorage();
+    loadShortcutsFromStorage();
 
     const onUnhandledRejection = (e: PromiseRejectionEvent) => {
       if (typeof console !== 'undefined') {
@@ -77,7 +100,7 @@ export function Workbench() {
       window.removeEventListener('unhandledrejection', onUnhandledRejection);
       window.removeEventListener('error', onError);
     };
-  }, [loadFromStorage]);
+  }, [loadFromStorage, loadLayoutFromStorage, loadShortcutsFromStorage]);
 
   // Sync i18n locale with the store locale.
   useEffect(() => {
@@ -91,17 +114,29 @@ export function Workbench() {
     else document.documentElement.classList.remove('dark');
   }, [theme]);
 
-  // F11 toggles focus mode (hide side panel for distraction-free editing).
+  // 全局快捷键处理器注册（通过 shortcutsStore 配置，可自定义）
   useEffect(() => {
-    const onKeyDown = (e: KeyboardEvent) => {
-      if (e.key === 'F11') {
-        e.preventDefault();
-        setViewMode(viewMode !== 'focus' ? 'focus' : 'workbench');
-      }
-    };
-    window.addEventListener('keydown', onKeyDown);
-    return () => window.removeEventListener('keydown', onKeyDown);
-  }, [viewMode, setViewMode]);
+    const unregs: Array<() => void> = [];
+    unregs.push(registerShortcutHandler('focusMode', () => {
+      setViewMode(viewMode !== 'focus' ? 'focus' : 'workbench');
+    }));
+    unregs.push(registerShortcutHandler('toggleSidebar', () => {
+      toggleSidePanel();
+    }));
+    unregs.push(registerShortcutHandler('openSettings', () => {
+      setSettingsOpen(true);
+    }));
+    unregs.push(registerShortcutHandler('openPalette', () => {
+      setCommandPaletteOpen(true);
+    }));
+    unregs.push(registerShortcutHandler('clearEditor', () => {
+      setEditorContent('');
+    }));
+    unregs.push(registerShortcutHandler('togglePreview', () => {
+      setPreviewVisible(!previewVisible);
+    }));
+    return () => unregs.forEach((u) => u());
+  }, [viewMode, setViewMode, toggleSidePanel, setSettingsOpen, setCommandPaletteOpen, setEditorContent, setPreviewVisible, previewVisible]);
 
   const isMobile = useIsMobile();
 
@@ -111,6 +146,7 @@ export function Workbench() {
         <MobileWorkbench />
         <CommandPalette />
         <GlobalCalcBar />
+        <SettingsPanel />
       </>
     );
   }
@@ -130,7 +166,9 @@ export function Workbench() {
         {viewMode === 'pipeline' ? (
           /* Pipeline view takes over the main area (Task 6). */
           <div className="flex-1 min-w-0 min-h-0">
-            <NodePipeline />
+            <ErrorBoundary>
+              <NodePipeline />
+            </ErrorBoundary>
           </div>
         ) : !editorVisible && !previewVisible ? (
           /* Plain layout when both main panels are hidden — avoids empty resizable group. */
@@ -178,8 +216,64 @@ export function Workbench() {
               </div>
             </div>
           </div>
+        ) : editorVisible && previewVisible ? (
+          /* 双面板布局：外层 side | main，内层 editor | preview（方向由 previewPosition 决定） */
+          <ResizablePanelGroup direction="horizontal" autoSaveId="omnimath-side-v2" className="flex-1 min-w-0">
+            {!sidePanelCollapsed && viewMode !== 'focus' && (
+              <>
+                <ResizablePanel
+                  defaultSize={20}
+                  minSize={12}
+                  maxSize={40}
+                  id="side-panel"
+                  order={1}
+                >
+                  <ErrorBoundary>
+                    <SidePanel />
+                  </ErrorBoundary>
+                </ResizablePanel>
+                <ResizableHandle withHandle className="data-[resize-handle-active]:bg-primary/60" />
+              </>
+            )}
+
+            <ResizablePanel
+              defaultSize={sidePanelCollapsed || viewMode === 'focus' ? 100 : 80}
+              minSize={50}
+              id="main-panel"
+              order={2}
+            >
+              <ResizablePanelGroup
+                direction={previewPosition === 'right' ? 'horizontal' : 'vertical'}
+                autoSaveId={`omnimath-main-${previewPosition}-${previewSize}`}
+                className="h-full w-full"
+              >
+                <ResizablePanel
+                  defaultSize={previewSize === 'large' ? 40 : 50}
+                  minSize={20}
+                  maxSize={80}
+                  id="editor-panel"
+                  order={1}
+                >
+                  <ErrorBoundary>
+                    <EditorPanel />
+                  </ErrorBoundary>
+                </ResizablePanel>
+                <ResizableHandle withHandle className="data-[resize-handle-active]:bg-primary/60" />
+                <ResizablePanel
+                  defaultSize={previewSize === 'large' ? 60 : 50}
+                  minSize={previewSize === 'large' ? 30 : 20}
+                  maxSize={80}
+                  id="preview-panel"
+                  order={2}
+                >
+                  <PreviewPanel />
+                </ResizablePanel>
+              </ResizablePanelGroup>
+            </ResizablePanel>
+          </ResizablePanelGroup>
         ) : (
-          <ResizablePanelGroup direction="horizontal" autoSaveId="omnimath-layout" className="flex-1 min-w-0">
+          /* 单面板布局：side | (editor 或 preview)，沿用旧的扁平结构 */
+          <ResizablePanelGroup direction="horizontal" autoSaveId={`omnimath-layout-${previewSize}`} className="flex-1 min-w-0">
             {/* Side panel — collapsible (hidden in focus mode) */}
             {!sidePanelCollapsed && viewMode !== 'focus' && (
               <>
@@ -190,7 +284,9 @@ export function Workbench() {
                   id="side-panel"
                   order={1}
                 >
-                  <SidePanel />
+                  <ErrorBoundary>
+                    <SidePanel />
+                  </ErrorBoundary>
                 </ResizablePanel>
                 <ResizableHandle withHandle className="data-[resize-handle-active]:bg-primary/60" />
               </>
@@ -199,13 +295,15 @@ export function Workbench() {
             {/* Editor */}
             {editorVisible && (
               <ResizablePanel
-                defaultSize={previewVisible ? 40 : 60}
+                defaultSize={previewVisible ? (previewSize === 'large' ? 35 : 40) : 60}
                 minSize={20}
                 maxSize={70}
                 id="editor-panel"
                 order={2}
               >
-                <EditorPanel />
+                <ErrorBoundary>
+                  <EditorPanel />
+                </ErrorBoundary>
               </ResizablePanel>
             )}
 
@@ -214,8 +312,8 @@ export function Workbench() {
             {/* Preview */}
             {previewVisible && (
               <ResizablePanel
-                defaultSize={editorVisible ? 40 : 60}
-                minSize={20}
+                defaultSize={editorVisible ? (previewSize === 'large' ? 45 : 40) : 60}
+                minSize={previewSize === 'large' ? 25 : 20}
                 maxSize={70}
                 id="preview-panel"
                 order={3}
@@ -234,6 +332,7 @@ export function Workbench() {
       {/* Overlays */}
       <CommandPalette />
       <GlobalCalcBar />
+      <SettingsPanel />
     </motion.div>
   );
 }
