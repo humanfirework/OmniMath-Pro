@@ -76,3 +76,14 @@ server.log
 
 # 开发工作日志
 worklog.md
+/dist
+
+# 文档目录（不入库，按需单独维护）
+/docs/
+
+# 营销材料与归档压缩包
+/marketing/
+*.zip
+
+# 开发测试脚本（不入库）
+/scripts/

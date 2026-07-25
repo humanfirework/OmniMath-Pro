@@ -1,7 +1,7 @@
 {
   "$schema": "../node_modules/@tauri-apps/cli/config.schema.json",
   "productName": "OmniMath Pro",
-  "version": "0.0.3",
+  "version": "0.0.4",
   "identifier": "com.omnimath.pro",
   "build": {
     "frontendDist": "../out",
@@ -19,11 +19,12 @@
         "minHeight": 600,
         "resizable": true,
         "center": true,
-        "fullscreen": false
+        "fullscreen": false,
+        "decorations": false
       }
     ],
     "security": {
-      "csp": null
+      "csp": "default-src 'self'; img-src 'self' data: blob: https:; style-src 'self' 'unsafe-inline'; script-src 'self'; connect-src 'self' https:; font-src 'self' data:; object-src 'none'; base-uri 'self'"
     }
   },
   "bundle": {
