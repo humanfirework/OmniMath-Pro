@@ -1,33 +1,16 @@
 import type { Metadata, Viewport } from "next";
-import { Inter, JetBrains_Mono, Noto_Sans_SC } from "next/font/google";
 import "katex/dist/katex.min.css";
 import "./globals.css";
 import { Toaster } from "@/components/ui/sonner";
 
-/* UI Latin font — Inter: outstanding legibility at 12–14px UI sizes,
- * neutral tone that pairs cleanly with CJK glyphs. */
-const inter = Inter({
-  variable: "--font-inter",
-  subsets: ["latin"],
-  display: "swap",
-});
-
-/* Code / math input font — JetBrains Mono: dotted zero, clear
- * l/1/I and O/0 differentiation, tabular figures for aligned output. */
-const jbMono = JetBrains_Mono({
-  variable: "--font-jb-mono",
-  subsets: ["latin"],
-  display: "swap",
-});
-
-/* CJK font — Noto Sans SC: consistent Chinese rendering across
- * Windows / macOS / Linux (replaces dated Microsoft YaHei fallback). */
-const notoSansSC = Noto_Sans_SC({
-  variable: "--font-noto-sc",
-  weight: ["400", "500", "700"],
-  display: "swap",
-  preload: false,
-});
+/* OmniMath Pro — 本地字体策略
+ *
+ * 不再依赖 next/font/google（需要联网下载，离线/沙箱环境会失败导致
+ * 整个 UI 字体 unloaded，文本挤在一起像乱码）。
+ *
+ * 改用系统字体栈兜底：在每个目标平台都使用最合适的预装字体。
+ * CSS 变量在 globals.css 中定义 --font-sans / --font-mono / --font-math。
+ */
 
 export const metadata: Metadata = {
   title: "OmniMath Pro — 全能脚本式AI数学工作台",
@@ -46,7 +29,8 @@ export const metadata: Metadata = {
   ],
   authors: [{ name: "OmniMath Team" }],
   icons: {
-    icon: "https://z-cdn.chatglm.cn/z-ai/static/logo.svg",
+    icon: "/logo.svg",
+    apple: "/logo.svg",
   },
 };
 
@@ -69,9 +53,7 @@ export default function RootLayout({
       <head>
         <link rel="preconnect" href="https://cdn.jsdelivr.net" />
       </head>
-      <body
-        className={`${inter.variable} ${jbMono.variable} ${notoSansSC.variable} antialiased`}
-      >
+      <body className="antialiased">
         {children}
         <Toaster />
       </body>

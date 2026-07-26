@@ -21,6 +21,7 @@ import {
   Workflow,
   Maximize2,
   ChevronDown,
+  PencilRuler,
 } from 'lucide-react';
 import {
   Tooltip,
@@ -124,12 +125,33 @@ export function TitleBar() {
 
       {/* ── Right: actions ────────────────────────────────────────── */}
       <div className="relative flex items-center gap-1.5">
-        {/* View mode switcher */}
+        {/* Prominent blueprint / pipeline entry — primary CTA so users
+            don't miss it (it's the "wow" feature of OmniMath Pro). */}
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <button
+              type="button"
+              onClick={() => setViewMode(viewMode === 'pipeline' ? 'workbench' : 'pipeline')}
+              className={cn(
+                'hidden sm:inline-flex items-center gap-1.5 h-7 px-2.5 rounded-md text-[12px] font-medium transition-all',
+                viewMode === 'pipeline'
+                  ? 'bg-primary text-primary-foreground shadow-sm'
+                  : 'bg-primary/10 text-primary border border-primary/30 hover:bg-primary/15',
+              )}
+            >
+              <Workflow className="size-3.5" strokeWidth={2.2} />
+              <span>{t('tabPipeline')}</span>
+            </button>
+          </TooltipTrigger>
+          <TooltipContent side="bottom">{t('tabPipeline')}</TooltipContent>
+        </Tooltip>
+
+        {/* View mode switcher — workbench / whiteboard / focus */}
         <div className="hidden sm:flex items-center gap-0.5 mr-1 p-0.5 rounded-md bg-muted/60 border border-border/60">
           {(
             [
               { v: 'workbench', icon: LayoutDashboard, key: 'menuToggleSidebar' },
-              { v: 'pipeline', icon: Workflow, key: 'tabPipeline' },
+              { v: 'whiteboard', icon: PencilRuler, key: 'abWhiteboard' },
               { v: 'focus', icon: Maximize2, key: 'menuResetZoom' },
             ] as const
           ).map(({ v, icon: Icon, key }) => (
