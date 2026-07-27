@@ -82,9 +82,6 @@ worklog.md
 /devlogs/
 /dist
 
-# 文档目录（不入库，按需单独维护）
-/docs/
-
 # 营销材料与归档压缩包
 /marketing/
 *.zip
