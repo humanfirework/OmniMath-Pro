@@ -314,6 +314,8 @@ export function WhiteboardCanvas() {
     [color, width, tool, getSvgPoint],
   );
 
+  // rAF batching: avoid creating new arrays on every pointermove event
+  const rafPendingRef = useRef(false);
   const handlePointerMove = useCallback(
     (e: React.PointerEvent<SVGSVGElement>) => {
       if (!drawingRef.current || !currentStrokeRef.current) return;
@@ -328,15 +330,25 @@ export function WhiteboardCanvas() {
         const dynamicW = Math.max(1, stroke.width * (1 - Math.min(0.5, velocity * 0.04)));
         stroke.width = (stroke.width + dynamicW) / 2;
       }
-      // Create a NEW points array (immutable) to avoid shared-reference bugs
-      stroke.points = [...stroke.points, p];
-      setStrokes((prev) => {
-        const idx = prev.findIndex((s) => s.id === stroke.id);
-        if (idx === -1) return [...prev, { ...stroke, points: [...stroke.points] }];
-        const next = prev.slice();
-        next[idx] = { ...stroke, points: [...stroke.points] };
-        return next;
-      });
+      // Mutate ref directly (no React re-render per point)
+      stroke.points.push(p);
+
+      // Batch React state update via rAF — one re-render per frame max
+      if (!rafPendingRef.current) {
+        rafPendingRef.current = true;
+        requestAnimationFrame(() => {
+          rafPendingRef.current = false;
+          const s = currentStrokeRef.current;
+          if (!s) return;
+          setStrokes((prev) => {
+            const idx = prev.findIndex((it) => it.id === s.id);
+            if (idx === -1) return [...prev, { ...s, points: [...s.points] }];
+            const next = prev.slice();
+            next[idx] = { ...s, points: [...s.points] };
+            return next;
+          });
+        });
+      }
     },
     [getSvgPoint],
   );

@@ -96,33 +96,32 @@ export interface Plot3DSceneProps {
 
 const THEME = {
   dark: {
-    bg: '#1a1a1d',
-    gridColor: '#3a3a40',
-    gridSection: '#2a2a2e',
-    axisLabel: '#b8b8c0',
-    tickLabel: '#8a8a92',
-    fogColor: '#1a1a1d',
+    bg: '#1e1e1e',
+    gridColor: '#404040',
+    gridSection: '#303030',
+    axisLabel: '#b0b0b0',
+    tickLabel: '#808080',
+    fogColor: '#1e1e1e',
     fogNear: 14,
     fogFar: 40,
   },
   light: {
     bg: '#fafafa',
-    gridColor: '#d4d4d8',
-    gridSection: '#e4e4e7',
-    axisLabel: '#3f3f46',
-    tickLabel: '#71717a',
+    gridColor: '#c8c8c8',
+    gridSection: '#dcdcdc',
+    axisLabel: '#404040',
+    tickLabel: '#707070',
     fogColor: '#fafafa',
     fogNear: 16,
     fogFar: 44,
   },
 };
 
-// Axis colors — tinted to the OmniMath palette (teal / amber / rose) instead
-// of pure RGB red/green/blue.
+// Axis colors — math software style (subtle, not neon bright)
 const AXIS_COLORS = {
-  x: '#2dd4bf', // teal
-  y: '#fbbf24', // amber
-  z: '#fb7185', // rose
+  x: '#1565c0', // blue
+  y: '#2e7d32', // green
+  z: '#c62828', // red
 };
 
 /* ------------------------------------------------------------------ */
@@ -186,10 +185,10 @@ function SurfaceMesh({ data, wireframe, colorMode }: SurfaceMeshProps) {
         side={THREE.DoubleSide}
         wireframe={wireframe}
         flatShading={false}
-        metalness={0.15}
-        roughness={0.55}
+        metalness={0.0}
+        roughness={0.85}
         transparent
-        opacity={0.94}
+        opacity={0.97}
       />
     </mesh>
   );
@@ -271,14 +270,18 @@ function BillboardLabel({
   const { camera } = useThree();
   const textRef = useRef<any>(null);
   const posVec = useMemo(() => new THREE.Vector3(...position), [position]);
+  const lastDistanceRef = useRef(0);
 
-  // Update fontSize every frame based on camera distance so the label
-  // maintains a constant screen-pixel size regardless of zoom.
+  // Update fontSize based on camera distance — but only when distance
+  // changes by >5%, to avoid updating 24 labels × 60fps unnecessarily.
   useFrame(() => {
     if (!textRef.current) return;
     const distance = camera.position.distanceTo(posVec);
-    // Convert desired screen pixels to world units at this distance.
-    // The magic number ~0.5 scales so that pixelSize=14 looks reasonable.
+    if (lastDistanceRef.current > 0) {
+      const ratio = distance / lastDistanceRef.current;
+      if (ratio > 0.95 && ratio < 1.05) return; // skip — barely changed
+    }
+    lastDistanceRef.current = distance;
     const worldSize = (pixelSize * distance) / 280;
     textRef.current.fontSize = worldSize;
   });
@@ -609,22 +612,22 @@ function SceneContents({
       <color attach="background" args={[palette.bg]} />
       <fog attach="fog" args={[palette.fogColor, palette.fogNear, palette.fogFar]} />
 
-      {/* Lighting — three-point-ish setup */}
-      <ambientLight intensity={theme === 'dark' ? 0.6 : 0.9} />
+      {/* Lighting — soft natural lighting like math software */}
+      <ambientLight intensity={theme === 'dark' ? 0.7 : 0.8} />
       <directionalLight
-        position={[8, 12, 6]}
-        intensity={theme === 'dark' ? 1.0 : 1.2}
+        position={[10, 15, 8]}
+        intensity={theme === 'dark' ? 0.7 : 0.8}
         color="#ffffff"
       />
-      <pointLight
-        position={[-6, -4, 8]}
-        intensity={theme === 'dark' ? 0.4 : 0.25}
-        color={AXIS_COLORS.x}
+      <directionalLight
+        position={[-8, -5, -6]}
+        intensity={theme === 'dark' ? 0.25 : 0.2}
+        color="#ffffff"
       />
-      <pointLight
-        position={[6, -4, -8]}
-        intensity={theme === 'dark' ? 0.3 : 0.18}
-        color={AXIS_COLORS.z}
+      <hemisphereLight
+        color="#ffffff"
+        groundColor={theme === 'dark' ? '#2a2a2a' : '#e8e8e8'}
+        intensity={theme === 'dark' ? 0.3 : 0.35}
       />
 
       {/* Surfaces */}

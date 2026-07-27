@@ -125,6 +125,8 @@ export interface TranslationDict {
   settingsUseMathFont: string;
   settingsResetAll: string;
   settingsResetConfirm: string;
+  settingsShortcuts: string;
+  settingsAbout: string;
 
   /* ---------------- Side panel tabs ---------------- */
   tabHistory: string;
@@ -160,6 +162,7 @@ export interface TranslationDict {
   abLinalg: string;
   abMatrix: string;
   abFiles: string;
+  abStats: string;
   abPlots: string;
   abShowSidebar: string;
   abHideSidebar: string;
@@ -334,6 +337,9 @@ export interface TranslationDict {
   linalgInsert: string;
   linalgError: string;
   linalgEmpty: string;
+
+  /* ---------------- Statistics ---------------- */
+  statsTitle: string;
 
   /* ---------------- Matrix editor ---------------- */
   matrixTitle: string;
@@ -822,6 +828,8 @@ const zhCN: TranslationDict = {
   settingsUseMathFont: "使用数学字体",
   settingsResetAll: "重置全部设置",
   settingsResetConfirm: "确定要重置所有设置吗？此操作不可撤销。",
+  settingsShortcuts: "快捷键",
+  settingsAbout: "关于",
 
   /* Tabs */
   tabHistory: "历史",
@@ -857,6 +865,7 @@ const zhCN: TranslationDict = {
   abLinalg: "线性代数",
   abMatrix: "矩阵",
   abFiles: "文件",
+  abStats: "概率统计",
   abPlots: "图表",
   abShowSidebar: "显示侧栏",
   abHideSidebar: "隐藏侧栏",
@@ -1031,6 +1040,9 @@ const zhCN: TranslationDict = {
   linalgInsert: "插入编辑器",
   linalgError: "矩阵运算错误",
   linalgEmpty: "请输入矩阵",
+
+  /* Statistics */
+  statsTitle: "概率统计",
 
   /* Matrix editor */
   matrixTitle: "矩阵编辑器",
@@ -1516,6 +1528,8 @@ const en: TranslationDict = {
   settingsUseMathFont: "Use Math Font",
   settingsResetAll: "Reset All Settings",
   settingsResetConfirm: "Are you sure you want to reset all settings? This cannot be undone.",
+  settingsShortcuts: "Shortcuts",
+  settingsAbout: "About",
 
   /* Tabs */
   tabHistory: "History",
@@ -1551,6 +1565,7 @@ const en: TranslationDict = {
   abLinalg: "Linear Algebra",
   abMatrix: "Matrix",
   abFiles: "Files",
+  abStats: "Statistics",
   abPlots: "Plots",
   abShowSidebar: "Show Sidebar",
   abHideSidebar: "Hide Sidebar",
@@ -1725,6 +1740,9 @@ const en: TranslationDict = {
   linalgInsert: "Insert into editor",
   linalgError: "Matrix operation error",
   linalgEmpty: "Please enter a matrix",
+
+  /* Statistics */
+  statsTitle: "Statistics",
 
   /* Matrix editor */
   matrixTitle: "Matrix Editor",

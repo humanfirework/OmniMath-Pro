@@ -82,12 +82,12 @@ export interface Plot2DCanvasProps {
 /* --------------------------- Constants --------------------------- */
 
 const PLOT_COLORS = [
-  '#2dd4bf', // teal
-  '#fbbf24', // amber
-  '#fb7185', // rose
-  '#34d399', // emerald
-  '#a78bfa', // violet
-  '#fb923c', // orange
+  '#1565c0', // blue (GeoGebra/Desmos style)
+  '#c62828', // red
+  '#2e7d32', // green
+  '#ef6c00', // orange
+  '#6a1b9a', // purple
+  '#00838f', // cyan
 ];
 
 /** Canvas padding (screen pixels). Declared at module level to avoid TDZ
@@ -329,21 +329,22 @@ export function Plot2DCanvas({
       // the offscreen layers have been rasterized. (D4)
 
       const dark = theme === 'dark';
-      const bg = getCssVar('--background', dark ? '#2e2e32' : '#ffffff');
-      const fg = getCssVar('--foreground', dark ? '#f0f2f5' : '#1f1f1f');
-      const axisColor = fg;
-      const gridMajor = dark ? 'rgba(255,255,255,0.12)' : 'rgba(0,0,0,0.08)';
-      const gridMinor = dark ? 'rgba(255,255,255,0.06)' : 'rgba(0,0,0,0.04)';
-      const tickLabelColor = getCssVar('--muted-foreground', dark ? '#b0b5bf' : '#4a4a52');
-      const axisLabelColor = getCssVar('--muted-foreground', dark ? '#a0a5af' : '#5a5a62');
-      const crosshairColor = getCssVar('--primary', '#2dd4bf');
+      // GeoGebra/Desmos/JSXGraph style math software colors
+      const bg = dark ? '#1a1a1a' : '#ffffff';
+      const fg = dark ? '#e0e0e0' : '#212121';
+      const axisColor = dark ? '#9e9e9e' : '#424242';
+      const gridMajor = dark ? 'rgba(255,255,255,0.10)' : 'rgba(0,0,0,0.10)';
+      const gridMinor = dark ? 'rgba(255,255,255,0.04)' : 'rgba(0,0,0,0.04)';
+      const tickLabelColor = dark ? '#9e9e9e' : '#616161';
+      const axisLabelColor = dark ? '#bdbdbd' : '#424242';
+      const crosshairColor = dark ? '#64b5f6' : '#1976d2';
 
       // Semantic marker / overlay colors for high contrast in both themes.
-      const markerStroke = getCssVar('--background', dark ? '#18181b' : '#ffffff');
-      const zeroFill = dark ? '#93c5fd' : '#2563eb';
-      const tooltipBg = getCssVar('--popover', dark ? '#18181b' : '#ffffff');
-      const tooltipFg = getCssVar('--popover-foreground', dark ? '#fafafa' : '#171717');
-      const tooltipBorder = getCssVar('--border', dark ? 'rgba(255,255,255,0.15)' : 'rgba(0,0,0,0.10)');
+      const markerStroke = dark ? '#212121' : '#ffffff';
+      const zeroFill = dark ? '#64b5f6' : '#1976d2';
+      const tooltipBg = dark ? '#303030' : '#ffffff';
+      const tooltipFg = dark ? '#f5f5f5' : '#212121';
+      const tooltipBorder = dark ? 'rgba(255,255,255,0.15)' : 'rgba(0,0,0,0.12)';
 
       const { x: vx, y: vy } = viewRef.current;
       const xNice = niceNumber(vx, 8);
@@ -435,7 +436,7 @@ export function Plot2DCanvas({
       // Independent of showGrid so turning off the grid keeps orientation. (D8)
       if (showAxes) {
         ctx.strokeStyle = axisColor;
-        ctx.lineWidth = 2;
+        ctx.lineWidth = 1.2;
         ctx.fillStyle = axisColor;
         const [, axisYScreen] = dataToScreen(0, 0);
         const [axisXScreen] = dataToScreen(0, 0);
@@ -448,11 +449,11 @@ export function Plot2DCanvas({
         ctx.moveTo(PADDING.left, yAxisScreen);
         ctx.lineTo(w - PADDING.right, yAxisScreen);
         ctx.stroke();
-        // Arrowhead at right.
+        // Arrowhead at right — cleaner, smaller
         ctx.beginPath();
         ctx.moveTo(w - PADDING.right, yAxisScreen);
-        ctx.lineTo(w - PADDING.right - 7, yAxisScreen - 5);
-        ctx.lineTo(w - PADDING.right - 7, yAxisScreen + 5);
+        ctx.lineTo(w - PADDING.right - 5, yAxisScreen - 3.5);
+        ctx.lineTo(w - PADDING.right - 5, yAxisScreen + 3.5);
         ctx.closePath();
         ctx.fill();
 
@@ -464,16 +465,16 @@ export function Plot2DCanvas({
         ctx.moveTo(xAxisScreen, PADDING.top);
         ctx.lineTo(xAxisScreen, h - PADDING.bottom);
         ctx.stroke();
-        // Arrowhead at top.
+        // Arrowhead at top — cleaner, smaller
         ctx.beginPath();
         ctx.moveTo(xAxisScreen, PADDING.top);
-        ctx.lineTo(xAxisScreen - 5, PADDING.top + 7);
-        ctx.lineTo(xAxisScreen + 5, PADDING.top + 7);
+        ctx.lineTo(xAxisScreen - 3.5, PADDING.top + 5);
+        ctx.lineTo(xAxisScreen + 3.5, PADDING.top + 5);
         ctx.closePath();
         ctx.fill();
 
         /* ---------- Tick labels ---------- */
-        ctx.font = '12px ui-monospace, "Geist Mono", monospace';
+        ctx.font = '11px ui-sans-serif, system-ui, sans-serif';
         ctx.fillStyle = tickLabelColor;
         ctx.textAlign = 'center';
         ctx.textBaseline = 'top';
@@ -502,7 +503,7 @@ export function Plot2DCanvas({
 
         // Axis labels (x, y).
         ctx.fillStyle = axisLabelColor;
-        ctx.font = 'italic 13px ui-serif, Georgia, serif';
+        ctx.font = 'italic 14px ui-serif, Georgia, serif';
         ctx.textAlign = 'right';
         ctx.textBaseline = 'bottom';
         ctx.fillText('x', w - PADDING.right - 4, yAxisScreen - 6);
@@ -522,15 +523,10 @@ export function Plot2DCanvas({
         const samples = plot.samples;
         if (samples.length < 2) continue;
         ctx.strokeStyle = plot.config.color;
-        ctx.lineWidth = 2.5;
+        ctx.lineWidth = 2;
         ctx.lineJoin = 'round';
         ctx.lineCap = 'round';
-        // Slight shadow/glow for the curve so it pops against the grid.
-        ctx.save();
-        ctx.shadowColor = plot.config.color;
-        ctx.shadowBlur = dark ? 10 : 6;
-        ctx.shadowOffsetX = 0;
-        ctx.shadowOffsetY = 0;
+        // Clean math software style - no glow/shadow
         ctx.beginPath();
         let penDown = false;
         for (const s of samples) {
@@ -547,7 +543,6 @@ export function Plot2DCanvas({
           }
         }
         ctx.stroke();
-        ctx.restore();
       }
       sig.l2Sig = l2Sig;
       sig.l2Computed = computed;
@@ -559,17 +554,17 @@ export function Plot2DCanvas({
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
     ctx.clearRect(0, 0, w, h);
     if (overlays) {
-      // Derivative curve — dashed line, color varies by order.
+      // Derivative curve — dashed line, math style colors
       if (overlays.derivativeSamples.length > 0) {
         const derivColors: Record<number, string> = {
-          1: '#fbbf24', // amber
-          2: '#fb923c', // orange
-          3: '#fb7185', // rose
+          1: dark ? '#ffb74d' : '#f57c00', // orange
+          2: dark ? '#ba68c8' : '#7b1fa2', // purple
+          3: dark ? '#4db6ac' : '#00796b', // teal
         };
-        const dColor = derivColors[overlays.derivativeOrder] || '#fbbf24';
+        const dColor = derivColors[overlays.derivativeOrder] || (dark ? '#ffb74d' : '#f57c00');
         ctx.strokeStyle = dColor;
-        ctx.lineWidth = 2;
-        ctx.setLineDash([6, 4]);
+        ctx.lineWidth = 1.5;
+        ctx.setLineDash([5, 3]);
         ctx.beginPath();
         let dPenDown = false;
         for (const s of overlays.derivativeSamples) {
@@ -588,21 +583,21 @@ export function Plot2DCanvas({
         ctx.stroke();
         ctx.setLineDash([]);
 
-        // 导数阶数标签
+        // Derivative order label
         const primes = "'".repeat(overlays.derivativeOrder);
         ctx.fillStyle = dColor;
-        ctx.font = 'italic 11px ui-serif, Georgia, serif';
+        ctx.font = 'italic 12px ui-serif, Georgia, serif';
         ctx.textAlign = 'right';
         ctx.textBaseline = 'top';
         ctx.fillText(`f${primes}(x)`, w - PADDING.right - 4, PADDING.top + 18);
       }
 
-      // 切线 — 半透明虚线
+      // Tangent line — dashed gray
       if (overlays.tangent) {
         const t = overlays.tangent;
-        ctx.strokeStyle = dark ? 'rgba(255,255,255,0.5)' : 'rgba(0,0,0,0.4)';
+        ctx.strokeStyle = dark ? 'rgba(255,255,255,0.4)' : 'rgba(0,0,0,0.35)';
         ctx.lineWidth = 1.5;
-        ctx.setLineDash([3, 3]);
+        ctx.setLineDash([4, 3]);
         ctx.beginPath();
         for (let i = 0; i < t.points.length; i++) {
           const [px, py] = t.points[i];
@@ -613,34 +608,34 @@ export function Plot2DCanvas({
         ctx.stroke();
         ctx.setLineDash([]);
 
-        // 切点 — 品红色圆点 + 斜率标签
+        // Tangent point — small black/white dot
         const [tsx, tsy] = dataToScreen(t.at.x, t.at.y);
-        ctx.fillStyle = '#e879f9';
+        ctx.fillStyle = dark ? '#ffffff' : '#000000';
         ctx.beginPath();
-        ctx.arc(tsx, tsy, 5, 0, Math.PI * 2);
+        ctx.arc(tsx, tsy, 4, 0, Math.PI * 2);
         ctx.fill();
-        ctx.fillStyle = dark ? '#f0f2f5' : '#1f1f1f';
-        ctx.font = '10px ui-monospace, monospace';
+        ctx.fillStyle = dark ? '#e0e0e0' : '#424242';
+        ctx.font = '10px ui-sans-serif, system-ui, sans-serif';
         ctx.textAlign = 'left';
         ctx.textBaseline = 'bottom';
         ctx.fillText(`k=${t.slope.toFixed(3)}`, tsx + 8, tsy - 4);
       }
 
-      // 交点 — 紫色圆点 + 坐标标签
+      // Intersection points — small filled dots
       if (overlays.intersections.length > 0) {
-        ctx.strokeStyle = dark ? 'rgba(255,255,255,0.3)' : 'rgba(0,0,0,0.2)';
-        ctx.lineWidth = 1.5;
         for (const p of overlays.intersections) {
           const [sx, sy] = dataToScreen(p.x, p.y);
           if (sx < PADDING.left || sx > w - PADDING.right) continue;
           if (sy < PADDING.top || sy > h - PADDING.bottom) continue;
-          ctx.fillStyle = '#a78bfa';
+          ctx.fillStyle = dark ? '#ce93d8' : '#8e24aa';
+          ctx.strokeStyle = markerStroke;
+          ctx.lineWidth = 1.5;
           ctx.beginPath();
-          ctx.arc(sx, sy, 5, 0, Math.PI * 2);
+          ctx.arc(sx, sy, 4, 0, Math.PI * 2);
           ctx.fill();
           ctx.stroke();
-          ctx.fillStyle = dark ? '#f0f2f5' : '#1f1f1f';
-          ctx.font = '10px ui-monospace, monospace';
+          ctx.fillStyle = dark ? '#e0e0e0' : '#424242';
+          ctx.font = '10px ui-sans-serif, system-ui, sans-serif';
           ctx.textAlign = 'left';
           ctx.textBaseline = 'bottom';
           ctx.fillText(`(${p.x.toFixed(2)}, ${p.y.toFixed(2)})`, sx + 8, sy - 4);
@@ -651,7 +646,7 @@ export function Plot2DCanvas({
     /* ---------- Extrema + zero markers ---------- */
     if (showMarkers) {
       for (const plot of visiblePlots) {
-        // Zeros — blue dots.
+        // Zeros — blue dots (math software standard)
         ctx.fillStyle = zeroFill;
         ctx.strokeStyle = markerStroke;
         ctx.lineWidth = 1.5;
@@ -660,56 +655,45 @@ export function Plot2DCanvas({
           if (sx < PADDING.left || sx > w - PADDING.right) continue;
           if (sy < PADDING.top || sy > h - PADDING.bottom) continue;
           ctx.beginPath();
-          ctx.arc(sx, sy, 5, 0, Math.PI * 2);
+          ctx.arc(sx, sy, 4, 0, Math.PI * 2);
           ctx.fill();
           ctx.stroke();
         }
-        // Maxima — red dots with glow + "max" label.
+        // Maxima — red dots
+        const extremaColor = dark ? '#ef5350' : '#d32f2f';
         for (const e of plot.extrema.maxima) {
           const [sx, sy] = dataToScreen(e.x, e.y);
           if (sx < PADDING.left || sx > w - PADDING.right) continue;
           if (sy < PADDING.top || sy > h - PADDING.bottom) continue;
-          ctx.save();
-          ctx.shadowColor = 'rgba(244,63,94,0.6)';
-          ctx.shadowBlur = 8;
-          ctx.fillStyle = '#fb7185';
-          ctx.beginPath();
-          ctx.arc(sx, sy, 5, 0, Math.PI * 2);
-          ctx.fill();
-          ctx.restore();
+          ctx.fillStyle = extremaColor;
           ctx.strokeStyle = markerStroke;
           ctx.lineWidth = 1.5;
           ctx.beginPath();
-          ctx.arc(sx, sy, 5, 0, Math.PI * 2);
+          ctx.arc(sx, sy, 4, 0, Math.PI * 2);
+          ctx.fill();
           ctx.stroke();
-          // 标签
-          ctx.fillStyle = dark ? '#f0f2f5' : '#1f1f1f';
-          ctx.font = '10px ui-monospace, monospace';
+          // Label
+          ctx.fillStyle = dark ? '#e0e0e0' : '#424242';
+          ctx.font = '10px ui-sans-serif, system-ui, sans-serif';
           ctx.textAlign = 'center';
           ctx.textBaseline = 'bottom';
           ctx.fillText(`max(${e.x.toFixed(2)}, ${e.y.toFixed(2)})`, sx, sy - 8);
         }
-        // Minima — red dots with glow + "min" label.
+        // Minima — red dots
         for (const e of plot.extrema.minima) {
           const [sx, sy] = dataToScreen(e.x, e.y);
           if (sx < PADDING.left || sx > w - PADDING.right) continue;
           if (sy < PADDING.top || sy > h - PADDING.bottom) continue;
-          ctx.save();
-          ctx.shadowColor = 'rgba(244,63,94,0.6)';
-          ctx.shadowBlur = 8;
-          ctx.fillStyle = '#fb7185';
-          ctx.beginPath();
-          ctx.arc(sx, sy, 5, 0, Math.PI * 2);
-          ctx.fill();
-          ctx.restore();
+          ctx.fillStyle = extremaColor;
           ctx.strokeStyle = markerStroke;
           ctx.lineWidth = 1.5;
           ctx.beginPath();
-          ctx.arc(sx, sy, 5, 0, Math.PI * 2);
+          ctx.arc(sx, sy, 4, 0, Math.PI * 2);
+          ctx.fill();
           ctx.stroke();
-          // 标签
-          ctx.fillStyle = dark ? '#f0f2f5' : '#1f1f1f';
-          ctx.font = '10px ui-monospace, monospace';
+          // Label
+          ctx.fillStyle = dark ? '#e0e0e0' : '#424242';
+          ctx.font = '10px ui-sans-serif, system-ui, sans-serif';
           ctx.textAlign = 'center';
           ctx.textBaseline = 'top';
           ctx.fillText(`min(${e.x.toFixed(2)}, ${e.y.toFixed(2)})`, sx, sy + 8);

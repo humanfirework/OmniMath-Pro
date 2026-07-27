@@ -13,7 +13,6 @@
 
 import { motion, AnimatePresence } from 'framer-motion';
 import {
-  Sigma,
   Moon,
   Sun,
   Languages,
@@ -87,7 +86,11 @@ export function TitleBar() {
             boxShadow: '0 0 16px oklch(0.7 0.15 165 / 30%)',
           }}
         >
-          <Sigma className="size-4 text-primary" strokeWidth={2.4} />
+          <img
+            src="/logo.svg"
+            alt="OmniMath Pro"
+            className="size-4 pointer-events-none select-none"
+          />
           <motion.span
             aria-hidden
             className="absolute inset-0 rounded-lg"

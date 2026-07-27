@@ -286,6 +286,7 @@ export function AIPanel() {
   const [config, setConfig] = useState<AIConfig>(() => loadAIConfig());
   // The last user message we attempted — used to auto-retry after saving config.
   const lastPendingRef = useRef<string | null>(null);
+  const pendingSendTimerRef = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
   const scrollRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
 
@@ -366,7 +367,8 @@ export function AIPanel() {
       if (pending) {
         lastPendingRef.current = null;
         // Defer so the UI updates first; send() guards on loading state.
-        setTimeout(() => {
+        clearTimeout(pendingSendTimerRef.current);
+        pendingSendTimerRef.current = setTimeout(() => {
           setInput('');
           void send(pending);
         }, 0);

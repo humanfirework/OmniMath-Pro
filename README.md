@@ -29,17 +29,33 @@
 
 ## 预览
 
-### 工作台与函数绘图
+### 工作台主页
 
-![工作台与函数绘图](./public/screenshots/workbench.png)
+![工作台主页](./public/screenshots/workbench.png)
 
-### 节点式计算流水线
+### 2D 函数绘图
 
-![节点式计算流水线](./public/screenshots/pipeline.png)
+![2D 函数绘图](./public/screenshots/plot2d.png)
+
+### 3D 曲面绘图
+
+![3D 曲面绘图](./public/screenshots/plot3d.png)
 
 ### 线性代数求解
 
 ![线性代数求解](./public/screenshots/linear-algebra.png)
+
+### 浮动计算器
+
+![浮动计算器](./public/screenshots/calculator.png)
+
+### 设置面板
+
+![设置面板](./public/screenshots/settings.png)
+
+### 浅色模式
+
+![浅色模式](./public/screenshots/light-mode.png)
 
 ---
 
@@ -70,6 +86,10 @@
 - 多函数叠加、自动标注重值点与零点
 - 鼠标滚轮缩放、拖拽平移、悬停读数
 - 极端范围与异常表达式防御，避免崩溃
+- 数学软件风格配色（参考 JSXGraph / GeoGebra）
+- 深色/浅色模式独立配色方案
+- 实时参数滑块：拖动变量值，曲线实时响应
+- 4 层 Canvas 架构，流畅 60fps 渲染
 
 ### 公式渲染
 
@@ -82,6 +102,13 @@
 - 矩阵输入、编辑与粘贴解析（支持 MATLAB / CSV / TSV 格式）
 - 高斯消元、LU / QR 分解、特征值计算
 - 线性方程组求解，自动判断唯一解 / 无解 / 无穷解
+
+### 浮动计算器
+
+- `Ctrl/Cmd + Shift + C` 快速调出便携式计算器
+- 三种模式：基础计算、科学计算、单位换算
+- 支持长度、重量、温度、面积、体积、时间单位转换
+- 可拖拽、可固定、可复制结果
 
 ### 节点式工作流（Pipeline）
 
@@ -97,6 +124,8 @@
 - **深色 / 浅色主题**：高对比度配色，符合 WCAG 可读性标准
 - **中英文 i18n**：界面一键切换中/英文
 - **命令面板**：`Ctrl/Cmd + Shift + P` 快速执行命令
+- **设置面板**：7 大分类（外观/编辑器/布局/导出/语言/快捷键/关于），自动检查更新，托盘最小化
+- **无障碍**：支持 `prefers-reduced-motion` 系统偏好
 
 ---
 
@@ -124,6 +153,7 @@
 | 状态管理 | Zustand |
 | 计算引擎 | mathjs |
 | 公式渲染 | KaTeX |
+| 3D 渲染 | Three.js、react-three-fiber |
 | 节点图 | 自研 Canvas + SVG 节点引擎 |
 | 桌面壳 | Tauri 2（Rust + wry/WebKit） |
 | 打包 | Tauri bundler（.msi / .exe / .dmg / .deb / .AppImage） |

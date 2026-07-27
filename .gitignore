@@ -79,10 +79,8 @@ worklog.md
 架构重构方案.md
 *.设计.md
 *.重构方案.md
+/devlogs/
 /dist
-
-# 文档目录（不入库，按需单独维护）
-/docs/
 
 # 营销材料与归档压缩包
 /marketing/
