@@ -330,7 +330,7 @@ export function Plot2DCanvas({
 
       const dark = theme === 'dark';
       // GeoGebra/Desmos/JSXGraph style math software colors
-      const bg = dark ? '#212121' : '#ffffff';
+      const bg = dark ? '#1a1a1a' : '#ffffff';
       const fg = dark ? '#e0e0e0' : '#212121';
       const axisColor = dark ? '#9e9e9e' : '#424242';
       const gridMajor = dark ? 'rgba(255,255,255,0.10)' : 'rgba(0,0,0,0.10)';

@@ -38,10 +38,10 @@ export interface VariableEntry {
   latex?: string;
 }
 
-export type SidePanelTab = 'history' | 'variables' | 'formulas' | 'linalg' | 'solver' | 'files';
+export type SidePanelTab = 'history' | 'variables' | 'formulas' | 'linalg' | 'solver' | 'files' | 'stats';
 export type PreviewTab = 'formula' | 'plot2d' | 'plot3d' | 'log' | 'pipeline' | 'ai';
 export type Theme = 'dark' | 'light';
-export type ViewMode = 'workbench' | 'pipeline' | 'whiteboard' | 'focus';
+export type ViewMode = 'workbench' | 'pipeline' | 'whiteboard' | 'focus' | 'linalg';
 export type ActivityBarPosition = 'left' | 'right';
 
 interface WorkbenchState {
@@ -119,9 +119,13 @@ interface WorkbenchState {
 
 export const STORAGE_KEY = 'omnimath-pro-v2';
 
-/** Default order of activity bar items (left-to-right or top-to-bottom). */
+/** Default order of activity bar items (left-to-right or top-to-bottom).
+ *  Note: 'linalg' is intentionally absent — it is now a viewMode toggle
+ *  rendered as a standalone button (alongside Pipeline/Whiteboard) rather
+ *  than a side-panel tab. The SidePanelTab type still includes 'linalg'
+ *  because LinearAlgebraPanel remains a valid (programmatically-set) panel. */
 const DEFAULT_ACTIVITY_BAR_ORDER: SidePanelTab[] = [
-  'history', 'variables', 'formulas', 'linalg', 'solver', 'files',
+  'history', 'variables', 'formulas', 'solver', 'files', 'stats',
 ];
 
 /** Validate a plot config from localStorage — rejects malformed entries
@@ -167,7 +171,7 @@ function loadInitial(): Partial<WorkbenchState> {
     const VALID_INPUT_MODES = ['simple', 'python', 'matlab'] as const;
     const VALID_THEMES = ['dark', 'light'] as const;
     const VALID_LOCALES = ['zh-CN', 'en'] as const;
-    const VALID_VIEW_MODES = ['workbench', 'pipeline', 'whiteboard', 'focus'] as const;
+    const VALID_VIEW_MODES = ['workbench', 'pipeline', 'whiteboard', 'focus', 'linalg'] as const;
     const VALID_AB_POSITIONS = ['left', 'right'] as const;
     const VALID_SIDE_PANELS: SidePanelTab[] = [...DEFAULT_ACTIVITY_BAR_ORDER];
     const VALID_PREVIEW_TABS = ['formula', 'plot', 'plot3d', 'log'] as const;

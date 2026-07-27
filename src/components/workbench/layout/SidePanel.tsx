@@ -25,6 +25,7 @@ import { FormulaLibraryPanel } from '@/components/workbench/panels/FormulaLibrar
 import { LinearAlgebraPanel } from '@/components/workbench/panels/LinearAlgebraPanel';
 import { SolverPanel } from '@/components/workbench/panels/SolverPanel';
 import { FilesPanel } from '@/components/workbench/panels/FilesPanel';
+import { StatisticsPanel } from '@/components/workbench/panels/StatisticsPanel';
 
 const PANEL_TITLE_KEY: Record<SidePanelTab, keyof TranslationDict> = {
   history: 'histTitle',
@@ -33,6 +34,7 @@ const PANEL_TITLE_KEY: Record<SidePanelTab, keyof TranslationDict> = {
   linalg: 'linalgTitle',
   solver: 'solverTitle',
   files: 'tabFiles',
+  stats: 'statsTitle',
 };
 
 export function SidePanel() {
@@ -72,6 +74,7 @@ export function SidePanel() {
         {activeSidePanel === 'linalg' && <LinearAlgebraPanel />}
         {activeSidePanel === 'solver' && <SolverPanel />}
         {activeSidePanel === 'files' && <FilesPanel />}
+        {activeSidePanel === 'stats' && <StatisticsPanel />}
       </div>
     </div>
   );

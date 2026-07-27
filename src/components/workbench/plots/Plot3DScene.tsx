@@ -186,7 +186,7 @@ function SurfaceMesh({ data, wireframe, colorMode }: SurfaceMeshProps) {
         wireframe={wireframe}
         flatShading={false}
         metalness={0.0}
-        roughness={0.8}
+        roughness={0.85}
         transparent
         opacity={0.97}
       />
@@ -613,10 +613,10 @@ function SceneContents({
       <fog attach="fog" args={[palette.fogColor, palette.fogNear, palette.fogFar]} />
 
       {/* Lighting — soft natural lighting like math software */}
-      <ambientLight intensity={theme === 'dark' ? 0.7 : 0.85} />
+      <ambientLight intensity={theme === 'dark' ? 0.7 : 0.8} />
       <directionalLight
         position={[10, 15, 8]}
-        intensity={theme === 'dark' ? 0.7 : 0.9}
+        intensity={theme === 'dark' ? 0.7 : 0.8}
         color="#ffffff"
       />
       <directionalLight
@@ -627,7 +627,7 @@ function SceneContents({
       <hemisphereLight
         color="#ffffff"
         groundColor={theme === 'dark' ? '#2a2a2a' : '#e8e8e8'}
-        intensity={theme === 'dark' ? 0.3 : 0.4}
+        intensity={theme === 'dark' ? 0.3 : 0.35}
       />
 
       {/* Surfaces */}

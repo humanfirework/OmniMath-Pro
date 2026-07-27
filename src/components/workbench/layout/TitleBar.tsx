@@ -86,28 +86,11 @@ export function TitleBar() {
             boxShadow: '0 0 16px oklch(0.7 0.15 165 / 30%)',
           }}
         >
-          <svg
-            className="size-4"
-            viewBox="0 0 100 100"
-            fill="none"
-            aria-label="OmniMath Pro"
-          >
-            <defs>
-              <linearGradient id="titlebarLogoGrad" x1="0%" y1="0%" x2="100%" y2="100%">
-                <stop offset="0%" stopColor="currentColor" stopOpacity="1" />
-                <stop offset="100%" stopColor="currentColor" stopOpacity="0.6" />
-              </linearGradient>
-            </defs>
-            {/* ∞ 无穷符号 */}
-            <g transform="translate(50,50)" fill="none" stroke="url(#titlebarLogoGrad)" strokeWidth="5" strokeLinecap="round">
-              <ellipse cx="-15" cy="0" rx="13" ry="10.5" transform="rotate(-12 -15 0)" />
-              <ellipse cx="15" cy="0" rx="13" ry="10.5" transform="rotate(12 15 0)" />
-            </g>
-            {/* Σ 求和符号 */}
-            <g transform="translate(50,50)" fill="currentColor" opacity="0.85">
-              <path d="M -7 -9 L 8 -9 L 8 -6 L -3 0 L 8 6 L 8 9 L -7 9 L -7 6 L 3 0 L -7 -6 Z" />
-            </g>
-          </svg>
+          <img
+            src="/logo.svg"
+            alt="OmniMath Pro"
+            className="size-4 pointer-events-none select-none"
+          />
           <motion.span
             aria-hidden
             className="absolute inset-0 rounded-lg"

@@ -8,9 +8,11 @@
  *   - History    (Clock)
  *   - Variables  (Variable)
  *   - Formulas   (BookOpen)
- *   - Linear Alg (Grid3x3)
  *   - Solver     (FunctionSquare)
- *   - Pipeline   (Workflow)   — switches viewMode to 'pipeline'
+ *   - Statistics (BarChart3)
+ *   - Pipeline   (Workflow)       — switches viewMode to 'pipeline'
+ *   - Whiteboard (PencilRuler)    — switches viewMode to 'whiteboard'
+ *   - Linear Alg (Grid3x3)        — switches viewMode to 'linalg'
  * Bottom: settings gear (opens command palette)
  */
 
@@ -51,6 +53,7 @@ import {
   FileCode2,
   PencilRuler,
   MoreHorizontal,
+  BarChart3,
 } from 'lucide-react';
 import {
   Tooltip,
@@ -80,7 +83,8 @@ interface ActivityItem {
     | 'abFormulas'
     | 'abLinalg'
     | 'abSolver'
-    | 'abFiles';
+    | 'abFiles'
+    | 'abStats';
   /** 分组 id，决定该 item 在哪个视觉组里渲染（组间有分隔线）。 */
   group: 'edit' | 'math' | 'tools';
 }
@@ -89,14 +93,14 @@ interface ActivityItem {
  * 顶部分组定义 —— ActivityBar 把所有 side-panel 入口按语义分成 3 组：
  *
  *   edit   编辑组    历史 / 变量 / 文件     — 数据入口
- *   math   数学组    公式 / 线代 / 求解器   — 数学工具
- *   tools  工具组    （Pipeline 单独渲染，所以这里其实只有 edit+math 两组）
+ *   math   数学组    公式 / 求解器 / 统计   — 数学工具
+ *   tools  工具组    （Pipeline/Linalg/Whiteboard 单独渲染，所以这里其实只有 edit+math 两组）
  *
  * 组与组之间用一条 1px 分隔线分开，让用户一眼看出"这是不同类别的功能"，
  * 而不是 6 个图标堆在一起。和 VSCode 的 ActivityBar 分组逻辑一致。
  *
- * 注：Pipeline 按钮单独渲染在分组下方（因为它切 viewMode 而非 sidePanel），
- * 视觉上属于"可视化"组，所以前面再加一条分隔线。
+ * 注：Pipeline / Linalg / Whiteboard 按钮单独渲染在分组下方（因为它们切
+ * viewMode 而非 sidePanel），视觉上属于"可视化"组，所以前面再加一条分隔线。
  */
 const TOP_ITEMS: ActivityItem[] = [
   // ── 编辑组 ──────────────────────────────────────────
@@ -105,8 +109,8 @@ const TOP_ITEMS: ActivityItem[] = [
   { id: 'files', icon: FileCode2, labelKey: 'abFiles', group: 'edit' },
   // ── 数学组 ──────────────────────────────────────────
   { id: 'formulas', icon: BookOpen, labelKey: 'abFormulas', group: 'math' },
-  { id: 'linalg', icon: Grid3x3, labelKey: 'abLinalg', group: 'math' },
   { id: 'solver', icon: FunctionSquare, labelKey: 'abSolver', group: 'math' },
+  { id: 'stats', icon: BarChart3, labelKey: 'abStats', group: 'math' },
 ];
 
 interface SortableActivityItemProps {
@@ -344,7 +348,7 @@ export function ActivityBar() {
           </div>
         )}
 
-        {/* 组间分隔线：Pipeline 按钮属于"可视化"组，与上方数学组之间分隔 */}
+        {/* 组间分隔线：Pipeline/Linalg/Whiteboard 按钮属于"可视化"组，与上方数学组之间分隔 */}
         <div aria-hidden className="w-5 h-px bg-border/50 my-1" />
 
         {/* Pipeline switch — special: changes viewMode */}
@@ -413,6 +417,40 @@ export function ActivityBar() {
             </motion.button>
           </TooltipTrigger>
           <TooltipContent side={tooltipSide}>{t('abWhiteboard')}</TooltipContent>
+        </Tooltip>
+
+        {/* Linear algebra switch — full-screen linalg workbench view */}
+        <Tooltip delayDuration={200}>
+          <TooltipTrigger asChild>
+            <motion.button
+              type="button"
+              initial={false}
+              animate={{ opacity: 1, x: 0 }}
+              transition={{ delay: 0.04 * (TOP_ITEMS.length + 1), duration: 0.18 }}
+              onClick={() => setViewMode(viewMode === 'linalg' ? 'workbench' : 'linalg')}
+              aria-label={t('abLinalg')}
+              className={cn(
+                'relative grid place-items-center size-9 rounded-lg transition-all',
+                viewMode === 'linalg'
+                  ? 'text-primary bg-primary/12'
+                  : 'text-muted-foreground hover:text-foreground hover:bg-accent/60',
+              )}
+            >
+              <Grid3x3 className="size-[18px]" strokeWidth={2} />
+              {viewMode === 'linalg' && (
+                <motion.span
+                  layoutId="activity-indicator"
+                  className={cn(
+                    'absolute top-1/2 -translate-y-1/2 w-[2px] h-5 bg-primary',
+                    isRight ? 'right-0 rounded-l' : 'left-0 rounded-r',
+                  )}
+                  style={{ boxShadow: '0 0 8px oklch(0.7 0.15 165 / 70%)' }}
+                  transition={{ type: 'spring', stiffness: 380, damping: 30 }}
+                />
+              )}
+            </motion.button>
+          </TooltipTrigger>
+          <TooltipContent side={tooltipSide}>{t('abLinalg')}</TooltipContent>
         </Tooltip>
       </div>
 

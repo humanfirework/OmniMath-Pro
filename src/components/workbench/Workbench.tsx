@@ -45,6 +45,7 @@ import { FloatingCalculator } from '@/components/workbench/panels/FloatingCalcul
 import { MobileWorkbench } from '@/components/workbench/MobileWorkbench';
 import { NodePipeline } from '@/components/workbench/nodes/NodePipeline';
 import { WhiteboardCanvas } from '@/components/workbench/whiteboard/WhiteboardCanvas';
+import { LinearAlgebraWorkbench } from '@/components/workbench/panels/LinearAlgebraWorkbench';
 import { SettingsPanel } from '@/components/workbench/panels/SettingsPanel';
 import { ErrorBoundary } from '@/components/ErrorBoundary';
 import { useShortcutsStore, SHORTCUTS_KEY } from '@/lib/store/shortcutsStore';
@@ -180,52 +181,66 @@ export function Workbench() {
               <WhiteboardCanvas />
             </ErrorBoundary>
           </div>
+        ) : viewMode === 'linalg' ? (
+          /* Linear algebra full-screen view (Task 1 — P2) */
+          <div className="flex-1 min-w-0 min-h-0">
+            <ErrorBoundary>
+              <LinearAlgebraWorkbench />
+            </ErrorBoundary>
+          </div>
         ) : !editorVisible && !previewVisible ? (
           /* Plain layout when both main panels are hidden — avoids empty resizable group. */
-          <div className="flex-1 flex min-w-0">
+          <ResizablePanelGroup direction="horizontal" autoSaveId="omnimath-side-only" className="flex-1 min-w-0">
             {!sidePanelCollapsed && viewMode !== 'focus' && (
-              <div className="w-1/4 min-w-[200px] max-w-[400px] shrink-0 border-r border-border/60 bg-card/30">
-                <SidePanel />
-              </div>
+              <>
+                <ResizablePanel defaultSize={25} minSize={12} maxSize={40} id="side-only-panel" order={1}>
+                  <ErrorBoundary>
+                    <SidePanel />
+                  </ErrorBoundary>
+                </ResizablePanel>
+                <ResizableHandle withHandle className="data-[resize-handle-active]:bg-primary/60" />
+              </>
             )}
-            <div className="flex-1 flex flex-col items-center justify-center gap-3 px-6 text-center bg-background/40">
-              <div className="grid place-items-center size-14 rounded-2xl bg-primary/8 border border-primary/20">
-                <PanelLeftClose className="size-6 text-primary/70" />
+            <ResizablePanel defaultSize={sidePanelCollapsed || viewMode === 'focus' ? 100 : 75} minSize={50} id="side-only-empty" order={2}>
+              <div className="h-full w-full flex flex-col items-center justify-center gap-3 px-6 text-center bg-background/40">
+                <div className="grid place-items-center size-14 rounded-2xl bg-primary/8 border border-primary/20">
+                  <PanelLeftClose className="size-6 text-primary/70" />
+                </div>
+                <p className="text-[13px] font-medium text-foreground/80">
+                  {t('wbAllPanelsHidden')}
+                </p>
+                <p className="text-[11.5px] text-muted-foreground max-w-xs">
+                  {t('wbAllPanelsHiddenHint')}
+                </p>
+                <div className="flex items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={() => setEditorVisible(true)}
+                    className="inline-flex items-center gap-1.5 rounded-md bg-primary px-3 py-1.5 text-xs font-medium text-primary-foreground hover:bg-primary/90 transition-colors"
+                  >
+                    <LayoutTemplate className="size-3.5" />
+                    {t('abToggleEditor')}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setPreviewVisible(true)}
+                    className="inline-flex items-center gap-1.5 rounded-md border border-border bg-background px-3 py-1.5 text-xs font-medium text-foreground hover:bg-accent transition-colors"
+                  >
+                    <PanelRight className="size-3.5" />
+                    {t('abTogglePreview')}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => toggleActivityBarHidden()}
+                    className="inline-flex items-center gap-1.5 rounded-md border border-border bg-background px-3 py-1.5 text-xs font-medium text-foreground hover:bg-accent transition-colors"
+                  >
+                    <PanelRightOpen className="size-3.5" />
+                    {t('abShowTaskbar')}
+                  </button>
+                </div>
               </div>
-              <p className="text-[13px] font-medium text-foreground/80">
-                {t('wbAllPanelsHidden')}
-              </p>
-              <p className="text-[11.5px] text-muted-foreground max-w-xs">
-                {t('wbAllPanelsHiddenHint')}
-              </p>
-              <div className="flex items-center gap-2">
-                <button
-                  type="button"
-                  onClick={() => setEditorVisible(true)}
-                  className="inline-flex items-center gap-1.5 rounded-md bg-primary px-3 py-1.5 text-xs font-medium text-primary-foreground hover:bg-primary/90 transition-colors"
-                >
-                  <LayoutTemplate className="size-3.5" />
-                  {t('abToggleEditor')}
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setPreviewVisible(true)}
-                  className="inline-flex items-center gap-1.5 rounded-md border border-border bg-background px-3 py-1.5 text-xs font-medium text-foreground hover:bg-accent transition-colors"
-                >
-                  <PanelRight className="size-3.5" />
-                  {t('abTogglePreview')}
-                </button>
-                <button
-                  type="button"
-                  onClick={() => toggleActivityBarHidden()}
-                  className="inline-flex items-center gap-1.5 rounded-md border border-border bg-background px-3 py-1.5 text-xs font-medium text-foreground hover:bg-accent transition-colors"
-                >
-                  <PanelRightOpen className="size-3.5" />
-                  {t('abShowTaskbar')}
-                </button>
-              </div>
-            </div>
-          </div>
+            </ResizablePanel>
+          </ResizablePanelGroup>
         ) : editorVisible && previewVisible ? (
           /* 双面板布局：外层 side | main，内层 editor | preview（方向由 previewPosition 决定） */
           <ResizablePanelGroup direction="horizontal" autoSaveId="omnimath-side-v2" className="flex-1 min-w-0">
