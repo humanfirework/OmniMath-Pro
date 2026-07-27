@@ -274,7 +274,9 @@ export function Workbench() {
                   id="preview-panel"
                   order={2}
                 >
-                  <PreviewPanel />
+                  <ErrorBoundary>
+                    <PreviewPanel />
+                  </ErrorBoundary>
                 </ResizablePanel>
               </ResizablePanelGroup>
             </ResizablePanel>
@@ -326,7 +328,9 @@ export function Workbench() {
                 id="preview-panel"
                 order={3}
               >
-                <PreviewPanel />
+                <ErrorBoundary>
+                  <PreviewPanel />
+                </ErrorBoundary>
               </ResizablePanel>
             )}
           </ResizablePanelGroup>

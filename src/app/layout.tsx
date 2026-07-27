@@ -52,6 +52,21 @@ export default function RootLayout({
     <html lang="zh-CN" className="dark" suppressHydrationWarning>
       <head>
         <link rel="preconnect" href="https://cdn.jsdelivr.net" />
+        {/* 阻塞式主题初始化脚本 — 在首次绘制前同步读取 localStorage
+            并切换 dark 类，避免 light 主题用户看到 dark 闪烁。
+            必须内联且同步执行，放在 body 之前。 */}
+        <script dangerouslySetInnerHTML={{
+          __html: `try {
+            var raw = localStorage.getItem('omnimath-workbench-v1') || localStorage.getItem('omnimath-pro-v2');
+            if (raw) {
+              var s = JSON.parse(raw);
+              var theme = s && (s.theme || (s.state && s.state.theme));
+              if (theme === 'light') {
+                document.documentElement.classList.remove('dark');
+              }
+            }
+          } catch (e) { /* ignore — fall back to default dark */ }`,
+        }} />
       </head>
       <body className="antialiased">
         {children}

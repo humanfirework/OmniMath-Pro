@@ -136,7 +136,7 @@ function SortableActivityItem({ item, isActive, isRight, tooltipSide, onClick }:
         <TooltipTrigger asChild>
           <motion.button
             type="button"
-            initial={{ opacity: 0, x: -8 }}
+            initial={false}
             animate={{ opacity: 1, x: 0 }}
             transition={{ duration: 0.18 }}
             onClick={onClick}
@@ -200,6 +200,16 @@ export function ActivityBar() {
   // area only after hydration completes.
   const [mounted, setMounted] = useState(false);
   useEffect(() => { setMounted(true); }, []);
+
+  // 清理 hide timer — 防止组件卸载后 timer 仍触发，污染全局 store
+  useEffect(() => {
+    return () => {
+      if (hideTimerRef.current) {
+        clearTimeout(hideTimerRef.current);
+        hideTimerRef.current = null;
+      }
+    };
+  }, []);
 
   const handleClick = (id: SidePanelTab) => {
     // When in pipeline/focus view, switch back to workbench and explicitly
@@ -342,9 +352,9 @@ export function ActivityBar() {
           <TooltipTrigger asChild>
             <motion.button
               type="button"
-              initial={{ opacity: 0, x: -8 }}
+              initial={false}
               animate={{ opacity: 1, x: 0 }}
-              transition={{ delay: 0.04 * TOP_ITEMS.length, duration: 0.18 }}
+              transition={{ delay: 0.04 * (TOP_ITEMS.length + 1), duration: 0.18 }}
               onClick={() => setViewMode(viewMode === 'pipeline' ? 'workbench' : 'pipeline')}
               aria-label={t('abPipeline')}
               className={cn(
@@ -376,7 +386,7 @@ export function ActivityBar() {
           <TooltipTrigger asChild>
             <motion.button
               type="button"
-              initial={{ opacity: 0, x: -8 }}
+              initial={false}
               animate={{ opacity: 1, x: 0 }}
               transition={{ delay: 0.04 * (TOP_ITEMS.length + 1), duration: 0.18 }}
               onClick={() => setViewMode(viewMode === 'whiteboard' ? 'workbench' : 'whiteboard')}
