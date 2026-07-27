@@ -29,9 +29,9 @@ Regular calculators are too simple, and professional math software is often too 
 
 | | | |
 |:---:|:---:|:---:|
-| ![Workbench](docs/images/workbench.png) | ![2D Plot](docs/images/plot2d.png) | ![3D Plot](docs/images/plot3d.png) |
-| ![Linear Algebra](docs/images/linear-algebra.png) | ![Calculator](docs/images/calculator.png) | ![Settings](docs/images/settings.png) |
-| ![Light Mode](docs/images/light-mode.png) | | |
+| ![Workbench](./public/screenshots/workbench.png) | ![2D Plot](./public/screenshots/plot2d.png) | ![3D Plot](./public/screenshots/plot3d.png) |
+| ![Linear Algebra](./public/screenshots/linear-algebra.png) | ![Calculator](./public/screenshots/calculator.png) | ![Settings](./public/screenshots/settings.png) |
+| ![Light Mode](./public/screenshots/light-mode.png) | | |
 
 ## Core Features
 
