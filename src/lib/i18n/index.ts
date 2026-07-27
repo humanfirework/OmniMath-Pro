@@ -154,6 +154,8 @@ export interface TranslationDict {
   abGuide: string;
   abFormulas: string;
   abPipeline: string;
+  abWhiteboard: string;
+  abLayoutMenu: string;
   abAI: string;
   abLinalg: string;
   abMatrix: string;
@@ -849,6 +851,8 @@ const zhCN: TranslationDict = {
   abGuide: "指南",
   abFormulas: "公式库",
   abPipeline: "流水线",
+  abWhiteboard: "白板",
+  abLayoutMenu: "布局选项",
   abAI: "AI 助手",
   abLinalg: "线性代数",
   abMatrix: "矩阵",
@@ -1541,6 +1545,8 @@ const en: TranslationDict = {
   abGuide: "Guide",
   abFormulas: "Formula Library",
   abPipeline: "Pipeline",
+  abWhiteboard: "Whiteboard",
+  abLayoutMenu: "Layout Options",
   abAI: "AI Assistant",
   abLinalg: "Linear Algebra",
   abMatrix: "Matrix",

@@ -14,7 +14,7 @@
  * Bottom: settings gear (opens command palette)
  */
 
-import { Fragment, useRef, type CSSProperties } from 'react';
+import { Fragment, useEffect, useRef, useState, type CSSProperties } from 'react';
 import { motion } from 'framer-motion';
 import {
   DndContext,
@@ -49,12 +49,22 @@ import {
   PanelRightClose,
   PanelRightOpen,
   FileCode2,
+  PencilRuler,
+  MoreHorizontal,
 } from 'lucide-react';
 import {
   Tooltip,
   TooltipContent,
   TooltipTrigger,
 } from '@/components/ui/tooltip';
+import {
+  DropdownMenu,
+  DropdownMenuTrigger,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+  DropdownMenuLabel,
+} from '@/components/ui/dropdown-menu';
 import { cn } from '@/lib/utils';
 import { useWorkbenchStore } from '@/lib/store/workbench';
 import { useSettingsStore } from '@/lib/store/settingsStore';
@@ -126,7 +136,7 @@ function SortableActivityItem({ item, isActive, isRight, tooltipSide, onClick }:
         <TooltipTrigger asChild>
           <motion.button
             type="button"
-            initial={{ opacity: 0, x: -8 }}
+            initial={false}
             animate={{ opacity: 1, x: 0 }}
             transition={{ duration: 0.18 }}
             onClick={onClick}
@@ -183,6 +193,23 @@ export function ActivityBar() {
   const isRight = activityBarPosition === 'right';
   const tooltipSide = isRight ? 'left' : 'right';
   const hideTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  // dnd-kit generates aria-describedby via useId which differs between SSR
+  // and client hydration → causes a React hydration mismatch warning that
+  // can leave the first paint in an inconsistent state. Mount the sortable
+  // area only after hydration completes.
+  const [mounted, setMounted] = useState(false);
+  useEffect(() => { setMounted(true); }, []);
+
+  // 清理 hide timer — 防止组件卸载后 timer 仍触发，污染全局 store
+  useEffect(() => {
+    return () => {
+      if (hideTimerRef.current) {
+        clearTimeout(hideTimerRef.current);
+        hideTimerRef.current = null;
+      }
+    };
+  }, []);
 
   const handleClick = (id: SidePanelTab) => {
     // When in pipeline/focus view, switch back to workbench and explicitly
@@ -267,30 +294,55 @@ export function ActivityBar() {
       }}
     >
       <div className="flex flex-col items-center gap-1 w-full">
-        <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleDragEnd}>
-          <SortableContext items={orderedItems.map((i) => i.id)} strategy={verticalListSortingStrategy}>
-            {orderedItems.map((item, idx) => (
-              <Fragment key={item.id}>
-                {/* 组间分隔线：当当前 item 的 group 与上一个不同时插入。
-                    仅在 idx > 0 时检查，避免顶部出现多余分隔线。
-                    分隔线是纯视觉元素，不参与 dnd-kit 排序。 */}
-                {idx > 0 && item.group !== orderedItems[idx - 1].group && (
-                  <div
-                    aria-hidden
-                    className="w-5 h-px bg-border/50 my-1"
+        {mounted ? (
+          <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleDragEnd}>
+            <SortableContext items={orderedItems.map((i) => i.id)} strategy={verticalListSortingStrategy}>
+              {orderedItems.map((item, idx) => (
+                <Fragment key={item.id}>
+                  {idx > 0 && item.group !== orderedItems[idx - 1].group && (
+                    <div aria-hidden className="w-5 h-px bg-border/50 my-1" />
+                  )}
+                  <SortableActivityItem
+                    item={item}
+                    isActive={activeSidePanel === item.id && !sidePanelCollapsed && viewMode === 'workbench'}
+                    isRight={isRight}
+                    tooltipSide={tooltipSide}
+                    onClick={() => handleClick(item.id)}
                   />
-                )}
-                <SortableActivityItem
-                  item={item}
-                  isActive={activeSidePanel === item.id && !sidePanelCollapsed && viewMode === 'workbench'}
-                  isRight={isRight}
-                  tooltipSide={tooltipSide}
-                  onClick={() => handleClick(item.id)}
-                />
-              </Fragment>
-            ))}
-          </SortableContext>
-        </DndContext>
+                </Fragment>
+              ))}
+            </SortableContext>
+          </DndContext>
+        ) : (
+          /* SSR / pre-hydration placeholder — same visual layout but no dnd-kit,
+             so server and client markup match (avoids hydration mismatch). */
+          <div className="flex flex-col items-center gap-1 w-full">
+            {orderedItems.map((item, idx) => {
+              const Icon = item.icon;
+              const isActive = activeSidePanel === item.id && !sidePanelCollapsed && viewMode === 'workbench';
+              return (
+                <Fragment key={item.id}>
+                  {idx > 0 && item.group !== orderedItems[idx - 1].group && (
+                    <div aria-hidden className="w-5 h-px bg-border/50 my-1" />
+                  )}
+                  <button
+                    type="button"
+                    aria-label={t(item.labelKey)}
+                    onClick={() => handleClick(item.id)}
+                    className={cn(
+                      'relative grid place-items-center size-9 rounded-lg transition-all',
+                      isActive
+                        ? 'text-primary bg-primary/12'
+                        : 'text-muted-foreground hover:text-foreground hover:bg-accent/60',
+                    )}
+                  >
+                    <Icon className="size-[18px]" strokeWidth={2} />
+                  </button>
+                </Fragment>
+              );
+            })}
+          </div>
+        )}
 
         {/* 组间分隔线：Pipeline 按钮属于"可视化"组，与上方数学组之间分隔 */}
         <div aria-hidden className="w-5 h-px bg-border/50 my-1" />
@@ -300,9 +352,9 @@ export function ActivityBar() {
           <TooltipTrigger asChild>
             <motion.button
               type="button"
-              initial={{ opacity: 0, x: -8 }}
+              initial={false}
               animate={{ opacity: 1, x: 0 }}
-              transition={{ delay: 0.04 * TOP_ITEMS.length, duration: 0.18 }}
+              transition={{ delay: 0.04 * (TOP_ITEMS.length + 1), duration: 0.18 }}
               onClick={() => setViewMode(viewMode === 'pipeline' ? 'workbench' : 'pipeline')}
               aria-label={t('abPipeline')}
               className={cn(
@@ -327,6 +379,40 @@ export function ActivityBar() {
             </motion.button>
           </TooltipTrigger>
           <TooltipContent side={tooltipSide}>{t('abPipeline')}</TooltipContent>
+        </Tooltip>
+
+        {/* Whiteboard switch — enters sketch view */}
+        <Tooltip delayDuration={200}>
+          <TooltipTrigger asChild>
+            <motion.button
+              type="button"
+              initial={false}
+              animate={{ opacity: 1, x: 0 }}
+              transition={{ delay: 0.04 * (TOP_ITEMS.length + 1), duration: 0.18 }}
+              onClick={() => setViewMode(viewMode === 'whiteboard' ? 'workbench' : 'whiteboard')}
+              aria-label={t('abWhiteboard')}
+              className={cn(
+                'relative grid place-items-center size-9 rounded-lg transition-all',
+                viewMode === 'whiteboard'
+                  ? 'text-primary bg-primary/12'
+                  : 'text-muted-foreground hover:text-foreground hover:bg-accent/60',
+              )}
+            >
+              <PencilRuler className="size-[18px]" strokeWidth={2} />
+              {viewMode === 'whiteboard' && (
+                <motion.span
+                  layoutId="activity-indicator"
+                  className={cn(
+                    'absolute top-1/2 -translate-y-1/2 w-[2px] h-5 bg-primary',
+                    isRight ? 'right-0 rounded-l' : 'left-0 rounded-r',
+                  )}
+                  style={{ boxShadow: '0 0 8px oklch(0.7 0.15 165 / 70%)' }}
+                  transition={{ type: 'spring', stiffness: 380, damping: 30 }}
+                />
+              )}
+            </motion.button>
+          </TooltipTrigger>
+          <TooltipContent side={tooltipSide}>{t('abWhiteboard')}</TooltipContent>
         </Tooltip>
       </div>
 
@@ -394,102 +480,66 @@ export function ActivityBar() {
 
         <div className="w-6 h-px bg-border/60 my-0.5" />
 
-        {/* Move position */}
-        <Tooltip delayDuration={200}>
-          <TooltipTrigger asChild>
-            <button
-              type="button"
+        {/* 布局菜单 — 把 Move/Lock/AutoHide/Hide 4 个按钮合并到一个下拉菜单，
+            让左下角更简约。 */}
+        <DropdownMenu>
+          <Tooltip delayDuration={200}>
+            <TooltipTrigger asChild>
+              <DropdownMenuTrigger asChild>
+                <button
+                  type="button"
+                  aria-label={t('abLayoutMenu')}
+                  className={cn(
+                    'grid place-items-center size-9 rounded-lg transition-colors',
+                    activityBarLocked || activityBarAutoHide
+                      ? 'text-primary bg-primary/12'
+                      : 'text-muted-foreground hover:text-foreground hover:bg-accent/60',
+                  )}
+                >
+                  <MoreHorizontal className="size-[18px]" />
+                </button>
+              </DropdownMenuTrigger>
+            </TooltipTrigger>
+            <TooltipContent side={tooltipSide}>{t('abLayoutMenu')}</TooltipContent>
+          </Tooltip>
+          <DropdownMenuContent side={tooltipSide} align="end" className="w-44">
+            <DropdownMenuLabel className="text-[10px] uppercase tracking-wide text-muted-foreground">
+              {t('abLayoutMenu')}
+            </DropdownMenuLabel>
+            <DropdownMenuItem
               onClick={() => setActivityBarPosition(isRight ? 'left' : 'right')}
               disabled={activityBarLocked}
-              aria-label={isRight ? t('abMoveLeft') : t('abMoveRight')}
-              className={cn(
-                'grid place-items-center size-9 rounded-lg transition-colors',
-                activityBarLocked
-                  ? 'text-muted-foreground/40 cursor-not-allowed'
-                  : 'text-muted-foreground hover:text-foreground hover:bg-accent/60',
-              )}
+              className="text-[11.5px] gap-2"
             >
-              {isRight ? <PanelLeft className="size-[18px]" /> : <PanelRight className="size-[18px]" />}
-            </button>
-          </TooltipTrigger>
-          <TooltipContent side={tooltipSide}>
-            {activityBarLocked ? t('abLocked') : isRight ? t('abMoveLeft') : t('abMoveRight')}
-          </TooltipContent>
-        </Tooltip>
-
-        {/* Lock / Unlock */}
-        <Tooltip delayDuration={200}>
-          <TooltipTrigger asChild>
-            <button
-              type="button"
+              {isRight ? <PanelLeft className="size-3.5" /> : <PanelRight className="size-3.5" />}
+              <span>{isRight ? t('abMoveLeft') : t('abMoveRight')}</span>
+            </DropdownMenuItem>
+            <DropdownMenuItem
               onClick={toggleActivityBarLock}
-              aria-label={activityBarLocked ? t('abUnlockTaskbar') : t('abLockTaskbar')}
-              className={cn(
-                'grid place-items-center size-9 rounded-lg transition-colors',
-                activityBarLocked
-                  ? 'text-primary bg-primary/12'
-                  : 'text-muted-foreground hover:text-foreground hover:bg-accent/60',
-              )}
+              className="text-[11.5px] gap-2"
             >
-              {activityBarLocked ? <Pin className="size-[18px]" /> : <PinOff className="size-[18px]" />}
-            </button>
-          </TooltipTrigger>
-          <TooltipContent side={tooltipSide}>
-            {activityBarLocked ? t('abUnlockTaskbar') : t('abLockTaskbar')}
-          </TooltipContent>
-        </Tooltip>
-
-        {/* Auto-hide */}
-        <Tooltip delayDuration={200}>
-          <TooltipTrigger asChild>
-            <button
-              type="button"
+              {activityBarLocked ? <Pin className="size-3.5" /> : <PinOff className="size-3.5" />}
+              <span>{activityBarLocked ? t('abUnlockTaskbar') : t('abLockTaskbar')}</span>
+            </DropdownMenuItem>
+            <DropdownMenuItem
               onClick={() => setActivityBarAutoHide(!activityBarAutoHide)}
               disabled={activityBarLocked}
-              aria-label={t('abAutoHide')}
-              className={cn(
-                'grid place-items-center size-9 rounded-lg transition-colors',
-                activityBarLocked
-                  ? 'text-muted-foreground/40 cursor-not-allowed'
-                  : activityBarAutoHide
-                    ? 'text-primary bg-primary/12'
-                    : 'text-muted-foreground hover:text-foreground hover:bg-accent/60',
-              )}
+              className="text-[11.5px] gap-2"
             >
-              {activityBarAutoHide ? (
-                <PanelRightClose className="size-[18px]" />
-              ) : (
-                <PanelRightOpen className="size-[18px]" />
-              )}
-            </button>
-          </TooltipTrigger>
-          <TooltipContent side={tooltipSide}>
-            {activityBarLocked ? t('abLocked') : activityBarAutoHide ? t('abDisableAutoHide') : t('abAutoHide')}
-          </TooltipContent>
-        </Tooltip>
-
-        {/* Hide taskbar (manual) */}
-        <Tooltip delayDuration={200}>
-          <TooltipTrigger asChild>
-            <button
-              type="button"
+              {activityBarAutoHide ? <PanelRightClose className="size-3.5" /> : <PanelRightOpen className="size-3.5" />}
+              <span>{activityBarAutoHide ? t('abDisableAutoHide') : t('abAutoHide')}</span>
+            </DropdownMenuItem>
+            <DropdownMenuSeparator />
+            <DropdownMenuItem
               onClick={() => toggleActivityBarHidden()}
               disabled={activityBarLocked}
-              aria-label={t('abHideTaskbar')}
-              className={cn(
-                'grid place-items-center size-9 rounded-lg transition-colors',
-                activityBarLocked
-                  ? 'text-muted-foreground/40 cursor-not-allowed'
-                  : 'text-muted-foreground hover:text-foreground hover:bg-accent/60',
-              )}
+              className="text-[11.5px] gap-2"
             >
-              {isRight ? <PanelRightClose className="size-[18px]" /> : <PanelLeftClose className="size-[18px]" />}
-            </button>
-          </TooltipTrigger>
-          <TooltipContent side={tooltipSide}>
-            {activityBarLocked ? t('abLocked') : t('abHideTaskbar')}
-          </TooltipContent>
-        </Tooltip>
+              {isRight ? <PanelRightClose className="size-3.5" /> : <PanelLeftClose className="size-3.5" />}
+              <span>{t('abHideTaskbar')}</span>
+            </DropdownMenuItem>
+          </DropdownMenuContent>
+        </DropdownMenu>
 
         <div className="w-6 h-px bg-border/60 my-0.5" />
 

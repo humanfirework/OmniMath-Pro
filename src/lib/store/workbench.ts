@@ -41,7 +41,7 @@ export interface VariableEntry {
 export type SidePanelTab = 'history' | 'variables' | 'formulas' | 'linalg' | 'solver' | 'files';
 export type PreviewTab = 'formula' | 'plot2d' | 'plot3d' | 'log' | 'pipeline' | 'ai';
 export type Theme = 'dark' | 'light';
-export type ViewMode = 'workbench' | 'pipeline' | 'focus';
+export type ViewMode = 'workbench' | 'pipeline' | 'whiteboard' | 'focus';
 export type ActivityBarPosition = 'left' | 'right';
 
 interface WorkbenchState {
@@ -162,29 +162,53 @@ function loadInitial(): Partial<WorkbenchState> {
     const raw = localStorage.getItem(STORAGE_KEY);
     if (!raw) return {};
     const data = JSON.parse(raw);
+
+    // 枚举值白名单校验 — 防止损坏/旧版本 localStorage 值导致功能异常
+    const VALID_INPUT_MODES = ['simple', 'python', 'matlab'] as const;
+    const VALID_THEMES = ['dark', 'light'] as const;
+    const VALID_LOCALES = ['zh-CN', 'en'] as const;
+    const VALID_VIEW_MODES = ['workbench', 'pipeline', 'whiteboard', 'focus'] as const;
+    const VALID_AB_POSITIONS = ['left', 'right'] as const;
+    const VALID_SIDE_PANELS: SidePanelTab[] = [...DEFAULT_ACTIVITY_BAR_ORDER];
+    const VALID_PREVIEW_TABS = ['formula', 'plot', 'plot3d', 'log'] as const;
+
+    // activityBarOrder 迁移：过滤无效 ID + 补全缺失项
+    // 旧版本可能有 symbols/templates/units/bases/guide 等已移除的 tab id，
+    // 也可能缺少新加入的 files/formulas/linalg/solver — 直接补齐。
+    const migrateOrder = (raw: unknown): SidePanelTab[] => {
+      if (!Array.isArray(raw)) return [...DEFAULT_ACTIVITY_BAR_ORDER];
+      const valid = raw.filter(
+        (id): id is SidePanelTab =>
+          typeof id === 'string' &&
+          (DEFAULT_ACTIVITY_BAR_ORDER as readonly string[]).includes(id),
+      );
+      for (const id of DEFAULT_ACTIVITY_BAR_ORDER) {
+        if (!valid.includes(id)) valid.push(id);
+      }
+      return valid;
+    };
+
     return {
-      editorContent: data.editorContent ?? '',
-      inputMode: data.inputMode ?? 'simple',
-      results: data.results ?? [],
-      variables: data.variables ?? {},
+      editorContent: typeof data.editorContent === 'string' ? data.editorContent : '',
+      inputMode: VALID_INPUT_MODES.includes(data.inputMode) ? data.inputMode : 'simple',
+      results: Array.isArray(data.results) ? data.results : [],
+      variables: data.variables && typeof data.variables === 'object' ? data.variables : {},
       plots: Array.isArray(data.plots)
         ? data.plots.map(sanitizePlot).filter((p: PlotConfig | null): p is PlotConfig => p !== null)
         : [],
-      theme: data.theme ?? 'dark',
-      locale: data.locale ?? 'zh-CN',
-      activeSidePanel: data.activeSidePanel ?? 'history',
-      sidePanelCollapsed: data.sidePanelCollapsed ?? false,
-      previewVisible: data.previewVisible ?? true,
-      editorVisible: data.editorVisible ?? true,
-      activePreviewTab: data.activePreviewTab ?? 'formula',
-      viewMode: data.viewMode ?? 'workbench',
-      activityBarPosition: data.activityBarPosition ?? 'left',
-      activityBarLocked: data.activityBarLocked ?? false,
-      activityBarAutoHide: data.activityBarAutoHide ?? false,
-      activityBarHidden: data.activityBarHidden ?? false,
-      activityBarOrder: Array.isArray(data.activityBarOrder)
-        ? data.activityBarOrder
-        : DEFAULT_ACTIVITY_BAR_ORDER,
+      theme: VALID_THEMES.includes(data.theme) ? data.theme : 'dark',
+      locale: VALID_LOCALES.includes(data.locale) ? data.locale : 'zh-CN',
+      activeSidePanel: VALID_SIDE_PANELS.includes(data.activeSidePanel) ? data.activeSidePanel : 'history',
+      sidePanelCollapsed: typeof data.sidePanelCollapsed === 'boolean' ? data.sidePanelCollapsed : false,
+      previewVisible: typeof data.previewVisible === 'boolean' ? data.previewVisible : true,
+      editorVisible: typeof data.editorVisible === 'boolean' ? data.editorVisible : true,
+      activePreviewTab: VALID_PREVIEW_TABS.includes(data.activePreviewTab) ? data.activePreviewTab : 'formula',
+      viewMode: VALID_VIEW_MODES.includes(data.viewMode) ? data.viewMode : 'workbench',
+      activityBarPosition: VALID_AB_POSITIONS.includes(data.activityBarPosition) ? data.activityBarPosition : 'left',
+      activityBarLocked: typeof data.activityBarLocked === 'boolean' ? data.activityBarLocked : false,
+      activityBarAutoHide: typeof data.activityBarAutoHide === 'boolean' ? data.activityBarAutoHide : false,
+      activityBarHidden: typeof data.activityBarHidden === 'boolean' ? data.activityBarHidden : false,
+      activityBarOrder: migrateOrder(data.activityBarOrder),
     };
   } catch {
     return {};
@@ -359,8 +383,14 @@ export const useWorkbenchStore = create<WorkbenchState>((set, get) => ({
     const initial = loadInitial();
     if (Object.keys(initial).length > 0) {
       set(initial);
-      if (initial.theme === 'dark' && typeof document !== 'undefined') {
-        document.documentElement.classList.add('dark');
+      // 主动同步主题类 — light 时移除 dark 类，避免 layout.tsx 硬编码的 dark
+      // 类残留造成 light 用户首次加载看到 dark 闪烁。
+      if (typeof document !== 'undefined') {
+        if (initial.theme === 'dark') {
+          document.documentElement.classList.add('dark');
+        } else {
+          document.documentElement.classList.remove('dark');
+        }
       }
       // Back-fill the engine scope with the restored variables so plots,
       // the console and blueprint nodes can use them immediately after a

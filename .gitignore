@@ -74,8 +74,11 @@ server.log
 # Trae IDE 内部 spec
 /.trae/
 
-# 开发工作日志
+# 开发工作日志 / 内部设计文档（不入库，按需单独维护）
 worklog.md
+架构重构方案.md
+*.设计.md
+*.重构方案.md
 /dist
 
 # 文档目录（不入库，按需单独维护）

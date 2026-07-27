@@ -43,6 +43,7 @@ import { CommandPalette } from '@/components/workbench/panels/CommandPalette';
 import { GlobalCalcBar } from '@/components/workbench/panels/GlobalCalcBar';
 import { MobileWorkbench } from '@/components/workbench/MobileWorkbench';
 import { NodePipeline } from '@/components/workbench/nodes/NodePipeline';
+import { WhiteboardCanvas } from '@/components/workbench/whiteboard/WhiteboardCanvas';
 import { SettingsPanel } from '@/components/workbench/panels/SettingsPanel';
 import { ErrorBoundary } from '@/components/ErrorBoundary';
 import { useShortcutsStore, SHORTCUTS_KEY } from '@/lib/store/shortcutsStore';
@@ -170,6 +171,13 @@ export function Workbench() {
               <NodePipeline />
             </ErrorBoundary>
           </div>
+        ) : viewMode === 'whiteboard' ? (
+          /* Whiteboard view — full-canvas sketch surface */
+          <div className="flex-1 min-w-0 min-h-0">
+            <ErrorBoundary>
+              <WhiteboardCanvas />
+            </ErrorBoundary>
+          </div>
         ) : !editorVisible && !previewVisible ? (
           /* Plain layout when both main panels are hidden — avoids empty resizable group. */
           <div className="flex-1 flex min-w-0">
@@ -266,7 +274,9 @@ export function Workbench() {
                   id="preview-panel"
                   order={2}
                 >
-                  <PreviewPanel />
+                  <ErrorBoundary>
+                    <PreviewPanel />
+                  </ErrorBoundary>
                 </ResizablePanel>
               </ResizablePanelGroup>
             </ResizablePanel>
@@ -318,7 +328,9 @@ export function Workbench() {
                 id="preview-panel"
                 order={3}
               >
-                <PreviewPanel />
+                <ErrorBoundary>
+                  <PreviewPanel />
+                </ErrorBoundary>
               </ResizablePanel>
             )}
           </ResizablePanelGroup>
