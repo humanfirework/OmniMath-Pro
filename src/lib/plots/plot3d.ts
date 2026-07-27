@@ -80,16 +80,18 @@ function hexToRgb(hex: string): [number, number, number] {
 }
 
 /**
- * Map a height ratio `t` ∈ [0, 1] to an RGB triple along a teal
- * gradient (deep → teal → light). Used for the height-based color mode.
+ * Map a height ratio `t` ∈ [0, 1] to an RGB triple using a professional
+ * color map similar to GeoGebra/Matplotlib — subtle blue-to-yellow gradient.
  */
 function heightColor(t: number): [number, number, number] {
   const clamped = Math.max(0, Math.min(1, t));
-  // Three stops: deep teal, brand teal, light cyan.
+  // Professional math software colormap: cool blue → teal → green → yellow
   const stops: Array<[number, [number, number, number]]> = [
-    [0.0, [0.04, 0.18, 0.20]],
-    [0.5, [0.176, 0.831, 0.749]],
-    [1.0, [0.55, 0.94, 0.88]],
+    [0.0, [0.20, 0.35, 0.65]],   // deep blue
+    [0.25, [0.25, 0.55, 0.70]],  // blue-teal
+    [0.5, [0.30, 0.65, 0.55]],   // teal-green
+    [0.75, [0.55, 0.70, 0.35]],  // green-yellow
+    [1.0, [0.85, 0.75, 0.25]],   // warm yellow
   ];
   for (let i = 1; i < stops.length; i++) {
     if (clamped <= stops[i][0]) {

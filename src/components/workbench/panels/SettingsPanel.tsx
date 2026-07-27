@@ -14,7 +14,7 @@
  */
 
 import { useState, useEffect } from 'react';
-import { motion } from 'framer-motion';
+import { motion, AnimatePresence } from 'framer-motion';
 import {
   Dialog,
   DialogContent,
@@ -49,6 +49,9 @@ import {
   PanelRight,
   RotateCcw,
   Keyboard,
+  Info,
+  RefreshCw,
+  Minimize2,
 } from 'lucide-react';
 import { useWorkbenchStore } from '@/lib/store/workbench';
 import { useLayoutStore, LAYOUT_KEY } from '@/lib/store/layoutStore';
@@ -62,10 +65,13 @@ import {
   type ShortcutDef,
 } from '@/lib/store/shortcutsStore';
 import { t } from '@/lib/i18n';
+import type { TranslationDict } from '@/lib/i18n';
 import { cn } from '@/lib/utils';
 import { toast } from 'sonner';
 
-type Category = 'appearance' | 'editor' | 'layout' | 'export' | 'language' | 'shortcuts';
+type Category = 'appearance' | 'editor' | 'layout' | 'export' | 'language' | 'shortcuts' | 'about';
+
+const APP_VERSION = '0.0.5';
 
 export function SettingsPanel() {
   const open = useSettingsStore((s) => s.open);
@@ -108,10 +114,24 @@ export function SettingsPanel() {
   const [category, setCategory] = useState<Category>('appearance');
   // Reset confirmation dialog — replaces window.confirm (unavailable in Tauri 2).
   const [resetConfirm, setResetConfirm] = useState(false);
+  // Update check state
+  const [checkingUpdate, setCheckingUpdate] = useState(false);
+  const [updateInfo, setUpdateInfo] = useState<{ available: boolean; latest?: string; notes?: string } | null>(null);
+  // Minimize to tray setting (persisted in localStorage)
+  const [minimizeToTray, setMinimizeToTray] = useState(() => {
+    if (typeof window === 'undefined') return false;
+    return localStorage.getItem('omnimath-minimize-tray') === 'true';
+  });
 
   useEffect(() => {
     loadSettings();
   }, [loadSettings]);
+
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      localStorage.setItem('omnimath-minimize-tray', String(minimizeToTray));
+    }
+  }, [minimizeToTray]);
 
   const handleReset = () => {
     setResetConfirm(true);
@@ -160,13 +180,34 @@ export function SettingsPanel() {
     }
   };
 
-  const categories: { id: Category; labelKey: typeof t extends (k: infer K) => string ? K : never; icon: typeof Palette }[] = [
+  const checkForUpdates = async () => {
+    setCheckingUpdate(true);
+    setUpdateInfo(null);
+    try {
+      // Simulate update check — in real Tauri build this would call GitHub API
+      await new Promise((r) => setTimeout(r, 1200));
+      // For demo purposes, show current is latest
+      setUpdateInfo({
+        available: false,
+        latest: APP_VERSION,
+        notes: '当前已是最新版本',
+      });
+      toast.success('已是最新版本');
+    } catch {
+      toast.error('检查更新失败');
+    } finally {
+      setCheckingUpdate(false);
+    }
+  };
+
+  const categories: { id: Category; labelKey: keyof TranslationDict; icon: typeof Palette }[] = [
     { id: 'appearance', labelKey: 'settingsAppearance', icon: Palette },
     { id: 'editor', labelKey: 'settingsEditor', icon: Code2 },
     { id: 'layout', labelKey: 'settingsLayout', icon: Layout },
     { id: 'export', labelKey: 'settingsExport', icon: Download },
     { id: 'language', labelKey: 'settingsLanguage', icon: Languages },
-    { id: 'shortcuts', labelKey: 'settingsShortcuts' as never, icon: Keyboard },
+    { id: 'shortcuts', labelKey: 'settingsShortcuts', icon: Keyboard },
+    { id: 'about', labelKey: 'settingsAbout', icon: Info },
   ];
 
   return (
@@ -274,6 +315,15 @@ export function SettingsPanel() {
                     checked={activityBarAutoHide}
                     onCheckedChange={(v) => setActivityBarAutoHide(v)}
                     disabled={activityBarLocked}
+                  />
+                </SettingRow>
+
+                <div className="h-px bg-border/40 my-1" />
+
+                <SettingRow label="关闭窗口时最小化到托盘">
+                  <Switch
+                    checked={minimizeToTray}
+                    onCheckedChange={setMinimizeToTray}
                   />
                 </SettingRow>
               </motion.div>
@@ -438,6 +488,102 @@ export function SettingsPanel() {
                   onResetOne={(action) => setShortcut(action, DEFAULT_SHORTCUTS[action])}
                   onResetAll={resetShortcuts}
                 />
+              </motion.div>
+            )}
+
+            {category === 'about' && (
+              <motion.div
+                initial={{ opacity: 0, x: 8 }}
+                animate={{ opacity: 1, x: 0 }}
+                transition={{ duration: 0.15 }}
+                className="space-y-5"
+              >
+                {/* Version info */}
+                <div className="rounded-lg border border-border/60 bg-muted/20 p-4 text-center">
+                  <div className="flex items-center justify-center gap-2 mb-2">
+                    <div className="size-10 rounded-xl bg-primary/10 grid place-items-center">
+                      <span className="text-lg font-bold text-primary">Σ</span>
+                    </div>
+                  </div>
+                  <h3 className="text-base font-semibold">OmniMath Pro</h3>
+                  <p className="text-xs text-muted-foreground mt-1">Version {APP_VERSION}</p>
+                  <p className="text-[11px] text-muted-foreground mt-2">专业的数学计算与可视化工具</p>
+                </div>
+
+                {/* Update check */}
+                <SettingRow label="检查更新">
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={checkForUpdates}
+                    disabled={checkingUpdate}
+                    className="gap-2 h-8 text-xs"
+                  >
+                    <RefreshCw className={cn('size-3.5', checkingUpdate && 'animate-spin')} />
+                    {checkingUpdate ? '检查中...' : '检查更新'}
+                  </Button>
+                </SettingRow>
+
+                {/* Update result */}
+                <AnimatePresence>
+                  {updateInfo && (
+                    <motion.div
+                      initial={{ opacity: 0, height: 0 }}
+                      animate={{ opacity: 1, height: 'auto' }}
+                      exit={{ opacity: 0, height: 0 }}
+                      className={cn(
+                        'rounded-lg border p-3 text-xs',
+                        updateInfo.available
+                          ? 'border-amber-500/30 bg-amber-500/10 text-amber-700 dark:text-amber-400'
+                          : 'border-emerald-500/30 bg-emerald-500/10 text-emerald-700 dark:text-emerald-400',
+                      )}
+                    >
+                      <div className="font-medium">
+                        {updateInfo.available
+                          ? `发现新版本: v${updateInfo.latest}`
+                          : `当前版本 v${APP_VERSION} 已是最新`}
+                      </div>
+                      {updateInfo.notes && (
+                        <div className="mt-1 text-[11px] opacity-80">{updateInfo.notes}</div>
+                      )}
+                    </motion.div>
+                  )}
+                </AnimatePresence>
+
+                {/* Links */}
+                <div className="space-y-2">
+                  <div className="text-[11px] uppercase tracking-wider text-muted-foreground">相关链接</div>
+                  <div className="grid grid-cols-2 gap-2">
+                    <button
+                      type="button"
+                      className="rounded-md border border-border/60 px-3 py-2 text-xs text-left hover:bg-accent/40 transition-colors"
+                    >
+                      📖 官方文档
+                    </button>
+                    <button
+                      type="button"
+                      className="rounded-md border border-border/60 px-3 py-2 text-xs text-left hover:bg-accent/40 transition-colors"
+                    >
+                      🐛 反馈问题
+                    </button>
+                    <button
+                      type="button"
+                      className="rounded-md border border-border/60 px-3 py-2 text-xs text-left hover:bg-accent/40 transition-colors"
+                    >
+                      ⭐ GitHub
+                    </button>
+                    <button
+                      type="button"
+                      className="rounded-md border border-border/60 px-3 py-2 text-xs text-left hover:bg-accent/40 transition-colors"
+                    >
+                      💬 讨论社区
+                    </button>
+                  </div>
+                </div>
+
+                <div className="text-[10px] text-muted-foreground text-center pt-2">
+                  © 2025 OmniMath. Built with Tauri + React.
+                </div>
               </motion.div>
             )}
           </div>

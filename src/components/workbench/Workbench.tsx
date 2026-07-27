@@ -41,6 +41,7 @@ import { PreviewPanel } from '@/components/workbench/layout/PreviewPanel';
 import { StatusBar } from '@/components/workbench/layout/StatusBar';
 import { CommandPalette } from '@/components/workbench/panels/CommandPalette';
 import { GlobalCalcBar } from '@/components/workbench/panels/GlobalCalcBar';
+import { FloatingCalculator } from '@/components/workbench/panels/FloatingCalculator';
 import { MobileWorkbench } from '@/components/workbench/MobileWorkbench';
 import { NodePipeline } from '@/components/workbench/nodes/NodePipeline';
 import { WhiteboardCanvas } from '@/components/workbench/whiteboard/WhiteboardCanvas';
@@ -147,6 +148,7 @@ export function Workbench() {
         <MobileWorkbench />
         <CommandPalette />
         <GlobalCalcBar />
+        <FloatingCalculator />
         <SettingsPanel />
       </>
     );
@@ -344,6 +346,7 @@ export function Workbench() {
       {/* Overlays */}
       <CommandPalette />
       <GlobalCalcBar />
+      <FloatingCalculator />
       <SettingsPanel />
     </motion.div>
   );

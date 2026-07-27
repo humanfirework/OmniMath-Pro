@@ -125,6 +125,8 @@ export interface TranslationDict {
   settingsUseMathFont: string;
   settingsResetAll: string;
   settingsResetConfirm: string;
+  settingsShortcuts: string;
+  settingsAbout: string;
 
   /* ---------------- Side panel tabs ---------------- */
   tabHistory: string;
@@ -822,6 +824,8 @@ const zhCN: TranslationDict = {
   settingsUseMathFont: "使用数学字体",
   settingsResetAll: "重置全部设置",
   settingsResetConfirm: "确定要重置所有设置吗？此操作不可撤销。",
+  settingsShortcuts: "快捷键",
+  settingsAbout: "关于",
 
   /* Tabs */
   tabHistory: "历史",
@@ -1516,6 +1520,8 @@ const en: TranslationDict = {
   settingsUseMathFont: "Use Math Font",
   settingsResetAll: "Reset All Settings",
   settingsResetConfirm: "Are you sure you want to reset all settings? This cannot be undone.",
+  settingsShortcuts: "Shortcuts",
+  settingsAbout: "About",
 
   /* Tabs */
   tabHistory: "History",
