@@ -48,8 +48,8 @@ jobs:
         uses: dtolnay/rust-toolchain@stable
         with:
           # 锁定 toolchain 保证可复现性
-          # 1.85.0 起 edition2024 稳定，indexmap v2.14+ 等依赖需要它
-          toolchain: "1.85.0"
+          # 1.88.0 — darling/plist/serde_with/time 等 crate 依赖的最低版本
+          toolchain: "1.88.0"
           targets: ${{ matrix.args == '--target aarch64-apple-darwin' && 'aarch64-apple-darwin' || matrix.args == '--target x86_64-apple-darwin' && 'x86_64-apple-darwin' || '' }}
 
       - name: Rust cache
