@@ -31,17 +31,33 @@ Built with Tauri 2 + Next.js 16 + React 19
 
 ## Preview
 
-### Workbench & Function Plotting
+### Workbench
 
-![Workbench & Function Plotting](./public/screenshots/workbench.png)
+![Workbench](./public/screenshots/workbench.png)
 
-### Node-based Computation Pipeline
+### 2D Plotting
 
-![Node-based Computation Pipeline](./public/screenshots/pipeline.png)
+![2D Plotting](./public/screenshots/plot2d.png)
 
-### Linear Algebra Solver
+### 3D Surface Plotting
 
-![Linear Algebra Solver](./public/screenshots/linear-algebra.png)
+![3D Surface Plotting](./public/screenshots/plot3d.png)
+
+### Linear Algebra
+
+![Linear Algebra](./public/screenshots/linear-algebra.png)
+
+### Floating Calculator
+
+![Floating Calculator](./public/screenshots/calculator.png)
+
+### Settings Panel
+
+![Settings Panel](./public/screenshots/settings.png)
+
+### Light Mode
+
+![Light Mode](./public/screenshots/light-mode.png)
 
 ---
 
@@ -72,6 +88,10 @@ Regular calculators are too simple, and professional math software is often too 
 - Multi-function overlay, automatic labeling of extrema and zeros
 - Mouse wheel zoom, drag-to-pan, hover-to-read
 - Defensive handling of extreme ranges and invalid expressions to prevent crashes
+- Math software style color scheme (inspired by JSXGraph / GeoGebra)
+- Independent color schemes for dark/light modes
+- Real-time parameter sliders: drag variable values, curves respond instantly
+- 4-layer Canvas architecture, smooth 60fps rendering
 
 ### Formula Rendering
 
@@ -84,6 +104,13 @@ Regular calculators are too simple, and professional math software is often too 
 - Matrix input, editing, and paste parsing (MATLAB / CSV / TSV)
 - Gaussian elimination, LU / QR decomposition, eigenvalue computation
 - Linear system solving with automatic detection of unique / no / infinite solutions
+
+### Floating Calculator
+
+- `Ctrl/Cmd + Shift + C` to summon a portable calculator
+- Three modes: Basic, Scientific, Unit Conversion
+- Supports length, weight, temperature, area, volume, time conversions
+- Draggable, pinnable, copy-to-clipboard
 
 ### Node-based Workflow (Pipeline)
 
@@ -99,6 +126,8 @@ Regular calculators are too simple, and professional math software is often too 
 - **Dark / Light themes**: High-contrast colors meeting WCAG readability standards
 - **Chinese / English i18n**: Switch interface language with one click
 - **Command Palette**: `Ctrl/Cmd + Shift + P` for quick commands
+- **Settings Panel**: 7 categories (Appearance/Editor/Layout/Export/Language/Shortcuts/About), auto update check, minimize to tray
+- **Accessibility**: Respects `prefers-reduced-motion` system preference
 
 ---
 
@@ -126,6 +155,7 @@ Go to the [Releases](https://github.com/humanfirework/OmniMath-Pro/releases) pag
 | State Management | Zustand |
 | Computation Engine | mathjs |
 | Formula Rendering | KaTeX |
+| 3D Rendering | Three.js, react-three-fiber |
 | Node Graph | Custom Canvas + SVG node engine |
 | Desktop Shell | Tauri 2 (Rust + wry/WebKit) |
 | Bundling | Tauri bundler (.msi / .exe / .dmg / .deb / .AppImage) |

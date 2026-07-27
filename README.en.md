@@ -25,15 +25,27 @@ Regular calculators are too simple, and professional math software is often too 
 - Instant results with LaTeX and keyboard shortcuts
 - Calculation, plotting, formulas, and variable management in one window
 
+## Screenshots
+
+| | | |
+|:---:|:---:|:---:|
+| ![Workbench](docs/images/workbench.png) | ![2D Plot](docs/images/plot2d.png) | ![3D Plot](docs/images/plot3d.png) |
+| ![Linear Algebra](docs/images/linear-algebra.png) | ![Calculator](docs/images/calculator.png) | ![Settings](docs/images/settings.png) |
+| ![Light Mode](docs/images/light-mode.png) | | |
+
 ## Core Features
 
 - **Symbolic computation & real-time evaluation**: powered by mathjs, supports variables, functions, matrices, complex numbers, and more
 - **2D function plotting**: Cartesian and polar coordinates, Canvas rendering, multi-function overlay
+- **3D function plotting**: math-software-style surfaces and curves (JSXGraph/GeoGebra inspired)
 - **LaTeX formula rendering**: powered by KaTeX, instant preview as you type
 - **Equation solving**: single-variable and system equations
 - **Unit & base conversion**: common units for length, mass, time, angle; base 2 to base 36 conversion
+- **Floating Calculator**: `Ctrl/Cmd + Shift + C` to summon a lightweight popup with basic, scientific, and unit-conversion modes
 - **Command palette & shortcuts**: VSCode-style `Ctrl/Cmd + Shift + P` for quick navigation
 - **Variable sliders & panel**: tweak parameters in real time and watch results/graphs update
+- **Settings panel**: 7 categories of options, automatic update checks, and minimize-to-tray support
+- **Accessibility**: respects `prefers-reduced-motion` to disable non-essential animations
 - **Chinese / English i18n**: switch interface language anytime
 - **Dark / light theme**: follow system or manual toggle
 - **VSCode-style three-pane layout**: adjustable ActivityBar / SidePanel / Editor / Preview / StatusBar
@@ -60,6 +72,7 @@ Head to the [Releases](https://github.com/humanfirework/OmniMath-Pro/releases) p
 | State Management | Zustand |
 | Computation Engine | mathjs |
 | Formula Rendering | KaTeX |
+| 3D Rendering | Three.js, react-three-fiber |
 | Desktop Shell | Tauri 2 (Rust + wry/WebKit) |
 | Bundling | Tauri bundler (.msi / .exe / .dmg / .deb / .AppImage) |
 

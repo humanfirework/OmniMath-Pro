@@ -242,11 +242,14 @@ export function FloatingCalculator() {
     }
   }, [display, expression]);
 
+  const copyTimerRef = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
+
   const handleCopy = useCallback(async () => {
     try {
       await navigator.clipboard.writeText(display);
       setCopied(true);
-      setTimeout(() => setCopied(false), 1400);
+      clearTimeout(copyTimerRef.current);
+      copyTimerRef.current = setTimeout(() => setCopied(false), 1400);
     } catch {
       /* ignore */
     }

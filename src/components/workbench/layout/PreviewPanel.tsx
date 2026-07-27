@@ -20,7 +20,7 @@
  */
 
 import dynamic from 'next/dynamic';
-import { Fragment, useCallback } from 'react';
+import { Fragment, useCallback, useRef } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
   FileText,
@@ -132,13 +132,15 @@ export function PreviewPanel() {
   const setPreviewSize = useLayoutStore((s) => s.setPreviewSize);
 
   const [copied, setCopied] = useState(false);
+  const copyTimerRef = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
 
   const handleCopy = useCallback(async () => {
     if (!currentResult) return;
     try {
       await navigator.clipboard.writeText(currentResult.output);
       setCopied(true);
-      setTimeout(() => setCopied(false), 1400);
+      clearTimeout(copyTimerRef.current);
+      copyTimerRef.current = setTimeout(() => setCopied(false), 1400);
     } catch {
       /* ignore */
     }

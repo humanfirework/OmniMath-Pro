@@ -171,10 +171,11 @@ export function EditorPanel() {
     return () => clearTimeout(timer);
   }, [editorContent, activeFileId]);
 
-  // Clean up the preview debounce timer on unmount.
+  // Clean up timers on unmount.
   useEffect(() => {
     return () => {
       if (previewTimerRef.current) clearTimeout(previewTimerRef.current);
+      if (runScriptTimerRef.current) clearTimeout(runScriptTimerRef.current);
     };
   }, []);
 
@@ -193,11 +194,13 @@ export function EditorPanel() {
   }, [previewLine, editorContent, inputMode]);
 
   /* ─── Run script ───────────────────────────────────────────────── */
+  const runScriptTimerRef = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
   const runScript = useCallback(() => {
     if (isRunning) return;
     setIsRunning(true);
     // Defer to allow UI to show running state.
-    setTimeout(async () => {
+    clearTimeout(runScriptTimerRef.current);
+    runScriptTimerRef.current = setTimeout(async () => {
       try {
         const lines = editorContent.split('\n');
         let lastResult: CalculationResult | null = null;

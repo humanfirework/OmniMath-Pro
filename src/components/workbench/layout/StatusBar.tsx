@@ -11,7 +11,7 @@
  *  - Conflict detector badge ( Phase 8 )：显示跨 store 冲突数与一键修复入口
  */
 
-import { useCallback, useMemo, useState } from 'react';
+import { useCallback, useMemo, useRef, useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
   Check,
@@ -83,10 +83,13 @@ export function StatusBar() {
   const varCount = Object.keys(variables).length;
   const plotCount = plots.length;
 
+  const calcTimerRef = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
+
   const runQuickCalc = useCallback(() => {
     if (!quickCalc.trim()) return;
     setCalcLoading(true);
-    setTimeout(() => {
+    clearTimeout(calcTimerRef.current);
+    calcTimerRef.current = setTimeout(() => {
       try {
         const r = evaluateExpression(quickCalc, inputMode);
         if (r.success) {

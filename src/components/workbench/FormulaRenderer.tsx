@@ -118,11 +118,14 @@ export function FormulaRenderer({
     }
   }, [collapsible, html]);
 
+  const copyTimerRef = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
+
   const handleCopy = async () => {
     try {
       await navigator.clipboard.writeText(latex);
       setCopied(true);
-      setTimeout(() => setCopied(false), 1400);
+      clearTimeout(copyTimerRef.current);
+      copyTimerRef.current = setTimeout(() => setCopied(false), 1400);
     } catch {
       /* ignore */
     }

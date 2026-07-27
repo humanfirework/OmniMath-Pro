@@ -270,14 +270,18 @@ function BillboardLabel({
   const { camera } = useThree();
   const textRef = useRef<any>(null);
   const posVec = useMemo(() => new THREE.Vector3(...position), [position]);
+  const lastDistanceRef = useRef(0);
 
-  // Update fontSize every frame based on camera distance so the label
-  // maintains a constant screen-pixel size regardless of zoom.
+  // Update fontSize based on camera distance — but only when distance
+  // changes by >5%, to avoid updating 24 labels × 60fps unnecessarily.
   useFrame(() => {
     if (!textRef.current) return;
     const distance = camera.position.distanceTo(posVec);
-    // Convert desired screen pixels to world units at this distance.
-    // The magic number ~0.5 scales so that pixelSize=14 looks reasonable.
+    if (lastDistanceRef.current > 0) {
+      const ratio = distance / lastDistanceRef.current;
+      if (ratio > 0.95 && ratio < 1.05) return; // skip — barely changed
+    }
+    lastDistanceRef.current = distance;
     const worldSize = (pixelSize * distance) / 280;
     textRef.current.fontSize = worldSize;
   });
