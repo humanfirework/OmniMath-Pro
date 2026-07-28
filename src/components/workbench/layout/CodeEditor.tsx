@@ -111,6 +111,7 @@ export function CodeEditor({
       backgroundColor: 'transparent',
       borderRight: '1px solid var(--border, rgba(255,255,255,0.1))',
       color: 'var(--muted-foreground, #888)',
+      opacity: '0.8',
     },
     // VSCode-style active line highlight: subtle teal background on both
     // the line content and the gutter. 0.08 is visible but not distracting.

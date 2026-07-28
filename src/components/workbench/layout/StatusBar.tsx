@@ -203,7 +203,7 @@ export function StatusBar() {
       </div>
 
       {/* Right */}
-      <div className="flex items-center gap-2">
+      <div className="flex items-center gap-1.5">
         {/* Conflict detector badge (Phase 8) */}
         <button
           type="button"
@@ -234,36 +234,41 @@ export function StatusBar() {
               : `${summary.total} ${t('statusConflicts')}`}
           </span>
         </button>
-        <span className="text-border hidden sm:inline">|</span>
-        <span className="hidden md:flex items-center gap-1 text-muted-foreground">
-          <Activity className="size-2.5" />
-          {lineCount} {t('editorLines')}
-        </span>
-        <span className="text-border hidden md:inline">|</span>
-        <span className="hidden sm:flex items-center gap-1 text-muted-foreground">
-          <Sigma className="size-2.5 text-primary" />
-          {inputMode}
-        </span>
-        <span className="text-border hidden sm:inline">|</span>
-        <span className="text-muted-foreground">
-          {varCount} {t('statusVars')}
-        </span>
-        <span className="text-border hidden sm:inline">|</span>
-        <span className="hidden sm:inline text-muted-foreground">
-          {plotCount} {t('statusPlots')}
-        </span>
-        <span className="text-border">|</span>
-        <span className="flex items-center gap-1 text-muted-foreground">
-          {theme === 'dark' ? <Moon className="size-2.5" /> : <Sun className="size-2.5 text-amber-500" />}
-          <span className="hidden sm:inline">
-            {theme === 'dark' ? t('statusDark') : t('statusLight')}
+
+        {/* Editor info group */}
+        <div className="hidden md:flex items-center gap-1.5 px-1.5 h-4 rounded bg-muted/40 text-muted-foreground">
+          <span className="flex items-center gap-1">
+            <Activity className="size-2.5" />
+            {lineCount} {t('editorLines')}
           </span>
-        </span>
-        <span className="text-border hidden sm:inline">|</span>
-        <span className="hidden sm:flex items-center gap-1 text-muted-foreground">
-          <Languages className="size-2.5" />
-          {locale === 'zh-CN' ? '中' : 'EN'}
-        </span>
+          <span className="text-border/60">·</span>
+          <span className="flex items-center gap-1">
+            <Sigma className="size-2.5 text-primary" />
+            {inputMode}
+          </span>
+        </div>
+
+        {/* Data info group */}
+        <div className="hidden sm:flex items-center gap-1.5 px-1.5 h-4 rounded bg-muted/40 text-muted-foreground">
+          <span>{varCount} {t('statusVars')}</span>
+          <span className="text-border/60">·</span>
+          <span>{plotCount} {t('statusPlots')}</span>
+        </div>
+
+        {/* Preferences group */}
+        <div className="flex items-center gap-1.5 px-1.5 h-4 rounded bg-muted/40 text-muted-foreground">
+          <span className="flex items-center gap-1">
+            {theme === 'dark' ? <Moon className="size-2.5" /> : <Sun className="size-2.5 text-amber-500" />}
+            <span className="hidden sm:inline">
+              {theme === 'dark' ? t('statusDark') : t('statusLight')}
+            </span>
+          </span>
+          <span className="hidden sm:inline text-border/60">·</span>
+          <span className="hidden sm:flex items-center gap-1">
+            <Languages className="size-2.5" />
+            {locale === 'zh-CN' ? '中' : 'EN'}
+          </span>
+        </div>
       </div>
 
       {/* Conflict detail popover (Phase 8) */}

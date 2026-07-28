@@ -304,7 +304,7 @@ export function ActivityBar() {
               {orderedItems.map((item, idx) => (
                 <Fragment key={item.id}>
                   {idx > 0 && item.group !== orderedItems[idx - 1].group && (
-                    <div aria-hidden className="w-5 h-px bg-border/50 my-1" />
+                    <div aria-hidden className="w-6 h-px bg-border/70 my-1.5" />
                   )}
                   <SortableActivityItem
                     item={item}
@@ -327,7 +327,7 @@ export function ActivityBar() {
               return (
                 <Fragment key={item.id}>
                   {idx > 0 && item.group !== orderedItems[idx - 1].group && (
-                    <div aria-hidden className="w-5 h-px bg-border/50 my-1" />
+                    <div aria-hidden className="w-6 h-px bg-border/70 my-1.5" />
                   )}
                   <button
                     type="button"
@@ -349,7 +349,7 @@ export function ActivityBar() {
         )}
 
         {/* 组间分隔线：Pipeline/Linalg/Whiteboard 按钮属于"可视化"组，与上方数学组之间分隔 */}
-        <div aria-hidden className="w-5 h-px bg-border/50 my-1" />
+        <div aria-hidden className="w-6 h-px bg-border/70 my-1.5" />
 
         {/* Pipeline switch — special: changes viewMode */}
         <Tooltip delayDuration={200}>
