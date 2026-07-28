@@ -8,7 +8,7 @@
  * Body: ScrollArea-wrapped panel.
  */
 
-import { PanelLeftClose } from 'lucide-react';
+import { PanelLeftClose, Clock, Variable, BookOpen, Grid3x3, FunctionSquare, FileCode2, BarChart3 } from 'lucide-react';
 import {
   Tooltip,
   TooltipContent,
@@ -37,6 +37,16 @@ const PANEL_TITLE_KEY: Record<SidePanelTab, keyof TranslationDict> = {
   stats: 'statsTitle',
 };
 
+const PANEL_ICON: Record<SidePanelTab, typeof Clock> = {
+  history: Clock,
+  variables: Variable,
+  formulas: BookOpen,
+  linalg: Grid3x3,
+  solver: FunctionSquare,
+  files: FileCode2,
+  stats: BarChart3,
+};
+
 export function SidePanel() {
   const activeSidePanel = useWorkbenchStore((s) => s.activeSidePanel);
   const toggleSidePanel = useWorkbenchStore((s) => s.toggleSidePanel);
@@ -45,9 +55,15 @@ export function SidePanel() {
     <div className="flex flex-col h-full bg-card/40">
       {/* Header */}
       <div className="shrink-0 h-9 flex items-center justify-between px-2 border-b border-border/60 bg-background/40">
-        <span className="text-[11.5px] font-semibold tracking-tight text-foreground/85 px-1">
-          {t(PANEL_TITLE_KEY[activeSidePanel])}
-        </span>
+        <div className="flex items-center gap-1.5 px-1">
+          {(() => {
+            const Icon = PANEL_ICON[activeSidePanel];
+            return <Icon className="size-3.5 text-primary shrink-0" />;
+          })()}
+          <span className="text-[11.5px] font-semibold tracking-tight text-foreground/85">
+            {t(PANEL_TITLE_KEY[activeSidePanel])}
+          </span>
+        </div>
         <Tooltip>
           <TooltipTrigger asChild>
             <button

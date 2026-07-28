@@ -340,11 +340,11 @@ function FormulaView({
     return (
       <div className="h-full flex flex-col items-center justify-center text-center px-8 py-12">
         <motion.div
-          animate={{ y: [0, -8, 0], rotate: [0, 6, -6, 0] }}
-          transition={{ duration: 4, repeat: Infinity, ease: 'easeInOut' }}
-          className="text-4xl mb-3"
+          animate={{ y: [0, -6, 0] }}
+          transition={{ duration: 3.2, repeat: Infinity, ease: 'easeInOut' }}
+          className="grid place-items-center size-14 rounded-2xl bg-primary/8 border border-primary/20 mb-3"
         >
-          ✨
+          <Sparkles className="size-6 text-primary/70" />
         </motion.div>
         <p className="text-[13px] font-medium text-foreground/80 mb-1">
           {t('previewEmpty')}

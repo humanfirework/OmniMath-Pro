@@ -153,9 +153,9 @@ export function TitleBar() {
         <div className="hidden sm:flex items-center gap-0.5 mr-1 p-0.5 rounded-md bg-muted/60 border border-border/60">
           {(
             [
-              { v: 'workbench', icon: LayoutDashboard, key: 'menuToggleSidebar' },
-              { v: 'whiteboard', icon: PencilRuler, key: 'abWhiteboard' },
-              { v: 'focus', icon: Maximize2, key: 'menuResetZoom' },
+              { v: 'workbench', icon: LayoutDashboard, key: 'viewWorkbench' as const },
+              { v: 'whiteboard', icon: PencilRuler, key: 'abWhiteboard' as const },
+              { v: 'focus', icon: Maximize2, key: 'viewFocus' as const },
             ] as const
           ).map(({ v, icon: Icon, key }) => (
             <Tooltip key={v}>

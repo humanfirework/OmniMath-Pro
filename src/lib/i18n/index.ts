@@ -638,6 +638,12 @@ export interface TranslationDict {
   wbAllPanelsHidden: string;
   wbAllPanelsHiddenHint: string;
 
+  /* ---------------- View modes ---------------- */
+  viewWorkbench: string;
+  viewFocus: string;
+  editorLivePreview: string;
+  editorLivePreviewHint: string;
+
   /* ---------------- Keyboard shortcuts ---------------- */
   ksTitle: string;
   ksEditor: string;
@@ -1341,6 +1347,12 @@ const zhCN: TranslationDict = {
   wbAllPanelsHidden: "所有面板已隐藏",
   wbAllPanelsHiddenHint: "可通过命令面板或任务栏恢复编辑器、预览区和任务栏",
 
+  /* View modes */
+  viewWorkbench: "工作台",
+  viewFocus: "专注模式",
+  editorLivePreview: "预览",
+  editorLivePreviewHint: "输入表达式查看实时预览",
+
   /* Keyboard shortcuts */
   ksTitle: "键盘快捷键",
   ksEditor: "编辑器",
@@ -2040,6 +2052,12 @@ const en: TranslationDict = {
   /* Workbench layout */
   wbAllPanelsHidden: "All panels are hidden",
   wbAllPanelsHiddenHint: "Restore editor, preview, or activity bar via the command palette or activity bar",
+
+  /* View modes */
+  viewWorkbench: "Workbench",
+  viewFocus: "Focus Mode",
+  editorLivePreview: "Preview",
+  editorLivePreviewHint: "Type an expression to see live preview",
 
   /* Keyboard shortcuts */
   ksTitle: "Keyboard Shortcuts",

@@ -455,7 +455,7 @@ export function EditorPanel() {
       {inputMode === 'simple' && (
         <div className="shrink-0 min-h-10 max-h-48 flex items-start gap-2 px-2.5 py-2 border-b border-border/60 bg-muted/30 border-l-2 border-l-primary/60 overflow-x-auto overflow-y-auto">
           <span className="text-[12px] font-medium text-muted-foreground shrink-0 mt-0.5">
-            预览:
+            {t('editorLivePreview')}:
           </span>
           {previewLatex ? (
             <FormulaRenderer
@@ -465,7 +465,7 @@ export function EditorPanel() {
             />
           ) : (
             <span className="text-[12px] text-muted-foreground/70 mt-0.5">
-              输入表达式查看实时预览
+              {t('editorLivePreviewHint')}
             </span>
           )}
         </div>
