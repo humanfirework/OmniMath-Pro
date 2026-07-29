@@ -85,13 +85,15 @@ Regular calculators are too simple, and professional math software is often too 
 ### 2D / 3D Plotting
 
 - Cartesian, polar, and parametric 2D plots
-- Multi-function overlay, automatic labeling of extrema and zeros
+- Multi-curve overlay on the same axes by default (overlay mode); facet mode retained as a toggle
+- Automatic labeling of extrema and zeros
 - Mouse wheel zoom, drag-to-pan, hover-to-read
 - Defensive handling of extreme ranges and invalid expressions to prevent crashes
 - Math software style color scheme (inspired by JSXGraph / GeoGebra)
 - Independent color schemes for dark/light modes
-- Real-time parameter sliders: drag variable values, curves respond instantly
-- 4-layer Canvas architecture, smooth 60fps rendering
+- **Parameter slider system**: auto-scans expressions for free parameters (excluding the independent variable and defined symbols), generates a Desmos-style slider for each, with numeric input and range/step editing; drag to redraw in real time, configuration persists across refreshes
+- **Auto intersections**: one-click computation of all pairwise intersections across visible curves; coordinates labeled on the chart and listed with their curve pairs in the panel; updates live as sliders are dragged
+- 4-layer Canvas architecture, smooth 60fps rendering; adaptive downsampling during slider drag to keep frame rate, full-precision resampling after release
 
 ### Formula Rendering
 
@@ -104,6 +106,14 @@ Regular calculators are too simple, and professional math software is often too 
 - Matrix input, editing, and paste parsing (MATLAB / CSV / TSV)
 - Gaussian elimination, LU / QR decomposition, eigenvalue computation
 - Linear system solving with automatic detection of unique / no / infinite solutions
+
+### Solver Workbench
+
+- Independent full-screen workbench (same layout as the Linear Algebra workbench), entry point in the ActivityBar math tools group
+- Left-side solver type navigation: Equation / System / Derivative / Integral / Limit
+- Right-side input area + KaTeX result area + step-by-step area; the main workspace is no longer constrained by sidebar width
+- **Enhanced step-by-step solving**: derivative steps annotate the rule used (power / product / quotient / chain, etc.), linear systems show stepwise elimination and back-substitution, integrals output available intermediate transformation steps; each step rendered with KaTeX and a rule description
+- Results can be sent to 2D plotting in one click for further visualization
 
 ### Floating Calculator
 
@@ -127,6 +137,9 @@ Regular calculators are too simple, and professional math software is often too 
 - **Chinese / English i18n**: Switch interface language with one click
 - **Command Palette**: `Ctrl/Cmd + Shift + P` for quick commands
 - **Settings Panel**: 7 categories (Appearance/Editor/Layout/Export/Language/Shortcuts/About), auto update check, minimize to tray
+- **Structured advanced settings**: the advanced section replaces JSON text editing with form controls (numeric input / switches / dropdowns); changes apply and persist instantly, invalid input is flagged inline and not written
+- **Typography refinement**: global font stack adds Chinese fallbacks (Noto Sans SC / PingFang SC / Microsoft YaHei, etc.); canvas ticks and annotations use a unified font with tabular-nums
+- **Unified transitions**: view and panel switches use lightweight transform/opacity transitions (150–250ms), preferring CSS transitions without heavy animation dependencies
 - **Accessibility**: Respects `prefers-reduced-motion` system preference
 
 ---

@@ -94,6 +94,19 @@ const PLOT_COLORS = [
  *  issues — the `computed` useMemo reads this during first render. */
 const PADDING = { left: 48, right: 16, top: 16, bottom: 32 };
 
+/** Canvas 文字统一 UI 字体栈，与 globals.css 的 --font-sans 保持一致。
+ *  中文回退紧跟 Inter，避免界面文字与刻度标注之间出现字体 fallback 抖动。
+ *  所有 canvas 刻度、交点标签、坐标标注、轴标签均通过该常量组合 ctx.font。
+ *  注：Canvas 2D 不直接支持 CSS font-variant-numeric，刻度数字的等宽对齐
+ *  依赖统一字体本身（同一字体下数字字形宽度一致已足够整齐）。 */
+const PLOT_FONT_FAMILY =
+  'Inter, "Noto Sans SC", "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", ui-sans-serif, system-ui, sans-serif';
+
+/** 数据读出（tooltip）用的等宽字体栈，与 globals.css 的 --font-mono 一致，
+ *  保证悬浮读数中的坐标数字按列对齐。 */
+const PLOT_MONO_FAMILY =
+  '"JetBrains Mono", "SF Mono", "Fira Code", "Cascadia Code", "Roboto Mono", ui-monospace, SFMono-Regular, Menlo, Consolas, monospace';
+
 const EXAMPLES = [
   { expr: 'sin x', label: 'sin x' },
   { expr: 'x^2', label: 'x²' },
@@ -209,12 +222,52 @@ export function Plot2DCanvas({
   // changes (console assignment, slider drag, variable delete) — this is
   // what makes `a = 3` + `plot(sin(a*x))` + slider work live.
   const scopeVersion = useScopeVersion();
+
+  /* ----------------- T7.1 滑块拖动降采样保帧率 -----------------
+   * scopeVersion 在滑块拖动时会每帧 bump（高频变化）。若每次都用全精度
+   * 采样（可达 2000 点/曲线）重绘，拖动会卡顿。策略：scopeVersion 一旦
+   * 变化就立即进入 lowQuality（采样密度降至约 1/3）保 60fps；停止变化
+   * 约 150ms 后退出 lowQuality，本组件的 computed useMemo 会以全密度
+   * 重采样，已有的 scheduleRedraw 机制随即触发一次高精度重绘。 */
+  const [lowQuality, setLowQuality] = useState(false);
+  const lowQualityTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  // 记录上一次见到的 scopeVersion，用于跳过首次挂载（避免初始渲染就被降采样）。
+  const scopeVersionPrevRef = useRef<number>(scopeVersion);
+  useEffect(() => {
+    // 首次挂载：prev === current，直接跳过。
+    if (scopeVersionPrevRef.current === scopeVersion) return;
+    scopeVersionPrevRef.current = scopeVersion;
+    // scopeVersion 变化（滑块拖动 / 控制台赋值 / 变量删除）：立即降采样。
+    setLowQuality(true);
+    if (lowQualityTimerRef.current) clearTimeout(lowQualityTimerRef.current);
+    // 停止变化约 150ms 后恢复全精度：定时器触发 setLowQuality(false)，
+    // computed 随之重算（全密度），已有 redraw-on-computed effect 触发重绘。
+    lowQualityTimerRef.current = setTimeout(() => {
+      setLowQuality(false);
+      lowQualityTimerRef.current = null;
+    }, 150);
+  }, [scopeVersion]);
+  // 卸载时清理防抖定时器，避免泄漏 / 卸载后 setState。
+  useEffect(() => {
+    return () => {
+      if (lowQualityTimerRef.current) {
+        clearTimeout(lowQualityTimerRef.current);
+        lowQualityTimerRef.current = null;
+      }
+    };
+  }, []);
+
   const computed = useMemo<ComputedPlot[]>(() => {
     // scopeVersion is a dependency ONLY (not read inside) — it forces
     // re-sampling when the shared engine scope mutates.
     void scopeVersion;
     const plotW = Math.max(1, canvasSize.w - PADDING.left - PADDING.right);
-    const sampleCount = Math.min(2000, Math.max(400, Math.floor(plotW * 2)));
+    const baseCount = Math.min(2000, Math.max(400, Math.floor(plotW * 2)));
+    // T7.1: 拖动期间降采样到约 1/3 密度（如 800→266）保帧率；
+    // lowQuality 变回 false 时本 useMemo 重算，触发全精度重绘。
+    const sampleCount = lowQuality
+      ? Math.max(135, Math.floor(baseCount / 3))
+      : baseCount;
     return plots.map((p, idx) => {
       // surface3d plots can't render in 2D — coerce to cartesian so the
       // sampler still produces something (the engine shouldn't normally
@@ -236,7 +289,7 @@ export function Plot2DCanvas({
       };
     });
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [plots, xRange, canvasSize.w, scopeVersion]);
+  }, [plots, xRange, canvasSize.w, scopeVersion, lowQuality]);
 
   /* ----------------------- Coordinate mapping ----------------------- */
 
@@ -474,7 +527,7 @@ export function Plot2DCanvas({
         ctx.fill();
 
         /* ---------- Tick labels ---------- */
-        ctx.font = '11px ui-sans-serif, system-ui, sans-serif';
+        ctx.font = `11px ${PLOT_FONT_FAMILY}`;
         ctx.fillStyle = tickLabelColor;
         ctx.textAlign = 'center';
         ctx.textBaseline = 'top';
@@ -503,7 +556,7 @@ export function Plot2DCanvas({
 
         // Axis labels (x, y).
         ctx.fillStyle = axisLabelColor;
-        ctx.font = 'italic 14px ui-serif, Georgia, serif';
+        ctx.font = `italic 14px ${PLOT_FONT_FAMILY}`;
         ctx.textAlign = 'right';
         ctx.textBaseline = 'bottom';
         ctx.fillText('x', w - PADDING.right - 4, yAxisScreen - 6);
@@ -586,7 +639,7 @@ export function Plot2DCanvas({
         // Derivative order label
         const primes = "'".repeat(overlays.derivativeOrder);
         ctx.fillStyle = dColor;
-        ctx.font = 'italic 12px ui-serif, Georgia, serif';
+        ctx.font = `italic 12px ${PLOT_FONT_FAMILY}`;
         ctx.textAlign = 'right';
         ctx.textBaseline = 'top';
         ctx.fillText(`f${primes}(x)`, w - PADDING.right - 4, PADDING.top + 18);
@@ -615,7 +668,7 @@ export function Plot2DCanvas({
         ctx.arc(tsx, tsy, 4, 0, Math.PI * 2);
         ctx.fill();
         ctx.fillStyle = dark ? '#e0e0e0' : '#424242';
-        ctx.font = '10px ui-sans-serif, system-ui, sans-serif';
+        ctx.font = `10px ${PLOT_FONT_FAMILY}`;
         ctx.textAlign = 'left';
         ctx.textBaseline = 'bottom';
         ctx.fillText(`k=${t.slope.toFixed(3)}`, tsx + 8, tsy - 4);
@@ -640,7 +693,7 @@ export function Plot2DCanvas({
           ctx.stroke();
           // Coordinate label: even indices above the dot, odd below.
           const text = `(${p.x.toFixed(2)}, ${p.y.toFixed(2)})`;
-          ctx.font = '10px ui-sans-serif, system-ui, sans-serif';
+          ctx.font = `10px ${PLOT_FONT_FAMILY}`;
           const tw = ctx.measureText(text).width;
           const above = idx % 2 === 0;
           // Horizontal: prefer right of the dot; flip left near the edge.
@@ -691,7 +744,7 @@ export function Plot2DCanvas({
           ctx.stroke();
           // Label
           ctx.fillStyle = dark ? '#e0e0e0' : '#424242';
-          ctx.font = '10px ui-sans-serif, system-ui, sans-serif';
+          ctx.font = `10px ${PLOT_FONT_FAMILY}`;
           ctx.textAlign = 'center';
           ctx.textBaseline = 'bottom';
           ctx.fillText(`max(${e.x.toFixed(2)}, ${e.y.toFixed(2)})`, sx, sy - 8);
@@ -710,7 +763,7 @@ export function Plot2DCanvas({
           ctx.stroke();
           // Label
           ctx.fillStyle = dark ? '#e0e0e0' : '#424242';
-          ctx.font = '10px ui-sans-serif, system-ui, sans-serif';
+          ctx.font = `10px ${PLOT_FONT_FAMILY}`;
           ctx.textAlign = 'center';
           ctx.textBaseline = 'top';
           ctx.fillText(`min(${e.x.toFixed(2)}, ${e.y.toFixed(2)})`, sx, sy + 8);
@@ -777,7 +830,7 @@ export function Plot2DCanvas({
           color: hover.snapColor,
         });
       }
-      ctx.font = '12px ui-monospace, "Geist Mono", monospace';
+      ctx.font = `12px ${PLOT_MONO_FAMILY}`;
       const padding = 8;
       const lineHeight = 16;
       let boxW = 0;
