@@ -46,6 +46,7 @@ import { MobileWorkbench } from '@/components/workbench/MobileWorkbench';
 import { NodePipeline } from '@/components/workbench/nodes/NodePipeline';
 import { WhiteboardCanvas } from '@/components/workbench/whiteboard/WhiteboardCanvas';
 import { LinearAlgebraWorkbench } from '@/components/workbench/panels/LinearAlgebraWorkbench';
+import { SolverWorkbench } from '@/components/workbench/panels/SolverWorkbench';
 import { SettingsPanel } from '@/components/workbench/panels/SettingsPanel';
 import { ErrorBoundary } from '@/components/ErrorBoundary';
 import { useShortcutsStore, SHORTCUTS_KEY } from '@/lib/store/shortcutsStore';
@@ -186,6 +187,13 @@ export function Workbench() {
           <div className="flex-1 min-w-0 min-h-0">
             <ErrorBoundary>
               <LinearAlgebraWorkbench />
+            </ErrorBoundary>
+          </div>
+        ) : viewMode === 'solver' ? (
+          /* Solver full-screen view (Task 3 — 方程/方程组/求导/积分/极限统一入口) */
+          <div className="flex-1 min-w-0 min-h-0">
+            <ErrorBoundary>
+              <SolverWorkbench />
             </ErrorBoundary>
           </div>
         ) : !editorVisible && !previewVisible ? (

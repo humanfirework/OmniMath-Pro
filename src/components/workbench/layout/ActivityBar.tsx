@@ -8,8 +8,8 @@
  *   - History    (Clock)
  *   - Variables  (Variable)
  *   - Formulas   (BookOpen)
- *   - Solver     (FunctionSquare)
  *   - Statistics (BarChart3)
+ *   - Solver     (FunctionSquare) — switches viewMode to 'solver'
  *   - Pipeline   (Workflow)       — switches viewMode to 'pipeline'
  *   - Whiteboard (PencilRuler)    — switches viewMode to 'whiteboard'
  *   - Linear Alg (Grid3x3)        — switches viewMode to 'linalg'
@@ -109,7 +109,6 @@ const TOP_ITEMS: ActivityItem[] = [
   { id: 'files', icon: FileCode2, labelKey: 'abFiles', group: 'edit' },
   // ── 数学组 ──────────────────────────────────────────
   { id: 'formulas', icon: BookOpen, labelKey: 'abFormulas', group: 'math' },
-  { id: 'solver', icon: FunctionSquare, labelKey: 'abSolver', group: 'math' },
   { id: 'stats', icon: BarChart3, labelKey: 'abStats', group: 'math' },
 ];
 
@@ -348,8 +347,42 @@ export function ActivityBar() {
           </div>
         )}
 
-        {/* 组间分隔线：Pipeline/Linalg/Whiteboard 按钮属于"可视化"组，与上方数学组之间分隔 */}
+        {/* 组间分隔线：Solver/Pipeline/Linalg/Whiteboard 按钮属于"全屏视图"组，与上方数学组之间分隔 */}
         <div aria-hidden className="w-6 h-px bg-border/70 my-1.5" />
+
+        {/* Solver switch — full-screen solver workbench view (Task 3) */}
+        <Tooltip delayDuration={200}>
+          <TooltipTrigger asChild>
+            <motion.button
+              type="button"
+              initial={false}
+              animate={{ opacity: 1, x: 0 }}
+              transition={{ delay: 0.04 * (TOP_ITEMS.length + 1), duration: 0.18 }}
+              onClick={() => setViewMode(viewMode === 'solver' ? 'workbench' : 'solver')}
+              aria-label={t('abSolver')}
+              className={cn(
+                'relative grid place-items-center size-9 rounded-lg transition-all',
+                viewMode === 'solver'
+                  ? 'text-primary bg-primary/12'
+                  : 'text-muted-foreground hover:text-foreground hover:bg-accent/60',
+              )}
+            >
+              <FunctionSquare className="size-[18px]" strokeWidth={2} />
+              {viewMode === 'solver' && (
+                <motion.span
+                  layoutId="activity-indicator"
+                  className={cn(
+                    'absolute top-1/2 -translate-y-1/2 w-[2px] h-5 bg-primary',
+                    isRight ? 'right-0 rounded-l' : 'left-0 rounded-r',
+                  )}
+                  style={{ boxShadow: '0 0 8px oklch(0.7 0.15 165 / 70%)' }}
+                  transition={{ type: 'spring', stiffness: 380, damping: 30 }}
+                />
+              )}
+            </motion.button>
+          </TooltipTrigger>
+          <TooltipContent side={tooltipSide}>{t('abSolver')}</TooltipContent>
+        </Tooltip>
 
         {/* Pipeline switch — special: changes viewMode */}
         <Tooltip delayDuration={200}>

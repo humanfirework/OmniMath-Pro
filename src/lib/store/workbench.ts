@@ -31,6 +31,18 @@ export interface PlotConfig {
   width?: number;
 }
 
+/** 2D 自由参数滑块配置（Desmos 式参数滑块的持久化状态）。 */
+export interface PlotParamConfig {
+  /** 当前值。 */
+  value: number;
+  /** 滑块范围下限。 */
+  min: number;
+  /** 滑块范围上限。 */
+  max: number;
+  /** 滑块步长。 */
+  step: number;
+}
+
 export interface VariableEntry {
   name: string;
   value: unknown;
@@ -41,7 +53,7 @@ export interface VariableEntry {
 export type SidePanelTab = 'history' | 'variables' | 'formulas' | 'linalg' | 'solver' | 'files' | 'stats';
 export type PreviewTab = 'formula' | 'plot2d' | 'plot3d' | 'log' | 'pipeline' | 'ai';
 export type Theme = 'dark' | 'light';
-export type ViewMode = 'workbench' | 'pipeline' | 'whiteboard' | 'focus' | 'linalg';
+export type ViewMode = 'workbench' | 'pipeline' | 'whiteboard' | 'focus' | 'linalg' | 'solver';
 export type ActivityBarPosition = 'left' | 'right';
 
 interface WorkbenchState {
@@ -57,6 +69,9 @@ interface WorkbenchState {
   // Variables & plots
   variables: Record<string, VariableEntry>;
   plots: PlotConfig[];
+  /** 2D 绘图自由参数的滑块状态（按参数名持久化；参数从表达式中消失后
+   *  仍保留其值，重新出现时直接恢复）。 */
+  plotParams: Record<string, PlotParamConfig>;
 
   // UI
   theme: Theme;
@@ -94,6 +109,8 @@ interface WorkbenchState {
   togglePlotVisibility: (id: string) => void;
   clearPlots: () => void;
   updatePlot: (id: string, patch: Partial<PlotConfig>) => void;
+  /** 合并写入某个 2D 自由参数的滑块配置（value/min/max/step 可部分更新）。 */
+  setPlotParam: (name: string, patch: Partial<PlotParamConfig>) => void;
 
   setTheme: (theme: Theme) => void;
   toggleTheme: () => void;
@@ -120,12 +137,12 @@ interface WorkbenchState {
 export const STORAGE_KEY = 'omnimath-pro-v2';
 
 /** Default order of activity bar items (left-to-right or top-to-bottom).
- *  Note: 'linalg' is intentionally absent — it is now a viewMode toggle
- *  rendered as a standalone button (alongside Pipeline/Whiteboard) rather
- *  than a side-panel tab. The SidePanelTab type still includes 'linalg'
- *  because LinearAlgebraPanel remains a valid (programmatically-set) panel. */
+ *  Note: 'linalg' 与 'solver' 被有意排除 — 它们现在是 viewMode 开关，
+ *  以独立按钮渲染（与 Pipeline/Whiteboard 并列），而非 side-panel tab。
+ *  SidePanelTab 类型仍保留二者，因为 LinearAlgebraPanel / SolverPanel
+ *  仍是合法的（可通过命令面板等方式程序化打开的）侧面板。 */
 const DEFAULT_ACTIVITY_BAR_ORDER: SidePanelTab[] = [
-  'history', 'variables', 'formulas', 'solver', 'files', 'stats',
+  'history', 'variables', 'formulas', 'files', 'stats',
 ];
 
 /** Validate a plot config from localStorage — rejects malformed entries
@@ -160,6 +177,31 @@ function sanitizePlot(p: unknown): PlotConfig | null {
   };
 }
 
+/** 校验并恢复 localStorage 中的 plotParams：四项数值必须有限、
+ *  min < max、step > 0，否则丢弃该条目（损坏数据不应让滑块崩溃）。 */
+function sanitizePlotParams(raw: unknown): Record<string, PlotParamConfig> {
+  if (!raw || typeof raw !== 'object') return {};
+  const out: Record<string, PlotParamConfig> = {};
+  for (const [name, v] of Object.entries(raw as Record<string, unknown>)) {
+    if (!name || !v || typeof v !== 'object') continue;
+    const o = v as Record<string, unknown>;
+    const value = o.value;
+    const min = o.min;
+    const max = o.max;
+    const step = o.step;
+    if (
+      typeof value === 'number' && Number.isFinite(value) &&
+      typeof min === 'number' && Number.isFinite(min) &&
+      typeof max === 'number' && Number.isFinite(max) &&
+      typeof step === 'number' && Number.isFinite(step) &&
+      min < max && step > 0
+    ) {
+      out[name] = { value, min, max, step };
+    }
+  }
+  return out;
+}
+
 function loadInitial(): Partial<WorkbenchState> {
   if (typeof window === 'undefined') return {};
   try {
@@ -171,14 +213,15 @@ function loadInitial(): Partial<WorkbenchState> {
     const VALID_INPUT_MODES = ['simple', 'python', 'matlab'] as const;
     const VALID_THEMES = ['dark', 'light'] as const;
     const VALID_LOCALES = ['zh-CN', 'en'] as const;
-    const VALID_VIEW_MODES = ['workbench', 'pipeline', 'whiteboard', 'focus', 'linalg'] as const;
+    const VALID_VIEW_MODES = ['workbench', 'pipeline', 'whiteboard', 'focus', 'linalg', 'solver'] as const;
     const VALID_AB_POSITIONS = ['left', 'right'] as const;
     const VALID_SIDE_PANELS: SidePanelTab[] = [...DEFAULT_ACTIVITY_BAR_ORDER];
     const VALID_PREVIEW_TABS = ['formula', 'plot', 'plot3d', 'log'] as const;
 
     // activityBarOrder 迁移：过滤无效 ID + 补全缺失项
     // 旧版本可能有 symbols/templates/units/bases/guide 等已移除的 tab id，
-    // 也可能缺少新加入的 files/formulas/linalg/solver — 直接补齐。
+    // 也可能缺少新加入的 files/formulas — 直接补齐；
+    // linalg/solver 已转为 viewMode 开关，不在此列表中。
     const migrateOrder = (raw: unknown): SidePanelTab[] => {
       if (!Array.isArray(raw)) return [...DEFAULT_ACTIVITY_BAR_ORDER];
       const valid = raw.filter(
@@ -200,6 +243,7 @@ function loadInitial(): Partial<WorkbenchState> {
       plots: Array.isArray(data.plots)
         ? data.plots.map(sanitizePlot).filter((p: PlotConfig | null): p is PlotConfig => p !== null)
         : [],
+      plotParams: sanitizePlotParams(data.plotParams),
       theme: VALID_THEMES.includes(data.theme) ? data.theme : 'dark',
       locale: VALID_LOCALES.includes(data.locale) ? data.locale : 'zh-CN',
       activeSidePanel: VALID_SIDE_PANELS.includes(data.activeSidePanel) ? data.activeSidePanel : 'history',
@@ -252,6 +296,7 @@ export const useWorkbenchStore = create<WorkbenchState>((set, get) => ({
 
   variables: {},
   plots: [],
+  plotParams: {},
 
   theme: 'dark',
   locale: 'zh-CN',
@@ -324,6 +369,24 @@ export const useWorkbenchStore = create<WorkbenchState>((set, get) => ({
     }));
     get().saveToStorage();
   },
+  setPlotParam: (name, patch) => {
+    set((s) => {
+      // 未出现过的参数先给一份默认配置，再套用 patch。
+      const prev: PlotParamConfig = s.plotParams[name] ?? {
+        value: 1,
+        min: -9,
+        max: 11,
+        step: 0.1,
+      };
+      return {
+        plotParams: {
+          ...s.plotParams,
+          [name]: { ...prev, ...patch },
+        },
+      };
+    });
+    get().saveToStorage();
+  },
 
   setTheme: (theme) => {
     set({ theme });
@@ -363,6 +426,7 @@ export const useWorkbenchStore = create<WorkbenchState>((set, get) => ({
             results: s.results,
             variables: s.variables,
             plots: s.plots,
+            plotParams: s.plotParams,
             theme: s.theme,
             locale: s.locale,
             activeSidePanel: s.activeSidePanel,
@@ -400,11 +464,21 @@ export const useWorkbenchStore = create<WorkbenchState>((set, get) => ({
       // the console and blueprint nodes can use them immediately after a
       // page reload (previously the panel showed them but mathjs could
       // not evaluate them until re-assigned).
-      if (initial.variables) {
+      if (initial.variables || initial.plotParams) {
         const revived: Record<string, unknown> = {};
-        for (const [name, entry] of Object.entries(initial.variables)) {
-          const v = reviveStoredValue((entry as VariableEntry).value);
-          if (v !== undefined) revived[name] = v;
+        // 先放 2D 自由参数的滑块值（低优先级）……
+        if (initial.plotParams) {
+          for (const [name, p] of Object.entries(initial.plotParams)) {
+            revived[name] = p.value;
+          }
+        }
+        // ……再放用户变量（高优先级，同名时覆盖参数 —— 已定义变量
+        // 本就不会出现在自由参数列表中）。
+        if (initial.variables) {
+          for (const [name, entry] of Object.entries(initial.variables)) {
+            const v = reviveStoredValue((entry as VariableEntry).value);
+            if (v !== undefined) revived[name] = v;
+          }
         }
         syncScope(revived);
       }

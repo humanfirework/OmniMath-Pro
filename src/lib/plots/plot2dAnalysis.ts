@@ -24,6 +24,9 @@ import { sampleFunction } from './plot2d';
 export interface IntersectionPoint {
   x: number;
   y: number;
+  /** 所属曲线对标签（如 "sin(x) ∩ cos(x)"），由"全部交点"自动模式填充，
+   *  用于交点列表中注明该点来自哪两条曲线。可选，不影响旧调用方。 */
+  pairLabel?: string;
 }
 
 export interface TangentResult {

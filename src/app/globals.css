@@ -67,7 +67,10 @@
   --color-node-border: var(--node-border);
   --color-connector: var(--connector);
 
-  --font-sans: "Inter", "SF Pro Display", "SF Pro Text", -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", "Noto Sans SC", ui-sans-serif, system-ui, sans-serif;
+  /* 中文回退紧跟 Inter：优先本地 Noto Sans SC，再按平台回退
+     PingFang SC（macOS/iOS）→ 冬青黑体 → 微软雅黑（Windows），
+     全部使用系统/本地字体，不引入网络字体下载 */
+  --font-sans: "Inter", "Noto Sans SC", "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", "SF Pro Display", "SF Pro Text", -apple-system, BlinkMacSystemFont, "Segoe UI", ui-sans-serif, system-ui, sans-serif;
   --font-mono: "JetBrains Mono", "SF Mono", "Fira Code", "Cascadia Code", "Roboto Mono", ui-monospace, SFMono-Regular, Menlo, Consolas, "Courier New", monospace;
   --font-math: "STIX Two Math", "KaTeX_Math", "Cambria Math", serif;
 
@@ -1075,6 +1078,18 @@ textarea.editor-input {
     color 0.18s ease;
 }
 
+/* 等宽数字工具类 —— 数字纵向对齐（设置面板数值、状态栏、读数等），
+   避免 proportional 数字在数值变化时横向跳动。
+   用法：<span className="tnum">3.14159</span> */
+.tnum {
+  font-variant-numeric: tabular-nums;
+}
+
+/* 数字输入框默认启用等宽数字，输入/步进时宽度不抖动 */
+input[type="number"] {
+  font-variant-numeric: tabular-nums;
+}
+
 /* Disable text selection on drag operations */
 .dragging,
 .dragging * {
@@ -1146,6 +1161,63 @@ textarea.editor-input {
   transform: translateZ(0);
   backface-visibility: hidden;
   perspective: 1000px;
+}
+
+/* ── 统一视图/面板过渡规范 ─────────────────────────────────────
+ * 规范：时长 150–250ms（默认 --motion-normal = 200ms）、ease-out、
+ * 只动画 transform/opacity（不触发重排，保证 60fps）。
+ *
+ * 用法（视图切换容器）：
+ *   <div className="view-transition">…</div>
+ * 进入动画：先挂 .view-enter-from，下一帧移除即平滑淡入；
+ * 或直接加 .view-enter 播放一次性进入动画。
+ */
+.view-transition {
+  transition:
+    opacity var(--motion-normal) ease-out,
+    transform var(--motion-normal) ease-out;
+}
+
+/* 进入前初始态：配合 .view-transition 使用 */
+.view-enter-from {
+  opacity: 0;
+  transform: translateY(4px);
+}
+
+/* 一次性进入动画（挂载即播放，等价 tw-animate-css 的 animate-in fade-in） */
+@keyframes viewEnter {
+  from { opacity: 0; transform: translateY(4px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+.view-enter {
+  animation: viewEnter var(--motion-normal) ease-out both;
+}
+
+/* ── Collapsible 展开/折叠平滑过渡 ─────────────────────────────
+ * 基于 radix 在内容元素上写入的 --radix-collapsible-content-height
+ * 变量做高度动画（shadcn 官方方案），并叠加透明度，与现有
+ * src/components/ui/collapsible.tsx 完全兼容（无需改组件）。
+ * 时长沿用 --motion-normal（200ms），ease-out。
+ */
+@keyframes collapsibleDown {
+  from { height: 0; opacity: 0; }
+  to { height: var(--radix-collapsible-content-height); opacity: 1; }
+}
+@keyframes collapsibleUp {
+  from { height: var(--radix-collapsible-content-height); opacity: 1; }
+  to { height: 0; opacity: 0; }
+}
+
+[data-slot="collapsible-content"] {
+  overflow: hidden;
+}
+
+[data-slot="collapsible-content"][data-state="open"] {
+  animation: collapsibleDown var(--motion-normal) ease-out;
+}
+
+[data-slot="collapsible-content"][data-state="closed"] {
+  animation: collapsibleUp var(--motion-normal) ease-out;
 }
 
 /* ── prefers-reduced-motion：尊重用户系统偏好，禁用无限动画 ─────────── */

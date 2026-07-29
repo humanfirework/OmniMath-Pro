@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import {
   extractSymbols,
+  extractFreeParameters,
   scanVariables,
   scanVariablesBatch,
   buildVariableUsageIndex,
@@ -53,6 +54,36 @@ describe('variableScanner', () => {
       // 依赖列表中。实际场景中函数变量很少作为"被依赖的变量"出现，
       // 这个取舍可接受；未来如需支持，应在 walk 中对 fn.name 做额外判断。
       expect(extractSymbols('f(x) + g(y, z)')).toEqual(['x', 'y', 'z']);
+    });
+  });
+
+  describe('extractFreeParameters', () => {
+    it('提取表达式中的自由参数（a*x^2+b → a, b）', () => {
+      expect(extractFreeParameters(['a*x^2+b'])).toEqual(['a', 'b']);
+    });
+
+    it('排除绘图自变量 x / y / t', () => {
+      expect(extractFreeParameters(['sin(x) + t - y + k'])).toEqual(['k']);
+    });
+
+    it('排除内置函数名与内置常量', () => {
+      expect(extractFreeParameters(['a*sin(pi*x) + e^2 + cos(x)'])).toEqual(['a']);
+    });
+
+    it('排除已在变量作用域中定义的符号', () => {
+      expect(extractFreeParameters(['a*x + b'], ['a'])).toEqual(['b']);
+    });
+
+    it('跨表达式去重并保持首次出现顺序', () => {
+      expect(extractFreeParameters(['a*x + b', 'b*cos(x) + c', 'a + c'])).toEqual(['a', 'b', 'c']);
+    });
+
+    it('语法错误的表达式被跳过，不影响其他表达式', () => {
+      expect(extractFreeParameters(['a + * b', 'c*x'])).toEqual(['c']);
+    });
+
+    it('空输入返回空', () => {
+      expect(extractFreeParameters([])).toEqual([]);
     });
   });
 

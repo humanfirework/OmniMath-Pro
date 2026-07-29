@@ -15,6 +15,8 @@
  *   - expression: the raw Algebrite output (plain math notation)
  */
 
+import { math } from './mathInstance';
+
 export interface SymbolicResult {
   /** LaTeX-formatted result, suitable for KaTeX rendering. */
   latex: string;
@@ -59,8 +61,8 @@ export async function symbolicIntegrate(
     const expression = Algebrite.run(`integral(${normalized}, ${varName})`);
     const latex = Algebrite.run(`printlatex(integral(${normalized}, ${varName}))`);
 
-    if (!expression || expression.trim() === '' || expression === 'nil') {
-      return fail('Algebrite returned empty result — integral may not be expressible in closed form.');
+    if (algebriteFailed(expression)) {
+      return fail('该积分可能没有初等函数形式的闭式解（Algebrite 未返回结果）。可尝试定积分获取数值结果。');
     }
 
     return {
@@ -68,6 +70,7 @@ export async function symbolicIntegrate(
       expression,
       steps: [
         `\\int ${latexExpr(normalized)} \\, d${varName}`,
+        ...integrationHints(expr, varName),
         `= ${latex || latexExpr(expression)}`,
         `\\text{(常量 } C \\text{ 省略)}`,
       ],
@@ -94,6 +97,11 @@ export async function symbolicDefiniteIntegral(
     const expression = Algebrite.run(`defint(${normalized}, ${varName}, ${a}, ${b})`);
     const latex = Algebrite.run(`printlatex(defint(${normalized}, ${varName}, ${a}, ${b}))`);
 
+    // Algebrite 未给出闭式结果 → Simpson 数值回退（Task 4.3）
+    if (algebriteFailed(expression)) {
+      return simpsonFallback(expr, varName, a, b, latexExpr(normalized));
+    }
+
     let numerical: number | undefined;
     try {
       const numStr = Algebrite.run(`float(defint(${normalized}, ${varName}, ${a}, ${b}))`);
@@ -109,13 +117,15 @@ export async function symbolicDefiniteIntegral(
       numerical,
       steps: [
         `\\int_{${a}}^{${b}} ${latexExpr(normalized)} \\, d${varName}`,
+        ...integrationHints(expr, varName),
         `= ${latex || latexExpr(expression)}`,
         ...(numerical !== undefined ? [`\\approx ${numerical}`] : []),
       ],
       success: true,
     };
-  } catch (err) {
-    return fail(`符号定积分失败：${(err as Error).message}`);
+  } catch {
+    // 符号路径抛错 → Simpson 数值回退
+    return simpsonFallback(expr, varName, a, b, undefined);
   }
 }
 
@@ -144,7 +154,7 @@ export async function symbolicLimit(
       // ignore
     }
 
-    if (!expression || expression.trim() === '' || expression === 'nil') {
+    if (algebriteFailed(expression)) {
       // Fallback to numeric limit
       if (numerical !== undefined) {
         return {
@@ -192,7 +202,7 @@ export async function symbolicSeries(
     const expression = Algebrite.run(`taylor(${normalized}, ${varName}, ${order}, ${point})`);
     const latex = Algebrite.run(`printlatex(taylor(${normalized}, ${varName}, ${order}, ${point}))`);
 
-    if (!expression || expression.trim() === '' || expression === 'nil') {
+    if (algebriteFailed(expression)) {
       return fail('Algebrite could not compute the Taylor series.');
     }
 
@@ -213,6 +223,126 @@ export async function symbolicSeries(
 /* ------------------------------------------------------------------ */
 /*  Helpers                                                            */
 /* ------------------------------------------------------------------ */
+
+/**
+ * 积分启发式提示（Task 4.3）：识别常见被积结构，输出对应的积分方法
+ * 说明步骤（换元 / 分部 / 幂函数 / 基本公式）。仅作教学提示，不参与
+ * 实际计算（计算由 Algebrite 完成）。
+ */
+function integrationHints(expr: string, varName: string): string[] {
+  const hints: string[] = [];
+  const e = expr.toLowerCase().replace(/\s+/g, '');
+  const v = varName.toLowerCase();
+
+  // 幂函数：x^n
+  if (new RegExp(`^${v}\\^-?\\d+$`).test(e) || e === v) {
+    hints.push(
+      `\\text{幂函数积分：} \\int ${v}^{n} \\, d${v} = \\frac{${v}^{n+1}}{n+1} + C \\; (n \\neq -1)`,
+    );
+    return hints;
+  }
+  // 1/x
+  if (e === `1/${v}` || e === `(${v})^(-1)` || e === `${v}^(-1)`) {
+    hints.push(`\\text{对数积分：} \\int \\frac{1}{${v}} \\, d${v} = \\ln |${v}| + C`);
+    return hints;
+  }
+  // 多项式
+  if (/^[0-9a-z+\-*/^()]*$/.test(e) && e.includes(v) && !e.includes('(')) {
+    hints.push(`\\text{逐项积分（和差法则）：} \\int (u \\pm v) \\, d${v} = \\int u \\, d${v} \\pm \\int v \\, d${v}`);
+    return hints;
+  }
+  // 分部积分候选：x·(e^x|sin|cos|ln)
+  const byPartsPatterns = [
+    new RegExp(`${v}\\s*\\*\\s*(?:exp|e\\^|sin|cos|log|ln)\\s*\\(`),
+    new RegExp(`(?:exp|e\\^|sin|cos|log|ln)\\s*\\([^)]*\\)\\s*\\*\\s*${v}\\b`),
+  ];
+  if (byPartsPatterns.some((re) => re.test(e))) {
+    hints.push(
+      `\\text{分部积分提示：} \\int u \\, dv = u v - \\int v \\, du \\text{（选 } u \\text{ 为易求导因子）}`,
+    );
+    return hints;
+  }
+  // 线性内层复合 → 换元：f(ax+b)
+  const innerLinear = new RegExp(
+    `(?:sin|cos|tan|exp|e\\^|log|ln|sqrt)\\s*\\(\\s*-?\\d*\\.?\\d*\\s*\\*?\\s*${v}\\s*[+\\-)]`,
+  ).test(e) || new RegExp(`\\(\\s*-?\\d*\\.?\\d*\\s*\\*?\\s*${v}\\s*[+\\-][^)]*\\)\\s*\\^`).test(e);
+  if (innerLinear) {
+    hints.push(
+      `\\text{换元提示：} u = a${v} + b，\\; \\int f(a${v}+b) \\, d${v} = \\frac{1}{a} F(a${v}+b) + C`,
+    );
+    return hints;
+  }
+  // f·f' 结构（如 sin(x)·cos(x)）
+  if (/(sin|cos|tan|exp|log|ln)\s*\([^)]*\)\s*\*\s*(sin|cos|tan|exp|log|ln)\s*\(/.test(e)) {
+    hints.push(`\\text{换元提示：} \\int f(${v}) \\cdot f'(${v}) \\, d${v} = \\frac{1}{2} f(${v})^2 + C`);
+    return hints;
+  }
+  // 基本初等函数
+  const basicMap: [RegExp, string][] = [
+    [new RegExp(`^sin\\(${v}\\)$`), `\\text{基本公式：} \\int \\sin ${v} \\, d${v} = -\\cos ${v} + C`],
+    [new RegExp(`^cos\\(${v}\\)$`), `\\text{基本公式：} \\int \\cos ${v} \\, d${v} = \\sin ${v} + C`],
+    [new RegExp(`^(?:exp\\(${v}\\)|e\\^${v}|e\\^\\(${v}\\))$`), `\\text{基本公式：} \\int e^{${v}} \\, d${v} = e^{${v}} + C`],
+    [new RegExp(`^(?:log|ln)\\(${v}\\)$`), `\\text{分部积分：} \\int \\ln ${v} \\, d${v} = ${v} \\ln ${v} - ${v} + C`],
+  ];
+  for (const [re, hint] of basicMap) {
+    if (re.test(e)) {
+      hints.push(hint);
+      return hints;
+    }
+  }
+  return hints;
+}
+
+/**
+ * Simpson 1/3 数值积分回退（Task 4.3）：符号积分失败/无闭式解时，
+ * 明确提示并给出数值结果。
+ */
+function simpsonFallback(
+  expr: string,
+  varName: string,
+  a: number,
+  b: number,
+  normalizedLatex?: string,
+): SymbolicResult & { numerical?: number } {
+  try {
+    const node = math.parse(expr);
+    const f = (x: number): number => {
+      try {
+        const val = node.evaluate({ [varName]: x });
+        return typeof val === 'number' ? val : NaN;
+      } catch {
+        return NaN;
+      }
+    };
+    const n = 1000; // must be even
+    const h = (b - a) / n;
+    let sum = f(a) + f(b);
+    for (let i = 1; i < n; i++) {
+      const fx = f(a + i * h);
+      if (!Number.isFinite(fx)) {
+        return {
+          ...fail('数值积分失败：被积函数在积分区间内存在不可求值点'),
+        };
+      }
+      sum += (i % 2 === 0 ? 2 : 4) * fx;
+    }
+    const numerical = ((h / 3) * sum);
+    const display = normalizedLatex ?? latexExpr(expr);
+    return {
+      latex: `\\approx ${parseFloat(numerical.toPrecision(8))}`,
+      expression: String(numerical),
+      numerical,
+      steps: [
+        `\\int_{${a}}^{${b}} ${display} \\, d${varName}`,
+        `\\text{无法得到闭式符号解，改用 Simpson 数值积分（} n = ${n} \\text{）}`,
+        `\\approx ${parseFloat(numerical.toPrecision(8))}`,
+      ],
+      success: true,
+    };
+  } catch (err) {
+    return fail(`符号与数值积分均失败：${(err as Error).message}`);
+  }
+}
 
 /**
  * Normalize a mathjs-style expression for Algebrite consumption.
@@ -251,4 +381,19 @@ function fail(message: string): SymbolicResult {
     success: false,
     error: message,
   };
+}
+
+/**
+ * 检测 Algebrite 输出是否表示计算失败。
+ * Algebrite 失败时可能返回空串、'nil'，或以 "Stop:" 开头的错误文本
+ * （如 "Stop: integral: sorry, could not find a solution"），
+ * 不能把这些当作有效结果展示。
+ */
+function algebriteFailed(s: string | null | undefined): boolean {
+  if (!s) return true;
+  const t = s.trim();
+  if (t === '' || t === 'nil') return true;
+  if (/^stop:/i.test(t)) return true;
+  if (/could not find a solution/i.test(t)) return true;
+  return false;
 }

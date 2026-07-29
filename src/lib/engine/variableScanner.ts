@@ -103,6 +103,53 @@ export function extractSymbols(
 }
 
 /**
+ * 绘图自变量保留字：cartesian/polar 用 `x`，parametric 用 `t`（采样时
+ * `x` 也会同时传入），`y` 作为惯用因变量名同样排除。这些符号在表达式
+ * 里出现时不应被当作"自由参数"生成滑块。
+ */
+const PLOT_INDEPENDENT_VARS = new Set(['x', 'y', 't']);
+
+/**
+ * 提取一组（可见 2D）表达式中的"自由参数"名列表。
+ *
+ * 自由参数 = 表达式里出现的符号，且：
+ *   - 不是绘图自变量（x / y / t）
+ *   - 不是 mathjs 内置常量（pi / e / phi …，由 extractSymbols 默认剔除）
+ *   - 不是内置函数名（sin/cos 等是 FunctionNode，extractSymbols 本就不收集）
+ *   - 未在变量作用域（workbench store 的 variables 表）中定义
+ *
+ * 典型用途：`plot(a*x^2+b)` 后自动为 `a`、`b` 生成 Desmos 式滑块。
+ *
+ * 注意：滑块值写入的是引擎共享 scope（mathInstance.scope），不写入
+ * store 的 variables 表，因此这里以 `definedVars`（store variables 的
+ * keys）为排除依据，参数不会因拖动滑块而"被定义"并从列表消失。
+ *
+ * @param exprs       可见 2D 表达式列表
+ * @param definedVars 已在变量作用域中定义的符号名（store variables 的 keys）
+ * @returns           自由参数名（跨表达式去重，保持首次出现顺序）
+ */
+export function extractFreeParameters(
+  exprs: string[],
+  definedVars: string[] = [],
+): string[] {
+  if (!Array.isArray(exprs) || exprs.length === 0) return [];
+  const defined = new Set(definedVars);
+  const seen = new Set<string>();
+  const result: string[] = [];
+  for (const expr of exprs) {
+    for (const sym of extractSymbols(expr)) {
+      if (PLOT_INDEPENDENT_VARS.has(sym)) continue;
+      if (defined.has(sym)) continue;
+      if (!seen.has(sym)) {
+        seen.add(sym);
+        result.push(sym);
+      }
+    }
+  }
+  return result;
+}
+
+/**
  * 扫描表达式引用了 `knownVars` 中的哪些变量。
  *
  * 这是蓝图引擎最常用的 API：传入节点的表达式 + 当前所有变量名，

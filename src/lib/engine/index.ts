@@ -28,6 +28,30 @@ export {
   getEvalScope,
 } from './evaluator';
 export { math } from './mathInstance';
+export { differentiateWithSteps, type DerivativeStepsResult } from './derivativeSteps';
+export { solveEquation } from './equationSolver';
+export type {
+  ComplexRoot,
+  EquationSolveResult,
+  EquationSolveOptions,
+  EquationSolveOutput,
+} from './equationSolver';
+export {
+  fmtNum as fmtEquationNum,
+  fmtComplex,
+  fmtComplexLatex,
+  coeffsToLatex,
+} from './equationSolver';
+export {
+  parseLinearSystem,
+  solveLinearSystemWithSteps,
+  nonlinearSystemSteps,
+} from './linearSystem';
+export type {
+  Matrix as LinearMatrix,
+  LinearSystemParse,
+  LinearSystemSolution,
+} from './linearSystem';
 export { inputToLatex, resultToLatex, formatNumber, stepsToLatex } from './latex';
 export { normalizeSymbols, symbolAliases } from './symbols';
 export { lenientPreprocess, preprocessForMode } from './parser';

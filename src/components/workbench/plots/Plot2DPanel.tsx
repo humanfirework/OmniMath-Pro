@@ -31,6 +31,7 @@ import {
   type CompareMode,
 } from './Plot2DAdvancedPanel';
 import { FacetGrid } from './FacetGrid';
+import { ParameterSliders } from './ParameterSliders';
 import { inputToLatex } from '@/lib/engine';
 import { sampleFunction } from '@/lib/plots/plot2d';
 import { coordinatedYRange, smartYRange, type CoordinatedRangeResult } from '@/lib/plots/smartRange';
@@ -115,13 +116,14 @@ export function Plot2DPanel() {
   // Default true (math-standard). User can disable in advanced panel.
   const [equalAspect, setEqualAspect] = useState(true);
 
-  // Compare mode: 'facet' (default for multi-plot) renders each curve in its
-  // own mini-plot with an independent Y axis so functions with wildly
-  // different magnitudes (x², sin x, eˣ) can be compared clearly.
-  // 'overlay' draws all curves on a single shared-Y axis (legacy behavior).
+  // Compare mode: 'overlay' (default for multi-plot) draws all curves on a
+  // single shared-Y axis — same coordinate system, Desmos style.
+  // 'facet' renders each curve in its own mini-plot with an independent Y
+  // axis so functions with wildly different magnitudes (x², sin x, eˣ) can
+  // be compared clearly. Kept as a toggle in the advanced panel.
   // Single-plot mode always falls back to 'overlay' since facetting one curve
   // is pointless.
-  const [userCompareMode, setUserCompareMode] = useState<CompareMode>('facet');
+  const [userCompareMode, setUserCompareMode] = useState<CompareMode>('overlay');
   const compareMode: CompareMode = plots.length > 1 ? userCompareMode : 'overlay';
 
   // Advanced-feature overlays (intersections / tangent / derivative)
@@ -377,6 +379,8 @@ export function Plot2DPanel() {
           </>
         )}
       </div>
+      {/* 自由参数滑块：仅当可见表达式含自由参数时显示（紧凑、可折叠） */}
+      <ParameterSliders plots={plots} />
       <PlotExpandDialog open={expandOpen} onClose={() => setExpandOpen(false)} />
 
       <ExportDialog

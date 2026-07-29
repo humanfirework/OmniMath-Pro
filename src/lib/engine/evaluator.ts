@@ -35,6 +35,7 @@ import {
 } from './types';
 import { normalizeSymbols } from './symbols';
 import { preprocessForMode } from './parser';
+import { differentiateWithSteps } from './derivativeSteps';
 import {
   inputToLatex,
   resultToLatex,
@@ -604,18 +605,15 @@ function handleDerivative(normalized: string, mode: InputMode): EvalResult {
   const expr = args[0];
   const varName = args[1].trim();
   try {
-    const node = math.parse(expr);
-    const dNode = math.derivative(node, varName);
-    const simplified = safeSimplify(dNode);
-    const latex = simplified.toTex({ implicit: 'hide' });
-    const steps = [
-      `f(${varName}) = ${inputToLatex(expr, mode)}`,
-      `\\frac{d}{d${varName}} f = ${inputToLatex(expr, mode)}`,
-      `= ${latex}`,
-    ];
+    // Task 4.1 — 分步求导并标注所用法则（幂/乘积/商/链式/和差…）
+    const { resultLatex, resultString, steps } = differentiateWithSteps(
+      expr,
+      varName,
+      inputToLatex(expr, mode),
+    );
     return ok({
-      result: `d/d${varName} [${expr}] = ${simplified.toString()}`,
-      latex,
+      result: `d/d${varName} [${expr}] = ${resultString}`,
+      latex: resultLatex,
       type: 'symbolic',
       steps,
     });

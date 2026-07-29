@@ -4,8 +4,9 @@
  * OmniMath Pro — 设置面板
  *
  * VS Code 风格的分类设置对话框：
- *   - 左侧分类导航（外观 / 编辑器 / 布局 / 导出 / 语言）
- *   - 右侧设置项（Switch / Select / RadioGroup）
+ *   - 左侧分类导航（外观 / 编辑器 / 布局 / 导出 / 语言 / 快捷键 / 高级 / 关于）
+ *   - 右侧设置项（Switch / Select / RadioGroup / Slider / Input）
+ *   - "高级"区为结构化表单（原 JSON 编辑的替代），修改即时生效并带校验
  *
  * 数据来源：
  *   - useWorkbenchStore: theme, locale, activityBar* 设置
@@ -24,6 +25,8 @@ import {
 } from '@/components/ui/dialog';
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs';
 import { Switch } from '@/components/ui/switch';
+import { Slider } from '@/components/ui/slider';
+import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { Label } from '@/components/ui/label';
 import {
@@ -52,6 +55,7 @@ import {
   Info,
   RefreshCw,
   Minimize2,
+  SlidersHorizontal,
 } from 'lucide-react';
 import { useWorkbenchStore } from '@/lib/store/workbench';
 import { useLayoutStore, LAYOUT_KEY } from '@/lib/store/layoutStore';
@@ -69,7 +73,7 @@ import type { TranslationDict } from '@/lib/i18n';
 import { cn } from '@/lib/utils';
 import { toast } from 'sonner';
 
-type Category = 'appearance' | 'editor' | 'layout' | 'export' | 'language' | 'shortcuts' | 'about';
+type Category = 'appearance' | 'editor' | 'layout' | 'export' | 'language' | 'shortcuts' | 'advanced' | 'about';
 
 const APP_VERSION = '0.0.5';
 
@@ -200,13 +204,15 @@ export function SettingsPanel() {
     }
   };
 
-  const categories: { id: Category; labelKey: keyof TranslationDict; icon: typeof Palette }[] = [
+  // labelKey 走 i18n；高级区暂无对应词条，直接用 label 字面量（与"检查更新"等既有写法一致）
+  const categories: { id: Category; labelKey?: keyof TranslationDict; label?: string; icon: typeof Palette }[] = [
     { id: 'appearance', labelKey: 'settingsAppearance', icon: Palette },
     { id: 'editor', labelKey: 'settingsEditor', icon: Code2 },
     { id: 'layout', labelKey: 'settingsLayout', icon: Layout },
     { id: 'export', labelKey: 'settingsExport', icon: Download },
     { id: 'language', labelKey: 'settingsLanguage', icon: Languages },
     { id: 'shortcuts', labelKey: 'settingsShortcuts', icon: Keyboard },
+    { id: 'advanced', label: '高级', icon: SlidersHorizontal },
     { id: 'about', labelKey: 'settingsAbout', icon: Info },
   ];
 
@@ -239,7 +245,7 @@ export function SettingsPanel() {
                   )}
                 >
                   <Icon className="size-3.5" />
-                  {t(cat.labelKey)}
+                  {cat.labelKey ? t(cat.labelKey) : cat.label}
                 </button>
               );
             })}
@@ -491,6 +497,17 @@ export function SettingsPanel() {
               </motion.div>
             )}
 
+            {category === 'advanced' && (
+              <motion.div
+                initial={{ opacity: 0, x: 8 }}
+                animate={{ opacity: 1, x: 0 }}
+                transition={{ duration: 0.15 }}
+                className="space-y-5"
+              >
+                <AdvancedSettings />
+              </motion.div>
+            )}
+
             {category === 'about' && (
               <motion.div
                 initial={{ opacity: 0, x: 8 }}
@@ -737,5 +754,257 @@ function ShortcutsList({
         </Button>
       </div>
     </div>
+  );
+}
+
+/** 高级设置行：上排 标签+控件，下排 说明文字，非法输入时红字提示 */
+function AdvRow({
+  label,
+  desc,
+  error,
+  children,
+}: {
+  label: string;
+  desc: string;
+  error?: string;
+  children: React.ReactNode;
+}) {
+  return (
+    <div className="space-y-1">
+      <div className="flex items-center justify-between gap-4">
+        <Label className="text-xs text-foreground/85 font-normal">{label}</Label>
+        {children}
+      </div>
+      <p className="text-[11px] text-muted-foreground leading-relaxed">{desc}</p>
+      {error && <p className="text-[11px] text-destructive">{error}</p>}
+    </div>
+  );
+}
+
+/** 校验数值输入：返回错误文案，合法时返回 null */
+function validateNumberInput(raw: string, min: number, max: number): string | null {
+  if (raw.trim() === '') return '请输入数值';
+  const n = Number(raw);
+  if (!Number.isFinite(n)) return '请输入有效数字';
+  if (!Number.isInteger(n)) return '请输入整数';
+  if (n < min || n > max) return `取值范围为 ${min} – ${max}`;
+  return null;
+}
+
+/**
+ * 高级设置（结构化表单，替代原 JSON 文本编辑）：
+ *   - 修改即时写入 settingsStore 并自动持久化，无需保存按钮
+ *   - 数值/字符串输入非法时就地红字提示且不写入 store，失焦后回退为 store 中的合法值
+ *   - 顶部"恢复默认"仅重置高级区，不影响其他分类
+ */
+function AdvancedSettings() {
+  const plotSamples = useSettingsStore((s) => s.advancedPlotSamples);
+  const setPlotSamples = useSettingsStore((s) => s.setAdvancedPlotSamples);
+  const plot3dResolution = useSettingsStore((s) => s.advancedPlot3dResolution);
+  const setPlot3dResolution = useSettingsStore((s) => s.setAdvancedPlot3dResolution);
+  const resultPrecision = useSettingsStore((s) => s.advancedResultPrecision);
+  const setResultPrecision = useSettingsStore((s) => s.setAdvancedResultPrecision);
+  const historyLimit = useSettingsStore((s) => s.advancedHistoryLimit);
+  const setHistoryLimit = useSettingsStore((s) => s.setAdvancedHistoryLimit);
+  const angleUnit = useSettingsStore((s) => s.advancedAngleUnit);
+  const setAngleUnit = useSettingsStore((s) => s.setAdvancedAngleUnit);
+  const showSteps = useSettingsStore((s) => s.advancedShowSteps);
+  const setShowSteps = useSettingsStore((s) => s.setAdvancedShowSteps);
+  const animations = useSettingsStore((s) => s.advancedAnimations);
+  const setAnimations = useSettingsStore((s) => s.setAdvancedAnimations);
+  const exportPrefix = useSettingsStore((s) => s.advancedExportPrefix);
+  const setExportPrefix = useSettingsStore((s) => s.setAdvancedExportPrefix);
+  const resetAdvanced = useSettingsStore((s) => s.resetAdvanced);
+
+  // 文本类控件的草稿值与校验错误（滑块/开关/下拉不会产生非法值，无需草稿）
+  const [drafts, setDrafts] = useState<Record<string, string>>({});
+  const [errors, setErrors] = useState<Record<string, string>>({});
+
+  /** 数值输入：更新草稿 → 校验 → 合法则立即写入 store，非法则仅提示 */
+  const handleNumber = (
+    key: string,
+    raw: string,
+    min: number,
+    max: number,
+    apply: (n: number) => void,
+  ) => {
+    setDrafts((d) => ({ ...d, [key]: raw }));
+    const err = validateNumberInput(raw, min, max);
+    setErrors((e) => ({ ...e, [key]: err ?? '' }));
+    if (!err) apply(Number(raw));
+  };
+
+  /** 文件名前缀输入：非空、≤40 字符、仅限字母/数字/连字符/下划线 */
+  const handlePrefix = (raw: string) => {
+    setDrafts((d) => ({ ...d, exportPrefix: raw }));
+    let err = '';
+    if (raw.trim() === '') err = '前缀不能为空';
+    else if (raw.length > 40) err = '最长 40 个字符';
+    else if (!/^[\w-]+$/.test(raw)) err = '仅限字母、数字、连字符与下划线';
+    setErrors((e) => ({ ...e, exportPrefix: err }));
+    if (!err) setExportPrefix(raw);
+  };
+
+  /** 失焦丢弃未生效的草稿与错误提示，回显 store 中的合法值 */
+  const handleBlur = (key: string) => {
+    setDrafts((d) => {
+      const next = { ...d };
+      delete next[key];
+      return next;
+    });
+    setErrors((e) => {
+      const next = { ...e };
+      delete next[key];
+      return next;
+    });
+  };
+
+  /** 仅重置高级区，并清空本地草稿/错误状态 */
+  const handleResetAdvanced = () => {
+    resetAdvanced();
+    setDrafts({});
+    setErrors({});
+    toast.success('高级设置已恢复默认');
+  };
+
+  return (
+    <>
+      {/* 分区说明 + 仅重置高级区的按钮 */}
+      <div className="flex items-center justify-between gap-3 rounded-md border border-border/60 bg-muted/30 px-2.5 py-2">
+        <p className="text-[11px] text-muted-foreground">
+          修改即时生效并自动保存，无需手写 JSON。
+        </p>
+        <Button
+          variant="ghost"
+          size="sm"
+          onClick={handleResetAdvanced}
+          className="shrink-0 gap-1.5 text-[11px] text-muted-foreground hover:text-destructive"
+        >
+          <RotateCcw className="size-3" />
+          恢复默认
+        </Button>
+      </div>
+
+      {/* 数值·有明确范围 → 滑块（滑块本身不会产生非法值） */}
+      <AdvRow
+        label="2D 曲线采样点数"
+        desc="采样越密曲线越平滑，但计算量越大；拖动参数滑块时会临时降采样以保证流畅。"
+      >
+        <div className="flex items-center gap-2">
+          <Slider
+            value={[plotSamples]}
+            min={100}
+            max={2000}
+            step={50}
+            onValueChange={(v) => setPlotSamples(v[0])}
+            className="w-32"
+          />
+          <span className="text-xs font-mono text-muted-foreground w-12 text-right">
+            {plotSamples}
+          </span>
+        </div>
+      </AdvRow>
+
+      <AdvRow
+        label="3D 曲面网格分辨率"
+        desc="每根坐标轴的网格数量，顶点数为分辨率的平方；过高会影响 3D 视图流畅度。"
+      >
+        <div className="flex items-center gap-2">
+          <Slider
+            value={[plot3dResolution]}
+            min={10}
+            max={200}
+            step={5}
+            onValueChange={(v) => setPlot3dResolution(v[0])}
+            className="w-32"
+          />
+          <span className="text-xs font-mono text-muted-foreground w-12 text-right">
+            {plot3dResolution}
+          </span>
+        </div>
+      </AdvRow>
+
+      {/* 数值·需键入 → Input(type=number)，带范围校验 */}
+      <AdvRow
+        label="结果有效数字位数"
+        desc="数值结果保留的有效数字位数，位数越多越精确。"
+        error={errors.resultPrecision}
+      >
+        <Input
+          type="number"
+          min={2}
+          max={15}
+          step={1}
+          value={drafts.resultPrecision ?? String(resultPrecision)}
+          onChange={(e) => handleNumber('resultPrecision', e.target.value, 2, 15, setResultPrecision)}
+          onBlur={() => handleBlur('resultPrecision')}
+          className={cn('w-24 h-8 text-xs', errors.resultPrecision && 'border-destructive')}
+        />
+      </AdvRow>
+
+      <AdvRow
+        label="历史记录条数上限"
+        desc="计算历史最多保留的条数，超出后最早的记录会被移除。"
+        error={errors.historyLimit}
+      >
+        <Input
+          type="number"
+          min={10}
+          max={500}
+          step={10}
+          value={drafts.historyLimit ?? String(historyLimit)}
+          onChange={(e) => handleNumber('historyLimit', e.target.value, 10, 500, setHistoryLimit)}
+          onBlur={() => handleBlur('historyLimit')}
+          className={cn('w-24 h-8 text-xs', errors.historyLimit && 'border-destructive')}
+        />
+      </AdvRow>
+
+      {/* 枚举 → 下拉选择 */}
+      <AdvRow
+        label="三角函数角度单位"
+        desc="sin/cos/tan 等三角函数求值时使用的角度单位。"
+      >
+        <Select value={angleUnit} onValueChange={(v) => setAngleUnit(v as 'rad' | 'deg')}>
+          <SelectTrigger className="w-32 h-8 text-xs">
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="rad" className="text-xs">弧度 rad</SelectItem>
+            <SelectItem value="deg" className="text-xs">角度 deg</SelectItem>
+          </SelectContent>
+        </Select>
+      </AdvRow>
+
+      {/* 布尔 → 开关 */}
+      <AdvRow
+        label="默认展开分步求解"
+        desc="方程、求导、积分等求解结果默认展示完整分步过程。"
+      >
+        <Switch checked={showSteps} onCheckedChange={setShowSteps} />
+      </AdvRow>
+
+      <AdvRow
+        label="启用界面过渡动画"
+        desc="面板与视图切换时的过渡动效；关闭可减少动态效果、提升低端设备流畅度。"
+      >
+        <Switch checked={animations} onCheckedChange={setAnimations} />
+      </AdvRow>
+
+      {/* 字符串 → 文本输入，带格式校验 */}
+      <AdvRow
+        label="导出文件名前缀"
+        desc="导出图片/文件时的默认文件名前缀，如 omnimath-1717000000000.png。"
+        error={errors.exportPrefix}
+      >
+        <Input
+          type="text"
+          value={drafts.exportPrefix ?? exportPrefix}
+          onChange={(e) => handlePrefix(e.target.value)}
+          onBlur={() => handleBlur('exportPrefix')}
+          maxLength={40}
+          className={cn('w-40 h-8 text-xs', errors.exportPrefix && 'border-destructive')}
+        />
+      </AdvRow>
+    </>
   );
 }

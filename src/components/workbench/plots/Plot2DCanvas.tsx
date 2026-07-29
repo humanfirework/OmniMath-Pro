@@ -621,12 +621,16 @@ export function Plot2DCanvas({
         ctx.fillText(`k=${t.slope.toFixed(3)}`, tsx + 8, tsy - 4);
       }
 
-      // Intersection points — small filled dots
+      // Intersection points — filled dots + (x, y) coordinate labels.
+      // Labels alternate above/below by index as a simple anti-overlap
+      // strategy, and get a translucent backdrop so they stay readable
+      // on top of grid lines and curves.
       if (overlays.intersections.length > 0) {
-        for (const p of overlays.intersections) {
+        overlays.intersections.forEach((p, idx) => {
           const [sx, sy] = dataToScreen(p.x, p.y);
-          if (sx < PADDING.left || sx > w - PADDING.right) continue;
-          if (sy < PADDING.top || sy > h - PADDING.bottom) continue;
+          if (sx < PADDING.left || sx > w - PADDING.right) return;
+          if (sy < PADDING.top || sy > h - PADDING.bottom) return;
+          // Marker dot.
           ctx.fillStyle = dark ? '#ce93d8' : '#8e24aa';
           ctx.strokeStyle = markerStroke;
           ctx.lineWidth = 1.5;
@@ -634,12 +638,25 @@ export function Plot2DCanvas({
           ctx.arc(sx, sy, 4, 0, Math.PI * 2);
           ctx.fill();
           ctx.stroke();
-          ctx.fillStyle = dark ? '#e0e0e0' : '#424242';
+          // Coordinate label: even indices above the dot, odd below.
+          const text = `(${p.x.toFixed(2)}, ${p.y.toFixed(2)})`;
           ctx.font = '10px ui-sans-serif, system-ui, sans-serif';
+          const tw = ctx.measureText(text).width;
+          const above = idx % 2 === 0;
+          // Horizontal: prefer right of the dot; flip left near the edge.
+          let lx = sx + 8;
+          if (lx + tw > w - PADDING.right) lx = sx - 8 - tw;
+          // Vertical center-line of the label, clamped inside the plot area.
+          const lyRaw = above ? sy - 8 : sy + 8;
+          const ly = Math.min(Math.max(lyRaw, PADDING.top + 6), h - PADDING.bottom - 6);
+          // Translucent backdrop for readability.
+          ctx.fillStyle = dark ? 'rgba(26,26,26,0.72)' : 'rgba(255,255,255,0.78)';
+          ctx.fillRect(lx - 2, ly - 6, tw + 4, 12);
+          ctx.fillStyle = dark ? '#e0e0e0' : '#424242';
           ctx.textAlign = 'left';
-          ctx.textBaseline = 'bottom';
-          ctx.fillText(`(${p.x.toFixed(2)}, ${p.y.toFixed(2)})`, sx + 8, sy - 4);
-        }
+          ctx.textBaseline = 'middle';
+          ctx.fillText(text, lx, ly);
+        });
       }
     }
 

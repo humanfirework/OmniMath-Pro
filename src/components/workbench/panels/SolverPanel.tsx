@@ -11,6 +11,13 @@
  *
  * All results rendered via <FormulaRenderer> (KaTeX) on glass cards.
  * Teal accent, framer-motion staggered entrance, friendly error boxes.
+ *
+ * 求解逻辑复用 engine 模块（Task 3/4 重构，与 SolverWorkbench 共享）：
+ *   - 方程     → engine/equationSolver.solveEquation（含分步说明）
+ *   - 方程组   → engine/linearSystem（高斯消元逐步 + 非线性数值说明）
+ *   - 求导     → engine/derivativeSteps.differentiateWithSteps（法则标注）
+ *   - 积分/极限 → engine/symbolic（中间提示 + Simpson 数值回退）
+ * 步骤渲染统一使用 SolverStepsView / GaussianEliminationView。
  */
 
 import { useState, useMemo } from 'react';
@@ -58,7 +65,24 @@ import {
   DropdownMenuSeparator,
 } from '@/components/ui/dropdown-menu';
 import { FormulaRenderer } from '@/components/workbench/FormulaRenderer';
-import { evaluateExpression } from '@/lib/engine';
+import { SolverStepsView } from '@/components/workbench/panels/SolverStepsView';
+import { GaussianEliminationView } from '@/components/workbench/panels/GaussianEliminationView';
+import {
+  evaluateExpression,
+  solveEquation,
+  fmtEquationNum as fmtNum,
+  fmtComplex,
+  parseLinearSystem,
+  solveLinearSystemWithSteps,
+  nonlinearSystemSteps,
+  differentiateWithSteps,
+  type EquationSolveResult,
+  type LinearSystemSolution,
+} from '@/lib/engine';
+import {
+  symbolicDefiniteIntegral,
+  symbolicLimit,
+} from '@/lib/engine/symbolic';
 import { t } from '@/lib/i18n';
 import { cn } from '@/lib/utils';
 import { toast } from 'sonner';
@@ -73,33 +97,10 @@ import { math } from '@/lib/engine/mathInstance';
  * Types
  * ------------------------------------------------------------------ */
 
-interface ComplexRoot {
-  re: number;
-  im: number;
-}
-
-interface EqResult {
-  latex: string;
-  roots: ComplexRoot[];
-  kind: 'polynomial' | 'transcendental' | 'none' | 'symbolic';
-  info?: string;
-  symbolicLatex?: string;
-  symbolicExpression?: string;
-  symbolicFallback?: boolean;
-}
-
-interface SystemResult {
-  latex: string;
-  vector: number[];
-  variables: string[];
-  kind: 'unique' | 'none' | 'infinite';
-  steps?: string[];
-  error?: string;
-}
-
 interface CalcResult {
   latex: string;
   steps?: string[];
+  numerical?: number;
   error?: string;
 }
 
@@ -110,261 +111,8 @@ interface NumericResult {
   error?: string;
 }
 
-/* ------------------------------------------------------------------ *
- * Number formatting helpers
- * ------------------------------------------------------------------ */
-
-function fmtNum(n: number, digits = 6): string {
-  if (typeof n !== 'number' || !Number.isFinite(n)) return '—';
-  if (Math.abs(n) < 1e-12) return '0';
-  const rounded = Math.round(n);
-  if (Math.abs(n - rounded) < 1e-10) return String(rounded);
-  return parseFloat(n.toPrecision(digits)).toString();
-}
-
-function fmtComplex(c: ComplexRoot): string {
-  const re = Math.abs(c.re) < 1e-10 ? 0 : c.re;
-  const im = Math.abs(c.im) < 1e-10 ? 0 : c.im;
-  if (im === 0) return fmtNum(re);
-  if (re === 0) {
-    if (im === 1) return 'i';
-    if (im === -1) return '-i';
-    return `${fmtNum(im)}i`;
-  }
-  const sign = im < 0 ? '-' : '+';
-  const imAbs = Math.abs(im);
-  const imPart = imAbs === 1 ? 'i' : `${fmtNum(imAbs)}i`;
-  return `${fmtNum(re)} ${sign} ${imPart}`;
-}
-
-function fmtComplexLatex(c: ComplexRoot): string {
-  const text = fmtComplex(c);
-  if (text === 'i') return 'i';
-  if (text === '-i') return '-i';
-  if (text.includes('i')) {
-    // mixed or pure imaginary
-    if (text.includes(' + ')) {
-      const [re, im] = text.split(' + ');
-      return `${re} + ${im}`;
-    }
-    if (text.includes(' - ')) {
-      const idx = text.indexOf(' - ');
-      const re = text.slice(0, idx);
-      const im = text.slice(idx + 3);
-      return `${re} - ${im}`;
-    }
-    return text; // pure imaginary like "2i"
-  }
-  return text;
-}
-
-/* ------------------------------------------------------------------ *
- * Equation solving
- * ------------------------------------------------------------------ */
-
-/** Try to parse the equation as a polynomial; if successful, return coefficients
- *  in ascending order (a0 + a1 x + a2 x^2 + ...). Returns null if not polynomial. */
-function tryGetPolyCoeffs(equation: string, varName: string): number[] | null {
-  try {
-    // Move lhs - rhs
-    let expr = equation;
-    if (equation.includes('=')) {
-      const eqIdx = equation.indexOf('=');
-      const lhs = equation.slice(0, eqIdx).trim();
-      const rhs = equation.slice(eqIdx + 1).trim();
-      expr = `(${lhs}) - (${rhs})`;
-    }
-    const r = math.rationalize(expr, {}, true) as {
-      coefficients?: number[];
-      variables?: string[];
-    };
-    if (r.coefficients && r.variables && r.variables.length === 1 && r.variables[0] === varName) {
-      return r.coefficients;
-    }
-    return null;
-  } catch {
-    return null;
-  }
-}
-
-/** Normalize a mathjs-style equation string for Algebrite consumption.
- *  Handles `=` sign (lhs - rhs) and Algebrite syntax differences:
- *    - `e^x` → `exp(x)` (Algebrite's exp function)
- *    - `ln(x)` → `log(x)` (Algebrite's natural log is `log`) */
-function normalizeForAlgebrite(equation: string): string {
-  let expr = equation.trim();
-  if (expr.includes('=')) {
-    const eqIdx = expr.indexOf('=');
-    const lhs = expr.slice(0, eqIdx).trim();
-    const rhs = expr.slice(eqIdx + 1).trim();
-    expr = `(${lhs}) - (${rhs})`;
-  }
-  // Convert e^x → exp(x) when e is used as base
-  expr = expr.replace(/\be\^(\([^)]+\)|[a-zA-Z0-9_]+)/g, 'exp($1)');
-  // Convert ln( → log(
-  expr = expr.replace(/\bln\(/g, 'log(');
-  return expr;
-}
-
-/** Find all roots (real + complex) of a polynomial via Durand-Kerner method. */
-function polyRoots(coeffs: number[]): ComplexRoot[] {
-  // Strip leading zeros (high-order)
-  let c = [...coeffs];
-  while (c.length > 1 && Math.abs(c[c.length - 1]) < 1e-14) c.pop();
-  const n = c.length - 1;
-  if (n <= 0) return [];
-
-  if (n === 1) {
-    return [{ re: -c[0] / c[1], im: 0 }];
-  }
-
-  if (n === 2) {
-    const [a0, a1, a2] = c;
-    const disc = a1 * a1 - 4 * a2 * a0;
-    if (disc >= 0) {
-      const s = Math.sqrt(disc);
-      return [
-        { re: (-a1 + s) / (2 * a2), im: 0 },
-        { re: (-a1 - s) / (2 * a2), im: 0 },
-      ];
-    }
-    const s = Math.sqrt(-disc);
-    return [
-      { re: -a1 / (2 * a2), im: s / (2 * a2) },
-      { re: -a1 / (2 * a2), im: -s / (2 * a2) },
-    ];
-  }
-
-  // Durand-Kerner: roots = initial guesses on a circle, iterate.
-  // Normalize so leading coefficient = 1.
-  const lead = c[n];
-  const a = c.map((v) => v / lead);
-  // Initial guesses: complex circle
-  const r0 = Math.pow(Math.abs(a[0]) + 1, 1 / n);
-
-  // Build initial guesses, optionally with random perturbation to escape
-  // divergence or stagnation when the default seed happens to be unlucky.
-  const initGuesses = (perturb: boolean): ComplexRoot[] => {
-    const guesses: ComplexRoot[] = [];
-    for (let k = 0; k < n; k++) {
-      const baseAngle = (2 * Math.PI * k) / n + 0.4;
-      const angle = perturb ? baseAngle + (Math.random() - 0.5) * 0.5 : baseAngle;
-      const radius = perturb ? r0 * (0.8 + Math.random() * 0.4) : r0;
-      guesses.push({ re: radius * Math.cos(angle), im: radius * Math.sin(angle) });
-    }
-    return guesses;
-  };
-
-  let roots: ComplexRoot[] = initGuesses(false);
-  const polyEval = (z: ComplexRoot): ComplexRoot => {
-    // Horner's method with complex arithmetic
-    let acc: ComplexRoot = { re: 0, im: 0 };
-    for (let i = a.length - 1; i >= 0; i--) {
-      // acc = acc * z + a[i]
-      const re = acc.re * z.re - acc.im * z.im + a[i];
-      const im = acc.re * z.im + acc.im * z.re;
-      acc = { re, im };
-    }
-    return acc;
-  };
-  const complexSub = (x: ComplexRoot, y: ComplexRoot): ComplexRoot => ({
-    re: x.re - y.re,
-    im: x.im - y.im,
-  });
-  const complexMul = (x: ComplexRoot, y: ComplexRoot): ComplexRoot => ({
-    re: x.re * y.re - x.im * y.im,
-    im: x.re * y.im + x.im * y.re,
-  });
-  const complexDiv = (x: ComplexRoot, y: ComplexRoot): ComplexRoot => {
-    const d = y.re * y.re + y.im * y.im;
-    if (d < 1e-30) return { re: 0, im: 0 };
-    return { re: (x.re * y.re + x.im * y.im) / d, im: (x.im * y.re - x.re * y.im) / d };
-  };
-  const complexAbs = (z: ComplexRoot): number => Math.sqrt(z.re * z.re + z.im * z.im);
-
-  // Iteration loop: max 500 iterations (>= 200 requirement).
-  // Re-initialize guesses with perturbation every 100 iterations if not
-  // converged, and also whenever divergence is detected (roots blowing up).
-  const MAX_ITER = 500;
-  for (let iter = 0; iter < MAX_ITER; iter++) {
-    // Re-initialize with perturbed guesses after every 100 stagnant iterations
-    if (iter > 0 && iter % 100 === 0) {
-      roots = initGuesses(true);
-    }
-    let maxChange = 0;
-    let diverging = false;
-    const newRoots: ComplexRoot[] = [];
-    for (let i = 0; i < n; i++) {
-      const num = polyEval(roots[i]);
-      let den: ComplexRoot = { re: 1, im: 0 };
-      for (let j = 0; j < n; j++) {
-        if (j !== i) den = complexMul(den, complexSub(roots[i], roots[j]));
-      }
-      const delta = complexDiv(num, den);
-      const newR = complexSub(roots[i], delta);
-      newRoots.push(newR);
-      const change = complexAbs(delta);
-      if (!Number.isFinite(change) || change > 1e15) {
-        diverging = true;
-      }
-      maxChange = Math.max(maxChange, change);
-    }
-    roots = newRoots;
-    // Divergence detected: re-seed with perturbed guesses and continue
-    if (diverging) {
-      roots = initGuesses(true);
-      continue;
-    }
-    // Convergence: stop when root differences fall below 1e-10
-    if (maxChange < 1e-10) break;
-  }
-
-  // Clean up: snap near-real roots to real
-  return roots.map((r) => ({
-    re: Math.abs(r.im) < 1e-9 * (1 + Math.abs(r.re)) ? r.re : r.re,
-    im: Math.abs(r.im) < 1e-9 * (1 + Math.abs(r.re)) ? 0 : r.im,
-  }));
-}
-
-/** Find numeric real roots of f(varName) in [a, b] via sign-change + bisection. */
-function findRealRoots(
-  fn: (x: number) => number,
-  a: number,
-  b: number,
-  step = 0.05,
-): number[] {
-  const roots: number[] = [];
-  let prev = fn(a);
-  for (let x = a + step; x <= b; x += step) {
-    const cur = fn(x);
-    if (Number.isFinite(prev) && Number.isFinite(cur)) {
-      if ((prev < 0 && cur > 0) || (prev > 0 && cur < 0)) {
-        // Bisect
-        let lo = x - step;
-        let hi = x;
-        for (let i = 0; i < 80; i++) {
-          const mid = (lo + hi) / 2;
-          const fm = fn(mid);
-          if (!Number.isFinite(fm)) break;
-          if (Math.abs(fm) < 1e-12) {
-            lo = mid;
-            hi = mid;
-            break;
-          }
-          if (Math.sign(fm) === Math.sign(fn(lo))) lo = mid;
-          else hi = mid;
-        }
-        const r = (lo + hi) / 2;
-        if (!roots.some((q) => Math.abs(q - r) < 1e-5)) roots.push(r);
-      }
-    }
-    prev = cur;
-  }
-  return roots;
-}
-
 /* ================================================================== *
- * Section 1 — Equation Solving
+ * Section 1 — Equation Solving（逻辑复用 engine/equationSolver）
  * ================================================================== */
 
 const EQUATION_EXAMPLE_GROUPS: ExampleGroup[] = [
@@ -391,7 +139,7 @@ function EquationSolverSection() {
   const [varName, setVarName] = useState('x');
   const [rangeA, setRangeA] = useState(-10);
   const [rangeB, setRangeB] = useState(10);
-  const [result, setResult] = useState<EqResult | null>(null);
+  const [result, setResult] = useState<EquationSolveResult | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [working, setWorking] = useState(false);
   const [solveMode, setSolveMode] = useState<'numeric' | 'symbolic'>('numeric');
@@ -401,125 +149,17 @@ function EquationSolverSection() {
     setError(null);
     setResult(null);
     try {
-      if (!equation.trim()) {
-        setError(t('solverEnterEquation'));
-        return;
-      }
-
-      // Try polynomial first
-      const coeffs = tryGetPolyCoeffs(equation, varName);
-      const isPoly = coeffs && coeffs.length > 1;
-
-      // Symbolic mode: try Algebrite for polynomial equations.
-      // Algebrite's `roots` only handles polynomials; for transcendental
-      // equations we skip symbolic and fall straight through to numeric.
-      if (solveMode === 'symbolic' && isPoly) {
-        try {
-          const Algebrite = (await import('algebrite')).default;
-          const polyExpr = normalizeForAlgebrite(equation);
-          const symbolicExpression = Algebrite.run(`roots(${polyExpr}, ${varName})`);
-          const symbolicLatex = Algebrite.run(`printlatex(roots(${polyExpr}, ${varName}))`);
-
-          if (symbolicExpression && symbolicExpression.trim() !== '' && symbolicExpression !== 'nil') {
-            // Also compute numeric roots for side-by-side comparison
-            const roots = polyRoots(coeffs);
-            const realRoots = roots.filter((r) => Math.abs(r.im) < 1e-9);
-            const complexRoots = roots.filter((r) => Math.abs(r.im) >= 1e-9);
-
-            const polyLatex = coeffsToLatex(coeffs, varName);
-            setResult({
-              latex: `${polyLatex} = 0`,
-              roots,
-              kind: 'symbolic',
-              info: `符号解 · ${realRoots.length} 实根, ${complexRoots.length} 复根, 次数 ${coeffs.length - 1}`,
-              symbolicLatex: symbolicLatex || symbolicExpression,
-              symbolicExpression,
-            });
-            return;
-          }
-          // Algebrite returned nil/empty → fall back to numeric
-          toast.warning('Algebrite 未返回有效符号解，已回退到数值解');
-        } catch {
-          // Algebrite threw → fall back to numeric
-          toast.warning('符号解失败，已回退到数值解');
-        }
-      } else if (solveMode === 'symbolic' && !isPoly) {
-        toast.warning('符号解仅支持多项式方程，已回退到数值解');
-      }
-
-      // Numeric mode (or symbolic fallback)
-      if (isPoly) {
-        const roots = polyRoots(coeffs);
-        const realRoots = roots.filter((r) => Math.abs(r.im) < 1e-9);
-        const complexRoots = roots.filter((r) => Math.abs(r.im) >= 1e-9);
-
-        const parts: string[] = [];
-        const rootLatex = roots
-          .map((r, i) => `${varName}_{${i + 1}} = ${fmtComplexLatex(r)}`)
-          .join(', \\quad ');
-
-        const polyLatex = coeffsToLatex(coeffs, varName);
-        parts.push(`\\text{多项式: } ${polyLatex} = 0`);
-        parts.push(`\\text{次数: } ${coeffs.length - 1}`);
-        if (realRoots.length > 0) {
-          parts.push(`\\text{实根 (${realRoots.length}): } ${realRoots.map((r) => fmtComplexLatex(r)).join(', ')}`);
-        }
-        if (complexRoots.length > 0) {
-          parts.push(`\\text{复根 (${complexRoots.length}): } ${complexRoots.map((r) => fmtComplexLatex(r)).join(', ')}`);
-        }
-        const latex = `${rootLatex} \\\\[8pt] \\text{次数: } ${coeffs.length - 1}`;
-        setResult({
-          latex,
-          roots,
-          kind: 'polynomial',
-          info: `${realRoots.length} 实根, ${complexRoots.length} 复根, 次数 ${coeffs.length - 1}`,
-          symbolicFallback: solveMode === 'symbolic',
-        });
-        return;
-      }
-
-      // Transcendental: numeric root finding in the specified range
-      let expr = equation;
-      if (equation.includes('=')) {
-        const eqIdx = equation.indexOf('=');
-        const lhs = equation.slice(0, eqIdx).trim();
-        const rhs = equation.slice(eqIdx + 1).trim();
-        expr = `(${lhs}) - (${rhs})`;
-      }
-      const node = math.parse(expr);
-      const fn = (x: number) => {
-        try {
-          const v = node.evaluate({ [varName]: x });
-          return typeof v === 'number' ? v : NaN;
-        } catch {
-          return NaN;
-        }
-      };
-      const realRoots = findRealRoots(fn, rangeA, rangeB, (rangeB - rangeA) / 400);
-
-      if (realRoots.length === 0) {
-        setResult({
-          latex: `\\text{在 } [${fmtNum(rangeA)}, ${fmtNum(rangeB)}] \\text{ 内未找到实根}`,
-          roots: [],
-          kind: 'none',
-          info: `范围 [${rangeA}, ${rangeB}]`,
-          symbolicFallback: solveMode === 'symbolic',
-        });
-        return;
-      }
-
-      const rootLatex = realRoots
-        .map((r, i) => `${varName}_{${i + 1}} = ${fmtNum(r)}`)
-        .join(', \\quad ');
-      setResult({
-        latex: rootLatex,
-        roots: realRoots.map((r) => ({ re: r, im: 0 })),
-        kind: 'transcendental',
-        info: `数值解 (在 [${fmtNum(rangeA)}, ${fmtNum(rangeB)}] 内找到 ${realRoots.length} 个根)`,
-        symbolicFallback: solveMode === 'symbolic',
+      const out = await solveEquation(equation, varName, {
+        mode: solveMode,
+        rangeA,
+        rangeB,
       });
-    } catch (err) {
-      setError((err as Error).message || t('solverError'));
+      for (const w of out.warnings) toast.warning(w);
+      if (out.error) {
+        setError(out.error);
+        return;
+      }
+      setResult(out.result ?? null);
     } finally {
       setWorking(false);
     }
@@ -697,35 +337,17 @@ function EquationSolverSection() {
               ))}
             </div>
           )}
+          {result.steps && result.steps.length > 0 && (
+            <SolverStepsView steps={result.steps} defaultExpandedCount={4} className="mt-2" />
+          )}
         </>
       ) : null} />
     </div>
   );
 }
 
-function coeffsToLatex(coeffs: number[], varName: string): string {
-  // ascending: a0 + a1*x + a2*x^2 + ...
-  const terms: string[] = [];
-  for (let i = coeffs.length - 1; i >= 0; i--) {
-    const c = coeffs[i];
-    if (Math.abs(c) < 1e-14) continue;
-    const absC = Math.abs(c);
-    const sign = c < 0 ? '-' : '+';
-    let term = '';
-    if (i === 0) term = fmtNum(absC);
-    else if (i === 1) term = absC === 1 ? `${varName}` : `${fmtNum(absC)} ${varName}`;
-    else term = absC === 1 ? `${varName}^{${i}}` : `${fmtNum(absC)} ${varName}^{${i}}`;
-    if (terms.length === 0) {
-      terms.push(c < 0 ? `-${term}` : term);
-    } else {
-      terms.push(`${sign} ${term}`);
-    }
-  }
-  return terms.length === 0 ? '0' : terms.join(' ');
-}
-
 /* ================================================================== *
- * Section 2 — System of Equations
+ * Section 2 — System of Equations（逻辑复用 engine/linearSystem）
  * ================================================================== */
 
 const SYSTEM_EXAMPLE_GROUPS: ExampleGroup[] = [
@@ -740,99 +362,30 @@ const SYSTEM_EXAMPLE_GROUPS: ExampleGroup[] = [
 
 function SystemSolverSection() {
   const [text, setText] = useState('x + y = 5\nx - y = 1');
-  const [result, setResult] = useState<SystemResult | null>(null);
+  const [solution, setSolution] = useState<LinearSystemSolution | null>(null);
+  const [varList, setVarList] = useState<string[]>([]);
+  const [nonlinearSteps, setNonlinearSteps] = useState<string[] | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [working, setWorking] = useState(false);
 
   const handleSolve = () => {
     setWorking(true);
     setError(null);
-    setResult(null);
+    setSolution(null);
+    setNonlinearSteps(null);
     try {
-      const lines = text.split('\n').map((l) => l.trim()).filter(Boolean);
-      if (lines.length === 0) {
-        setError(t('solverEnterEquation'));
+      const parsed = parseLinearSystem(text);
+      if ('error' in parsed) {
+        setError(parsed.error);
         return;
       }
-
-      // Parse each equation: collect variable names and coefficients
-      const allVars = new Set<string>();
-      const rows: { coeffs: Record<string, number>; rhs: number }[] = [];
-      for (const line of lines) {
-        const eqIdx = line.indexOf('=');
-        if (eqIdx === -1) {
-          setError(t('solverSystemParseFail') + `: ${line}`);
-          return;
-        }
-        const lhs = line.slice(0, eqIdx).trim();
-        const rhsStr = line.slice(eqIdx + 1).trim();
-        let rhs: number;
-        try {
-          rhs = Number(math.evaluate(rhsStr, {}));
-        } catch {
-          setError(t('solverSystemParseFail') + `: ${line}`);
-          return;
-        }
-        const coeffs = parseLinearCoeffs(lhs);
-        if (!coeffs) {
-          setError(t('solverSystemParseFail') + `: ${line}`);
-          return;
-        }
-        for (const v of Object.keys(coeffs)) allVars.add(v);
-        rows.push({ coeffs, rhs });
+      if (!parsed.linear) {
+        // 非线性方程组 → 数值迭代说明（Task 4.2）
+        setNonlinearSteps(nonlinearSystemSteps(parsed.errorLine ?? ''));
+        return;
       }
-
-      const varList = Array.from(allVars).sort();
-      const A: number[][] = rows.map((r) => varList.map((v) => r.coeffs[v] ?? 0));
-      const b: number[] = rows.map((r) => r.rhs);
-
-      // Solve
-      try {
-        const x = math.lusolve(math.matrix(A), b);
-        const arr = (x as unknown as { toArray: () => unknown[] }).toArray() as number[][];
-        const flat: number[] = arr.map((row) => (Array.isArray(row) ? Number(row[0]) : Number(row)));
-
-        // Check residual to determine if there's a unique solution
-        const residual = A.reduce((sum, row, i) => {
-          let val = -b[i];
-          for (let j = 0; j < row.length; j++) val += row[j] * flat[j];
-          return sum + Math.abs(val);
-        }, 0);
-
-        if (!Number.isFinite(residual) || residual > 1e-6) {
-          setResult({
-            latex: '\\text{方程组可能无解或有无穷多解}',
-            vector: [],
-            variables: varList,
-            kind: 'none',
-            error: 'singular or inconsistent',
-          });
-          return;
-        }
-
-        const parts = flat.map((v, i) => `${varList[i]} = ${fmtNum(v)}`);
-        const latex = parts.join(', \\quad ');
-        setResult({
-          latex,
-          vector: flat,
-          variables: varList,
-          kind: 'unique',
-        });
-      } catch (err) {
-        // lusolve throws on singular
-        const msg = (err as Error).message || '';
-        if (msg.toLowerCase().includes('singular') || msg.toLowerCase().includes('rank')) {
-          setResult({
-            latex: '\\text{方程组无解或有无穷多解 (系数矩阵奇异)}',
-            vector: [],
-            variables: varList,
-            kind: 'infinite',
-            error: msg,
-          });
-        } else {
-          setError(msg);
-        }
-      }
+      setVarList(parsed.varList);
+      setSolution(solveLinearSystemWithSteps(parsed.A, parsed.b));
     } catch (err) {
       setError((err as Error).message || t('solverError'));
     } finally {
@@ -891,190 +444,58 @@ function SystemSolverSection() {
         </DropdownMenu>
       </div>
 
-      <ResultBlock error={error} result={result ? (
-        <>
-          {result.kind === 'unique' && (
-            <div className="overflow-x-auto">
-              <FormulaRenderer latex={result.latex} displayMode />
-            </div>
-          )}
-          {result.kind === 'none' && (
-            <div className="text-[11.5px] text-rose-600 dark:text-rose-300">
-              {t('solverNoSolution')}
-            </div>
-          )}
-          {result.kind === 'infinite' && (
-            <div className="text-[11.5px] text-amber-600 dark:text-amber-300">
-              {t('solverMultipleSolutions')}
-              <div className="mt-1 overflow-x-auto">
-                <FormulaRenderer latex={result.latex} displayMode />
+      <ResultBlock error={error} result={
+        nonlinearSteps ? (
+          <SolverStepsView steps={nonlinearSteps} title="数值方法说明" />
+        ) : solution ? (
+          <>
+            {solution.kind === 'unique' && (
+              <div className="overflow-x-auto">
+                <FormulaRenderer latex={solution.latex} displayMode />
               </div>
-            </div>
-          )}
-          {result.variables.length > 0 && result.kind === 'unique' && (
-            <div className="mt-2 grid grid-cols-2 sm:grid-cols-3 gap-1">
-              {result.variables.map((v, i) => (
-                <div
-                  key={v}
-                  className="rounded border border-emerald-500/30 bg-emerald-500/5 px-2 py-1 text-[11px] font-mono text-emerald-700 dark:text-emerald-300"
-                >
-                  {v} = {fmtNum(result.vector[i] ?? 0)}
+            )}
+            {solution.kind === 'none' && (
+              <div className="text-[11.5px] text-rose-600 dark:text-rose-300">
+                {t('solverNoSolution')}
+              </div>
+            )}
+            {solution.kind === 'infinite' && (
+              <div className="text-[11.5px] text-amber-600 dark:text-amber-300">
+                {t('solverMultipleSolutions')}
+                <div className="mt-1 overflow-x-auto">
+                  <FormulaRenderer latex={solution.latex} displayMode />
                 </div>
-              ))}
-            </div>
-          )}
-        </>
-      ) : null} />
+              </div>
+            )}
+            {solution.kind === 'unique' && solution.vector && varList.length > 0 && (
+              <div className="mt-2 grid grid-cols-2 sm:grid-cols-3 gap-1">
+                {varList.map((v, i) => (
+                  <div
+                    key={v}
+                    className="rounded border border-emerald-500/30 bg-emerald-500/5 px-2 py-1 text-[11px] font-mono text-emerald-700 dark:text-emerald-300"
+                  >
+                    {v} = {fmtNum(solution.vector![i] ?? 0)}
+                  </div>
+                ))}
+              </div>
+            )}
+            {/* 逐步消元中间状态（Task 4.2） */}
+            {solution.steps.length > 0 && (
+              <GaussianEliminationView
+                steps={solution.steps}
+                defaultExpandedCount={4}
+                className="mt-2"
+              />
+            )}
+          </>
+        ) : null
+      } />
     </div>
   );
 }
 
-/** Parse a linear LHS like "2x + 3y - z" into { x: 2, y: 3, z: -1 }.
- * Returns null if non-linear (contains x*y, x^2, sin(x), etc). */
-function parseLinearCoeffs(lhs: string): Record<string, number> | null {
-  // Try mathjs: parse, walk for symbol nodes — each term must be linear.
-  try {
-    const node = math.parse(lhs);
-    const coeffs: Record<string, number> = {};
-
-    // We expand to a sum of monomials and check each is a constant or k*var.
-    const terms = expandToMonomials(node);
-    if (!terms) return null;
-
-    for (const term of terms) {
-      // term: { coef: number, vars: string[] }
-      if (term.vars.length > 1) return null; // non-linear
-      if (term.vars.length === 0) {
-        // constant term — but linear equations shouldn't have constants on LHS
-        // (they should be on RHS); however, mathematically we can fold into rhs=0 effect
-        // We'll treat the LHS as Ax + By + C = rhs → C subtracted from rhs.
-        // For simplicity, store as __const
-        coeffs['__const'] = (coeffs['__const'] ?? 0) + term.coef;
-      } else {
-        const v = term.vars[0];
-        coeffs[v] = (coeffs[v] ?? 0) + term.coef;
-      }
-    }
-    return coeffs;
-  } catch {
-    return null;
-  }
-}
-
-interface Monomial {
-  coef: number;
-  vars: string[];
-}
-
-/** Expand a mathjs node to a list of monomials. Returns null if non-polynomial. */
-function expandToMonomials(node: unknown): Monomial[] | null {
-  const n = node as {
-    type?: string;
-    isOperatorNode?: boolean;
-    op?: string;
-    args?: unknown[];
-    isConstantNode?: boolean;
-    value?: unknown;
-    isSymbolNode?: boolean;
-    name?: string;
-    isFunctionNode?: boolean;
-    fn?: { name?: string };
-    content?: unknown;
-  };
-  if (!n) return null;
-
-  // Constant
-  if (n.isConstantNode || n.type === 'ConstantNode') {
-    return [{ coef: Number(n.value), vars: [] }];
-  }
-
-  // Symbol
-  if (n.isSymbolNode || n.type === 'SymbolNode') {
-    return [{ coef: 1, vars: [n.name as string] }];
-  }
-
-  // Parentheses
-  if (n.type === 'ParenthesisNode') {
-    return expandToMonomials(n.content);
-  }
-
-  // Operator
-  if (n.isOperatorNode || n.type === 'OperatorNode') {
-    const args = n.args ?? [];
-    if (n.op === '+') {
-      const a = expandToMonomials(args[0]);
-      const b = expandToMonomials(args[1]);
-      if (!a || !b) return null;
-      return [...a, ...b];
-    }
-    if (n.op === '-') {
-      if (args.length === 1) {
-        const a = expandToMonomials(args[0]);
-        if (!a) return null;
-        return a.map((m) => ({ ...m, coef: -m.coef }));
-      }
-      const a = expandToMonomials(args[0]);
-      const b = expandToMonomials(args[1]);
-      if (!a || !b) return null;
-      return [...a, ...b.map((m) => ({ ...m, coef: -m.coef }))];
-    }
-    if (n.op === '*') {
-      const a = expandToMonomials(args[0]);
-      const b = expandToMonomials(args[1]);
-      if (!a || !b) return null;
-      const out: Monomial[] = [];
-      for (const ma of a) {
-        for (const mb of b) {
-          out.push({
-            coef: ma.coef * mb.coef,
-            vars: [...ma.vars, ...mb.vars].sort(),
-          });
-        }
-      }
-      return out;
-    }
-    if (n.op === '/') {
-      // Only constant denominator allowed
-      const a = expandToMonomials(args[0]);
-      const b = expandToMonomials(args[1]);
-      if (!a || !b) return null;
-      if (b.length !== 1 || b[0].vars.length > 0) return null;
-      const denom = b[0].coef;
-      if (Math.abs(denom) < 1e-14) return null;
-      return a.map((m) => ({ ...m, coef: m.coef / denom }));
-    }
-    if (n.op === '^') {
-      // Only allow integer powers
-      const a = expandToMonomials(args[0]);
-      const b = expandToMonomials(args[1]);
-      if (!a || !b) return null;
-      if (a.length !== 1 || b.length !== 1 || b[0].vars.length > 0) return null;
-      const base = a[0];
-      const exp = b[0].coef;
-      if (!Number.isInteger(exp) || exp < 0 || exp > 10) return null;
-      if (base.vars.length === 0) {
-        return [{ coef: Math.pow(base.coef, exp), vars: [] }];
-      }
-      // (k*v)^n = k^n * v^n — but for linear we only allow n=1
-      if (exp !== 1) return null;
-      return [base];
-    }
-    return null;
-  }
-
-  // Unary minus node (sometimes wrapped)
-  if (n.type === 'UnaryNode') {
-    const a = expandToMonomials(n.args?.[0]);
-    if (!a) return null;
-    return a.map((m) => ({ ...m, coef: -m.coef }));
-  }
-
-  // Function node — non-polynomial
-  return null;
-}
-
 /* ================================================================== *
- * Section 3 — Calculus
+ * Section 3 — Calculus（求导/积分/极限复用 engine 模块，法则与中间步骤标注）
  * ================================================================== */
 
 type CalcMode = 'deriv' | 'integral' | 'limit' | 'taylor';
@@ -1179,13 +600,13 @@ function CalculusSection() {
     setExpr(CALC_EXAMPLES[m][0]);
   };
 
-  const handleCompute = () => {
+  const handleCompute = async () => {
     setWorking(true);
     setError(null);
     setResult(null);
     try {
-      // Use the engine's evaluateExpression for proper integration with engine scope
-      const engineResult = computeCalculus(mode, expr, varName, { lower, upper, point, order });
+      // 复用 engine 模块（求导法则标注 / 积分提示与数值回退 / 符号极限）
+      const engineResult = await computeCalculus(mode, expr, varName, { lower, upper, point, order });
       if (engineResult.error) {
         setError(engineResult.error);
         return;
@@ -1366,19 +787,17 @@ function CalculusSection() {
           <div className="overflow-x-auto">
             <FormulaRenderer latex={result.latex} displayMode />
           </div>
+          {result.numerical !== undefined && (
+            <div className="text-[11px] font-mono text-muted-foreground">
+              数值结果 ≈ {parseFloat(result.numerical.toPrecision(8))}
+            </div>
+          )}
           {result.steps && result.steps.length > 0 && (
-            <details className="group">
-              <summary className="cursor-pointer text-[10.5px] text-muted-foreground hover:text-foreground select-none">
-                {t('solverSteps')} ({result.steps.length})
-              </summary>
-              <div className="mt-1.5 space-y-1 overflow-x-auto">
-                {result.steps.map((s, i) => (
-                  <div key={i} className="text-[11px] text-foreground/80">
-                    <FormulaRenderer latex={s} displayMode />
-                  </div>
-                ))}
-              </div>
-            </details>
+            <SolverStepsView
+              steps={result.steps}
+              title={t('solverSteps')}
+              defaultExpandedCount={5}
+            />
           )}
           {mode === 'limit' && !error && (
             <LimitZoomViewer
@@ -1544,39 +963,48 @@ function LimitZoomViewer({
   );
 }
 
-function computeCalculus(
+async function computeCalculus(
   mode: 'deriv' | 'integral' | 'limit' | 'taylor',
   expr: string,
   varName: string,
   opts: { lower: number; upper: number; point: number; order: number },
-): CalcResult {
+): Promise<CalcResult> {
   try {
     if (mode === 'deriv') {
-      const res = evaluateExpression(`derivative(${expr}, ${varName})`, 'matlab');
-      if (!res.success) return { latex: '', error: res.error };
+      // Task 4.1 — 分步求导并标注所用法则（幂/乘积/商/链式/和差…）
+      const { resultLatex, steps } = differentiateWithSteps(expr, varName);
       return {
-        latex: `\\frac{d}{d${varName}} \\left[ ${expr} \\right] = ${res.latex}`,
-        steps: res.steps,
+        latex: `\\frac{d}{d${varName}} \\left[ ${expr} \\right] = ${resultLatex}`,
+        steps,
       };
     }
     if (mode === 'integral') {
-      const res = evaluateExpression(
-        `integrate(${expr}, ${varName}, ${opts.lower}, ${opts.upper})`,
-        'matlab',
-      );
+      // Task 4.3 — 符号定积分 + 方法提示；无闭式解时回退 Simpson 数值积分
+      const res = await symbolicDefiniteIntegral(expr, varName, opts.lower, opts.upper);
       if (!res.success) return { latex: '', error: res.error };
       return {
         latex: `\\int_{${opts.lower}}^{${opts.upper}} ${expr} \\, d${varName} = ${res.latex}`,
         steps: res.steps,
+        numerical: res.numerical,
       };
     }
     if (mode === 'limit') {
-      const res = evaluateExpression(`limit(${expr}, ${varName}, ${opts.point})`, 'matlab');
+      const pointArg: number | string = Number.isFinite(opts.point)
+        ? opts.point
+        : opts.point > 0
+          ? 'inf'
+          : '-inf';
+      const res = await symbolicLimit(expr, varName, pointArg);
       if (!res.success) return { latex: '', error: res.error };
-      const ptStr = Number.isFinite(opts.point) ? String(opts.point) : '\\infty';
+      const ptStr = Number.isFinite(opts.point)
+        ? String(opts.point)
+        : opts.point > 0
+          ? '\\infty'
+          : '-\\infty';
       return {
         latex: `\\lim_{${varName} \\to ${ptStr}} ${expr} = ${res.latex}`,
         steps: res.steps,
+        numerical: res.numerical,
       };
     }
     if (mode === 'taylor') {

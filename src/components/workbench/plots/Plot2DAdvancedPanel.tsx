@@ -294,18 +294,38 @@ function IntersectTab({
   const visiblePlots = useMemo(() => plots.filter((p) => p.visible && p.plotType !== 'surface3d'), [plots]);
   const [idx1, setIdx1] = useState(0);
   const [idx2, setIdx2] = useState(1);
-  const [enabled, setEnabled] = useState(false);
+  // 默认开启"自动全部交点"：对所有可见曲线两两组合计算交点；
+  // 手动 A/B 逐对选择保留为可选模式。
+  const [enabled, setEnabled] = useState(true);
+  const [mode, setMode] = useState<'auto' | 'manual'>('auto');
   const scopeVersion = useScopeVersion();
 
   const results = useMemo<IntersectionPoint[]>(() => {
     void scopeVersion; // re-compute when a slider / variable changes
     if (!enabled || visiblePlots.length < 2) return [];
+    if (mode === 'auto') {
+      // 两两组合（i < j），每个交点附带所属曲线对标签。
+      const out: IntersectionPoint[] = [];
+      for (let i = 0; i < visiblePlots.length; i++) {
+        for (let j = i + 1; j < visiblePlots.length; j++) {
+          const a = visiblePlots[i];
+          const b = visiblePlots[j];
+          const label = `${shortExpr(a.expression)} ∩ ${shortExpr(b.expression)}`;
+          for (const p of findIntersections(a.expression, b.expression, xRange)) {
+            out.push({ ...p, pairLabel: label });
+          }
+        }
+      }
+      return out;
+    }
+    // 手动模式：选定的曲线 A / B 逐对计算。
     const a = visiblePlots[Math.min(idx1, visiblePlots.length - 1)];
     const b = visiblePlots[Math.min(idx2, visiblePlots.length - 1)];
     if (!a || !b || a.id === b.id) return [];
-    return findIntersections(a.expression, b.expression, xRange);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [enabled, visiblePlots, idx1, idx2, xRange, scopeVersion]);
+    const label = `${shortExpr(a.expression)} ∩ ${shortExpr(b.expression)}`;
+    return findIntersections(a.expression, b.expression, xRange)
+      .map((p) => ({ ...p, pairLabel: label }));
+  }, [enabled, mode, visiblePlots, idx1, idx2, xRange, scopeVersion]);
 
   useEffect(() => {
     onOverlaysChange({
@@ -335,12 +355,30 @@ function IntersectTab({
           {enabled ? '关闭交点' : '显示交点'}
         </Button>
         {enabled && (
-          <span className="text-[10px] text-muted-foreground">
+          <ToggleGroup
+            type="single"
+            value={mode}
+            onValueChange={(v) => {
+              if (v === 'auto' || v === 'manual') setMode(v);
+            }}
+            className="h-6"
+            size="sm"
+          >
+            <ToggleGroupItem value="auto" className="h-6 px-2 text-[10px]" aria-label="自动全部交点">
+              全部
+            </ToggleGroupItem>
+            <ToggleGroupItem value="manual" className="h-6 px-2 text-[10px]" aria-label="手动选择曲线对">
+              手动
+            </ToggleGroupItem>
+          </ToggleGroup>
+        )}
+        {enabled && (
+          <span className="ml-auto text-[10px] text-muted-foreground">
             找到 {results.length} 个交点
           </span>
         )}
       </div>
-      {enabled && (
+      {enabled && mode === 'manual' && (
         <div className="grid grid-cols-2 gap-1.5">
           <CurveSelect label="曲线 A" plots={visiblePlots} value={idx1} onChange={setIdx1} />
           <CurveSelect label="曲线 B" plots={visiblePlots} value={idx2} onChange={setIdx2} />
@@ -350,9 +388,11 @@ function IntersectTab({
         <ScrollArea className="max-h-32 rounded border border-border/40">
           <div className="p-1.5 font-mono text-[10px]">
             {results.map((p, i) => (
-              <div key={i} className="flex justify-between py-0.5">
-                <span className="text-muted-foreground">[{i + 1}]</span>
-                <span className="text-foreground/80">
+              <div key={i} className="flex items-baseline justify-between gap-2 py-0.5">
+                <span className="min-w-0 truncate text-muted-foreground" title={p.pairLabel}>
+                  {p.pairLabel ?? `[${i + 1}]`}
+                </span>
+                <span className="shrink-0 text-foreground/80">
                   ({p.x.toFixed(4)}, {p.y.toFixed(4)})
                 </span>
               </div>
@@ -362,6 +402,11 @@ function IntersectTab({
       )}
     </div>
   );
+}
+
+/** 曲线对标签里的表达式缩写：过长时截断，保持列表单行可读。 */
+function shortExpr(expr: string): string {
+  return expr.length > 20 ? `${expr.slice(0, 20)}…` : expr;
 }
 
 /* ------------------------------------------------------------------ */
