@@ -121,7 +121,6 @@ export function usePortReporter(
   // Keep latest key in a ref so the cleanup function can remove by key
   // even after nodeId/portId props change.
   const keyRef = useRef(key);
-  keyRef.current = key;
 
   // ── 关键修复：用 ref 持有 ctx，避免 measure 依赖 ctx ──────────
   // 之前 measure 的 deps 是 [ctx, dotRef]，但 ctx 是
@@ -132,7 +131,14 @@ export function usePortReporter(
   // 改用 ctxRef 后 measure 的 deps 仅 [dotRef]，永不重建，
   // useLayoutEffect 只在 mount 时执行一次。
   const ctxRef = useRef(ctx);
-  ctxRef.current = ctx;
+
+  // Sync the latest key/ctx into the refs after every render. Refs must
+  // not be written during render (react-hooks/refs); this layout effect
+  // is declared before the measure effects below so it always runs first.
+  useLayoutEffect(() => {
+    keyRef.current = key;
+    ctxRef.current = ctx;
+  });
 
   const measure = useCallback(() => {
     const dot = dotRef.current;

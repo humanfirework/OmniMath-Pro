@@ -66,6 +66,21 @@ interface NameDialogState {
   parentId: string | null;
 }
 
+/**
+ * Flush the debounced editor auto-save for the currently-open file.
+ * The EditorPanel saves edits with a 500ms debounce; switching or
+ * replacing the active file within that window would otherwise drop the
+ * last keystrokes. `exceptId` skips the flush when the target file is
+ * the one already open.
+ */
+function flushActiveFileEdits(exceptId?: string) {
+  const fs = useFileSystemStore.getState();
+  const prevId = fs.activeFileId;
+  if (prevId && prevId !== exceptId && fs.nodes[prevId]?.type === 'file') {
+    fs.updateFileContent(prevId, useWorkbenchStore.getState().editorContent);
+  }
+}
+
 export function FilesPanel() {
   const nodes = useFileSystemStore((s) => s.nodes);
   const loaded = useFileSystemStore((s) => s.loaded);
@@ -123,6 +138,9 @@ export function FilesPanel() {
     if (!trimmed) return;
     try {
       if (nameDialog.type === 'file') {
+        // The new file becomes active — persist pending edits of the
+        // previously-open file first (see flushActiveFileEdits).
+        flushActiveFileEdits();
         createFile(trimmed, nameDialog.parentId, '', 'simple');
         toast.success(`已创建 ${trimmed}`);
       } else {
@@ -315,14 +333,19 @@ function FileTreeNode({ node, depth }: { node: FileNode; depth: number }) {
   const handleClick = useCallback(() => {
     if (isFolder) {
       toggleFolderExpanded(node.id);
-    } else {
-      setActiveFile(node.id);
-      // Load content into editor.
-      if (node.content !== undefined) {
-        setEditorContent(node.content);
-      }
+      return;
     }
-  }, [isFolder, node.id, node.content, toggleFolderExpanded, setActiveFile, setEditorContent]);
+    // Clicking the already-open file must not reload its stored content —
+    // the editor may hold edits not yet flushed by the debounced auto-save.
+    if (activeFileId === node.id) return;
+    // Persist pending edits of the previously-open file before switching.
+    flushActiveFileEdits(node.id);
+    setActiveFile(node.id);
+    // Load content into editor.
+    if (node.content !== undefined) {
+      setEditorContent(node.content);
+    }
+  }, [isFolder, node.id, node.content, activeFileId, toggleFolderExpanded, setActiveFile, setEditorContent]);
 
   const handleRename = useCallback(() => {
     setRenameValue(node.name);

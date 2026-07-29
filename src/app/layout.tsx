@@ -8,7 +8,10 @@ import { Toaster } from "@/components/ui/sonner";
  * 不再依赖 next/font/google（需要联网下载，离线/沙箱环境会失败导致
  * 整个 UI 字体 unloaded，文本挤在一起像乱码）。
  *
- * 改用系统字体栈兜底：在每个目标平台都使用最合适的预装字体。
+ * 字体全部自托管：Inter 与 Noto Sans SC（含中文 unicode-range 分片）
+ * 及 STIX Two Math 的 woff2 放在 public/fonts，@font-face 在
+ * globals.css 顶部注册（font-display: swap），栈首同名命中；
+ * 其后保留各平台系统字体（PingFang SC / 微软雅黑等）作为回退。
  * CSS 变量在 globals.css 中定义 --font-sans / --font-mono / --font-math。
  */
 

@@ -138,6 +138,24 @@ function genId(): string {
   return `f-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
 }
 
+/**
+ * Guard against duplicate names among siblings (same parent directory).
+ * Files and folders share one namespace per directory — like a real FS.
+ * Throws so callers (Panels) can surface a toast instead of silently
+ * creating ambiguous tree entries.
+ */
+function assertNoDuplicateName(
+  nodes: Record<string, FileNode>,
+  parentId: string | null,
+  name: string,
+  excludeId?: string,
+): void {
+  const dup = Object.values(nodes).some(
+    (n) => n.parentId === parentId && n.name === name && n.id !== excludeId,
+  );
+  if (dup) throw new Error(`同目录下已存在名为 "${name}" 的文件或文件夹`);
+}
+
 /* ------------------------------------------------------------------ */
 /*  Default content for first launch                                  */
 /* ------------------------------------------------------------------ */
@@ -196,6 +214,7 @@ export const useFileSystemStore = create<FileSystemState>((set, get) => ({
   loaded: false,
 
   createFile: (name, parentId, content = '', language = 'simple') => {
+    assertNoDuplicateName(get().nodes, parentId, name);
     const id = genId();
     const now = Date.now();
     const node: FileNode = {
@@ -226,6 +245,7 @@ export const useFileSystemStore = create<FileSystemState>((set, get) => ({
   },
 
   createFolder: (name, parentId) => {
+    assertNoDuplicateName(get().nodes, parentId, name);
     const id = genId();
     const now = Date.now();
     const node: FileNode = {
@@ -253,16 +273,17 @@ export const useFileSystemStore = create<FileSystemState>((set, get) => ({
   },
 
   renameNode: (id, name) => {
-    set((s) => {
-      const node = s.nodes[id];
-      if (!node) return s;
-      return {
-        nodes: {
-          ...s.nodes,
-          [id]: { ...node, name, updatedAt: Date.now() },
-        },
-      };
-    });
+    const node = get().nodes[id];
+    if (!node) return;
+    // Reject renames that would collide with a sibling in the same
+    // directory (excluding the node itself).
+    assertNoDuplicateName(get().nodes, node.parentId, name, id);
+    set((s) => ({
+      nodes: {
+        ...s.nodes,
+        [id]: { ...s.nodes[id], name, updatedAt: Date.now() },
+      },
+    }));
     get().saveToStorage();
   },
 
@@ -328,10 +349,15 @@ export const useFileSystemStore = create<FileSystemState>((set, get) => ({
     set((s) => {
       const node = s.nodes[id];
       if (!node || node.type !== 'folder') return s;
+      // The UI treats `expanded === undefined` as expanded
+      // (`node.expanded !== false`), so negating the raw value is wrong:
+      // toggling an undefined-expanded folder used to set it to `true`,
+      // producing no visible change on the first click. Negate the
+      // *displayed* state instead.
       return {
         nodes: {
           ...s.nodes,
-          [id]: { ...node, expanded: !node.expanded },
+          [id]: { ...node, expanded: node.expanded === false },
         },
       };
     });
@@ -369,9 +395,17 @@ export const useFileSystemStore = create<FileSystemState>((set, get) => ({
     try {
       const data = (await idbGet(FS_KEY)) as PersistedFS | null;
       if (data && data.nodes && typeof data.nodes === 'object') {
+        // Sanitize the persisted active file: it may reference a node that
+        // no longer exists (e.g. corrupted/older data), which would leave
+        // the editor bound to a phantom file.
+        const persistedActive = data.activeFileId ?? null;
+        const activeFileId =
+          persistedActive && data.nodes[persistedActive]?.type === 'file'
+            ? persistedActive
+            : null;
         set({
           nodes: data.nodes,
-          activeFileId: data.activeFileId ?? null,
+          activeFileId,
           loaded: true,
         });
       } else {

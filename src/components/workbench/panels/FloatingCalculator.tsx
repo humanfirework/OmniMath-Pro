@@ -5,7 +5,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import {
   Calculator, X, Pin, PinOff, Copy, Check, RotateCcw,
   Ruler, ArrowLeftRight, ChevronDown, ChevronUp,
-  FlaskConical, Binary, Grid3x3, History,
+  FlaskConical, Binary, Grid3x3, History, NotebookPen,
 } from 'lucide-react';
 import { useWorkbenchStore } from '@/lib/store/workbench';
 import { evaluateExpression, math } from '@/lib/engine';
@@ -196,6 +196,10 @@ export function FloatingCalculator() {
   const [history, setHistory] = useState<string[]>([]);
   const [showHistory, setShowHistory] = useState(false);
 
+  // Notepad state
+  const [notepadText, setNotepadText] = useState('');
+  const [showNotepad, setShowNotepad] = useState(false);
+
   const copyTimerRef = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
   const matrixCopyTimerRef = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
 
@@ -215,6 +219,18 @@ export function FloatingCalculator() {
         if (Array.isArray(parsed)) {
           setHistory(parsed.filter((x): x is string => typeof x === 'string').slice(0, 20));
         }
+      }
+    } catch { /* ignore */ }
+    try {
+      const note = localStorage.getItem('calc-notepad');
+      if (note !== null) {
+        setNotepadText(note);
+      }
+    } catch { /* ignore */ }
+    try {
+      const noteOpen = localStorage.getItem('calc-notepad-open');
+      if (noteOpen !== null) {
+        setShowNotepad(JSON.parse(noteOpen) === true);
       }
     } catch { /* ignore */ }
   }, []);
@@ -244,6 +260,25 @@ export function FloatingCalculator() {
     try {
       localStorage.removeItem('calc-history');
     } catch { /* ignore */ }
+  }, []);
+
+  // Notepad handlers (persist content and open state)
+  const handleNotepadChange = useCallback((e: React.ChangeEvent<HTMLTextAreaElement>) => {
+    const v = e.target.value;
+    setNotepadText(v);
+    try {
+      localStorage.setItem('calc-notepad', v);
+    } catch { /* ignore */ }
+  }, []);
+
+  const toggleNotepad = useCallback(() => {
+    setShowNotepad((v) => {
+      const next = !v;
+      try {
+        localStorage.setItem('calc-notepad-open', JSON.stringify(next));
+      } catch { /* ignore */ }
+      return next;
+    });
   }, []);
 
   // Memory operations
@@ -399,8 +434,10 @@ export function FloatingCalculator() {
     const handleMove = (e: MouseEvent) => {
       const dx = e.clientX - dragRef.current.startX;
       const dy = e.clientY - dragRef.current.startY;
+      // Account for the notepad side panel (200px + 8px gap) when expanded
+      const panelWidth = showNotepad ? 488 : 280;
       setPosition({
-        x: Math.max(0, Math.min(window.innerWidth - 280, dragRef.current.startPosX + dx)),
+        x: Math.max(0, Math.min(window.innerWidth - panelWidth, dragRef.current.startPosX + dx)),
         y: Math.max(0, Math.min(window.innerHeight - 200, dragRef.current.startPosY + dy)),
       });
     };
@@ -411,7 +448,7 @@ export function FloatingCalculator() {
       window.removeEventListener('mousemove', handleMove);
       window.removeEventListener('mouseup', handleUp);
     };
-  }, [dragging]);
+  }, [dragging, showNotepad]);
 
   const inputDigit = useCallback((digit: string) => {
     if (justEvaluated) {
@@ -821,10 +858,11 @@ export function FloatingCalculator() {
               zIndex: 76,
             }}
             className={cn(
-              'fixed w-[280px] rounded-xl border border-border bg-card/95 backdrop-blur-xl shadow-2xl overflow-hidden',
+              'fixed flex items-stretch',
               dragging ? 'cursor-grabbing' : ''
             )}
           >
+            <div className="w-[280px] rounded-xl border border-border bg-card/95 backdrop-blur-xl shadow-2xl overflow-hidden flex flex-col">
             {/* Header / drag handle */}
             <div
               onMouseDown={handleDragStart}
@@ -842,6 +880,17 @@ export function FloatingCalculator() {
                 title="Copy result"
               >
                 {copied ? <Check className="size-3.5 text-emerald-500" /> : <Copy className="size-3.5" />}
+              </button>
+              <button
+                type="button"
+                onClick={toggleNotepad}
+                className={cn(
+                  'size-6 rounded-md flex items-center justify-center',
+                  showNotepad ? 'text-primary bg-primary/10' : 'text-muted-foreground hover:bg-accent hover:text-foreground'
+                )}
+                title={showNotepad ? 'Hide notepad' : 'Show notepad'}
+              >
+                <NotebookPen className="size-3.5" />
               </button>
               <button
                 type="button"
@@ -1343,6 +1392,33 @@ export function FloatingCalculator() {
               <span className="font-mono">Ctrl+Shift+C</span>
               <span>Drag to move</span>
             </div>
+            </div>
+
+            {/* Notepad side panel */}
+            <AnimatePresence initial={false}>
+              {showNotepad && (
+                <motion.div
+                  initial={{ width: 0, opacity: 0 }}
+                  animate={{ width: 208, opacity: 1 }}
+                  exit={{ width: 0, opacity: 0 }}
+                  transition={{ type: 'spring', stiffness: 300, damping: 30 }}
+                  className="overflow-hidden shrink-0"
+                >
+                  <div className="w-[200px] h-full ml-2 rounded-xl border border-border bg-card/95 backdrop-blur-xl shadow-2xl p-2 flex flex-col gap-1.5">
+                    <div className="flex items-center gap-1 px-1 text-[10px] text-muted-foreground">
+                      <NotebookPen className="size-3" />
+                      <span>Notepad</span>
+                    </div>
+                    <textarea
+                      value={notepadText}
+                      onChange={handleNotepadChange}
+                      placeholder="草稿 / 记录数据…"
+                      className="flex-1 min-h-[160px] w-full resize-none rounded-md bg-muted/50 border border-border/50 p-2 text-xs font-mono outline-none focus:border-primary/50 placeholder:text-muted-foreground/60"
+                    />
+                  </div>
+                </motion.div>
+              )}
+            </AnimatePresence>
           </motion.div>
         )}
       </AnimatePresence>

@@ -146,15 +146,56 @@ export function EditorPanel() {
   // We use a ref to skip the auto-save effect during programmatic loads
   // so we don't immediately write back the same content.
   const skipNextSaveRef = useRef(false);
+  // Tracks the file we actually loaded, so we can detect it being deleted
+  // (activeFileId → null) vs. simply launching with no file open.
+  const loadedFileIdRef = useRef<string | null>(null);
   useEffect(() => {
-    if (!activeFileId) return;
+    if (!activeFileId) {
+      // The previously-open file was deleted (or its folder was) — the
+      // store nulled activeFileId. Reset the editor to a safe empty state
+      // instead of leaving stale content that looks like it still belongs
+      // to the deleted file. On a fresh launch with no active file
+      // (loadedFileIdRef still null), keep the persisted draft as-is.
+      if (loadedFileIdRef.current !== null) {
+        loadedFileIdRef.current = null;
+        skipNextSaveRef.current = false;
+        setEditorContent('');
+      }
+      return;
+    }
     const file = useFileSystemStore.getState().nodes[activeFileId];
-    if (file?.type === 'file' && file.content !== undefined) {
-      skipNextSaveRef.current = true;
-      setEditorContent(file.content);
-      if (file.language) setInputMode(file.language);
+    if (!file || file.type !== 'file') {
+      // Dangling reference (e.g. corrupted persisted state) — clear it so
+      // the auto-save below can't target a non-existent node.
+      loadedFileIdRef.current = null;
+      useFileSystemStore.getState().setActiveFile(null);
+      setEditorContent('');
+      return;
+    }
+    if (loadedFileIdRef.current !== activeFileId) {
+      loadedFileIdRef.current = activeFileId;
+      if (file.content !== undefined) {
+        skipNextSaveRef.current = true;
+        setEditorContent(file.content);
+        if (file.language) setInputMode(file.language);
+      }
     }
   }, [activeFileId, setEditorContent, setInputMode]);
+
+  // Flush pending edits on unmount (e.g. switching to the pipeline view):
+  // the debounced auto-save below would otherwise drop the last <500ms of
+  // keystrokes, and the stale file content would overwrite the editor on
+  // remount.
+  const latestEditRef = useRef({ activeFileId, editorContent });
+  useEffect(() => {
+    latestEditRef.current = { activeFileId, editorContent };
+  }, [activeFileId, editorContent]);
+  useEffect(() => {
+    return () => {
+      const { activeFileId: id, editorContent: content } = latestEditRef.current;
+      if (id) useFileSystemStore.getState().updateFileContent(id, content);
+    };
+  }, []);
 
   // When editor content changes AND there's an active file, auto-save to
   // the file system store (debounced). Skip if this change was triggered

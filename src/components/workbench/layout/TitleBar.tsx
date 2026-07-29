@@ -8,20 +8,22 @@
  *          + i18n appSubtitle.
  *  - Center: File / Edit / View / Help menu buttons (open command palette).
  *  - Right: theme toggle (Sun/Moon, animated), language switcher (zh/EN),
- *           view-mode switcher (Workbench / Pipeline / Focus).
+ *           window controls (minimize / maximize / close, Tauri desktop only).
+ *  View-mode switching lives in the ActivityBar (left icon rail) — not here.
  */
 
+import { useEffect, useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
   Moon,
   Sun,
   Languages,
-  LayoutDashboard,
-  Workflow,
-  Maximize2,
   ChevronDown,
-  PencilRuler,
+  Minus,
+  Square,
+  X,
 } from 'lucide-react';
+import { getCurrentWindow } from '@tauri-apps/api/window';
 import {
   Tooltip,
   TooltipContent,
@@ -37,6 +39,7 @@ import {
 import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
 import { useWorkbenchStore } from '@/lib/store/workbench';
+import { inTauri } from '@/lib/tauri';
 import { t, useLocale, setLocale, type Locale } from '@/lib/i18n';
 import pkg from '@/../package.json';
 
@@ -45,11 +48,17 @@ const MENU_KEYS = ['menuFile', 'menuEdit', 'menuView', 'menuHelp'] as const;
 export function TitleBar() {
   const theme = useWorkbenchStore((s) => s.theme);
   const toggleTheme = useWorkbenchStore((s) => s.toggleTheme);
-  const viewMode = useWorkbenchStore((s) => s.viewMode);
-  const setViewMode = useWorkbenchStore((s) => s.setViewMode);
   const setCommandPaletteOpen = useWorkbenchStore((s) => s.setCommandPaletteOpen);
   const locale = useLocale();
   const setLocaleStore = useWorkbenchStore((s) => s.setLocale);
+
+  // 仅在 Tauri 桌面壳内渲染窗口控制按钮。
+  // 初始渲染一律为 false（SSR / 浏览器），挂载后再判定，
+  // 避免 hydration 不一致。
+  const [isDesktop, setIsDesktop] = useState(false);
+  useEffect(() => {
+    setIsDesktop(inTauri());
+  }, []);
 
   const handleLocaleChange = (next: Locale) => {
     setLocale(next);
@@ -128,56 +137,6 @@ export function TitleBar() {
 
       {/* ── Right: actions ────────────────────────────────────────── */}
       <div className="relative flex items-center gap-1.5">
-        {/* Prominent blueprint / pipeline entry — primary CTA so users
-            don't miss it (it's the "wow" feature of OmniMath Pro). */}
-        <Tooltip>
-          <TooltipTrigger asChild>
-            <button
-              type="button"
-              onClick={() => setViewMode(viewMode === 'pipeline' ? 'workbench' : 'pipeline')}
-              className={cn(
-                'hidden sm:inline-flex items-center gap-1.5 h-7 px-2.5 rounded-md text-[12px] font-medium transition-all',
-                viewMode === 'pipeline'
-                  ? 'bg-primary text-primary-foreground shadow-sm'
-                  : 'bg-primary/10 text-primary border border-primary/30 hover:bg-primary/15',
-              )}
-            >
-              <Workflow className="size-3.5" strokeWidth={2.2} />
-              <span>{t('tabPipeline')}</span>
-            </button>
-          </TooltipTrigger>
-          <TooltipContent side="bottom">{t('tabPipeline')}</TooltipContent>
-        </Tooltip>
-
-        {/* View mode switcher — workbench / whiteboard / focus */}
-        <div className="hidden sm:flex items-center gap-0.5 mr-1 p-0.5 rounded-md bg-muted/60 border border-border/60">
-          {(
-            [
-              { v: 'workbench', icon: LayoutDashboard, key: 'viewWorkbench' as const },
-              { v: 'whiteboard', icon: PencilRuler, key: 'abWhiteboard' as const },
-              { v: 'focus', icon: Maximize2, key: 'viewFocus' as const },
-            ] as const
-          ).map(({ v, icon: Icon, key }) => (
-            <Tooltip key={v}>
-              <TooltipTrigger asChild>
-                <button
-                  type="button"
-                  onClick={() => setViewMode(v)}
-                  className={cn(
-                    'grid place-items-center size-6 rounded transition-all',
-                    viewMode === v
-                      ? 'bg-primary/15 text-primary'
-                      : 'text-muted-foreground hover:text-foreground hover:bg-accent/60',
-                  )}
-                >
-                  <Icon className="size-3.5" />
-                </button>
-              </TooltipTrigger>
-              <TooltipContent side="bottom">{t(key)}</TooltipContent>
-            </Tooltip>
-          ))}
-        </div>
-
         {/* Language switcher */}
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
@@ -247,6 +206,42 @@ export function TitleBar() {
             {theme === 'dark' ? t('menuLight') : t('menuDark')}
           </TooltipContent>
         </Tooltip>
+
+        {/* ── Window controls (Tauri desktop only) ───────────────────
+            decorations:false，无原生标题栏，需自行实现窗口按钮。
+            关于拖拽：不要给这里加 data-tauri-drag-region={false} ——
+            该属性只有「存在/不存在」两种状态，赋值为 "false" 依然会被
+            视为拖拽区域。Tauri 2 的拖拽脚本只对命中带
+            data-tauri-drag-region 元素自身的 mousedown 启动拖拽，
+            <button> 上的点击会正常触发 onClick，不会被拖拽吞掉。 */}
+        {isDesktop && (
+          <div className="flex items-center gap-0.5 ml-1 pl-1.5 border-l border-border/60">
+            <button
+              type="button"
+              onClick={() => void getCurrentWindow().minimize()}
+              aria-label="Minimize window"
+              className="grid place-items-center size-7 rounded-md text-muted-foreground hover:bg-accent hover:text-foreground transition-colors"
+            >
+              <Minus className="size-3.5" />
+            </button>
+            <button
+              type="button"
+              onClick={() => void getCurrentWindow().toggleMaximize()}
+              aria-label="Maximize or restore window"
+              className="grid place-items-center size-7 rounded-md text-muted-foreground hover:bg-accent hover:text-foreground transition-colors"
+            >
+              <Square className="size-3" />
+            </button>
+            <button
+              type="button"
+              onClick={() => void getCurrentWindow().close()}
+              aria-label="Close window"
+              className="grid place-items-center size-7 rounded-md text-muted-foreground hover:bg-red-500/90 hover:text-white transition-colors"
+            >
+              <X className="size-3.5" />
+            </button>
+          </div>
+        )}
       </div>
     </header>
   );

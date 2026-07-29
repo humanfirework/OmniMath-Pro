@@ -1609,6 +1609,31 @@ function NodeCard({
   variables, onPlotOpen,
 }: NodeCardProps) {
   const def = NODE_TYPES[node.type];
+  // Hooks must run unconditionally — the defensive early return below
+  // (unknown node type) previously skipped them, violating the rules of
+  // hooks. cardRef stays unattached for error cards, so the glow effect
+  // is a no-op there.
+  const cardRef = useRef<HTMLDivElement>(null);
+
+  // Compute-pulse glow: re-trigger on computeTick bump via direct DOM
+  // manipulation (avoids setState-in-effect lint error).
+  const lastTick = useRef(0);
+  useEffect(() => {
+    if (computeTick > 0 && computeTick !== lastTick.current) {
+      lastTick.current = computeTick;
+      const el = cardRef.current;
+      if (el) {
+        el.classList.remove('animate-glow-pulse');
+        // Force reflow so the animation restarts.
+        void el.offsetWidth;
+        el.classList.add('animate-glow-pulse');
+        const id = setTimeout(() => el.classList.remove('animate-glow-pulse'), 900);
+        return () => clearTimeout(id);
+      }
+    }
+    return;
+  }, [computeTick]);
+
   // ── 防御性渲染：如果 node.type 不在注册表中（脏数据/旧版本数据），
   // 显示错误卡片而不是崩溃白屏。用户可看到错误并删除该节点。
   if (!def) {
@@ -1650,26 +1675,6 @@ function NodeCard({
   const cat = CATEGORY_COLOR[def.category];
   const Icon = ICONS[def.icon] ?? Hash;
   const portsH = portsSectionHeight(node);
-  const cardRef = useRef<HTMLDivElement>(null);
-
-  // Compute-pulse glow: re-trigger on computeTick bump via direct DOM
-  // manipulation (avoids setState-in-effect lint error).
-  const lastTick = useRef(0);
-  useEffect(() => {
-    if (computeTick > 0 && computeTick !== lastTick.current) {
-      lastTick.current = computeTick;
-      const el = cardRef.current;
-      if (el) {
-        el.classList.remove('animate-glow-pulse');
-        // Force reflow so the animation restarts.
-        void el.offsetWidth;
-        el.classList.add('animate-glow-pulse');
-        const id = setTimeout(() => el.classList.remove('animate-glow-pulse'), 900);
-        return () => clearTimeout(id);
-      }
-    }
-    return;
-  }, [computeTick]);
 
   return (
     <motion.div
