@@ -5,17 +5,21 @@
  * together on [-10, 10], the raw min/max of e^x (~22026) inflates the Y
  * range so much that sin x's [-1, 1] oscillation becomes invisible.
  *
- * Strategy:
+ * Strategy (the single, default "free" range behaviour):
  *  1. Quantile-based range: use P5/P95 instead of raw min/max to ignore
  *     extreme tails (e.g. the last sample of e^x near x=10).
  *  2. Outlier detection: if a single curve's P95 / median ratio exceeds a
  *     threshold, that curve is flagged as an "outlier" (exponential /
- *     unbounded) and excluded from the shared Y range — the user can
- *     switch to "full range mode" to see it.
+ *     unbounded) and clipped from the shared Y range so it cannot crush
+ *     the other curves.
  *  3. Coordinated multi-curve range: compute each curve's smart range
- *     independently, take the union of the non-outlier curves.
+ *     independently, take the union of the non-outlier curves so every
+ *     ordinary curve stays fully visible. If every curve is an outlier,
+ *     fall back to the union of all curves so nothing disappears.
  *  4. Always include zero and add a minimum padding so flat lines get
- *     breathing room.
+ *     breathing room. The result is deterministic for a given sample set,
+ *     which keeps zooming smooth — the derived view never fights the
+ *     user's own pan/zoom (a user-set view always wins until reset).
  *
  * Pure math — no React, no DOM. Safe to unit-test in isolation.
  */
@@ -50,12 +54,15 @@ export interface SmartRangeOptions {
 }
 
 export interface CoordinatedRangeResult {
-  /** The Y range to use for the shared plot (outliers excluded). */
+  /**
+   * The Y range to use for the shared plot. Computed as the union of every
+   * non-outlier curve's quantile-based smart range, so all ordinary curves
+   * stay fully visible; extreme outlier curves are clipped instead of
+   * crushing the others.
+   */
   range: [number, number];
-  /** Labels of curves flagged as outliers (e.g. ["e^x"]). */
+  /** Labels of curves flagged as outliers (e.g. ["e^x"]) — clipped from `range`. */
   outliers: string[];
-  /** Full range including outlier curves — for "full range mode" toggle. */
-  fullRange: [number, number];
 }
 
 /* ------------------------------------------------------------------ */
@@ -170,29 +177,32 @@ export function isOutlierCurve(
  *
  * - Each curve gets a smart range via `smartYRange`.
  * - Outlier curves (e.g. e^x) are excluded from the shared range and
- *   returned in `outliers` so the UI can show a "this curve is clipped,
- *   switch to full range" hint.
- * - `fullRange` is the raw union of all curves (outliers included) for
- *   the "full range mode" toggle.
+ *   returned in `outliers` so the UI can show a "this curve is clipped"
+ *   hint.
+ * - The shared range is the union of every non-outlier curve's smart
+ *   range, so all ordinary curves stay fully visible no matter how many
+ *   are plotted.
+ * - If every curve is an outlier, the union of ALL curves is used as a
+ *   fallback so the plot never shows an empty / degenerate view.
  */
 export function coordinatedYRange(
   plots: { samples: PlotSample[]; label: string }[],
   options: SmartRangeOptions = {},
 ): CoordinatedRangeResult {
   if (plots.length === 0) {
-    return { range: [-6, 6], outliers: [], fullRange: [-6, 6] };
+    return { range: [-6, 6], outliers: [] };
   }
 
   const outliers: string[] = [];
   let sharedMin = Infinity;
   let sharedMax = -Infinity;
-  let fullMin = Infinity;
-  let fullMax = -Infinity;
+  let allMin = Infinity;
+  let allMax = -Infinity;
 
   for (const { samples, label } of plots) {
     const [lo, hi] = smartYRange(samples, options);
-    if (Number.isFinite(lo)) fullMin = Math.min(fullMin, lo);
-    if (Number.isFinite(hi)) fullMax = Math.max(fullMax, hi);
+    if (Number.isFinite(lo)) allMin = Math.min(allMin, lo);
+    if (Number.isFinite(hi)) allMax = Math.max(allMax, hi);
 
     if (isOutlierCurve(samples, options)) {
       outliers.push(label);
@@ -202,14 +212,15 @@ export function coordinatedYRange(
     if (Number.isFinite(hi)) sharedMax = Math.max(sharedMax, hi);
   }
 
-  // Fallback: if every curve was an outlier, use the full range.
+  // Fallback: if every curve was an outlier, use the union of all curves
+  // so the plot still shows something meaningful.
   if (!Number.isFinite(sharedMin) || !Number.isFinite(sharedMax)) {
-    sharedMin = fullMin;
-    sharedMax = fullMax;
+    sharedMin = allMin;
+    sharedMax = allMax;
   }
 
   if (!Number.isFinite(sharedMin) || !Number.isFinite(sharedMax)) {
-    return { range: [-6, 6], outliers, fullRange: [-6, 6] };
+    return { range: [-6, 6], outliers };
   }
 
   const {
@@ -227,10 +238,5 @@ export function coordinatedYRange(
   const pad = Math.max(span * padding, minRange * 0.1);
   const range: [number, number] = [sharedMin - pad, sharedMax + pad];
 
-  // Full range also gets a tiny pad.
-  const fullSpan = fullMax - fullMin;
-  const fullPad = Math.max(fullSpan * 0.05, 1);
-  const fullRange: [number, number] = [fullMin - fullPad, fullMax + fullPad];
-
-  return { range, outliers, fullRange };
+  return { range, outliers };
 }

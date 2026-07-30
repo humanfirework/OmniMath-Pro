@@ -8,7 +8,7 @@
  *   - 交点 (Intersections): compute & list where two curves cross
  *   - 切线 (Tangent): draw the tangent line of a curve at x₀
  *   - 求导 (Derivative): show the 1st/2nd/3rd numerical derivative curve
- *   - 范围 (Range mode): switch between smart / full / manual Y range
+ *   - 范围 (Range mode): switch between free (auto-adaptive) / manual Y range
  *
  * Design intent (from the user spec):
  *   "避免过多按钮影响界面美观，可采用可折叠面板或上下文菜单形式集成高级功能"
@@ -44,7 +44,7 @@ import { useScopeVersion } from '@/lib/hooks/useScopeVersion';
 /*  Types                                                             */
 /* ------------------------------------------------------------------ */
 
-export type RangeMode = 'smart' | 'full' | 'manual';
+export type RangeMode = 'free' | 'manual';
 
 /**
  * Compare mode for multi-plot rendering.
@@ -76,9 +76,6 @@ export interface Plot2DAdvancedPanelProps {
   onCompareModeChange: (mode: CompareMode) => void;
   /** Called whenever the computed overlays change. */
   onOverlaysChange: (overlays: AdvancedOverlays) => void;
-  /** Whether X/Y axes use equal scale (1:1) so circles stay circular. */
-  equalAspect: boolean;
-  onEqualAspectChange: (v: boolean) => void;
 }
 
 /* ------------------------------------------------------------------ */
@@ -95,8 +92,6 @@ export function Plot2DAdvancedPanel({
   compareMode,
   onCompareModeChange,
   onOverlaysChange,
-  equalAspect,
-  onEqualAspectChange,
 }: Plot2DAdvancedPanelProps) {
   const [open, setOpen] = useState(false);
   const showCompareToggle = plots.length > 1;
@@ -111,11 +106,6 @@ export function Plot2DAdvancedPanel({
         >
           {open ? <ChevronDown className="size-3" /> : <ChevronRight className="size-3" />}
           <span>高级功能</span>
-          {outliers.length > 0 && (
-            <span className="ml-1 rounded-full bg-amber-500/15 px-1.5 py-0.5 text-[9px] text-amber-600 dark:text-amber-400">
-              {outliers.length} 条离群曲线已裁切
-            </span>
-          )}
           {showCompareToggle && (
             <span className="ml-auto flex items-center gap-1 text-[9px] text-muted-foreground">
               {compareMode === 'facet' ? <Grid3x3 className="size-2.5" /> : <Layers className="size-2.5" />}
@@ -150,8 +140,6 @@ export function Plot2DAdvancedPanel({
                 compareMode={compareMode}
                 onCompareModeChange={onCompareModeChange}
                 showCompareToggle={showCompareToggle}
-                equalAspect={equalAspect}
-                onEqualAspectChange={onEqualAspectChange}
               />
             </TabsContent>
             <TabsContent value="intersect">
@@ -181,8 +169,6 @@ function RangeTab({
   compareMode,
   onCompareModeChange,
   showCompareToggle,
-  equalAspect,
-  onEqualAspectChange,
 }: {
   outliers: string[];
   rangeMode: RangeMode;
@@ -190,8 +176,6 @@ function RangeTab({
   compareMode: CompareMode;
   onCompareModeChange: (m: CompareMode) => void;
   showCompareToggle: boolean;
-  equalAspect: boolean;
-  onEqualAspectChange: (v: boolean) => void;
 }) {
   return (
     <div className="flex flex-col gap-2 py-1">
@@ -221,44 +205,19 @@ function RangeTab({
           </p>
         </>
       )}
-      <Label className="text-[10px] text-muted-foreground">坐标轴比例</Label>
-      <ToggleGroup
-        type="single"
-        value={equalAspect ? 'equal' : 'free'}
-        onValueChange={(v) => {
-          if (v === 'equal' || v === 'free') onEqualAspectChange(v === 'equal');
-        }}
-        className="h-7"
-        size="sm"
-      >
-        <ToggleGroupItem value="equal" className="h-7 px-2 text-[10px] gap-1" aria-label="等比例">
-          <Grid3x3 className="size-3" /> 等比例 (1:1)
-        </ToggleGroupItem>
-        <ToggleGroupItem value="free" className="h-7 px-2 text-[10px] gap-1" aria-label="自由比例">
-          <Layers className="size-3" /> 自由
-        </ToggleGroupItem>
-      </ToggleGroup>
-      <p className="text-[10px] text-muted-foreground">
-        {equalAspect
-          ? '等比例模式：X/Y 轴比例尺相同，圆形保持圆形。适合几何函数。'
-          : '自由模式：X/Y 轴独立缩放，充分利用画布空间。适合波形函数。'}
-      </p>
       <Label className="text-[10px] text-muted-foreground">Y 轴范围模式{showCompareToggle && compareMode === 'facet' ? '（仅叠加模式生效）' : ''}</Label>
       <ToggleGroup
         type="single"
         value={rangeMode}
         onValueChange={(v) => {
-          if (v === 'smart' || v === 'full' || v === 'manual') onRangeModeChange(v);
+          if (v === 'free' || v === 'manual') onRangeModeChange(v);
         }}
         className="h-7"
         size="sm"
         disabled={showCompareToggle && compareMode === 'facet'}
       >
-        <ToggleGroupItem value="smart" className="h-7 px-2 text-[10px]" aria-label="智能范围">
-          智能
-        </ToggleGroupItem>
-        <ToggleGroupItem value="full" className="h-7 px-2 text-[10px]" aria-label="全范围">
-          全范围
+        <ToggleGroupItem value="free" className="h-7 px-2 text-[10px]" aria-label="自由范围">
+          自由
         </ToggleGroupItem>
         <ToggleGroupItem value="manual" className="h-7 px-2 text-[10px]" aria-label="手动范围">
           手动
@@ -266,12 +225,12 @@ function RangeTab({
       </ToggleGroup>
       {outliers.length > 0 && (
         <p className="rounded border border-amber-500/30 bg-amber-500/5 px-2 py-1 text-[10px] text-amber-600 dark:text-amber-400">
-          检测到 <span className="font-mono">{outliers.join(', ')}</span> 数值跨度极大，已用智能范围裁切。切换到「全范围」可查看完整曲线。
+          检测到 <span className="font-mono">{outliers.join(', ')}</span> 数值跨度极大，已用自由范围裁切。
         </p>
       )}
-      {outliers.length === 0 && rangeMode === 'smart' && !(showCompareToggle && compareMode === 'facet') && (
+      {outliers.length === 0 && rangeMode === 'free' && !(showCompareToggle && compareMode === 'facet') && (
         <p className="text-[10px] text-muted-foreground">
-          智能模式使用 P5/P95 分位数自动过滤极端值，保持多曲线比例协调。
+          自由模式使用 P5/P95 分位数自动适配所有曲线，保持多曲线比例协调。
         </p>
       )}
     </div>

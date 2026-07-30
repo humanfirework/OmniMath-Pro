@@ -3,17 +3,22 @@
 /**
  * OmniMath Pro — Formula Library Panel
  *
- * 7 categories of formulas (Algebra, Geometry, Trigonometry, Calculus,
- * Statistics, Physics, Finance) with search + clickable chips.
+ * 7 built-in categories (Algebra, Geometry, Trigonometry, Calculus,
+ * Statistics, Physics, Finance) + a "Custom" category for user-defined
+ * formulas, with search + clickable chips.
  *
- * List view: formula name + brief description, click to expand details.
+ * List view: collapsible accordion grouped by category, formula name +
+ * brief description, click to expand details.
  * Detail view: name + LaTeX rendering (KaTeX) + description + "Insert"
- * button → inserts example into editor.
+ * button → inserts example into editor. Custom formulas can be edited
+ * or deleted from the detail view.
  *
- * 30+ formulas across categories.
+ * Custom formulas (name / LaTeX / category / description / example) are
+ * stored separately from built-ins and persisted to localStorage under
+ * the key "omnimath-custom-formulas-v1".
  */
 
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
   BookOpen,
@@ -21,13 +26,30 @@ import {
   ArrowLeft,
   Sparkles,
   Plus,
+  Pencil,
+  Trash2,
   ChevronDown,
   ChevronRight,
 } from 'lucide-react';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
+import {
+  Dialog,
+  DialogContent,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select';
 import { FormulaRenderer } from '@/components/workbench/FormulaRenderer';
 import { useWorkbenchStore } from '@/lib/store/workbench';
 import { t } from '@/lib/i18n';
@@ -44,6 +66,15 @@ type CategoryKey =
   | 'finance';
 
 interface Formula {
+  id: string;
+  name: string;
+  category: CategoryKey;
+  latex: string;
+  description: string;
+  example: string;
+}
+
+interface CustomFormula {
   id: string;
   name: string;
   category: CategoryKey;
@@ -71,6 +102,9 @@ const CATEGORY_COLOR: Record<CategoryKey, string> = {
   physics: 'text-orange-600 dark:text-orange-400 bg-orange-500/10 border-orange-500/30',
   finance: 'text-cyan-600 dark:text-cyan-400 bg-cyan-500/10 border-cyan-500/30',
 };
+
+const CUSTOM_COLOR =
+  'text-fuchsia-600 dark:text-fuchsia-400 bg-fuchsia-500/10 border-fuchsia-500/30';
 
 const FORMULAS: Formula[] = [
   // Algebra
@@ -138,12 +172,62 @@ const DEFAULT_EXPANDED_CATEGORIES: CategoryKey[] = [
   'trigonometry',
 ];
 
+// Collapsible group keys: the 7 built-in categories plus the "custom" bucket.
+type GroupKey = CategoryKey | 'custom';
+
+type ActiveFilter = CategoryKey | 'all' | 'custom';
+
+interface DisplayFormula extends Formula {
+  custom: boolean;
+}
+
+const CUSTOM_FORMULAS_KEY = 'omnimath-custom-formulas-v1';
+
+function isValidCustomFormula(v: unknown): v is CustomFormula {
+  if (typeof v !== 'object' || v === null) return false;
+  const f = v as Record<string, unknown>;
+  return (
+    typeof f.id === 'string' &&
+    typeof f.name === 'string' &&
+    typeof f.latex === 'string' &&
+    typeof f.description === 'string' &&
+    typeof f.example === 'string' &&
+    typeof f.category === 'string' &&
+    (ALL_CATEGORIES as string[]).includes(f.category)
+  );
+}
+
+function loadCustomFormulas(): CustomFormula[] {
+  if (typeof window === 'undefined') return [];
+  try {
+    const raw = localStorage.getItem(CUSTOM_FORMULAS_KEY);
+    if (!raw) return [];
+    const data = JSON.parse(raw);
+    if (!Array.isArray(data)) return [];
+    return data.filter(isValidCustomFormula);
+  } catch {
+    return [];
+  }
+}
+
+function saveCustomFormulas(list: CustomFormula[]) {
+  if (typeof window === 'undefined') return;
+  try {
+    localStorage.setItem(CUSTOM_FORMULAS_KEY, JSON.stringify(list));
+  } catch {
+    // ignore quota errors
+  }
+}
+
 export function FormulaLibraryPanel() {
   const setEditorContent = useWorkbenchStore((s) => s.setEditorContent);
   const [query, setQuery] = useState('');
-  const [activeCat, setActiveCat] = useState<CategoryKey | 'all'>('all');
-  const [selected, setSelected] = useState<Formula | null>(null);
-  const [collapsedCategories, setCollapsedCategories] = useState<Set<CategoryKey>>(
+  const [activeCat, setActiveCat] = useState<ActiveFilter>('all');
+  const [selected, setSelected] = useState<DisplayFormula | null>(null);
+  const [customFormulas, setCustomFormulas] = useState<CustomFormula[]>([]);
+  const [formOpen, setFormOpen] = useState(false);
+  const [editing, setEditing] = useState<CustomFormula | null>(null);
+  const [collapsedGroups, setCollapsedGroups] = useState<Set<GroupKey>>(
     () =>
       new Set(
         ALL_CATEGORIES.filter(
@@ -152,19 +236,34 @@ export function FormulaLibraryPanel() {
       ),
   );
 
-  const toggleCategory = (cat: CategoryKey) => {
-    setCollapsedCategories((prev) => {
+  // Load persisted custom formulas after mount (SSR-safe).
+  useEffect(() => {
+    setCustomFormulas(loadCustomFormulas());
+  }, []);
+
+  const toggleGroup = (g: GroupKey) => {
+    setCollapsedGroups((prev) => {
       const next = new Set(prev);
-      if (next.has(cat)) next.delete(cat);
-      else next.add(cat);
+      if (next.has(g)) next.delete(g);
+      else next.add(g);
       return next;
     });
   };
 
+  const allFormulas = useMemo<DisplayFormula[]>(
+    () => [
+      ...FORMULAS.map((f) => ({ ...f, custom: false })),
+      ...customFormulas.map((f) => ({ ...f, custom: true })),
+    ],
+    [customFormulas],
+  );
+
   const filtered = useMemo(() => {
     const q = query.trim().toLowerCase();
-    return FORMULAS.filter((f) => {
-      if (activeCat !== 'all' && f.category !== activeCat) return false;
+    return allFormulas.filter((f) => {
+      if (activeCat === 'custom' && !f.custom) return false;
+      if (activeCat !== 'all' && activeCat !== 'custom' && f.category !== activeCat)
+        return false;
       if (!q) return true;
       return (
         f.name.toLowerCase().includes(q) ||
@@ -172,12 +271,70 @@ export function FormulaLibraryPanel() {
         f.latex.toLowerCase().includes(q)
       );
     });
-  }, [query, activeCat]);
+  }, [query, activeCat, allFormulas]);
 
   // Show grouped (collapsible) view only when browsing all categories
   // without a search query. Searching falls back to a flat list so all
   // matches are visible regardless of collapse state.
   const showGrouped = activeCat === 'all' && !query.trim();
+
+  const openAddForm = () => {
+    setEditing(null);
+    setFormOpen(true);
+  };
+
+  const openEditForm = (f: DisplayFormula) => {
+    setEditing({
+      id: f.id,
+      name: f.name,
+      category: f.category,
+      latex: f.latex,
+      description: f.description,
+      example: f.example,
+    });
+    setFormOpen(true);
+  };
+
+  const handleSubmitForm = (values: Omit<CustomFormula, 'id'>) => {
+    if (editing) {
+      const updated: CustomFormula = { ...editing, ...values };
+      setCustomFormulas((prev) => {
+        const next = prev.map((f) => (f.id === editing.id ? updated : f));
+        saveCustomFormulas(next);
+        return next;
+      });
+      setSelected((prev) =>
+        prev && prev.id === editing.id
+          ? { ...updated, custom: true }
+          : prev,
+      );
+    } else {
+      const created: CustomFormula = {
+        ...values,
+        id: `custom-${Date.now().toString(36)}-${Math.random()
+          .toString(36)
+          .slice(2, 8)}`,
+      };
+      setCustomFormulas((prev) => {
+        const next = [...prev, created];
+        saveCustomFormulas(next);
+        return next;
+      });
+    }
+    setFormOpen(false);
+    setEditing(null);
+  };
+
+  const handleDelete = (f: DisplayFormula) => {
+    setCustomFormulas((prev) => {
+      const next = prev.filter((c) => c.id !== f.id);
+      saveCustomFormulas(next);
+      return next;
+    });
+    setSelected(null);
+  };
+
+  const customCount = filtered.filter((f) => f.custom).length;
 
   return (
     <div className="flex flex-col h-full">
@@ -188,6 +345,17 @@ export function FormulaLibraryPanel() {
           <span className="text-[12.5px] font-semibold tracking-tight">
             {t('formulasTitle')}
           </span>
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={openAddForm}
+            className="ml-auto h-6 px-1.5 text-[11px] gap-1 text-muted-foreground hover:text-primary"
+            aria-label={t('formulasAddCustom')}
+            title={t('formulasAddCustom')}
+          >
+            <Plus className="size-3.5" />
+            {t('formulasAddCustom')}
+          </Button>
         </div>
         <div className="relative mb-2">
           <Search className="absolute left-2 top-1/2 -translate-y-1/2 size-3.5 text-muted-foreground" />
@@ -214,6 +382,11 @@ export function FormulaLibraryPanel() {
               label={t(CATEGORY_LABEL_KEY[c])}
             />
           ))}
+          <Chip
+            active={activeCat === 'custom'}
+            onClick={() => setActiveCat('custom')}
+            label={t('formulasCustom')}
+          />
         </div>
       </div>
 
@@ -244,15 +417,28 @@ export function FormulaLibraryPanel() {
                       {selected.name}
                     </h3>
                   </div>
-                  <Badge
-                    variant="outline"
-                    className={cn(
-                      'h-5 px-2 text-[10px] font-medium',
-                      CATEGORY_COLOR[selected.category],
+                  <div className="flex items-center gap-1.5">
+                    <Badge
+                      variant="outline"
+                      className={cn(
+                        'h-5 px-2 text-[10px] font-medium',
+                        CATEGORY_COLOR[selected.category],
+                      )}
+                    >
+                      {t(CATEGORY_LABEL_KEY[selected.category])}
+                    </Badge>
+                    {selected.custom && (
+                      <Badge
+                        variant="outline"
+                        className={cn(
+                          'h-5 px-2 text-[10px] font-medium',
+                          CUSTOM_COLOR,
+                        )}
+                      >
+                        {t('formulasCustom')}
+                      </Badge>
                     )}
-                  >
-                    {t(CATEGORY_LABEL_KEY[selected.category])}
-                  </Badge>
+                  </div>
                   <div className="rounded-lg border border-primary/30 bg-primary/5 p-3 glow-card-teal">
                     <FormulaRenderer latex={selected.latex} displayMode />
                   </div>
@@ -275,6 +461,28 @@ export function FormulaLibraryPanel() {
                     <Plus className="size-3.5" />
                     {t('formulasInsertExample')}
                   </Button>
+                  {selected.custom && (
+                    <div className="flex gap-2">
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => openEditForm(selected)}
+                        className="flex-1 h-8 text-[12px] gap-1.5"
+                      >
+                        <Pencil className="size-3.5" />
+                        {t('commonEdit')}
+                      </Button>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => handleDelete(selected)}
+                        className="flex-1 h-8 text-[12px] gap-1.5 text-destructive hover:text-destructive"
+                      >
+                        <Trash2 className="size-3.5" />
+                        {t('commonDelete')}
+                      </Button>
+                    </div>
+                  )}
                 </div>
               </motion.div>
             ) : (
@@ -287,45 +495,61 @@ export function FormulaLibraryPanel() {
               >
                 {filtered.length === 0 ? (
                   <div className="text-center py-12 text-[12px] text-muted-foreground">
-                    {t('cpNoResults')}
+                    {activeCat === 'custom' && !query.trim()
+                      ? t('formulasCustomEmpty')
+                      : t('cpNoResults')}
                   </div>
                 ) : showGrouped ? (
-                  ALL_CATEGORIES.map((cat) => {
-                    const items = filtered.filter((f) => f.category === cat);
-                    if (items.length === 0) return null;
-                    const isCollapsed = collapsedCategories.has(cat);
-                    return (
-                      <div key={cat} className="mb-1">
-                        <button
-                          type="button"
-                          onClick={() => toggleCategory(cat)}
-                          className={cn(
-                            'w-full flex items-center justify-between gap-2 px-2 py-1.5 rounded-md border bg-muted/30 hover:bg-muted/60 transition-colors',
-                            'border-border/60',
-                          )}
-                          aria-expanded={!isCollapsed}
-                        >
-                          <span className="flex items-center gap-1.5">
-                            {isCollapsed ? (
-                              <ChevronRight className="size-3.5 text-muted-foreground" />
-                            ) : (
-                              <ChevronDown className="size-3.5 text-muted-foreground" />
+                  <>
+                    {ALL_CATEGORIES.map((cat) => {
+                      const items = filtered.filter((f) => f.category === cat);
+                      if (items.length === 0) return null;
+                      const isCollapsed = collapsedGroups.has(cat);
+                      return (
+                        <div key={cat} className="mb-1">
+                          <GroupHeader
+                            label={t(CATEGORY_LABEL_KEY[cat])}
+                            colorClass={CATEGORY_COLOR[cat]}
+                            count={items.length}
+                            collapsed={isCollapsed}
+                            onToggle={() => toggleGroup(cat)}
+                          />
+                          <AnimatePresence initial={false}>
+                            {!isCollapsed && (
+                              <motion.div
+                                initial={{ height: 0, opacity: 0 }}
+                                animate={{ height: 'auto', opacity: 1 }}
+                                exit={{ height: 0, opacity: 0 }}
+                                transition={{ duration: 0.2, ease: 'easeInOut' }}
+                                className="overflow-hidden"
+                              >
+                                <div className="space-y-1 pt-1">
+                                  {items.map((f, i) => (
+                                    <FormulaCard
+                                      key={f.id}
+                                      formula={f}
+                                      index={i}
+                                      onClick={() => setSelected(f)}
+                                    />
+                                  ))}
+                                </div>
+                              </motion.div>
                             )}
-                            <span
-                              className={cn(
-                                'inline-flex items-center text-[10.5px] font-semibold px-1.5 py-0.5 rounded border',
-                                CATEGORY_COLOR[cat],
-                              )}
-                            >
-                              {t(CATEGORY_LABEL_KEY[cat])}
-                            </span>
-                          </span>
-                          <span className="text-[10.5px] text-muted-foreground tabular-nums">
-                            {items.length}
-                          </span>
-                        </button>
+                          </AnimatePresence>
+                        </div>
+                      );
+                    })}
+                    {customCount > 0 && (
+                      <div className="mb-1">
+                        <GroupHeader
+                          label={t('formulasCustom')}
+                          colorClass={CUSTOM_COLOR}
+                          count={customCount}
+                          collapsed={collapsedGroups.has('custom')}
+                          onToggle={() => toggleGroup('custom')}
+                        />
                         <AnimatePresence initial={false}>
-                          {!isCollapsed && (
+                          {!collapsedGroups.has('custom') && (
                             <motion.div
                               initial={{ height: 0, opacity: 0 }}
                               animate={{ height: 'auto', opacity: 1 }}
@@ -334,21 +558,23 @@ export function FormulaLibraryPanel() {
                               className="overflow-hidden"
                             >
                               <div className="space-y-1 pt-1">
-                                {items.map((f, i) => (
-                                  <FormulaCard
-                                    key={f.id}
-                                    formula={f}
-                                    index={i}
-                                    onClick={() => setSelected(f)}
-                                  />
-                                ))}
+                                {filtered
+                                  .filter((f) => f.custom)
+                                  .map((f, i) => (
+                                    <FormulaCard
+                                      key={f.id}
+                                      formula={f}
+                                      index={i}
+                                      onClick={() => setSelected(f)}
+                                    />
+                                  ))}
                               </div>
                             </motion.div>
                           )}
                         </AnimatePresence>
                       </div>
-                    );
-                  })
+                    )}
+                  </>
                 ) : (
                   filtered.map((f, i) => (
                     <FormulaCard
@@ -364,7 +590,200 @@ export function FormulaLibraryPanel() {
           </AnimatePresence>
         </div>
       </ScrollArea>
+
+      <CustomFormulaDialog
+        open={formOpen}
+        editing={editing}
+        onOpenChange={(open) => {
+          setFormOpen(open);
+          if (!open) setEditing(null);
+        }}
+        onSubmit={handleSubmitForm}
+      />
     </div>
+  );
+}
+
+function CustomFormulaDialog({
+  open,
+  editing,
+  onOpenChange,
+  onSubmit,
+}: {
+  open: boolean;
+  editing: CustomFormula | null;
+  onOpenChange: (open: boolean) => void;
+  onSubmit: (values: Omit<CustomFormula, 'id'>) => void;
+}) {
+  const [name, setName] = useState('');
+  const [latex, setLatex] = useState('');
+  const [category, setCategory] = useState<CategoryKey>('algebra');
+  const [description, setDescription] = useState('');
+  const [example, setExample] = useState('');
+
+  // Reset the form each time the dialog opens (add vs. edit mode).
+  useEffect(() => {
+    if (open) {
+      setName(editing?.name ?? '');
+      setLatex(editing?.latex ?? '');
+      setCategory(editing?.category ?? 'algebra');
+      setDescription(editing?.description ?? '');
+      setExample(editing?.example ?? '');
+    }
+  }, [open, editing]);
+
+  const canSave = name.trim() !== '' && latex.trim() !== '';
+
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent className="sm:max-w-md">
+        <DialogHeader>
+          <DialogTitle className="text-[14px]">
+            {editing ? t('commonEdit') : t('formulasAddCustom')}
+          </DialogTitle>
+        </DialogHeader>
+        <div className="space-y-3">
+          <div className="space-y-1">
+            <Label htmlFor="custom-formula-name" className="text-[11.5px]">
+              {t('formulasName')}
+            </Label>
+            <Input
+              id="custom-formula-name"
+              value={name}
+              onChange={(e) => setName(e.target.value)}
+              className="h-8 text-[12px]"
+            />
+          </div>
+          <div className="space-y-1">
+            <Label htmlFor="custom-formula-latex" className="text-[11.5px]">
+              {t('formulasLatex')}
+            </Label>
+            <Input
+              id="custom-formula-latex"
+              value={latex}
+              onChange={(e) => setLatex(e.target.value)}
+              className="h-8 text-[12px] font-mono"
+            />
+          </div>
+          <div className="space-y-1">
+            <Label className="text-[11.5px]">{t('formulasCategories')}</Label>
+            <Select
+              value={category}
+              onValueChange={(v) => setCategory(v as CategoryKey)}
+            >
+              <SelectTrigger className="w-full h-8 text-[12px]">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                {ALL_CATEGORIES.map((c) => (
+                  <SelectItem key={c} value={c} className="text-[12px]">
+                    {t(CATEGORY_LABEL_KEY[c])}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+          <div className="space-y-1">
+            <Label htmlFor="custom-formula-desc" className="text-[11.5px]">
+              {t('formulasDescription')}
+            </Label>
+            <Input
+              id="custom-formula-desc"
+              value={description}
+              onChange={(e) => setDescription(e.target.value)}
+              className="h-8 text-[12px]"
+            />
+          </div>
+          <div className="space-y-1">
+            <Label htmlFor="custom-formula-example" className="text-[11.5px]">
+              {t('formulasExampleInput')}
+            </Label>
+            <Input
+              id="custom-formula-example"
+              value={example}
+              onChange={(e) => setExample(e.target.value)}
+              className="h-8 text-[12px] font-mono"
+            />
+          </div>
+          {latex.trim() && (
+            <div className="rounded-lg border border-primary/30 bg-primary/5 p-3 glow-card-teal">
+              <FormulaRenderer latex={latex} displayMode />
+            </div>
+          )}
+        </div>
+        <DialogFooter>
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => onOpenChange(false)}
+            className="h-8 text-[12px]"
+          >
+            {t('commonCancel')}
+          </Button>
+          <Button
+            size="sm"
+            disabled={!canSave}
+            onClick={() =>
+              onSubmit({
+                name: name.trim(),
+                latex: latex.trim(),
+                category,
+                description: description.trim(),
+                example: example.trim(),
+              })
+            }
+            className="h-8 text-[12px]"
+          >
+            {t('commonSave')}
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+function GroupHeader({
+  label,
+  colorClass,
+  count,
+  collapsed,
+  onToggle,
+}: {
+  label: string;
+  colorClass: string;
+  count: number;
+  collapsed: boolean;
+  onToggle: () => void;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onToggle}
+      className={cn(
+        'w-full flex items-center justify-between gap-2 px-2 py-1.5 rounded-md border bg-muted/30 hover:bg-muted/60 transition-colors',
+        'border-border/60',
+      )}
+      aria-expanded={!collapsed}
+    >
+      <span className="flex items-center gap-1.5">
+        {collapsed ? (
+          <ChevronRight className="size-3.5 text-muted-foreground" />
+        ) : (
+          <ChevronDown className="size-3.5 text-muted-foreground" />
+        )}
+        <span
+          className={cn(
+            'inline-flex items-center text-[10.5px] font-semibold px-1.5 py-0.5 rounded border',
+            colorClass,
+          )}
+        >
+          {label}
+        </span>
+      </span>
+      <span className="text-[10.5px] text-muted-foreground tabular-nums">
+        {count}
+      </span>
+    </button>
   );
 }
 
@@ -398,7 +817,7 @@ function FormulaCard({
   index,
   onClick,
 }: {
-  formula: Formula;
+  formula: DisplayFormula;
   index: number;
   onClick: () => void;
 }) {
@@ -415,13 +834,25 @@ function FormulaCard({
         <span className="text-[12.5px] font-medium text-foreground truncate">
           {formula.name}
         </span>
-        <span
-          className={cn(
-            'inline-flex items-center text-[9.5px] font-medium px-1.5 py-0.5 rounded border',
-            CATEGORY_COLOR[formula.category],
+        <span className="flex items-center gap-1 shrink-0">
+          {formula.custom && (
+            <span
+              className={cn(
+                'inline-flex items-center text-[9.5px] font-medium px-1.5 py-0.5 rounded border',
+                CUSTOM_COLOR,
+              )}
+            >
+              {t('formulasCustom')}
+            </span>
           )}
-        >
-          {t(CATEGORY_LABEL_KEY[formula.category])}
+          <span
+            className={cn(
+              'inline-flex items-center text-[9.5px] font-medium px-1.5 py-0.5 rounded border',
+              CATEGORY_COLOR[formula.category],
+            )}
+          >
+            {t(CATEGORY_LABEL_KEY[formula.category])}
+          </span>
         </span>
       </div>
       <p className="text-[11px] text-muted-foreground line-clamp-2">

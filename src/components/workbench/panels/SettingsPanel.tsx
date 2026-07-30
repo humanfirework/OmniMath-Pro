@@ -89,6 +89,10 @@ export function SettingsPanel() {
   const setUseMathFont = useSettingsStore((s) => s.setUseMathFont);
   const fontPreset = useSettingsStore((s) => s.fontPreset);
   const setFontPreset = useSettingsStore((s) => s.setFontPreset);
+  const editorFontSize = useSettingsStore((s) => s.editorFontSize);
+  const setEditorFontSize = useSettingsStore((s) => s.setEditorFontSize);
+  const plotAxisFontSize = useSettingsStore((s) => s.plotAxisFontSize);
+  const setPlotAxisFontSize = useSettingsStore((s) => s.setPlotAxisFontSize);
   const resetSettings = useSettingsStore((s) => s.resetToDefaults);
 
   // Workbench store
@@ -383,6 +387,40 @@ export function SettingsPanel() {
                     checked={useMathFont}
                     onCheckedChange={setUseMathFont}
                   />
+                </SettingRow>
+
+                <SettingRow label="编辑器字号">
+                  <div className="flex items-center gap-2">
+                    <input
+                      type="range"
+                      min={8}
+                      max={32}
+                      step={1}
+                      value={editorFontSize}
+                      onChange={(e) => setEditorFontSize(Number(e.target.value))}
+                      className="w-32 accent-primary"
+                    />
+                    <span className="text-xs font-mono text-muted-foreground w-12">
+                      {editorFontSize}px
+                    </span>
+                  </div>
+                </SettingRow>
+
+                <SettingRow label="坐标轴字号">
+                  <div className="flex items-center gap-2">
+                    <input
+                      type="range"
+                      min={8}
+                      max={24}
+                      step={1}
+                      value={plotAxisFontSize}
+                      onChange={(e) => setPlotAxisFontSize(Number(e.target.value))}
+                      className="w-32 accent-primary"
+                    />
+                    <span className="text-xs font-mono text-muted-foreground w-12">
+                      {plotAxisFontSize}px
+                    </span>
+                  </div>
                 </SettingRow>
               </motion.div>
             )}

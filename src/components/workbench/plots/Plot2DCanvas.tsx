@@ -75,8 +75,6 @@ export interface Plot2DCanvasProps {
   showAxes?: boolean;
   /** Show extrema (red) and zeros (blue) markers. */
   showMarkers?: boolean;
-  /** Maintain equal X/Y scale ratio (1:1) so circles stay circular. Default: true. */
-  equalAspect?: boolean;
   /** Advanced overlays: derivatives, tangent line, intersections. */
   overlays?: PlotOverlay;
   /**
@@ -161,7 +159,6 @@ export function Plot2DCanvas({
   showGrid = true,
   showAxes = true,
   showMarkers = true,
-  equalAspect = true,
   overlays,
   curveSpecs,
 }: Plot2DCanvasProps) {
@@ -324,25 +321,11 @@ export function Plot2DCanvas({
       }
       const plotW = Math.max(1, w - PADDING.left - PADDING.right);
       const plotH = Math.max(1, h - PADDING.top - PADDING.bottom);
-      // Equal aspect ratio: use min(X, Y) scale so circles stay circular.
-      let actualW = plotW;
-      let actualH = plotH;
-      let offsetX = 0;
-      let offsetY = 0;
-      if (equalAspect) {
-        const xScale = plotW / xSpan;
-        const yScale = plotH / ySpan;
-        const uniform = Math.min(xScale, yScale);
-        actualW = uniform * xSpan;
-        actualH = uniform * ySpan;
-        offsetX = (plotW - actualW) / 2;
-        offsetY = (plotH - actualH) / 2;
-      }
-      const sx = PADDING.left + offsetX + ((wx - vx[0]) / xSpan) * actualW;
-      const sy = PADDING.top + offsetY + (1 - (wy - vy[0]) / ySpan) * actualH;
+      const sx = PADDING.left + ((wx - vx[0]) / xSpan) * plotW;
+      const sy = PADDING.top + (1 - (wy - vy[0]) / ySpan) * plotH;
       return [sx, sy];
     },
-    [equalAspect],
+    [],
   );
 
   const screenToData = useCallback((sx: number, sy: number): [number, number] => {
@@ -355,24 +338,10 @@ export function Plot2DCanvas({
     }
     const plotW = Math.max(1, w - PADDING.left - PADDING.right);
     const plotH = Math.max(1, h - PADDING.top - PADDING.bottom);
-    // Equal aspect ratio: must inverse the same offset/scale as dataToScreen.
-    let actualW = plotW;
-    let actualH = plotH;
-    let offsetX = 0;
-    let offsetY = 0;
-    if (equalAspect) {
-      const xScale = plotW / xSpan;
-      const yScale = plotH / ySpan;
-      const uniform = Math.min(xScale, yScale);
-      actualW = uniform * xSpan;
-      actualH = uniform * ySpan;
-      offsetX = (plotW - actualW) / 2;
-      offsetY = (plotH - actualH) / 2;
-    }
-    const wx = vx[0] + ((sx - PADDING.left - offsetX) / actualW) * xSpan;
-    const wy = vy[0] + (1 - (sy - PADDING.top - offsetY) / actualH) * ySpan;
+    const wx = vx[0] + ((sx - PADDING.left) / plotW) * xSpan;
+    const wy = vy[0] + (1 - (sy - PADDING.top) / plotH) * ySpan;
     return [wx, wy];
-  }, [equalAspect]);
+  }, []);
 
   /* ----------------------- Actual draw ------------------------------ */
   const drawNow = useCallback(() => {
@@ -442,7 +411,7 @@ export function Plot2DCanvas({
       if (!gridCtx || !curveCtx || !annotCtx) return;
       const viewStr = `${vx[0]}|${vx[1]}|${vy[0]}|${vy[1]}`;
       const sizeStr = `${targetW}|${targetH}`;
-      const l1Sig = `${theme}|${showGrid}|${showAxes}|${equalAspect}|${viewStr}|${sizeStr}`;
+      const l1Sig = `${theme}|${showGrid}|${showAxes}|${viewStr}|${sizeStr}`;
       const l2Sig = `${theme}|${viewStr}|${sizeStr}`;
       const l3Sig = `${theme}|${showMarkers}|${viewStr}|${sizeStr}`;
       const sig = layerSigRef.current;
@@ -891,7 +860,7 @@ export function Plot2DCanvas({
       console.error('[Plot2DCanvas] draw error:', err);
       setDrawError(err instanceof Error ? err.message : '绘制失败');
     }
-  }, [computed, theme, dataToScreen, screenToData, showGrid, showAxes, showMarkers, equalAspect, overlays]);
+  }, [computed, theme, dataToScreen, screenToData, showGrid, showAxes, showMarkers, overlays]);
 
   // Keep the ref in sync so the rAF callback always uses the latest drawNow.
   // We must do this inside an effect (not during render) per React 19 rules.
@@ -946,7 +915,6 @@ export function Plot2DCanvas({
   /* ----------------------- Wheel zoom ------------------------------- */
   // D5 fix: bind via native addEventListener with { passive: false } so
   // preventDefault actually takes effect (React's onWheel is passive).
-  // D9 fix: deps include equalAspect so the closure sees the latest value.
   const handleWheel = useCallback(
     (e: WheelEvent) => {
       try {
@@ -960,39 +928,10 @@ export function Plot2DCanvas({
         const factor = clamp(rawFactor, 0.5, 2);
         const horizontalOnly = e.shiftKey;
         const { x: vx, y: vy } = viewRef.current;
-        let nx: [number, number] = clampRangeWidth([wx + (vx[0] - wx) * factor, wx + (vx[1] - wx) * factor]);
-        let ny: [number, number] = vy;
-        if (!horizontalOnly) {
-          ny = clampRangeWidth([wy + (vy[0] - wy) * factor, wy + (vy[1] - wy) * factor]);
-        }
-        // equalAspect 下两轴必须同步缩放，否则 uniform scale 会反复重算，
-        // 导致图像跳动/消失。
-        if (equalAspect && !horizontalOnly) {
-          // D10 fix: removed duplicate `ny` reassignment that was identical to
-          // the one above. The original code computed the same expression twice.
-          // Keep X/Y span ratio consistent so the uniform-scale plot stays put.
-          const xSpan = nx[1] - nx[0];
-          const ySpan = ny[1] - ny[0];
-          const { w, h } = sizeRef.current;
-          const plotW = Math.max(1, w - PADDING.left - PADDING.right);
-          const plotH = Math.max(1, h - PADDING.top - PADDING.bottom);
-          const xScale = plotW / xSpan;
-          const yScale = plotH / ySpan;
-          // D11 fix: preserve the cursor's relative position when re-anchoring.
-          // wxRel is the cursor's relative position in the post-zoom nx (before
-          // span adjustment). After shrinking nx, re-anchor so wx stays at wxRel.
-          const wxRel = (wx - nx[0]) / (nx[1] - nx[0]);
-          // 如果 Y 的 scale 更大（Y 更"宽松"），则 Y 需要缩小 span 来匹配
-          if (yScale > xScale) {
-            const targetYSpan = ySpan * (xScale / yScale);
-            const yCenter = (ny[0] + ny[1]) / 2;
-            ny = [yCenter - targetYSpan / 2, yCenter + targetYSpan / 2];
-          } else {
-            // X 需要缩小 span 来匹配 Y — re-anchor at wx to keep cursor centered
-            const targetXSpan = xSpan * (yScale / xScale);
-            nx = [wx - wxRel * targetXSpan, wx + (1 - wxRel) * targetXSpan];
-          }
-        }
+        const nx: [number, number] = clampRangeWidth([wx + (vx[0] - wx) * factor, wx + (vx[1] - wx) * factor]);
+        const ny: [number, number] = horizontalOnly
+          ? vy
+          : clampRangeWidth([wy + (vy[0] - wy) * factor, wy + (vy[1] - wy) * factor]);
         viewRef.current = { x: nx, y: ny };
         onViewChange?.(nx, ny);
         scheduleRedraw();
@@ -1001,7 +940,7 @@ export function Plot2DCanvas({
         setDrawError(err instanceof Error ? err.message : '缩放失败');
       }
     },
-    [screenToData, onViewChange, scheduleRedraw, equalAspect],
+    [screenToData, onViewChange, scheduleRedraw],
   );
 
   // D5 fix: native wheel listener with passive:false so preventDefault works.
@@ -1052,21 +991,8 @@ export function Plot2DCanvas({
           const { w, h } = sizeRef.current;
           const plotW = Math.max(1, w - PADDING.left - PADDING.right);
           const plotH = Math.max(1, h - PADDING.top - PADDING.bottom);
-          // equalAspect 下使用实际绘图宽高（actualW/actualH），
-          // 否则拖拽距离与视觉移动不匹配（图像跳动）。
-          let dragW = plotW;
-          let dragH = plotH;
-          if (equalAspect) {
-            const xSpan = dragRef.current.origX[1] - dragRef.current.origX[0];
-            const ySpan = dragRef.current.origY[1] - dragRef.current.origY[0];
-            if (xSpan > 0 && ySpan > 0) {
-              const uniform = Math.min(plotW / xSpan, plotH / ySpan);
-              dragW = uniform * xSpan;
-              dragH = uniform * ySpan;
-            }
-          }
-          const wxShift = (dx / dragW) * (dragRef.current.origX[1] - dragRef.current.origX[0]);
-          const wyShift = (dy / dragH) * (dragRef.current.origY[1] - dragRef.current.origY[0]);
+          const wxShift = (dx / plotW) * (dragRef.current.origX[1] - dragRef.current.origX[0]);
+          const wyShift = (dy / plotH) * (dragRef.current.origY[1] - dragRef.current.origY[0]);
           const nx: [number, number] = [dragRef.current.origX[0] - wxShift, dragRef.current.origX[1] - wxShift];
           const ny: [number, number] = [dragRef.current.origY[0] + wyShift, dragRef.current.origY[1] + wyShift];
           viewRef.current = { x: nx, y: ny };

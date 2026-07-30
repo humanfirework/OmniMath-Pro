@@ -4,19 +4,11 @@
  * OmniMath Pro — ActivityBar
  *
  * VSCode-style far-left icon strip (w-12) with glass background.
- * Vertical icon buttons with active indicator (left teal bar + glow):
- *   - History    (Clock)
- *   - Variables  (Variable)
- *   - Formulas   (BookOpen)
- *   - Statistics (BarChart3)
- *   - Solver     (FunctionSquare) — switches viewMode to 'solver'
- *   - Pipeline   (Workflow)       — switches viewMode to 'pipeline'
- *   - Whiteboard (PencilRuler)    — switches viewMode to 'whiteboard'
- *   - Linear Alg (Grid3x3)        — switches viewMode to 'linalg'
- * Bottom: settings gear (opens command palette)
+ * All icons (including view-mode switches and utility toggles) are freely
+ * draggable and their order is persisted in settingsStore.
  */
 
-import { Fragment, useEffect, useRef, useState, type CSSProperties } from 'react';
+import { useEffect, useRef, useState, type CSSProperties } from 'react';
 import { motion } from 'framer-motion';
 import {
   DndContext,
@@ -70,101 +62,55 @@ import {
 } from '@/components/ui/dropdown-menu';
 import { cn } from '@/lib/utils';
 import { useWorkbenchStore } from '@/lib/store/workbench';
-import { useSettingsStore } from '@/lib/store/settingsStore';
+import { useSettingsStore, DEFAULT_ACTIVITY_BAR_ORDER } from '@/lib/store/settingsStore';
 import { t } from '@/lib/i18n';
-import type { SidePanelTab } from '@/lib/store/workbench';
+import type { SidePanelTab, ViewMode } from '@/lib/store/workbench';
+import type { TranslationDict } from '@/lib/i18n';
 
-interface ActivityItem {
-  id: SidePanelTab;
+type ActivityItemId =
+  | SidePanelTab
+  | 'solver'
+  | 'pipeline'
+  | 'whiteboard'
+  | 'linalg'
+  | 'toggleEditor'
+  | 'togglePreview'
+  | 'toggleSidebar'
+  | 'layoutMenu'
+  | 'settings';
+
+interface RegistryEntry {
   icon: typeof Clock;
-  labelKey:
-    | 'abHistory'
-    | 'abVariables'
-    | 'abFormulas'
-    | 'abLinalg'
-    | 'abSolver'
-    | 'abFiles'
-    | 'abStats';
-  /** 分组 id，决定该 item 在哪个视觉组里渲染（组间有分隔线）。 */
-  group: 'edit' | 'math' | 'tools';
+  labelKey: keyof TranslationDict;
 }
 
-/**
- * 顶部分组定义 —— ActivityBar 把所有 side-panel 入口按语义分成 3 组：
- *
- *   edit   编辑组    历史 / 变量 / 文件     — 数据入口
- *   math   数学组    公式 / 求解器 / 统计   — 数学工具
- *   tools  工具组    （Pipeline/Linalg/Whiteboard 单独渲染，所以这里其实只有 edit+math 两组）
- *
- * 组与组之间用一条 1px 分隔线分开，让用户一眼看出"这是不同类别的功能"，
- * 而不是 6 个图标堆在一起。和 VSCode 的 ActivityBar 分组逻辑一致。
- *
- * 注：Pipeline / Linalg / Whiteboard 按钮单独渲染在分组下方（因为它们切
- * viewMode 而非 sidePanel），视觉上属于"可视化"组，所以前面再加一条分隔线。
- */
-const TOP_ITEMS: ActivityItem[] = [
-  // ── 编辑组 ──────────────────────────────────────────
-  { id: 'history', icon: Clock, labelKey: 'abHistory', group: 'edit' },
-  { id: 'variables', icon: Variable, labelKey: 'abVariables', group: 'edit' },
-  { id: 'files', icon: FileCode2, labelKey: 'abFiles', group: 'edit' },
-  // ── 数学组 ──────────────────────────────────────────
-  { id: 'formulas', icon: BookOpen, labelKey: 'abFormulas', group: 'math' },
-  { id: 'stats', icon: BarChart3, labelKey: 'abStats', group: 'math' },
-];
+const ACTIVITY_REGISTRY: Record<ActivityItemId, RegistryEntry> = {
+  history: { icon: Clock, labelKey: 'abHistory' },
+  variables: { icon: Variable, labelKey: 'abVariables' },
+  files: { icon: FileCode2, labelKey: 'abFiles' },
+  formulas: { icon: BookOpen, labelKey: 'abFormulas' },
+  stats: { icon: BarChart3, labelKey: 'abStats' },
+  solver: { icon: FunctionSquare, labelKey: 'abSolver' },
+  pipeline: { icon: Workflow, labelKey: 'abPipeline' },
+  whiteboard: { icon: PencilRuler, labelKey: 'abWhiteboard' },
+  linalg: { icon: Grid3x3, labelKey: 'abLinalg' },
+  toggleEditor: { icon: LayoutTemplate, labelKey: 'abToggleEditor' },
+  togglePreview: { icon: PanelRight, labelKey: 'abTogglePreview' },
+  toggleSidebar: { icon: PanelLeftClose, labelKey: 'abShowSidebar' },
+  layoutMenu: { icon: MoreHorizontal, labelKey: 'abLayoutMenu' },
+  settings: { icon: Settings, labelKey: 'settingsTitle' },
+};
 
-interface SortableActivityItemProps {
-  item: ActivityItem;
-  isActive: boolean;
-  isRight: boolean;
-  tooltipSide: 'left' | 'right';
-  onClick: () => void;
-}
-
-/** Draggable activity bar button. Uses dnd-kit's useSortable hook so the
- *  user can reorder the activity bar items by dragging. Click vs drag is
- *  disambiguated by PointerSensor's activationConstraint (distance: 5). */
-function SortableActivityItem({ item, isActive, isRight, tooltipSide, onClick }: SortableActivityItemProps) {
-  const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id: item.id });
-  const Icon = item.icon;
-
+function SortableWrapper({ id, children }: { id: string; children: React.ReactNode }) {
+  const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id });
   const style: CSSProperties = {
     transform: CSS.Transform.toString(transform),
     transition,
     opacity: isDragging ? 0.5 : 1,
   };
-
   return (
-    <div ref={setNodeRef} style={style} {...attributes} {...listeners}>
-      <Tooltip delayDuration={200}>
-        <TooltipTrigger asChild>
-          <motion.button
-            type="button"
-            initial={false}
-            animate={{ opacity: 1, x: 0 }}
-            transition={{ duration: 0.18 }}
-            onClick={onClick}
-            aria-label={t(item.labelKey)}
-            className={cn(
-              'relative grid place-items-center size-9 rounded-lg transition-all',
-              isActive
-                ? 'text-primary bg-primary/12'
-                : 'text-muted-foreground hover:text-foreground hover:bg-accent/60',
-            )}
-          >
-            <Icon className="size-[18px]" strokeWidth={2} />
-            {isActive && (
-              <span
-                className={cn(
-                  'absolute top-1/2 -translate-y-1/2 w-[2px] h-5 bg-primary',
-                  isRight ? 'right-0 rounded-l' : 'left-0 rounded-r',
-                )}
-                style={{ boxShadow: '0 0 8px oklch(0.7 0.15 165 / 70%)' }}
-              />
-            )}
-          </motion.button>
-        </TooltipTrigger>
-        <TooltipContent side={tooltipSide}>{t(item.labelKey)}</TooltipContent>
-      </Tooltip>
+    <div ref={setNodeRef} style={style} {...attributes} {...listeners} className="w-full flex justify-center">
+      {children}
     </div>
   );
 }
@@ -176,7 +122,7 @@ export function ActivityBar() {
   const toggleSidePanel = useWorkbenchStore((s) => s.toggleSidePanel);
   const setViewMode = useWorkbenchStore((s) => s.setViewMode);
   const viewMode = useWorkbenchStore((s) => s.viewMode);
-  const openSettings = useSettingsStore((s) => s.setOpen);
+  const setSettingsOpen = useSettingsStore((s) => s.setOpen);
 
   const activityBarPosition = useWorkbenchStore((s) => s.activityBarPosition);
   const activityBarLocked = useWorkbenchStore((s) => s.activityBarLocked);
@@ -190,8 +136,9 @@ export function ActivityBar() {
   const toggleActivityBarHidden = useWorkbenchStore((s) => s.toggleActivityBarHidden);
   const setEditorVisible = useWorkbenchStore((s) => s.setEditorVisible);
   const setPreviewVisible = useWorkbenchStore((s) => s.setPreviewVisible);
-  const activityBarOrder = useWorkbenchStore((s) => s.activityBarOrder);
-  const setActivityBarOrder = useWorkbenchStore((s) => s.setActivityBarOrder);
+
+  const activityBarOrder = useSettingsStore((s) => s.activityBarOrder);
+  const setActivityBarOrder = useSettingsStore((s) => s.setActivityBarOrder);
 
   const isRight = activityBarPosition === 'right';
   const tooltipSide = isRight ? 'left' : 'right';
@@ -214,15 +161,12 @@ export function ActivityBar() {
     };
   }, []);
 
-  const handleClick = (id: SidePanelTab) => {
-    // When in pipeline/focus view, switch back to workbench and explicitly
-    // open the requested side panel so navigation always works.
+  const handlePanelClick = (id: SidePanelTab) => {
     if (viewMode !== 'workbench') {
       setViewMode('workbench');
       setActiveSidePanel(id);
       return;
     }
-    // Normal workbench toggle behavior.
     if (activeSidePanel === id && !sidePanelCollapsed) {
       toggleSidePanel();
     } else {
@@ -230,21 +174,268 @@ export function ActivityBar() {
     }
   };
 
-  // Drag-to-reorder: sensors with a small activation distance so clicks
-  // are still registered (not mistaken for drags).
   const sensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: 5 } }),
   );
-  const orderedItems = activityBarOrder
-    .map((id) => TOP_ITEMS.find((item) => item.id === id))
-    .filter((item): item is ActivityItem => item !== undefined);
+
+  const orderedIds = activityBarOrder
+    .filter((id): id is ActivityItemId => DEFAULT_ACTIVITY_BAR_ORDER.includes(id));
+  for (const id of DEFAULT_ACTIVITY_BAR_ORDER as ActivityItemId[]) {
+    if (!orderedIds.includes(id)) orderedIds.push(id);
+  }
+
   const handleDragEnd = (event: DragEndEvent) => {
     const { active, over } = event;
     if (!over || active.id === over.id) return;
-    const oldIndex = activityBarOrder.indexOf(active.id as SidePanelTab);
-    const newIndex = activityBarOrder.indexOf(over.id as SidePanelTab);
+    const oldIndex = orderedIds.indexOf(active.id as ActivityItemId);
+    const newIndex = orderedIds.indexOf(over.id as ActivityItemId);
     if (oldIndex === -1 || newIndex === -1) return;
-    setActivityBarOrder(arrayMove(activityBarOrder, oldIndex, newIndex));
+    setActivityBarOrder(arrayMove(orderedIds, oldIndex, newIndex));
+  };
+
+  const renderItem = (id: ActivityItemId, sortable = true) => {
+    const reg = ACTIVITY_REGISTRY[id];
+    if (!reg) return null;
+    const Icon = reg.icon;
+
+    const wrapper = (children: React.ReactNode) =>
+      sortable ? <SortableWrapper key={id} id={id}>{children}</SortableWrapper> : <div key={id} className="w-full flex justify-center">{children}</div>;
+
+    // ── Side-panel tabs ──
+    if (['history', 'variables', 'files', 'formulas', 'stats'].includes(id)) {
+      const isActive = activeSidePanel === id && !sidePanelCollapsed && viewMode === 'workbench';
+      return wrapper(
+        <Tooltip delayDuration={200}>
+          <TooltipTrigger asChild>
+            <motion.button
+              type="button"
+              initial={false}
+              animate={{ opacity: 1, x: 0 }}
+              transition={{ duration: 0.18 }}
+              onClick={() => handlePanelClick(id as SidePanelTab)}
+              aria-label={t(reg.labelKey)}
+              className={cn(
+                'relative grid place-items-center size-9 rounded-lg transition-all',
+                isActive
+                  ? 'text-primary bg-primary/12'
+                  : 'text-muted-foreground hover:text-foreground hover:bg-accent/60',
+              )}
+            >
+              <Icon className="size-[18px]" strokeWidth={2} />
+              {isActive && (
+                <span
+                  className={cn(
+                    'absolute top-1/2 -translate-y-1/2 w-[2px] h-5 bg-primary',
+                    isRight ? 'right-0 rounded-l' : 'left-0 rounded-r',
+                  )}
+                  style={{ boxShadow: '0 0 8px oklch(0.7 0.15 165 / 70%)' }}
+                />
+              )}
+            </motion.button>
+          </TooltipTrigger>
+          <TooltipContent side={tooltipSide}>{t(reg.labelKey)}</TooltipContent>
+        </Tooltip>,
+      );
+    }
+
+    // ── View-mode switches ──
+    if (['solver', 'pipeline', 'whiteboard', 'linalg'].includes(id)) {
+      const isActive = viewMode === id;
+      return wrapper(
+        <Tooltip delayDuration={200}>
+          <TooltipTrigger asChild>
+            <motion.button
+              type="button"
+              initial={false}
+              animate={{ opacity: 1, x: 0 }}
+              transition={{ duration: 0.18 }}
+              onClick={() => setViewMode(viewMode === id ? 'workbench' : id as ViewMode)}
+              aria-label={t(reg.labelKey)}
+              className={cn(
+                'relative grid place-items-center size-9 rounded-lg transition-all',
+                isActive
+                  ? 'text-primary bg-primary/12'
+                  : 'text-muted-foreground hover:text-foreground hover:bg-accent/60',
+              )}
+            >
+              <Icon className="size-[18px]" strokeWidth={2} />
+              {isActive && (
+                <motion.span
+                  layoutId="activity-indicator"
+                  className={cn(
+                    'absolute top-1/2 -translate-y-1/2 w-[2px] h-5 bg-primary',
+                    isRight ? 'right-0 rounded-l' : 'left-0 rounded-r',
+                  )}
+                  style={{ boxShadow: '0 0 8px oklch(0.7 0.15 165 / 70%)' }}
+                  transition={{ type: 'spring', stiffness: 380, damping: 30 }}
+                />
+              )}
+            </motion.button>
+          </TooltipTrigger>
+          <TooltipContent side={tooltipSide}>{t(reg.labelKey)}</TooltipContent>
+        </Tooltip>,
+      );
+    }
+
+    // ── Utility: Toggle Editor ──
+    if (id === 'toggleEditor') {
+      const isActive = editorVisible;
+      return wrapper(
+        <Tooltip delayDuration={200}>
+          <TooltipTrigger asChild>
+            <button
+              type="button"
+              onClick={() => setEditorVisible(!editorVisible)}
+              aria-label={t(reg.labelKey)}
+              className={cn(
+                'grid place-items-center size-9 rounded-lg transition-colors',
+                isActive
+                  ? 'text-primary bg-primary/12'
+                  : 'text-muted-foreground hover:text-foreground hover:bg-accent/60',
+              )}
+            >
+              <LayoutTemplate className="size-[18px]" />
+            </button>
+          </TooltipTrigger>
+          <TooltipContent side={tooltipSide}>{t(reg.labelKey)}</TooltipContent>
+        </Tooltip>,
+      );
+    }
+
+    // ── Utility: Toggle Preview ──
+    if (id === 'togglePreview') {
+      const isActive = previewVisible;
+      return wrapper(
+        <Tooltip delayDuration={200}>
+          <TooltipTrigger asChild>
+            <button
+              type="button"
+              onClick={() => setPreviewVisible(!previewVisible)}
+              aria-label={t(reg.labelKey)}
+              className={cn(
+                'grid place-items-center size-9 rounded-lg transition-colors',
+                isActive
+                  ? 'text-primary bg-primary/12'
+                  : 'text-muted-foreground hover:text-foreground hover:bg-accent/60',
+              )}
+            >
+              <PanelRight className="size-[18px]" />
+            </button>
+          </TooltipTrigger>
+          <TooltipContent side={tooltipSide}>{t(reg.labelKey)}</TooltipContent>
+        </Tooltip>,
+      );
+    }
+
+    // ── Utility: Toggle Sidebar ──
+    if (id === 'toggleSidebar') {
+      return wrapper(
+        <Tooltip delayDuration={200}>
+          <TooltipTrigger asChild>
+            <button
+              type="button"
+              onClick={toggleSidePanel}
+              aria-label={sidePanelCollapsed ? t('abShowSidebar') : t('abHideSidebar')}
+              className="grid place-items-center size-9 rounded-lg text-muted-foreground hover:text-foreground hover:bg-accent/60 transition-colors"
+            >
+              {sidePanelCollapsed ? (
+                <PanelLeftOpen className="size-[18px]" />
+              ) : (
+                <PanelLeftClose className="size-[18px]" />
+              )}
+            </button>
+          </TooltipTrigger>
+          <TooltipContent side={tooltipSide}>
+            {sidePanelCollapsed ? t('abShowSidebar') : t('abHideSidebar')}
+          </TooltipContent>
+        </Tooltip>,
+      );
+    }
+
+    // ── Utility: Layout Menu ──
+    if (id === 'layoutMenu') {
+      return wrapper(
+        <DropdownMenu>
+          <Tooltip delayDuration={200}>
+            <TooltipTrigger asChild>
+              <DropdownMenuTrigger asChild>
+                <button
+                  type="button"
+                  aria-label={t(reg.labelKey)}
+                  className={cn(
+                    'grid place-items-center size-9 rounded-lg transition-colors',
+                    activityBarLocked || activityBarAutoHide
+                      ? 'text-primary bg-primary/12'
+                      : 'text-muted-foreground hover:text-foreground hover:bg-accent/60',
+                  )}
+                >
+                  <MoreHorizontal className="size-[18px]" />
+                </button>
+              </DropdownMenuTrigger>
+            </TooltipTrigger>
+            <TooltipContent side={tooltipSide}>{t(reg.labelKey)}</TooltipContent>
+          </Tooltip>
+          <DropdownMenuContent side={tooltipSide} align="end" className="w-44">
+            <DropdownMenuLabel className="text-[10px] uppercase tracking-wide text-muted-foreground">
+              {t('abLayoutMenu')}
+            </DropdownMenuLabel>
+            <DropdownMenuItem
+              onClick={() => setActivityBarPosition(isRight ? 'left' : 'right')}
+              disabled={activityBarLocked}
+              className="text-[11.5px] gap-2"
+            >
+              {isRight ? <PanelLeft className="size-3.5" /> : <PanelRight className="size-3.5" />}
+              <span>{isRight ? t('abMoveLeft') : t('abMoveRight')}</span>
+            </DropdownMenuItem>
+            <DropdownMenuItem
+              onClick={toggleActivityBarLock}
+              className="text-[11.5px] gap-2"
+            >
+              {activityBarLocked ? <Pin className="size-3.5" /> : <PinOff className="size-3.5" />}
+              <span>{activityBarLocked ? t('abUnlockTaskbar') : t('abLockTaskbar')}</span>
+            </DropdownMenuItem>
+            <DropdownMenuItem
+              onClick={() => setActivityBarAutoHide(!activityBarAutoHide)}
+              disabled={activityBarLocked}
+              className="text-[11.5px] gap-2"
+            >
+              {activityBarAutoHide ? <PanelRightClose className="size-3.5" /> : <PanelRightOpen className="size-3.5" />}
+              <span>{activityBarAutoHide ? t('abDisableAutoHide') : t('abAutoHide')}</span>
+            </DropdownMenuItem>
+            <DropdownMenuSeparator />
+            <DropdownMenuItem
+              onClick={() => toggleActivityBarHidden()}
+              disabled={activityBarLocked}
+              className="text-[11.5px] gap-2"
+            >
+              {isRight ? <PanelRightClose className="size-3.5" /> : <PanelLeftClose className="size-3.5" />}
+              <span>{t('abHideTaskbar')}</span>
+            </DropdownMenuItem>
+          </DropdownMenuContent>
+        </DropdownMenu>,
+      );
+    }
+
+    // ── Utility: Settings ──
+    if (id === 'settings') {
+      return wrapper(
+        <Tooltip delayDuration={200}>
+          <TooltipTrigger asChild>
+            <button
+              type="button"
+              onClick={() => setSettingsOpen(true)}
+              aria-label={t(reg.labelKey)}
+              className="grid place-items-center size-9 rounded-lg text-muted-foreground hover:text-foreground hover:bg-accent/60 transition-colors"
+            >
+              <Settings className="size-[18px]" />
+            </button>
+          </TooltipTrigger>
+          <TooltipContent side={tooltipSide}>{t(reg.labelKey)}</TooltipContent>
+        </Tooltip>,
+      );
+    }
+
+    return null;
   };
 
   // Auto-hide: collapsed trigger strip. Hovering reveals the full bar.
@@ -299,335 +490,17 @@ export function ActivityBar() {
       <div className="flex flex-col items-center gap-1 w-full">
         {mounted ? (
           <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleDragEnd}>
-            <SortableContext items={orderedItems.map((i) => i.id)} strategy={verticalListSortingStrategy}>
-              {orderedItems.map((item, idx) => (
-                <Fragment key={item.id}>
-                  {idx > 0 && item.group !== orderedItems[idx - 1].group && (
-                    <div aria-hidden className="w-6 h-px bg-border/70 my-1.5" />
-                  )}
-                  <SortableActivityItem
-                    item={item}
-                    isActive={activeSidePanel === item.id && !sidePanelCollapsed && viewMode === 'workbench'}
-                    isRight={isRight}
-                    tooltipSide={tooltipSide}
-                    onClick={() => handleClick(item.id)}
-                  />
-                </Fragment>
-              ))}
+            <SortableContext items={orderedIds} strategy={verticalListSortingStrategy}>
+              {orderedIds.map((id) => renderItem(id, true))}
             </SortableContext>
           </DndContext>
         ) : (
           /* SSR / pre-hydration placeholder — same visual layout but no dnd-kit,
              so server and client markup match (avoids hydration mismatch). */
           <div className="flex flex-col items-center gap-1 w-full">
-            {orderedItems.map((item, idx) => {
-              const Icon = item.icon;
-              const isActive = activeSidePanel === item.id && !sidePanelCollapsed && viewMode === 'workbench';
-              return (
-                <Fragment key={item.id}>
-                  {idx > 0 && item.group !== orderedItems[idx - 1].group && (
-                    <div aria-hidden className="w-6 h-px bg-border/70 my-1.5" />
-                  )}
-                  <button
-                    type="button"
-                    aria-label={t(item.labelKey)}
-                    onClick={() => handleClick(item.id)}
-                    className={cn(
-                      'relative grid place-items-center size-9 rounded-lg transition-all',
-                      isActive
-                        ? 'text-primary bg-primary/12'
-                        : 'text-muted-foreground hover:text-foreground hover:bg-accent/60',
-                    )}
-                  >
-                    <Icon className="size-[18px]" strokeWidth={2} />
-                  </button>
-                </Fragment>
-              );
-            })}
+            {orderedIds.map((id) => renderItem(id, false))}
           </div>
         )}
-
-        {/* 组间分隔线：Solver/Pipeline/Linalg/Whiteboard 按钮属于"全屏视图"组，与上方数学组之间分隔 */}
-        <div aria-hidden className="w-6 h-px bg-border/70 my-1.5" />
-
-        {/* Solver switch — full-screen solver workbench view (Task 3) */}
-        <Tooltip delayDuration={200}>
-          <TooltipTrigger asChild>
-            <motion.button
-              type="button"
-              initial={false}
-              animate={{ opacity: 1, x: 0 }}
-              transition={{ delay: 0.04 * (TOP_ITEMS.length + 1), duration: 0.18 }}
-              onClick={() => setViewMode(viewMode === 'solver' ? 'workbench' : 'solver')}
-              aria-label={t('abSolver')}
-              className={cn(
-                'relative grid place-items-center size-9 rounded-lg transition-all',
-                viewMode === 'solver'
-                  ? 'text-primary bg-primary/12'
-                  : 'text-muted-foreground hover:text-foreground hover:bg-accent/60',
-              )}
-            >
-              <FunctionSquare className="size-[18px]" strokeWidth={2} />
-              {viewMode === 'solver' && (
-                <motion.span
-                  layoutId="activity-indicator"
-                  className={cn(
-                    'absolute top-1/2 -translate-y-1/2 w-[2px] h-5 bg-primary',
-                    isRight ? 'right-0 rounded-l' : 'left-0 rounded-r',
-                  )}
-                  style={{ boxShadow: '0 0 8px oklch(0.7 0.15 165 / 70%)' }}
-                  transition={{ type: 'spring', stiffness: 380, damping: 30 }}
-                />
-              )}
-            </motion.button>
-          </TooltipTrigger>
-          <TooltipContent side={tooltipSide}>{t('abSolver')}</TooltipContent>
-        </Tooltip>
-
-        {/* Pipeline switch — special: changes viewMode */}
-        <Tooltip delayDuration={200}>
-          <TooltipTrigger asChild>
-            <motion.button
-              type="button"
-              initial={false}
-              animate={{ opacity: 1, x: 0 }}
-              transition={{ delay: 0.04 * (TOP_ITEMS.length + 1), duration: 0.18 }}
-              onClick={() => setViewMode(viewMode === 'pipeline' ? 'workbench' : 'pipeline')}
-              aria-label={t('abPipeline')}
-              className={cn(
-                'relative grid place-items-center size-9 rounded-lg transition-all',
-                viewMode === 'pipeline'
-                  ? 'text-primary bg-primary/12'
-                  : 'text-muted-foreground hover:text-foreground hover:bg-accent/60',
-              )}
-            >
-              <Workflow className="size-[18px]" strokeWidth={2} />
-              {viewMode === 'pipeline' && (
-                <motion.span
-                  layoutId="activity-indicator"
-                  className={cn(
-                    'absolute top-1/2 -translate-y-1/2 w-[2px] h-5 bg-primary',
-                    isRight ? 'right-0 rounded-l' : 'left-0 rounded-r',
-                  )}
-                  style={{ boxShadow: '0 0 8px oklch(0.7 0.15 165 / 70%)' }}
-                  transition={{ type: 'spring', stiffness: 380, damping: 30 }}
-                />
-              )}
-            </motion.button>
-          </TooltipTrigger>
-          <TooltipContent side={tooltipSide}>{t('abPipeline')}</TooltipContent>
-        </Tooltip>
-
-        {/* Whiteboard switch — enters sketch view */}
-        <Tooltip delayDuration={200}>
-          <TooltipTrigger asChild>
-            <motion.button
-              type="button"
-              initial={false}
-              animate={{ opacity: 1, x: 0 }}
-              transition={{ delay: 0.04 * (TOP_ITEMS.length + 1), duration: 0.18 }}
-              onClick={() => setViewMode(viewMode === 'whiteboard' ? 'workbench' : 'whiteboard')}
-              aria-label={t('abWhiteboard')}
-              className={cn(
-                'relative grid place-items-center size-9 rounded-lg transition-all',
-                viewMode === 'whiteboard'
-                  ? 'text-primary bg-primary/12'
-                  : 'text-muted-foreground hover:text-foreground hover:bg-accent/60',
-              )}
-            >
-              <PencilRuler className="size-[18px]" strokeWidth={2} />
-              {viewMode === 'whiteboard' && (
-                <motion.span
-                  layoutId="activity-indicator"
-                  className={cn(
-                    'absolute top-1/2 -translate-y-1/2 w-[2px] h-5 bg-primary',
-                    isRight ? 'right-0 rounded-l' : 'left-0 rounded-r',
-                  )}
-                  style={{ boxShadow: '0 0 8px oklch(0.7 0.15 165 / 70%)' }}
-                  transition={{ type: 'spring', stiffness: 380, damping: 30 }}
-                />
-              )}
-            </motion.button>
-          </TooltipTrigger>
-          <TooltipContent side={tooltipSide}>{t('abWhiteboard')}</TooltipContent>
-        </Tooltip>
-
-        {/* Linear algebra switch — full-screen linalg workbench view */}
-        <Tooltip delayDuration={200}>
-          <TooltipTrigger asChild>
-            <motion.button
-              type="button"
-              initial={false}
-              animate={{ opacity: 1, x: 0 }}
-              transition={{ delay: 0.04 * (TOP_ITEMS.length + 1), duration: 0.18 }}
-              onClick={() => setViewMode(viewMode === 'linalg' ? 'workbench' : 'linalg')}
-              aria-label={t('abLinalg')}
-              className={cn(
-                'relative grid place-items-center size-9 rounded-lg transition-all',
-                viewMode === 'linalg'
-                  ? 'text-primary bg-primary/12'
-                  : 'text-muted-foreground hover:text-foreground hover:bg-accent/60',
-              )}
-            >
-              <Grid3x3 className="size-[18px]" strokeWidth={2} />
-              {viewMode === 'linalg' && (
-                <motion.span
-                  layoutId="activity-indicator"
-                  className={cn(
-                    'absolute top-1/2 -translate-y-1/2 w-[2px] h-5 bg-primary',
-                    isRight ? 'right-0 rounded-l' : 'left-0 rounded-r',
-                  )}
-                  style={{ boxShadow: '0 0 8px oklch(0.7 0.15 165 / 70%)' }}
-                  transition={{ type: 'spring', stiffness: 380, damping: 30 }}
-                />
-              )}
-            </motion.button>
-          </TooltipTrigger>
-          <TooltipContent side={tooltipSide}>{t('abLinalg')}</TooltipContent>
-        </Tooltip>
-      </div>
-
-      <div className="flex flex-col items-center gap-1 w-full">
-        {/* Toggle Editor */}
-        <Tooltip delayDuration={200}>
-          <TooltipTrigger asChild>
-            <button
-              type="button"
-              onClick={() => setEditorVisible(!editorVisible)}
-              aria-label={t('abToggleEditor')}
-              className={cn(
-                'grid place-items-center size-9 rounded-lg transition-colors',
-                editorVisible
-                  ? 'text-primary bg-primary/12'
-                  : 'text-muted-foreground hover:text-foreground hover:bg-accent/60',
-              )}
-            >
-              <LayoutTemplate className="size-[18px]" />
-            </button>
-          </TooltipTrigger>
-          <TooltipContent side={tooltipSide}>{t('abToggleEditor')}</TooltipContent>
-        </Tooltip>
-
-        {/* Toggle Preview */}
-        <Tooltip delayDuration={200}>
-          <TooltipTrigger asChild>
-            <button
-              type="button"
-              onClick={() => setPreviewVisible(!previewVisible)}
-              aria-label={t('abTogglePreview')}
-              className={cn(
-                'grid place-items-center size-9 rounded-lg transition-colors',
-                previewVisible
-                  ? 'text-primary bg-primary/12'
-                  : 'text-muted-foreground hover:text-foreground hover:bg-accent/60',
-              )}
-            >
-              <PanelRight className="size-[18px]" />
-            </button>
-          </TooltipTrigger>
-          <TooltipContent side={tooltipSide}>{t('abTogglePreview')}</TooltipContent>
-        </Tooltip>
-
-        {/* Toggle Sidebar */}
-        <Tooltip delayDuration={200}>
-          <TooltipTrigger asChild>
-            <button
-              type="button"
-              onClick={toggleSidePanel}
-              aria-label={sidePanelCollapsed ? t('abShowSidebar') : t('abHideSidebar')}
-              className="grid place-items-center size-9 rounded-lg text-muted-foreground hover:text-foreground hover:bg-accent/60 transition-colors"
-            >
-              {sidePanelCollapsed ? (
-                <PanelLeftOpen className="size-[18px]" />
-              ) : (
-                <PanelLeftClose className="size-[18px]" />
-              )}
-            </button>
-          </TooltipTrigger>
-          <TooltipContent side={tooltipSide}>
-            {sidePanelCollapsed ? t('abShowSidebar') : t('abHideSidebar')}
-          </TooltipContent>
-        </Tooltip>
-
-        <div className="w-6 h-px bg-border/60 my-0.5" />
-
-        {/* 布局菜单 — 把 Move/Lock/AutoHide/Hide 4 个按钮合并到一个下拉菜单，
-            让左下角更简约。 */}
-        <DropdownMenu>
-          <Tooltip delayDuration={200}>
-            <TooltipTrigger asChild>
-              <DropdownMenuTrigger asChild>
-                <button
-                  type="button"
-                  aria-label={t('abLayoutMenu')}
-                  className={cn(
-                    'grid place-items-center size-9 rounded-lg transition-colors',
-                    activityBarLocked || activityBarAutoHide
-                      ? 'text-primary bg-primary/12'
-                      : 'text-muted-foreground hover:text-foreground hover:bg-accent/60',
-                  )}
-                >
-                  <MoreHorizontal className="size-[18px]" />
-                </button>
-              </DropdownMenuTrigger>
-            </TooltipTrigger>
-            <TooltipContent side={tooltipSide}>{t('abLayoutMenu')}</TooltipContent>
-          </Tooltip>
-          <DropdownMenuContent side={tooltipSide} align="end" className="w-44">
-            <DropdownMenuLabel className="text-[10px] uppercase tracking-wide text-muted-foreground">
-              {t('abLayoutMenu')}
-            </DropdownMenuLabel>
-            <DropdownMenuItem
-              onClick={() => setActivityBarPosition(isRight ? 'left' : 'right')}
-              disabled={activityBarLocked}
-              className="text-[11.5px] gap-2"
-            >
-              {isRight ? <PanelLeft className="size-3.5" /> : <PanelRight className="size-3.5" />}
-              <span>{isRight ? t('abMoveLeft') : t('abMoveRight')}</span>
-            </DropdownMenuItem>
-            <DropdownMenuItem
-              onClick={toggleActivityBarLock}
-              className="text-[11.5px] gap-2"
-            >
-              {activityBarLocked ? <Pin className="size-3.5" /> : <PinOff className="size-3.5" />}
-              <span>{activityBarLocked ? t('abUnlockTaskbar') : t('abLockTaskbar')}</span>
-            </DropdownMenuItem>
-            <DropdownMenuItem
-              onClick={() => setActivityBarAutoHide(!activityBarAutoHide)}
-              disabled={activityBarLocked}
-              className="text-[11.5px] gap-2"
-            >
-              {activityBarAutoHide ? <PanelRightClose className="size-3.5" /> : <PanelRightOpen className="size-3.5" />}
-              <span>{activityBarAutoHide ? t('abDisableAutoHide') : t('abAutoHide')}</span>
-            </DropdownMenuItem>
-            <DropdownMenuSeparator />
-            <DropdownMenuItem
-              onClick={() => toggleActivityBarHidden()}
-              disabled={activityBarLocked}
-              className="text-[11.5px] gap-2"
-            >
-              {isRight ? <PanelRightClose className="size-3.5" /> : <PanelLeftClose className="size-3.5" />}
-              <span>{t('abHideTaskbar')}</span>
-            </DropdownMenuItem>
-          </DropdownMenuContent>
-        </DropdownMenu>
-
-        <div className="w-6 h-px bg-border/60 my-0.5" />
-
-        {/* Settings — 打开设置面板 */}
-        <Tooltip delayDuration={200}>
-          <TooltipTrigger asChild>
-            <button
-              type="button"
-              onClick={() => openSettings(true)}
-              aria-label={t('settingsTitle')}
-              className="grid place-items-center size-9 rounded-lg text-muted-foreground hover:text-foreground hover:bg-accent/60 transition-colors"
-            >
-              <Settings className="size-[18px]" />
-            </button>
-          </TooltipTrigger>
-          <TooltipContent side={tooltipSide}>{t('settingsTitle')}</TooltipContent>
-        </Tooltip>
       </div>
     </aside>
   );

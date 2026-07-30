@@ -44,7 +44,7 @@
 
 import { useEffect, useMemo, useRef, useState } from 'react';
 import type { MutableRefObject } from 'react';
-import { Canvas, useThree, useFrame } from '@react-three/fiber';
+import { Canvas, useThree, useFrame, invalidate } from '@react-three/fiber';
 import { OrbitControls, Grid, Text, Line, Billboard } from '@react-three/drei';
 import * as THREE from 'three';
 import type { Surface3DData } from '@/lib/plots/plot3d';
@@ -134,41 +134,53 @@ interface SurfaceMeshProps {
   colorMode: 'height' | 'solid';
 }
 
+/** Build an empty (non-rendering) geometry — used as a fallback. */
+function emptyGeometry(): THREE.BufferGeometry {
+  const g = new THREE.BufferGeometry();
+  g.setAttribute('position', new THREE.BufferAttribute(new Float32Array(3), 3));
+  g.setAttribute('normal', new THREE.BufferAttribute(new Float32Array(3), 3));
+  g.setAttribute('color', new THREE.BufferAttribute(new Float32Array(3), 3));
+  return g;
+}
+
 function SurfaceMesh({ data, wireframe, colorMode }: SurfaceMeshProps) {
   // Build the BufferGeometry attributes. Memoized so we don't recreate
   // Float32Arrays / Uint32Arrays on every render — only when the surface
   // data or color mode actually changes.
   const geometry = useMemo(() => {
-    const g = new THREE.BufferGeometry();
-    // Defensive: validate lengths so a malformed Surface3DData cannot
-    // trigger a three.js error that would bubble up and crash the app.
-    if (
-      !data || !data.vertices || data.vertices.length < 3 ||
-      data.vertices.length % 3 !== 0 ||
-      !data.normals || data.normals.length !== data.vertices.length ||
-      !data.indices || data.indices.length === 0
-    ) {
-      // Return an empty geometry — the mesh will simply not render.
-      g.setAttribute('position', new THREE.BufferAttribute(new Float32Array(3), 3));
-      g.setAttribute('normal', new THREE.BufferAttribute(new Float32Array(3), 3));
-      g.setAttribute('color', new THREE.BufferAttribute(new Float32Array(3), 3));
+    try {
+      // Defensive: validate lengths so a malformed Surface3DData cannot
+      // trigger a three.js error that would bubble up and crash the app.
+      if (
+        !data || !data.vertices || data.vertices.length < 3 ||
+        data.vertices.length % 3 !== 0 ||
+        !data.normals || data.normals.length !== data.vertices.length ||
+        !data.indices || data.indices.length === 0
+      ) {
+        // Return an empty geometry — the mesh will simply not render.
+        return emptyGeometry();
+      }
+      const g = new THREE.BufferGeometry();
+      g.setAttribute('position', new THREE.BufferAttribute(data.vertices, 3));
+      g.setAttribute('normal', new THREE.BufferAttribute(data.normals, 3));
+      const colorAttr =
+        colorMode === 'solid'
+          ? solidColorArray(data.vertices.length / 3, data.color)
+          : data.colors;
+      g.setAttribute('color', new THREE.BufferAttribute(
+        colorAttr && colorAttr.length === data.vertices.length
+          ? colorAttr
+          : solidColorArray(data.vertices.length / 3, data.color),
+        3,
+      ));
+      g.setIndex(new THREE.BufferAttribute(data.indices, 1));
+      g.computeBoundingSphere();
       return g;
+    } catch (err) {
+      // Never let a geometry-building failure unmount the whole Canvas.
+      console.error('[Plot3DScene] surface geometry build failed', err);
+      return emptyGeometry();
     }
-    g.setAttribute('position', new THREE.BufferAttribute(data.vertices, 3));
-    g.setAttribute('normal', new THREE.BufferAttribute(data.normals, 3));
-    const colorAttr =
-      colorMode === 'solid'
-        ? solidColorArray(data.vertices.length / 3, data.color)
-        : data.colors;
-    g.setAttribute('color', new THREE.BufferAttribute(
-      colorAttr && colorAttr.length === data.vertices.length
-        ? colorAttr
-        : solidColorArray(data.vertices.length / 3, data.color),
-      3,
-    ));
-    g.setIndex(new THREE.BufferAttribute(data.indices, 1));
-    g.computeBoundingSphere();
-    return g;
   }, [data, colorMode]);
 
   // Dispose of the old geometry when it changes to avoid GPU memory leaks.
@@ -274,16 +286,23 @@ function BillboardLabel({
 
   // Update fontSize based on camera distance — but only when distance
   // changes by >5%, to avoid updating 24 labels × 60fps unnecessarily.
+  // Guarded: a throw inside a useFrame callback propagates through the
+  // fiber render loop and can unmount the whole Canvas (blank panel).
   useFrame(() => {
-    if (!textRef.current) return;
-    const distance = camera.position.distanceTo(posVec);
-    if (lastDistanceRef.current > 0) {
-      const ratio = distance / lastDistanceRef.current;
-      if (ratio > 0.95 && ratio < 1.05) return; // skip — barely changed
+    try {
+      if (!textRef.current) return;
+      const distance = camera.position.distanceTo(posVec);
+      if (lastDistanceRef.current > 0) {
+        const ratio = distance / lastDistanceRef.current;
+        if (ratio > 0.95 && ratio < 1.05) return; // skip — barely changed
+      }
+      lastDistanceRef.current = distance;
+      const worldSize = (pixelSize * distance) / 280;
+      textRef.current.fontSize = worldSize;
+    } catch (err) {
+      // Never let a label-sizing failure kill the render loop.
+      console.error('[Plot3DScene] BillboardLabel frame error', err);
     }
-    lastDistanceRef.current = distance;
-    const worldSize = (pixelSize * distance) / 280;
-    textRef.current.fontSize = worldSize;
   });
 
   return (
@@ -551,7 +570,34 @@ function CameraReset({
     if (controlsRef.current) {
       controlsRef.current.reset();
     }
-  }, [resetSignal]);  
+  }, [resetSignal, upAxis, camera]);  
+  return null;
+}
+
+/* ------------------------------------------------------------------ */
+/*  WebGLContextGuard — handle context loss / restore                 */
+/* ------------------------------------------------------------------ */
+
+function WebGLContextGuard() {
+  const { gl } = useThree();
+  useEffect(() => {
+    const canvas = gl.domElement;
+    const handleLost = (e: Event) => {
+      e.preventDefault();
+      console.warn('[Plot3DScene] WebGL context lost');
+    };
+    const handleRestored = () => {
+      console.log('[Plot3DScene] WebGL context restored');
+      gl.resetState();
+      invalidate();
+    };
+    canvas.addEventListener('webglcontextlost', handleLost);
+    canvas.addEventListener('webglcontextrestored', handleRestored);
+    return () => {
+      canvas.removeEventListener('webglcontextlost', handleLost);
+      canvas.removeEventListener('webglcontextrestored', handleRestored);
+    };
+  }, [gl]);
   return null;
 }
 
@@ -666,6 +712,9 @@ function SceneContents({
 
       {/* T6: 命令式截图桥接 — 把 gl.render + toDataURL 注册到外部 ref */}
       {captureRef && <CaptureBridge captureRef={captureRef} />}
+
+      {/* WebGL context loss / restore handling */}
+      <WebGLContextGuard />
     </>
   );
 }
@@ -694,6 +743,39 @@ export function Plot3DScene({
   // instead of mounting <Canvas> (which would synchronously throw).
   const [webglOk] = useState<boolean>(() => isWebGLAvailable());
 
+  // The renderer must only initialize once the container has non-zero
+  // size. Mounting <Canvas> while the host is 0×0 (hidden tab, collapsed
+  // panel, dialog animating open) creates a 0×0 drawing buffer that
+  // stays black — with frameloop="demand" nothing forces a re-render.
+  // ResizeObserver waits for the first visible layout before mounting,
+  // and keeps the renderer sized correctly afterwards (fibre handles
+  // the resize itself via its own observer).
+  const hostRef = useRef<HTMLDivElement>(null);
+  const [hostReady, setHostReady] = useState(false);
+  useEffect(() => {
+    const el = hostRef.current;
+    if (!el) return;
+    const check = () => {
+      if (el.clientWidth > 0 && el.clientHeight > 0) {
+        setHostReady(true);
+      }
+    };
+    check();
+    if (hostReady) return; // already visible — no observer needed
+    const ro = new ResizeObserver((entries) => {
+      for (const entry of entries) {
+        const { width, height } = entry.contentRect;
+        if (width > 0 && height > 0) {
+          setHostReady(true);
+          ro.disconnect();
+          return;
+        }
+      }
+    });
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, [hostReady]);
+
   if (!webglOk) {
     return (
       <div className="grid h-full w-full place-items-center bg-background p-6 text-center">
@@ -708,32 +790,40 @@ export function Plot3DScene({
   }
 
   return (
-    <Canvas
-      camera={{
-        position: upAxis === 'z' ? [6, 6, 5] : [6, 5, 6],
-        up: upAxis === 'z' ? [0, 0, 1] : [0, 1, 0],
-        fov: 50,
-        near: 0.1,
-        far: 100,
-      }}
-      dpr={[1, 2]}
-      frameloop={frameloop}
-      gl={{ antialias: true, alpha: false, preserveDrawingBuffer: false, powerPreference: 'high-performance' }}
-      style={{ width: '100%', height: '100%', touchAction: 'none' }}
-    >
-      <SceneContents
-        surfaces={surfaces}
-        theme={theme}
-        showAxes={showAxes}
-        showGrid={showGrid}
-        wireframe={wireframe}
-        autoRotate={autoRotate}
-        colorMode={colorMode}
-        upAxis={upAxis}
-        resetSignal={resetSignal}
-        captureRef={captureRef}
-      />
-    </Canvas>
+    <div ref={hostRef} className="h-full w-full">
+      {hostReady ? (
+        <Canvas
+          camera={{
+            position: upAxis === 'z' ? [6, 6, 5] : [6, 5, 6],
+            up: upAxis === 'z' ? [0, 0, 1] : [0, 1, 0],
+            fov: 50,
+            near: 0.1,
+            far: 100,
+          }}
+          dpr={[1, 2]}
+          frameloop={frameloop}
+          gl={{ antialias: true, alpha: false, preserveDrawingBuffer: false, powerPreference: 'high-performance' }}
+          style={{ width: '100%', height: '100%', touchAction: 'none' }}
+        >
+          <SceneContents
+            surfaces={surfaces}
+            theme={theme}
+            showAxes={showAxes}
+            showGrid={showGrid}
+            wireframe={wireframe}
+            autoRotate={autoRotate}
+            colorMode={colorMode}
+            upAxis={upAxis}
+            resetSignal={resetSignal}
+            captureRef={captureRef}
+          />
+        </Canvas>
+      ) : (
+        // Placeholder while waiting for the first non-zero layout —
+        // matches the dynamic-import loading fallback in Plot3DPanel.
+        <div className="h-full w-full bg-background/40" />
+      )}
+    </div>
   );
 }
 

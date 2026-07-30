@@ -88,7 +88,7 @@ function defaultSpecForPlot(p: {
  * exponential curves don't dominate the shared Y axis.
  *
  * Returns the coordinated result including `outliers` (curve labels that
- * were clipped) and `fullRange` (for the "full range mode" toggle).
+ * were clipped).
  */
 function deriveSmartY(
   plots: ReturnType<typeof useWorkbenchStore.getState>['plots'],
@@ -96,7 +96,7 @@ function deriveSmartY(
   curveSpecs: Record<string, Curve2DSpec>,
 ): CoordinatedRangeResult {
   if (plots.length === 0) {
-    return { range: DEFAULT_Y, outliers: [], fullRange: DEFAULT_Y };
+    return { range: DEFAULT_Y, outliers: [] };
   }
   const sampled = plots.map((p) => {
     const spec = curveSpecs[p.id] ?? defaultSpecForPlot(p);
@@ -136,13 +136,9 @@ export function Plot2DPanel() {
   // default (no ref access during render, no useEffect cascade).
   const [userView, setUserView] = useState<{ view: ViewBox; plotCount: number } | null>(null);
 
-  // Range mode: 'smart' (default, quantile-based w/ outlier clipping),
-  // 'full' (show every curve including e^x), or 'manual' (user-set Y).
-  const [rangeMode, setRangeMode] = useState<RangeMode>('smart');
-
-  // Equal aspect ratio: keep X/Y scale 1:1 so circles stay circular.
-  // Default true (math-standard). User can disable in advanced panel.
-  const [equalAspect, setEqualAspect] = useState(true);
+  // Range mode: 'free' (default, quantile-based adaptive w/ outlier
+  // clipping) or 'manual' (user-set Y).
+  const [rangeMode, setRangeMode] = useState<RangeMode>('free');
 
   // Compare mode: 'overlay' (default for multi-plot) draws all curves on a
   // single shared-Y axis — same coordinate system, Desmos style.
@@ -178,36 +174,34 @@ export function Plot2DPanel() {
     setSpecEdits((prev) => ({ ...prev, [id]: spec }));
   }, []);
 
-  // Derived smart Y range from the current set of plots (memoized).
-  // This computes both the clipped `range` (outliers excluded) and the
-  // `fullRange` (all curves included) so the user can toggle between them.
+  // Derived adaptive Y range from the current set of plots (memoized).
+  // This is the single "free" behaviour: quantile-based with outlier
+  // clipping, union of all ordinary curves so everything stays visible.
   // `scopeVersion` re-derives when a slider / variable changes the curves.
   const scopeVersion = useScopeVersion();
   const smartY = useMemo<CoordinatedRangeResult>(() => {
     void scopeVersion;
     if (plots.length === 0) {
-      return { range: DEFAULT_Y, outliers: [], fullRange: DEFAULT_Y };
+      return { range: DEFAULT_Y, outliers: [] };
     }
     const hasPolar = plots.some((p) => curveSpecs[p.id]?.mode === 'polar');
     if (hasPolar) {
       const r = 4;
-      return { range: [-r, r], outliers: [], fullRange: [-r, r] };
+      return { range: [-r, r], outliers: [] };
     }
     const latest = plots[plots.length - 1];
     const x = (latest?.xRange ?? DEFAULT_X) as [number, number];
     return deriveSmartY(plots, x, curveSpecs);
-     
+
   }, [plots, scopeVersion, curveSpecs]);
 
-  // The default view picks Y based on the current range mode.
+  // The default view always uses the adaptive free range.
   const defaultView = useMemo<ViewBox>(() => {
     if (plots.length === 0) return { x: DEFAULT_X, y: DEFAULT_Y };
     const latest = plots[plots.length - 1];
     const x = (latest?.xRange ?? DEFAULT_X) as [number, number];
-    const y =
-      rangeMode === 'full' ? smartY.fullRange : smartY.range;
-    return { x, y };
-  }, [plots, rangeMode, smartY]);
+    return { x, y: smartY.range };
+  }, [plots, smartY]);
 
   // If the plot count has changed since the user set their view, drop the
   // override so the derived default takes over.
@@ -215,7 +209,7 @@ export function Plot2DPanel() {
     userView && userView.plotCount === plots.length ? userView.view : null;
 
   // 'manual' range mode uses the user-set Y if present; otherwise falls
-  // back to the smart/full range from defaultView.
+  // back to the adaptive free range from defaultView.
   const effectiveX = effectiveUserView?.x ?? defaultView.x;
   const effectiveY =
     rangeMode === 'manual' && effectiveUserView
@@ -264,14 +258,14 @@ export function Plot2DPanel() {
   }, [defaultView, plots.length]);
   const handleReset = useCallback(() => {
     setUserView(null);
-    setRangeMode('smart');
+    setRangeMode('free');
   }, []);
 
   const handleRangeChange = useCallback(
     (which: 'x' | 'y', index: 0 | 1, value: number) => {
       // Manually editing the Y range switches to 'manual' mode so the
       // user's value is respected instead of being overwritten by the
-      // smart / full range.
+      // adaptive free range.
       if (which === 'y') setRangeMode('manual');
       setUserView((prev) => {
         const baseX = prev?.view.x ?? defaultView.x;
@@ -358,11 +352,10 @@ export function Plot2DPanel() {
       onInsertExample: handleInsertExample,
       showGrid: true,
       showMarkers: true,
-      equalAspect,
       overlays,
       curveSpecs,
     }),
-    [plots, theme, effectiveX, effectiveY, handleViewChange, handleResetView, handleInsertExample, equalAspect, overlays, curveSpecs],
+    [plots, theme, effectiveX, effectiveY, handleViewChange, handleResetView, handleInsertExample, overlays, curveSpecs],
   );
 
   /* ----------------------- Render ----------------------------------- */
@@ -393,8 +386,6 @@ export function Plot2DPanel() {
         compareMode={compareMode}
         onCompareModeChange={setUserCompareMode}
         onOverlaysChange={setOverlays}
-        equalAspect={equalAspect}
-        onEqualAspectChange={setEqualAspect}
       />
       <div ref={canvasWrapperRef} className="relative min-h-0 flex-1">
         {compareMode === 'facet' && plots.length > 1 ? (

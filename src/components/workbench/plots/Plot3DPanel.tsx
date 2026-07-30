@@ -563,9 +563,12 @@ export function Plot3DPanel() {
         </div>
 
         {/* ---------- 3D Canvas (or empty state) ---------- */}
+        {/* min-h-[200px]: guarantee the WebGL canvas never collapses to a
+            zero-height container when the controls panel crowds the flex
+            column — a 0-size container prevents renderer init. */}
         <div
           ref={canvasWrapperRef}
-          className="relative min-h-0 flex-1"
+          className="relative min-h-[200px] flex-1"
           style={{
             background:
               theme === 'dark'

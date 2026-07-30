@@ -18,6 +18,12 @@ interface SettingsState {
   useMathFont: boolean;
   /** UI 字体预设：modern（Inter）/ scholarly（Space Grotesk + Newsreader）/ system */
   fontPreset: 'modern' | 'scholarly' | 'system';
+  /** 活动栏图标顺序（自由拖拽排序后持久化），默认与内置布局顺序一致 */
+  activityBarOrder: string[];
+  /** 编辑器字号（px，8–32），默认 14 */
+  editorFontSize: number;
+  /** 坐标轴字号（px，8–24），默认 12 */
+  plotAxisFontSize: number;
 
   /* 高级设置（结构化表单，原 JSON 编辑的替代） */
   /** 2D 曲线采样点数（100–2000），默认 800（对应 plot2dAnalysis 的 steps 默认值） */
@@ -43,6 +49,9 @@ interface SettingsState {
   setDefaultFormulaFontSize: (size: number) => void;
   setUseMathFont: (v: boolean) => void;
   setFontPreset: (v: 'modern' | 'scholarly' | 'system') => void;
+  setActivityBarOrder: (order: string[]) => void;
+  setEditorFontSize: (size: number) => void;
+  setPlotAxisFontSize: (size: number) => void;
 
   setAdvancedPlotSamples: (n: number) => void;
   setAdvancedPlot3dResolution: (n: number) => void;
@@ -62,11 +71,22 @@ interface SettingsState {
 
 export const SETTINGS_KEY = 'omnimath-settings-v1';
 
+/** 活动栏图标的默认顺序（同时作为合法 id 白名单用于持久化数据校验；
+ *  id 必须与 ActivityBar 中的条目注册表一致）。 */
+export const DEFAULT_ACTIVITY_BAR_ORDER: string[] = [
+  'history', 'variables', 'files', 'formulas', 'stats',
+  'solver', 'pipeline', 'whiteboard', 'linalg',
+  'toggleEditor', 'togglePreview', 'toggleSidebar', 'layoutMenu', 'settings',
+];
+
 interface PersistedSettings {
   defaultExportDpi: 1 | 2 | 4;
   defaultFormulaFontSize: number;
   useMathFont: boolean;
   fontPreset?: 'modern' | 'scholarly' | 'system';
+  activityBarOrder?: string[];
+  editorFontSize?: number;
+  plotAxisFontSize?: number;
   /* 高级设置项均为可选，兼容旧版本持久化数据 */
   advancedPlotSamples?: number;
   advancedPlot3dResolution?: number;
@@ -102,6 +122,9 @@ export const useSettingsStore = create<SettingsState>((set, get) => ({
   defaultFormulaFontSize: 28,
   useMathFont: true,
   fontPreset: 'modern',
+  activityBarOrder: [...DEFAULT_ACTIVITY_BAR_ORDER],
+  editorFontSize: 14,
+  plotAxisFontSize: 12,
   ...ADVANCED_DEFAULTS,
 
   setOpen: (v) => set({ open: v }),
@@ -120,6 +143,18 @@ export const useSettingsStore = create<SettingsState>((set, get) => ({
   },
   setFontPreset: (v) => {
     set({ fontPreset: v });
+    get().saveToStorage();
+  },
+  setActivityBarOrder: (order) => {
+    set({ activityBarOrder: order });
+    get().saveToStorage();
+  },
+  setEditorFontSize: (size) => {
+    set({ editorFontSize: clampInt(size, 8, 32) });
+    get().saveToStorage();
+  },
+  setPlotAxisFontSize: (size) => {
+    set({ plotAxisFontSize: clampInt(size, 8, 24) });
     get().saveToStorage();
   },
 
@@ -172,6 +207,9 @@ export const useSettingsStore = create<SettingsState>((set, get) => ({
           defaultFormulaFontSize: s.defaultFormulaFontSize,
           useMathFont: s.useMathFont,
           fontPreset: s.fontPreset,
+          activityBarOrder: s.activityBarOrder,
+          editorFontSize: s.editorFontSize,
+          plotAxisFontSize: s.plotAxisFontSize,
           advancedPlotSamples: s.advancedPlotSamples,
           advancedPlot3dResolution: s.advancedPlot3dResolution,
           advancedResultPrecision: s.advancedResultPrecision,
@@ -204,6 +242,23 @@ export const useSettingsStore = create<SettingsState>((set, get) => ({
       }
       if (data.fontPreset === 'modern' || data.fontPreset === 'scholarly' || data.fontPreset === 'system') {
         set({ fontPreset: data.fontPreset });
+      }
+      /* 活动栏顺序：过滤失效 id + 补全缺失项，与 workbench 的迁移逻辑一致 */
+      if (Array.isArray(data.activityBarOrder)) {
+        const valid = data.activityBarOrder.filter(
+          (id): id is string =>
+            typeof id === 'string' && DEFAULT_ACTIVITY_BAR_ORDER.includes(id),
+        );
+        for (const id of DEFAULT_ACTIVITY_BAR_ORDER) {
+          if (!valid.includes(id)) valid.push(id);
+        }
+        set({ activityBarOrder: valid });
+      }
+      if (typeof data.editorFontSize === 'number' && data.editorFontSize >= 8 && data.editorFontSize <= 32) {
+        set({ editorFontSize: Math.round(data.editorFontSize) });
+      }
+      if (typeof data.plotAxisFontSize === 'number' && data.plotAxisFontSize >= 8 && data.plotAxisFontSize <= 24) {
+        set({ plotAxisFontSize: Math.round(data.plotAxisFontSize) });
       }
       /* 高级设置：逐项校验合法性后再写入，避免损坏的持久化数据污染状态 */
       if (typeof data.advancedPlotSamples === 'number' && data.advancedPlotSamples >= 100 && data.advancedPlotSamples <= 2000) {
@@ -240,6 +295,9 @@ export const useSettingsStore = create<SettingsState>((set, get) => ({
       defaultFormulaFontSize: 28,
       useMathFont: true,
       fontPreset: 'modern',
+      activityBarOrder: [...DEFAULT_ACTIVITY_BAR_ORDER],
+      editorFontSize: 14,
+      plotAxisFontSize: 12,
       ...ADVANCED_DEFAULTS,
     });
     get().saveToStorage();

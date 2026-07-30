@@ -265,6 +265,13 @@ export interface TranslationDict {
   formulasCategoryStatistics: string;
   formulasCategoryPhysics: string;
   formulasCategoryFinance: string;
+  formulasAddCustom: string;
+  formulasCustom: string;
+  formulasName: string;
+  formulasLatex: string;
+  formulasDescription: string;
+  formulasExampleInput: string;
+  formulasCustomEmpty: string;
 
   /* ---------------- Equation solver ---------------- */
   solverTitle: string;
@@ -1002,6 +1009,13 @@ const zhCN: TranslationDict = {
   formulasCategoryStatistics: "统计",
   formulasCategoryPhysics: "物理",
   formulasCategoryFinance: "金融",
+  formulasAddCustom: "新增公式",
+  formulasCustom: "自定义",
+  formulasName: "名称",
+  formulasLatex: "LaTeX 表达式",
+  formulasDescription: "描述",
+  formulasExampleInput: "示例输入",
+  formulasCustomEmpty: "暂无自定义公式",
 
   /* Solver */
   solverTitle: "方程求解",
@@ -1732,6 +1746,13 @@ const en: TranslationDict = {
   formulasCategoryStatistics: "Statistics",
   formulasCategoryPhysics: "Physics",
   formulasCategoryFinance: "Finance",
+  formulasAddCustom: "Add formula",
+  formulasCustom: "Custom",
+  formulasName: "Name",
+  formulasLatex: "LaTeX expression",
+  formulasDescription: "Description",
+  formulasExampleInput: "Example input",
+  formulasCustomEmpty: "No custom formulas",
 
   /* Solver */
   solverTitle: "Equation Solver",

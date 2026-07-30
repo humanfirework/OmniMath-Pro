@@ -48,6 +48,7 @@ import {
 } from '@/components/ui/tooltip';
 import { useWorkbenchStore, STORAGE_KEY } from '@/lib/store/workbench';
 import { useFileSystemStore } from '@/lib/store/fileSystemStore';
+import { useSettingsStore } from '@/lib/store/settingsStore';
 import {
   evaluateExpressionAsync,
   getScope,
@@ -126,6 +127,25 @@ export function EditorPanel() {
   const [previewLine, setPreviewLine] = useState(1);
   const previewTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const defaultScriptSetRef = useRef(false);
+  const editorContainerRef = useRef<HTMLDivElement | null>(null);
+
+  /* ─── Editor font size from settings store ───────────────────── */
+  const editorFontSize = useSettingsStore((s) => s.editorFontSize);
+  const setEditorFontSize = useSettingsStore((s) => s.setEditorFontSize);
+
+  /* ─── Ctrl/Cmd + wheel zoom ───────────────────────────────────── */
+  useEffect(() => {
+    const el = editorContainerRef.current;
+    if (!el) return;
+    const onWheel = (e: WheelEvent) => {
+      if (!e.ctrlKey && !e.metaKey) return;
+      e.preventDefault();
+      const next = editorFontSize + (e.deltaY > 0 ? -1 : 1);
+      setEditorFontSize(next);
+    };
+    el.addEventListener('wheel', onWheel, { passive: false });
+    return () => el.removeEventListener('wheel', onWheel);
+  }, [editorFontSize, setEditorFontSize]);
 
   // Initialize default script only on the very first app launch (no persisted
   // storage). Once storage exists, an empty editor is intentional — do not
@@ -623,7 +643,7 @@ export function EditorPanel() {
           )}
 
           {/* Editor area */}
-          <div className="flex-1 min-h-0 flex overflow-hidden">
+          <div ref={editorContainerRef} className="flex-1 min-h-0 flex overflow-hidden">
             <CodeEditor
               value={editorContent}
               onChange={setEditorContent}
@@ -636,6 +656,7 @@ export function EditorPanel() {
               }}
               language={inputMode}
               placeholder={t('editorPlaceholder')}
+              fontSize={editorFontSize}
             />
           </div>
         </>

@@ -167,7 +167,6 @@ describe('coordinatedYRange', () => {
     const r = coordinatedYRange([]);
     expect(r.range).toEqual([-6, 6]);
     expect(r.outliers).toEqual([]);
-    expect(r.fullRange).toEqual([-6, 6]);
   });
 
   it('detects e^x as outlier when mixed with sin x', () => {
@@ -189,22 +188,14 @@ describe('coordinatedYRange', () => {
     expect(r.range[0]).toBeGreaterThan(-100);
   });
 
-  it('full range includes outliers', () => {
-    const r = coordinatedYRange([
-      { samples: makeSineSamples(100), label: 'sin(x)' },
-      { samples: makeExpSamples(100), label: 'e^x' },
-    ]);
-    // full range should include e^x's ~22000 max
-    expect(r.fullRange[1]).toBeGreaterThan(1000);
-  });
-
-  it('falls back to full range when all curves are outliers', () => {
+  it('falls back to union of all curves when every curve is an outlier', () => {
     const r = coordinatedYRange([
       { samples: makeExpSamples(100), label: 'e^x' },
       { samples: makeExpSamples(100).map((s) => ({ ...s, y: s.y * 2 })), label: '2*e^x' },
     ]);
     expect(r.outliers.length).toBe(2);
-    // When all are outliers, range should equal full range (with padding diff)
+    // When all are outliers, range should still cover the curves so the plot
+    // does not show an empty / degenerate view.
     expect(r.range[1]).toBeGreaterThan(1000);
   });
 

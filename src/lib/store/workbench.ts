@@ -87,7 +87,6 @@ interface WorkbenchState {
   activityBarLocked: boolean;
   activityBarAutoHide: boolean;
   activityBarHidden: boolean;
-  activityBarOrder: SidePanelTab[];
   editorVisible: boolean;
 
   // Actions
@@ -126,7 +125,6 @@ interface WorkbenchState {
   toggleActivityBarLock: () => void;
   setActivityBarAutoHide: (v: boolean) => void;
   toggleActivityBarHidden: () => void;
-  setActivityBarOrder: (order: SidePanelTab[]) => void;
   setEditorVisible: (v: boolean) => void;
 
   // Persistence
@@ -136,13 +134,10 @@ interface WorkbenchState {
 
 export const STORAGE_KEY = 'omnimath-pro-v2';
 
-/** Default order of activity bar items (left-to-right or top-to-bottom).
- *  Note: 'linalg' 与 'solver' 被有意排除 — 它们现在是 viewMode 开关，
- *  以独立按钮渲染（与 Pipeline/Whiteboard 并列），而非 side-panel tab。
- *  SidePanelTab 类型仍保留二者，因为 LinearAlgebraPanel / SolverPanel
- *  仍是合法的（可通过命令面板等方式程序化打开的）侧面板。 */
-const DEFAULT_ACTIVITY_BAR_ORDER: SidePanelTab[] = [
-  'history', 'variables', 'formulas', 'files', 'stats',
+/** 合法的 side-panel tab 值（用于旧 localStorage 数据校验）。
+ *  注意：activityBarOrder 已迁移到 settingsStore，此处仅保留 activeSidePanel 的校验。 */
+const VALID_SIDE_PANELS: SidePanelTab[] = [
+  'history', 'variables', 'formulas', 'files', 'stats', 'linalg', 'solver',
 ];
 
 /** Validate a plot config from localStorage — rejects malformed entries
@@ -215,25 +210,7 @@ function loadInitial(): Partial<WorkbenchState> {
     const VALID_LOCALES = ['zh-CN', 'en'] as const;
     const VALID_VIEW_MODES = ['workbench', 'pipeline', 'whiteboard', 'focus', 'linalg', 'solver'] as const;
     const VALID_AB_POSITIONS = ['left', 'right'] as const;
-    const VALID_SIDE_PANELS: SidePanelTab[] = [...DEFAULT_ACTIVITY_BAR_ORDER];
     const VALID_PREVIEW_TABS = ['formula', 'plot', 'plot3d', 'log'] as const;
-
-    // activityBarOrder 迁移：过滤无效 ID + 补全缺失项
-    // 旧版本可能有 symbols/templates/units/bases/guide 等已移除的 tab id，
-    // 也可能缺少新加入的 files/formulas — 直接补齐；
-    // linalg/solver 已转为 viewMode 开关，不在此列表中。
-    const migrateOrder = (raw: unknown): SidePanelTab[] => {
-      if (!Array.isArray(raw)) return [...DEFAULT_ACTIVITY_BAR_ORDER];
-      const valid = raw.filter(
-        (id): id is SidePanelTab =>
-          typeof id === 'string' &&
-          (DEFAULT_ACTIVITY_BAR_ORDER as readonly string[]).includes(id),
-      );
-      for (const id of DEFAULT_ACTIVITY_BAR_ORDER) {
-        if (!valid.includes(id)) valid.push(id);
-      }
-      return valid;
-    };
 
     return {
       editorContent: typeof data.editorContent === 'string' ? data.editorContent : '',
@@ -256,7 +233,6 @@ function loadInitial(): Partial<WorkbenchState> {
       activityBarLocked: typeof data.activityBarLocked === 'boolean' ? data.activityBarLocked : false,
       activityBarAutoHide: typeof data.activityBarAutoHide === 'boolean' ? data.activityBarAutoHide : false,
       activityBarHidden: typeof data.activityBarHidden === 'boolean' ? data.activityBarHidden : false,
-      activityBarOrder: migrateOrder(data.activityBarOrder),
     };
   } catch {
     return {};
@@ -311,7 +287,6 @@ export const useWorkbenchStore = create<WorkbenchState>((set, get) => ({
   activityBarLocked: false,
   activityBarAutoHide: false,
   activityBarHidden: false,
-  activityBarOrder: DEFAULT_ACTIVITY_BAR_ORDER,
   editorVisible: true,
 
   setEditorContent: (content) => { set({ editorContent: content }); get().saveToStorage(); },
@@ -409,7 +384,6 @@ export const useWorkbenchStore = create<WorkbenchState>((set, get) => ({
   toggleActivityBarLock: () => { set((s) => ({ activityBarLocked: !s.activityBarLocked })); get().saveToStorage(); },
   setActivityBarAutoHide: (v) => { set({ activityBarAutoHide: v }); get().saveToStorage(); },
   toggleActivityBarHidden: () => { set((s) => ({ activityBarHidden: !s.activityBarHidden })); get().saveToStorage(); },
-  setActivityBarOrder: (order) => { set({ activityBarOrder: order }); get().saveToStorage(); },
   setEditorVisible: (v) => { set({ editorVisible: v }); get().saveToStorage(); },
 
   saveToStorage: () => {
@@ -439,7 +413,6 @@ export const useWorkbenchStore = create<WorkbenchState>((set, get) => ({
             activityBarLocked: s.activityBarLocked,
             activityBarAutoHide: s.activityBarAutoHide,
             activityBarHidden: s.activityBarHidden,
-            activityBarOrder: s.activityBarOrder,
           }),
         );
       } catch {
