@@ -209,7 +209,7 @@ export function FloatingCalculator() {
       const mem = localStorage.getItem('calc-memory');
       if (mem !== null) {
         memoryRef.current = parseFloat(mem) || 0;
-        setMemoryFlag((v) => !v);
+        setMemoryValue(memoryRef.current);
       }
     } catch { /* ignore */ }
     try {
@@ -238,7 +238,7 @@ export function FloatingCalculator() {
   // Persist memory
   const saveMemory = useCallback((v: number) => {
     memoryRef.current = v;
-    setMemoryFlag((f) => !f);
+    setMemoryValue(v);
     try {
       localStorage.setItem('calc-memory', v.toString());
     } catch { /* ignore */ }
@@ -831,9 +831,6 @@ export function FloatingCalculator() {
     );
   };
 
-  // Reference `memoryFlag` so React re-renders when memory changes
-  void memoryFlag;
-
   return (
     <>
       {/* Toggle button (fixed corner) */}
@@ -1260,8 +1257,8 @@ export function FloatingCalculator() {
                     <div className="text-2xl font-mono font-semibold text-foreground truncate">
                       {display}
                     </div>
-                    {memoryRef.current !== 0 && (
-                      <div className="text-[9px] text-primary/70 font-mono">M = {memoryRef.current}</div>
+                    {memoryValue !== 0 && (
+                      <div className="text-[9px] text-primary/70 font-mono">M = {memoryValue}</div>
                     )}
                   </div>
                 </div>
