@@ -33,6 +33,22 @@
 
 ![工作台主页](./public/screenshots/workbench.png)
 
+### 浮动计算器（基础模式）
+
+![浮动计算器 - 基础模式](./public/screenshots/calculator-basic.png)
+
+### 浮动计算器（便签面板）
+
+![浮动计算器 - 便签面板](./public/screenshots/calculator-notepad.png)
+
+### 浮动计算器（科学模式）
+
+![浮动计算器 - 科学模式](./public/screenshots/calculator-scientific.png)
+
+### 浮动计算器（单位换算）
+
+![浮动计算器 - 单位换算](./public/screenshots/calculator-converter.png)
+
 ### 2D 函数绘图
 
 ![2D 函数绘图](./public/screenshots/plot2d.png)
@@ -45,9 +61,13 @@
 
 ![线性代数求解](./public/screenshots/linear-algebra.png)
 
-### 浮动计算器
+### Pipeline 节点工作流
 
-![浮动计算器](./public/screenshots/calculator.png)
+![Pipeline 节点工作流](./public/screenshots/pipeline.png)
+
+### 求解器工作台
+
+![求解器工作台](./public/screenshots/solver.png)
 
 ### 设置面板
 
@@ -116,8 +136,10 @@
 ### 浮动计算器
 
 - `Ctrl/Cmd + Shift + C` 快速调出便携式计算器
-- 三种模式：基础计算、科学计算、单位换算
+- **五种模式**：基础计算、科学计算、程序员模式（HEX/DEC/OCT/BIN）、线性代数（矩阵行列式/逆/转置/特征值）、单位换算
 - 支持长度、重量、温度、面积、体积、时间单位转换
+- **便签面板**：点击侧边便签图标展开草稿区，可随时记录数据与中间结果，内容持久化保存，刷新后不丢失
+- **历史回填**：点击历史记录中的任意条目，自动回填到计算输入区继续计算
 - 可拖拽、可固定、可复制结果
 
 ### 节点式工作流（Pipeline）
@@ -129,6 +151,8 @@
 ### 界面与体验
 
 - **VSCode 风格布局**：ActivityBar / SidePanel / Editor / Preview / StatusBar
+- **窗口控制按钮**：自定义标题栏右侧提供最小化、最大化/还原、关闭三按钮（仅 Tauri 桌面壳内显示），关闭按钮 hover 红色高亮
+- **精简顶部栏**：视图切换入口统一收敛至 ActivityBar，标题栏不再出现重复按钮，减少视觉噪音
 - **任务栏**：支持左右切换、锁定/解锁、自动隐藏、手动隐藏
 - **面板显隐**：编辑器、预览区、侧边栏、任务栏均可独立显示/隐藏，状态自动记忆
 - **深色 / 浅色主题**：高对比度配色，符合 WCAG 可读性标准，深色主题采用分层表面设计（background / card / popover 三级递进）
@@ -136,7 +160,7 @@
 - **命令面板**：`Ctrl/Cmd + Shift + P` 快速执行命令
 - **设置面板**：7 大分类（外观/编辑器/布局/导出/语言/快捷键/关于），自动检查更新，托盘最小化
 - **结构化高级设置**：高级区由 JSON 文本编辑改为表单控件（数字输入 / 开关 / 下拉），修改即时生效与持久化，非法输入就地提示且不写入
-- **字体排印优化**：全局字体栈补充中文回退（Noto Sans SC / PingFang SC / 微软雅黑等），canvas 刻度与标注统一字体并启用等宽数字（tabular-nums）
+- **自托管字体**：Inter、Noto Sans SC、STIX Two Math 字体随应用本地分发（woff2），不依赖系统预装字体，无 CJK 字体的环境也能正常显示中英文，完全离线可用
 - **统一过渡动画**：视图与面板切换使用轻量 transform/opacity 过渡（150–250ms），优先 CSS 过渡，不引入重型动画依赖
 - **无障碍**：支持 `prefers-reduced-motion` 系统偏好
 - **状态栏分组**：右侧信息按逻辑分组（编辑器信息 / 数据信息 / 偏好设置），药丸式圆角分组替代密集竖线分隔
@@ -201,7 +225,9 @@ omnimath-pro/
 │   ├── capabilities/           # Tauri 权限配置
 │   └── tauri.conf.json         # 构建/窗口/打包配置
 ├── prisma/                     # Prisma schema（保留未来扩展）
-├── public/                     # 静态资源（logo、截图等）
+├── public/                     # 静态资源（logo、截图、自托管字体等）
+│   ├── fonts/                  # 自托管 woff2 字体（Inter / Noto Sans SC / STIX Two Math）
+│   └── screenshots/            # README 截图
 └── .github/workflows/          # 多平台自动发布工作流
 ```
 
