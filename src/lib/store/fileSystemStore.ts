@@ -13,6 +13,9 @@
  *
  * Integration:
  *   - `activeFileId` tracks the currently-open file in the editor.
+ *   - `openTabs` / `activeTabId` power the multi-tab editor: every file
+ *     shown in the editor has a tab, and `activeTabId` is always kept
+ *     identical to `activeFileId` (single "which file is shown" truth).
  *   - EditorPanel listens to `activeFileId` and loads/saves content.
  *   - FilesPanel renders the tree and calls CRUD actions.
  */
@@ -39,6 +42,14 @@ export interface FileNode {
 interface FileSystemState {
   nodes: Record<string, FileNode>;
   activeFileId: string | null;
+  /**
+   * Multi-tab editing: ids of the open editor tabs, in display order.
+   * Every entry must reference an existing *file* node (enforced when
+   * tabs are opened and when persisted state is restored).
+   */
+  openTabs: string[];
+  /** Active tab — always kept identical to `activeFileId`. */
+  activeTabId: string | null;
   loaded: boolean;
 
   // CRUD
@@ -56,6 +67,10 @@ interface FileSystemState {
 
   // Active file
   setActiveFile: (id: string | null) => void;
+
+  // Editor tabs
+  openFile: (id: string) => void;
+  closeTab: (id: string) => void;
 
   // Persistence
   loadFromStorage: () => Promise<void>;
@@ -130,6 +145,8 @@ async function idbSet(key: string, value: unknown): Promise<void> {
 interface PersistedFS {
   nodes: Record<string, FileNode>;
   activeFileId: string | null;
+  openTabs: string[];
+  activeTabId: string | null;
 }
 
 let saveTimer: ReturnType<typeof setTimeout> | null = null;
@@ -205,12 +222,75 @@ function createDefaultNodes(): Record<string, FileNode> {
 }
 
 /* ------------------------------------------------------------------ */
+/*  Tab helpers (pure — unit-tested directly)                         */
+/* ------------------------------------------------------------------ */
+
+/**
+ * Remove `closedId` from the tab list and, if it was the active tab,
+ * pick the tab to activate next: the one sliding into the closed slot
+ * (right neighbor), or the new last tab when the rightmost tab was
+ * closed. Unknown ids are a no-op (same references returned).
+ */
+export function closeTabPure(
+  openTabs: string[],
+  closedId: string,
+  activeTabId: string | null,
+): { openTabs: string[]; activeTabId: string | null } {
+  const idx = openTabs.indexOf(closedId);
+  if (idx === -1) return { openTabs, activeTabId };
+  const nextTabs = openTabs.filter((t) => t !== closedId);
+  const nextActive =
+    activeTabId === closedId
+      ? (nextTabs[Math.min(idx, nextTabs.length - 1)] ?? null)
+      : activeTabId;
+  return { openTabs: nextTabs, activeTabId: nextActive };
+}
+
+/**
+ * Validate persisted tab state against the node map:
+ *  - drop tab ids that are missing or not files, and dedupe;
+ *  - migrate the legacy `activeFileId` (pre-tab sessions) into a tab;
+ *  - repair "tabs but no active tab" by activating the last one.
+ */
+export function sanitizeRestoredTabs(
+  nodes: Record<string, FileNode>,
+  persisted: { openTabs?: unknown; activeTabId?: unknown; activeFileId?: unknown },
+): { openTabs: string[]; activeTabId: string | null } {
+  const isFile = (id: unknown): id is string =>
+    typeof id === 'string' && nodes[id]?.type === 'file';
+
+  const rawTabs = Array.isArray(persisted.openTabs) ? persisted.openTabs : [];
+  const openTabs: string[] = [];
+  for (const id of rawTabs) {
+    if (isFile(id) && !openTabs.includes(id)) openTabs.push(id);
+  }
+
+  let activeTabId: string | null = null;
+  for (const candidate of [persisted.activeTabId, persisted.activeFileId]) {
+    if (isFile(candidate)) {
+      activeTabId = candidate;
+      break;
+    }
+  }
+  // Migration: a valid active file from pre-tab data has no tab entry
+  // yet — give it one so the tab bar and editor stay in sync.
+  if (activeTabId && !openTabs.includes(activeTabId)) openTabs.push(activeTabId);
+  // Corrupted state: tabs exist but none is active — activate the last.
+  if (!activeTabId && openTabs.length > 0) {
+    activeTabId = openTabs[openTabs.length - 1];
+  }
+  return { openTabs, activeTabId };
+}
+
+/* ------------------------------------------------------------------ */
 /*  Store                                                             */
 /* ------------------------------------------------------------------ */
 
 export const useFileSystemStore = create<FileSystemState>((set, get) => ({
   nodes: {},
   activeFileId: null,
+  openTabs: [],
+  activeTabId: null,
   loaded: false,
 
   createFile: (name, parentId, content = '', language = 'simple') => {
@@ -229,7 +309,10 @@ export const useFileSystemStore = create<FileSystemState>((set, get) => ({
     };
     set((s) => ({
       nodes: { ...s.nodes, [id]: node },
+      // Creating a file opens it in a tab right away (create = open).
+      openTabs: [...s.openTabs, id],
       activeFileId: id,
+      activeTabId: id,
     }));
     // Auto-expand parent folder so the new file is visible.
     if (parentId) {
@@ -303,8 +386,20 @@ export const useFileSystemStore = create<FileSystemState>((set, get) => ({
         }
       }
       for (const did of toDelete) delete next[did];
-      const activeFileId = toDelete.includes(s.activeFileId ?? '') ? null : s.activeFileId;
-      return { nodes: next, activeFileId };
+      // Remove deleted files from the tab bar too, reactivating a
+      // neighbor via the same rule as closeTab when the active tab was
+      // among them.
+      let openTabs = s.openTabs;
+      let activeTabId = s.activeTabId;
+      for (const did of toDelete) {
+        const r = closeTabPure(openTabs, did, activeTabId);
+        openTabs = r.openTabs;
+        activeTabId = r.activeTabId;
+      }
+      const activeFileId = toDelete.includes(s.activeFileId ?? '')
+        ? activeTabId
+        : s.activeFileId;
+      return { nodes: next, activeFileId, openTabs, activeTabId };
     });
     get().saveToStorage();
   },
@@ -387,46 +482,86 @@ export const useFileSystemStore = create<FileSystemState>((set, get) => ({
   },
 
   setActiveFile: (id) => {
-    set({ activeFileId: id });
+    if (id !== null) {
+      // Route through openFile so the tab bar always contains the file
+      // shown in the editor.
+      get().openFile(id);
+      return;
+    }
+    set((s) => {
+      // Keep the "tabs ⇒ active tab" invariant: fall back to the last
+      // open tab instead of leaving the bar without an active file.
+      const activeTabId =
+        s.openTabs.length > 0 ? s.openTabs[s.openTabs.length - 1] : null;
+      return { activeFileId: activeTabId, activeTabId };
+    });
+    get().saveToStorage();
+  },
+
+  openFile: (id) => {
+    const node = get().nodes[id];
+    if (!node || node.type !== 'file') return;
+    set((s) => ({
+      // Already open → just reactivate; otherwise append and activate.
+      openTabs: s.openTabs.includes(id) ? s.openTabs : [...s.openTabs, id],
+      activeTabId: id,
+      activeFileId: id,
+    }));
+    get().saveToStorage();
+  },
+
+  closeTab: (id) => {
+    // Unsaved content needs no special handling: edits always live in
+    // the file node (debounced auto-save + flush-before-switch), so a
+    // closed tab keeps its content in the tree and can be reopened.
+    set((s) => {
+      const { openTabs, activeTabId } = closeTabPure(s.openTabs, id, s.activeTabId);
+      if (openTabs === s.openTabs) return s; // unknown id — no-op
+      return { openTabs, activeTabId, activeFileId: activeTabId };
+    });
     get().saveToStorage();
   },
 
   loadFromStorage: async () => {
     try {
-      const data = (await idbGet(FS_KEY)) as PersistedFS | null;
+      const data = (await idbGet(FS_KEY)) as Partial<PersistedFS> | null;
       if (data && data.nodes && typeof data.nodes === 'object') {
-        // Sanitize the persisted active file: it may reference a node that
-        // no longer exists (e.g. corrupted/older data), which would leave
-        // the editor bound to a phantom file.
-        const persistedActive = data.activeFileId ?? null;
-        const activeFileId =
-          persistedActive && data.nodes[persistedActive]?.type === 'file'
-            ? persistedActive
-            : null;
+        // Sanitize persisted tab/active state: ids may reference nodes
+        // that no longer exist (e.g. corrupted/older data), which would
+        // leave the editor bound to a phantom file. Legacy sessions
+        // (activeFileId only, no tab state) are migrated into tabs.
+        const { openTabs, activeTabId } = sanitizeRestoredTabs(data.nodes, data);
         set({
           nodes: data.nodes,
-          activeFileId,
+          openTabs,
+          activeTabId,
+          activeFileId: activeTabId,
           loaded: true,
         });
       } else {
         // First launch — seed with default example.
         const nodes = createDefaultNodes();
-        set({ nodes, activeFileId: null, loaded: true });
+        set({ nodes, activeFileId: null, openTabs: [], activeTabId: null, loaded: true });
         // Persist the seed.
-        await idbSet(FS_KEY, { nodes, activeFileId: null } satisfies PersistedFS);
+        await idbSet(FS_KEY, {
+          nodes,
+          activeFileId: null,
+          openTabs: [],
+          activeTabId: null,
+        } satisfies PersistedFS);
       }
     } catch {
       // Fallback: create defaults in memory (no persistence).
       const nodes = createDefaultNodes();
-      set({ nodes, activeFileId: null, loaded: true });
+      set({ nodes, activeFileId: null, openTabs: [], activeTabId: null, loaded: true });
     }
   },
 
   saveToStorage: () => {
     if (saveTimer) clearTimeout(saveTimer);
     saveTimer = setTimeout(() => {
-      const { nodes, activeFileId } = get();
-      void idbSet(FS_KEY, { nodes, activeFileId } satisfies PersistedFS);
+      const { nodes, activeFileId, openTabs, activeTabId } = get();
+      void idbSet(FS_KEY, { nodes, activeFileId, openTabs, activeTabId } satisfies PersistedFS);
     }, 400);
   },
 }));

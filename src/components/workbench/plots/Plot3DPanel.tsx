@@ -160,7 +160,7 @@ export function Plot3DPanel() {
       if (data) out.push(data);
     }
     return out;
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+     
   }, [surface3dPlots, resolution, scopeVersion]);
 
   /* --------------------- Add surface ------------------------------- */

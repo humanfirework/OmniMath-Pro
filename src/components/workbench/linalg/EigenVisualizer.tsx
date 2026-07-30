@@ -428,14 +428,14 @@ export function EigenVisualizer({ matrix: matrixProp, onMatrixChange, dimension 
   useEffect(() => {
     setMtrx(normalizeMatrix(matrixProp, dim));
     // 仅依赖 matrixProp，避免 dim 切换时被覆盖
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+     
   }, [matrixProp]);
 
   // 同步 dimension prop 变化
   useEffect(() => {
     setDim(dimension);
     setMtrx(normalizeMatrix(matrixProp, dimension));
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+     
   }, [dimension]);
 
   const updateCell = (idx: number, value: string) => {

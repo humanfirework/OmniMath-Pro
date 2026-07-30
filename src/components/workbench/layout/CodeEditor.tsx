@@ -227,7 +227,7 @@ export function CodeEditor({
       view.destroy();
       viewRef.current = null;
     };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+     
   }, []);
 
   /* ─── Reconfigure theme when font size changes (Ctrl+wheel zoom) ─ */
@@ -237,7 +237,7 @@ export function CodeEditor({
     view.dispatch({
       effects: themeCompartment.current.reconfigure(editorTheme),
     });
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+     
   }, [fontPx]);
 
   /* ─── Ctrl+wheel zoom (VSCode-style, editor only) ────────────── */

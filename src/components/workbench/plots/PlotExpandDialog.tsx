@@ -14,7 +14,7 @@ import { X, Download, Copy, ZoomIn, ZoomOut, RotateCcw } from 'lucide-react';
 import { useWorkbenchStore } from '@/lib/store/workbench';
 import { Plot2DCanvas, type Plot2DCanvasProps } from './Plot2DCanvas';
 import { inputToLatex } from '@/lib/engine';
-import { autoYRange, sampleFunction } from '@/lib/plots/plot2d';
+import { autoYRange, sampleFunction, sampleCurve, type Curve2DSpec } from '@/lib/plots/plot2d';
 import { useScopeVersion } from '@/lib/hooks/useScopeVersion';
 import { toast } from 'sonner';
 
@@ -28,14 +28,21 @@ interface ViewBox {
 
 function deriveDefaultY(
   plots: ReturnType<typeof useWorkbenchStore.getState>['plots'],
+  curveSpecs?: Record<string, Curve2DSpec>,
 ): [number, number] {
   if (plots.length === 0) return DEFAULT_Y;
   const ranges: [number, number][] = [];
   for (const p of plots) {
-    const plotType2d = (p.plotType === 'surface3d'
-      ? 'cartesian'
-      : p.plotType ?? 'cartesian') as 'cartesian' | 'polar' | 'parametric';
-    const samples = sampleFunction(p.expression, p.xRange ?? DEFAULT_X, plotType2d, 300);
+    const spec = curveSpecs?.[p.id];
+    let samples;
+    if (spec) {
+      samples = sampleCurve(spec, p.xRange ?? DEFAULT_X, 300);
+    } else {
+      const plotType2d = (p.plotType === 'surface3d'
+        ? 'cartesian'
+        : p.plotType ?? 'cartesian') as 'cartesian' | 'polar' | 'parametric';
+      samples = sampleFunction(p.expression, p.xRange ?? DEFAULT_X, plotType2d, 300);
+    }
     ranges.push(autoYRange(samples));
   }
   const mins = ranges.map((r) => r[0]).sort((a, b) => a - b);
@@ -57,9 +64,11 @@ function zoomAroundCenter(range: [number, number], factor: number): [number, num
 export interface PlotExpandDialogProps {
   open: boolean;
   onClose: () => void;
+  /** Resolved per-curve specs from the panel's curve editor (optional). */
+  curveSpecs?: Record<string, Curve2DSpec>;
 }
 
-export function PlotExpandDialog({ open, onClose }: PlotExpandDialogProps) {
+export function PlotExpandDialog({ open, onClose, curveSpecs }: PlotExpandDialogProps) {
   const plots = useWorkbenchStore((s) => s.plots);
   const theme = useWorkbenchStore((s) => s.theme);
   const [userView, setUserView] = useState<ViewBox | null>(null);
@@ -68,7 +77,9 @@ export function PlotExpandDialog({ open, onClose }: PlotExpandDialogProps) {
   const defaultView = useMemo<ViewBox>(() => {
     void scopeVersion;
     if (plots.length === 0) return { x: DEFAULT_X, y: DEFAULT_Y };
-    const hasPolar = plots.some((p) => p.plotType === 'polar');
+    const hasPolar = plots.some(
+      (p) => (curveSpecs?.[p.id]?.mode ?? p.plotType) === 'polar',
+    );
     if (hasPolar) {
       const r = 4;
       return { x: [-r, r], y: [-r, r] };
@@ -76,10 +87,10 @@ export function PlotExpandDialog({ open, onClose }: PlotExpandDialogProps) {
     const latest = plots[plots.length - 1];
     return {
       x: (latest?.xRange ?? DEFAULT_X) as [number, number],
-      y: deriveDefaultY(plots),
+      y: deriveDefaultY(plots, curveSpecs),
     };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [plots, scopeVersion]);
+     
+  }, [plots, scopeVersion, curveSpecs]);
 
   const effectiveX = userView?.x ?? defaultView.x;
   const effectiveY = userView?.y ?? defaultView.y;
@@ -155,8 +166,9 @@ export function PlotExpandDialog({ open, onClose }: PlotExpandDialogProps) {
       onInsertExample: () => {},
       showGrid: true,
       showMarkers: true,
+      curveSpecs,
     }),
-    [plots, theme, effectiveX, effectiveY, handleViewChange, handleReset],
+    [plots, theme, effectiveX, effectiveY, handleViewChange, handleReset, curveSpecs],
   );
 
   if (!open) return null;

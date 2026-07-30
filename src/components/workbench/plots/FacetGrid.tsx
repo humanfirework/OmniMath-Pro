@@ -25,7 +25,9 @@ import {
 } from 'react';
 import {
   sampleFunction,
+  sampleCurve,
   niceNumber,
+  type Curve2DSpec,
   type PlotSample,
 } from '@/lib/plots/plot2d';
 import type { PlotConfig } from '@/lib/store/workbench';
@@ -52,13 +54,15 @@ export interface FacetGridProps {
   /** Independent Y range per plot (same length & order as `plots`). */
   facetYRanges: [number, number][];
   theme: 'dark' | 'light';
+  /** Resolved per-curve specs from the panel's curve editor (optional). */
+  curveSpecs?: Record<string, Curve2DSpec>;
 }
 
 /* =================================================================== */
 /*  FacetGrid                                                          */
 /* =================================================================== */
 
-export function FacetGrid({ plots, xRange, facetYRanges, theme }: FacetGridProps) {
+export function FacetGrid({ plots, xRange, facetYRanges, theme, curveSpecs }: FacetGridProps) {
   // 2 columns; rows auto-flow. For 1-2 plots → 1 row; 3-4 → 2 rows; etc.
   return (
     <div
@@ -73,6 +77,7 @@ export function FacetGrid({ plots, xRange, facetYRanges, theme }: FacetGridProps
           xRange={xRange}
           yRange={facetYRanges[idx] ?? [-6, 6]}
           theme={theme}
+          spec={curveSpecs?.[plot.id]}
         />
       ))}
     </div>
@@ -89,6 +94,8 @@ interface FacetPlotProps {
   xRange: [number, number];
   yRange: [number, number];
   theme: 'dark' | 'light';
+  /** Resolved curve spec (mode + exprs + parameter range), if provided. */
+  spec?: Curve2DSpec;
 }
 
 interface HoverState {
@@ -99,7 +106,7 @@ interface HoverState {
   snap?: PlotSample;
 }
 
-function FacetPlot({ plot, color, xRange, yRange, theme }: FacetPlotProps) {
+function FacetPlot({ plot, color, xRange, yRange, theme, spec }: FacetPlotProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const rafRef = useRef<number | null>(null);
@@ -117,11 +124,14 @@ function FacetPlot({ plot, color, xRange, yRange, theme }: FacetPlotProps) {
   const samples = useMemo<PlotSample[]>(() => {
     void scopeVersion;
     if (!visible) return [];
+    if (spec) {
+      return sampleCurve(spec, xRange, 400);
+    }
     const plotType2d = (plot.plotType === 'surface3d' ? 'cartesian' : plot.plotType ?? 'cartesian') as
       | 'cartesian' | 'polar' | 'parametric';
     return sampleFunction(plot.expression, xRange, plotType2d, 400);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [plot.expression, plot.plotType, xRange, visible, scopeVersion]);
+     
+  }, [plot.expression, plot.plotType, xRange, visible, scopeVersion, spec]);
 
   // Coordinate mapping.
   const dataToScreen = useCallback(

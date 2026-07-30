@@ -9,7 +9,29 @@ on:
   workflow_dispatch:
 
 jobs:
+  # 质量门禁：类型检查 / Lint / 单元测试全部通过后才进入构建发布
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@v2
+
+      - name: Install dependencies
+        run: bun install --frozen-lockfile
+
+      - name: Type check
+        run: bunx tsc --noEmit
+
+      - name: Lint
+        run: bunx eslint . --max-warnings=0
+
+      - name: Run tests
+        run: bunx vitest run
+
   publish-tauri:
+    needs: test
     permissions:
       contents: write
     strategy:

@@ -434,7 +434,7 @@ function TangentTab({
     const p = visiblePlots[Math.min(idx, visiblePlots.length - 1)];
     if (!p) return null;
     return tangentLine(p.expression, x0, xRange);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+     
   }, [enabled, visiblePlots, idx, x0, xRange, scopeVersion]);
 
   useEffect(() => {
@@ -520,7 +520,7 @@ function DerivativeTab({
     const p = visiblePlots[Math.min(idx, visiblePlots.length - 1)];
     if (!p) return [];
     return numericDerivative(p.expression, xRange, order);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+     
   }, [enabled, visiblePlots, idx, order, xRange, scopeVersion]);
 
   // Compute symbolic derivative (async, for display only).

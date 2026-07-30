@@ -32,8 +32,14 @@ import {
 } from './Plot2DAdvancedPanel';
 import { FacetGrid } from './FacetGrid';
 import { ParameterSliders } from './ParameterSliders';
+import { PlotCurveEditor } from './PlotCurveEditor';
 import { inputToLatex } from '@/lib/engine';
-import { sampleFunction } from '@/lib/plots/plot2d';
+import {
+  sampleCurve,
+  DEFAULT_POLAR_THETA_RANGE,
+  DEFAULT_PARAMETRIC_T_RANGE,
+  type Curve2DSpec,
+} from '@/lib/plots/plot2d';
 import { coordinatedYRange, smartYRange, type CoordinatedRangeResult } from '@/lib/plots/smartRange';
 import { useScopeVersion } from '@/lib/hooks/useScopeVersion';
 import { toast } from 'sonner';
@@ -52,6 +58,28 @@ interface ViewBox {
 }
 
 /**
+ * Build the default Curve2DSpec for a plot (before any user edits in the
+ * curve editor): mode from `plotType`, expression from `expression`, and
+ * the mode's default parameter range (θ: 0…2π, t: -10…10).
+ */
+function defaultSpecForPlot(p: {
+  expression: string;
+  plotType: 'cartesian' | 'polar' | 'parametric' | 'surface3d';
+}): Curve2DSpec {
+  const mode = (p.plotType === 'surface3d' ? 'cartesian' : p.plotType ?? 'cartesian') as
+    | 'cartesian' | 'polar' | 'parametric';
+  return {
+    mode,
+    exprX: p.expression,
+    exprY: '',
+    paramRange:
+      mode === 'polar'
+        ? [...DEFAULT_POLAR_THETA_RANGE]
+        : [...DEFAULT_PARAMETRIC_T_RANGE],
+  };
+}
+
+/**
  * Auto-derive a sensible Y range from the current plots sampled over the
  * given X view range, using the smart coordinated range algorithm.
  *
@@ -65,14 +93,14 @@ interface ViewBox {
 function deriveSmartY(
   plots: ReturnType<typeof useWorkbenchStore.getState>['plots'],
   xRange: [number, number],
+  curveSpecs: Record<string, Curve2DSpec>,
 ): CoordinatedRangeResult {
   if (plots.length === 0) {
     return { range: DEFAULT_Y, outliers: [], fullRange: DEFAULT_Y };
   }
   const sampled = plots.map((p) => {
-    const plotType2d = (p.plotType === 'surface3d' ? 'cartesian' : p.plotType ?? 'cartesian') as
-      | 'cartesian' | 'polar' | 'parametric';
-    const samples = sampleFunction(p.expression, xRange, plotType2d, 300);
+    const spec = curveSpecs[p.id] ?? defaultSpecForPlot(p);
+    const samples = sampleCurve(spec, xRange, 300);
     return { samples, label: p.expression };
   });
   return coordinatedYRange(sampled, {
@@ -135,6 +163,21 @@ export function Plot2DPanel() {
     derivativeOrder: 1,
   });
 
+  // Per-curve spec edits from the PlotCurveEditor (mode / expressions /
+  // parameter range). Keyed by plot id; entries without an edit fall back
+  // to the default derived from the PlotConfig.
+  const [specEdits, setSpecEdits] = useState<Record<string, Curve2DSpec>>({});
+  const curveSpecs = useMemo<Record<string, Curve2DSpec>>(() => {
+    const out: Record<string, Curve2DSpec> = {};
+    for (const p of plots) {
+      out[p.id] = specEdits[p.id] ?? defaultSpecForPlot(p);
+    }
+    return out;
+  }, [plots, specEdits]);
+  const handleSpecChange = useCallback((id: string, spec: Curve2DSpec) => {
+    setSpecEdits((prev) => ({ ...prev, [id]: spec }));
+  }, []);
+
   // Derived smart Y range from the current set of plots (memoized).
   // This computes both the clipped `range` (outliers excluded) and the
   // `fullRange` (all curves included) so the user can toggle between them.
@@ -145,16 +188,16 @@ export function Plot2DPanel() {
     if (plots.length === 0) {
       return { range: DEFAULT_Y, outliers: [], fullRange: DEFAULT_Y };
     }
-    const hasPolar = plots.some((p) => p.plotType === 'polar');
+    const hasPolar = plots.some((p) => curveSpecs[p.id]?.mode === 'polar');
     if (hasPolar) {
       const r = 4;
       return { range: [-r, r], outliers: [], fullRange: [-r, r] };
     }
     const latest = plots[plots.length - 1];
     const x = (latest?.xRange ?? DEFAULT_X) as [number, number];
-    return deriveSmartY(plots, x);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [plots, scopeVersion]);
+    return deriveSmartY(plots, x, curveSpecs);
+     
+  }, [plots, scopeVersion, curveSpecs]);
 
   // The default view picks Y based on the current range mode.
   const defaultView = useMemo<ViewBox>(() => {
@@ -189,10 +232,9 @@ export function Plot2DPanel() {
     void scopeVersion;
     if (compareMode !== 'facet') return [];
     return plots.map((p) => {
-      const plotType2d = (p.plotType === 'surface3d' ? 'cartesian' : p.plotType ?? 'cartesian') as
-        | 'cartesian' | 'polar' | 'parametric';
-      if (plotType2d === 'polar') return [-4, 4] as [number, number];
-      const samples = sampleFunction(p.expression, effectiveX, plotType2d, 300);
+      const spec = curveSpecs[p.id] ?? defaultSpecForPlot(p);
+      if (spec.mode === 'polar') return [-4, 4] as [number, number];
+      const samples = sampleCurve(spec, effectiveX, 300);
       return smartYRange(samples, {
         lowerQuantile: 0.05,
         upperQuantile: 0.95,
@@ -200,8 +242,8 @@ export function Plot2DPanel() {
         padding: 0.1,
       });
     });
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [plots, effectiveX, compareMode, scopeVersion]);
+     
+  }, [plots, effectiveX, compareMode, scopeVersion, curveSpecs]);
 
   /* ----------------------- View controls ---------------------------- */
   // All view mutations write to `userView` so the derived default is preserved
@@ -318,8 +360,9 @@ export function Plot2DPanel() {
       showMarkers: true,
       equalAspect,
       overlays,
+      curveSpecs,
     }),
-    [plots, theme, effectiveX, effectiveY, handleViewChange, handleResetView, handleInsertExample, equalAspect, overlays],
+    [plots, theme, effectiveX, effectiveY, handleViewChange, handleResetView, handleInsertExample, equalAspect, overlays, curveSpecs],
   );
 
   /* ----------------------- Render ----------------------------------- */
@@ -339,6 +382,7 @@ export function Plot2DPanel() {
         onCopyLatex={handleCopyLatex}
         onExpand={() => setExpandOpen(true)}
       />
+      <PlotCurveEditor plots={plots} specs={curveSpecs} onSpecChange={handleSpecChange} />
       <Plot2DAdvancedPanel
         plots={plots}
         xRange={effectiveX}
@@ -359,6 +403,7 @@ export function Plot2DPanel() {
             xRange={effectiveX}
             facetYRanges={facetYRanges}
             theme={theme}
+            curveSpecs={curveSpecs}
           />
         ) : (
           <>
@@ -381,7 +426,7 @@ export function Plot2DPanel() {
       </div>
       {/* 自由参数滑块：仅当可见表达式含自由参数时显示（紧凑、可折叠） */}
       <ParameterSliders plots={plots} />
-      <PlotExpandDialog open={expandOpen} onClose={() => setExpandOpen(false)} />
+      <PlotExpandDialog open={expandOpen} onClose={() => setExpandOpen(false)} curveSpecs={curveSpecs} />
 
       <ExportDialog
         open={exportOpen}

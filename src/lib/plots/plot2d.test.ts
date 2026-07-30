@@ -10,6 +10,9 @@ import {
   formatCoord,
   autoYRange,
   sampleFunction,
+  samplePolar,
+  sampleParametric,
+  sampleCurve,
   findExtrema,
   type PlotSample,
 } from './plot2d';
@@ -258,8 +261,168 @@ describe('sampleFunction', () => {
   });
 });
 
-/* ----------------------------- findExtrema ----------------------------- */
+/* ----------------------------- samplePolar ----------------------------- */
 
+describe('samplePolar', () => {
+  it('returns empty array for empty expression', () => {
+    expect(samplePolar('', 0, Math.PI * 2)).toEqual([]);
+    expect(samplePolar('   ', 0, Math.PI * 2)).toEqual([]);
+  });
+
+  it('returns empty array for malformed range', () => {
+    expect(samplePolar('1', 2, 2)).toEqual([]);
+    expect(samplePolar('1', NaN, 2)).toEqual([]);
+    expect(samplePolar('1', 0, Infinity)).toEqual([]);
+  });
+
+  it('returns empty array for compile error', () => {
+    expect(samplePolar('x ++', 0, Math.PI * 2)).toEqual([]);
+  });
+
+  it('r = 1 → all samples lie on the unit circle', () => {
+    const samples = samplePolar('1', 0, Math.PI * 2, 200);
+    expect(samples.length).toBe(200);
+    for (const s of samples) {
+      expect(Number.isFinite(s.x)).toBe(true);
+      expect(Number.isFinite(s.y)).toBe(true);
+      expect(s.x * s.x + s.y * s.y).toBeCloseTo(1, 5);
+    }
+  });
+
+  it('keeps parameter order (never sorts by x)', () => {
+    // 4 samples → θ = 0, 2π/3, 4π/3, 2π. If the sampler sorted by x,
+    // the two x ≈ -0.5 points would be adjacent in the wrong y order.
+    const samples = samplePolar('1', 0, Math.PI * 2, 4);
+    expect(samples[0].x).toBeCloseTo(1, 5);
+    expect(samples[0].y).toBeCloseTo(0, 5);
+    expect(samples[1].x).toBeCloseTo(-0.5, 5);
+    expect(samples[1].y).toBeCloseTo(Math.sqrt(3) / 2, 5);
+    expect(samples[2].x).toBeCloseTo(-0.5, 5);
+    expect(samples[2].y).toBeCloseTo(-Math.sqrt(3) / 2, 5);
+    expect(samples[3].x).toBeCloseTo(1, 5);
+    expect(samples[3].y).toBeCloseTo(0, 5);
+  });
+
+  it('supports the theta alias (r = theta is an Archimedean spiral)', () => {
+    const samples = samplePolar('theta', 0, Math.PI, 101);
+    const last = samples[100];
+    const radius = Math.sqrt(last.x * last.x + last.y * last.y);
+    expect(radius).toBeCloseTo(Math.PI, 5);
+  });
+
+  it('breaks the polyline at singularities (r = 1/θ, θ = 0)', () => {
+    const samples = samplePolar('1/x', 0, Math.PI * 2, 101);
+    // θ = 0 → 1/0 = Infinity → non-finite → pen-up gap.
+    const first = samples[0];
+    expect(Number.isFinite(first.x) && Number.isFinite(first.y)).toBe(false);
+    // Everywhere else the curve is finite, with |point| = 1/θ.
+    for (let i = 1; i < samples.length; i++) {
+      expect(Number.isFinite(samples[i].x)).toBe(true);
+      expect(Number.isFinite(samples[i].y)).toBe(true);
+    }
+    const last = samples[100]; // θ = 2π
+    const radius = Math.sqrt(last.x * last.x + last.y * last.y);
+    expect(radius).toBeCloseTo(1 / (Math.PI * 2), 5);
+  });
+
+  it('clamps sample count to [2, 2000]', () => {
+    expect(samplePolar('1', 0, 1, 0).length).toBe(2);
+    expect(samplePolar('1', 0, 1, 5000).length).toBe(2000);
+  });
+});
+
+/* --------------------------- sampleParametric --------------------------- */
+
+describe('sampleParametric', () => {
+  it('returns empty array for empty expressions', () => {
+    expect(sampleParametric('', 'sin(t)', 0, 1)).toEqual([]);
+    expect(sampleParametric('cos(t)', '', 0, 1)).toEqual([]);
+    expect(sampleParametric('  ', '  ', 0, 1)).toEqual([]);
+  });
+
+  it('returns empty array for malformed range', () => {
+    expect(sampleParametric('t', 't', 3, 3)).toEqual([]);
+    expect(sampleParametric('t', 't', NaN, 3)).toEqual([]);
+  });
+
+  it('returns empty array when either expression fails to compile', () => {
+    expect(sampleParametric('t ++', 't', 0, 1)).toEqual([]);
+    expect(sampleParametric('t', 't ++', 0, 1)).toEqual([]);
+  });
+
+  it('x = cos(t), y = sin(t) over [0, 2π] → unit circle', () => {
+    const samples = sampleParametric('cos(t)', 'sin(t)', 0, Math.PI * 2, 200);
+    expect(samples.length).toBe(200);
+    for (const s of samples) {
+      expect(Number.isFinite(s.x)).toBe(true);
+      expect(Number.isFinite(s.y)).toBe(true);
+      expect(s.x * s.x + s.y * s.y).toBeCloseTo(1, 5);
+    }
+  });
+
+  it('keeps parameter order (never sorts by x)', () => {
+    // t = 0, 2π/3, 4π/3, 2π — same ordering argument as the polar test.
+    const samples = sampleParametric('cos(t)', 'sin(t)', 0, Math.PI * 2, 4);
+    expect(samples[0].x).toBeCloseTo(1, 5);
+    expect(samples[0].y).toBeCloseTo(0, 5);
+    expect(samples[1].y).toBeGreaterThan(0);
+    expect(samples[2].y).toBeLessThan(0);
+    expect(samples[3].x).toBeCloseTo(1, 5);
+  });
+
+  it('breaks the polyline at singularities (x = 1/t, t = 0)', () => {
+    const samples = sampleParametric('1/t', 't', 0, 1, 11);
+    const first = samples[0];
+    expect(Number.isFinite(first.x) && Number.isFinite(first.y)).toBe(false);
+    for (let i = 1; i < samples.length; i++) {
+      expect(Number.isFinite(samples[i].x)).toBe(true);
+      expect(Number.isFinite(samples[i].y)).toBe(true);
+      // Hyperbola branch: x·y = 1 for every finite sample.
+      expect(samples[i].x * samples[i].y).toBeCloseTo(1, 5);
+    }
+  });
+
+  it('clamps sample count to [2, 2000]', () => {
+    expect(sampleParametric('t', 't', 0, 1, 0).length).toBe(2);
+    expect(sampleParametric('t', 't', 0, 1, 5000).length).toBe(2000);
+  });
+});
+
+/* ----------------------------- sampleCurve ----------------------------- */
+
+describe('sampleCurve', () => {
+  it('dispatches cartesian specs to sampleFunction', () => {
+    const viaSpec = sampleCurve(
+      { mode: 'cartesian', exprX: 'x', exprY: '', paramRange: [0, 1] },
+      [0, 10],
+      11,
+    );
+    const direct = sampleFunction('x', [0, 10], 'cartesian', 11);
+    expect(viaSpec).toEqual(direct);
+  });
+
+  it('dispatches polar specs to samplePolar', () => {
+    const viaSpec = sampleCurve(
+      { mode: 'polar', exprX: '1', exprY: '', paramRange: [0, Math.PI * 2] },
+      [-10, 10], // view range must be ignored for polar
+      50,
+    );
+    const direct = samplePolar('1', 0, Math.PI * 2, 50);
+    expect(viaSpec).toEqual(direct);
+  });
+
+  it('dispatches parametric specs to sampleParametric', () => {
+    const viaSpec = sampleCurve(
+      { mode: 'parametric', exprX: 'cos(t)', exprY: 'sin(t)', paramRange: [0, Math.PI * 2] },
+      [-10, 10], // view range must be ignored for parametric
+      50,
+    );
+    const direct = sampleParametric('cos(t)', 'sin(t)', 0, Math.PI * 2, 50);
+    expect(viaSpec).toEqual(direct);
+  });
+});
+
+/* ----------------------------- findExtrema ----------------------------- */
 describe('findExtrema', () => {
   it('returns empty arrays for empty samples', () => {
     const r = findExtrema([]);

@@ -190,7 +190,7 @@ export function FloatingCalculator() {
 
   // Memory state (basic mode)
   const memoryRef = useRef<number>(0);
-  const [memoryFlag, setMemoryFlag] = useState(false); // toggles to reflect memory changes in UI
+  const [memoryValue, setMemoryValue] = useState(0); // 渲染期读取记忆值（ref 不能在 render 中访问）
 
   // History state
   const [history, setHistory] = useState<string[]>([]);
@@ -310,90 +310,6 @@ export function FloatingCalculator() {
       if (!isNaN(val)) saveMemory(val);
     } catch { /* ignore */ }
   }, [display, saveMemory]);
-
-  // Keyboard shortcut — Ctrl+Shift+C and physical input
-  useEffect(() => {
-    const handler = (e: KeyboardEvent) => {
-      // Always handle the toggle shortcut
-      if ((e.ctrlKey || e.metaKey) && e.shiftKey && e.key.toLowerCase() === 'c') {
-        e.preventDefault();
-        setOpen((v) => !v);
-        return;
-      }
-
-      if (!open) return;
-
-      // Escape closes (if not pinned)
-      if (e.key === 'Escape') {
-        if (!pinned) setOpen(false);
-        return;
-      }
-
-      // Don't capture physical keys when typing in input/select/textarea fields
-      const target = e.target as HTMLElement | null;
-      if (
-        target &&
-        (target.tagName === 'INPUT' ||
-          target.tagName === 'SELECT' ||
-          target.tagName === 'TEXTAREA' ||
-          target.isContentEditable)
-      ) {
-        return;
-      }
-
-      // Skip physical input for modes with their own UI (converter, linalg)
-      if (mode === 'converter' || mode === 'linalg') return;
-
-      const key = e.key;
-
-      if (mode === 'programmer') {
-        const base = progBase;
-        const validChars =
-          base === 2
-            ? '01'
-            : base === 8
-              ? '01234567'
-              : base === 16
-                ? '0123456789abcdefABCDEF'
-                : '0123456789';
-        if (validChars.includes(key)) {
-          e.preventDefault();
-          progInputDigit(key);
-        } else if (key === 'Backspace') {
-          e.preventDefault();
-          progBackspace();
-        } else if (key === 'Enter' || key === '=') {
-          e.preventDefault();
-          progEquals();
-        }
-        return;
-      }
-
-      // Basic / scientific mode physical input
-      if (key >= '0' && key <= '9') {
-        e.preventDefault();
-        inputDigit(key);
-      } else if (key === '+' || key === '-' || key === '*' || key === '/') {
-        e.preventDefault();
-        inputOperator(key);
-      } else if (key === 'Enter' || key === '=') {
-        e.preventDefault();
-        evaluate();
-      } else if (key === 'Backspace') {
-        e.preventDefault();
-        backspace();
-      } else if (key === '.') {
-        e.preventDefault();
-        inputDigit('.');
-      } else if (key === '(' || key === ')') {
-        e.preventDefault();
-        inputOperator(key);
-      }
-    };
-    window.addEventListener('keydown', handler);
-    return () => window.removeEventListener('keydown', handler);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [open, pinned, mode, progBase, display, expression, justEvaluated]);
 
   // Converter calculation
   useEffect(() => {
@@ -676,6 +592,91 @@ export function FloatingCalculator() {
       addHistory(entry);
     }
   }, [progOp, progOperand, getProgInt, formatBase, progBase, addHistory]);
+
+  // Keyboard shortcut — Ctrl+Shift+C and physical input
+  // NOTE: 必须放在 inputDigit/evaluate/prog* 等 useCallback 声明之后，
+  // 否则 react-hooks/immutability 会报 "access variable before declared"。
+  useEffect(() => {
+    const handler = (e: KeyboardEvent) => {
+      // Always handle the toggle shortcut
+      if ((e.ctrlKey || e.metaKey) && e.shiftKey && e.key.toLowerCase() === 'c') {
+        e.preventDefault();
+        setOpen((v) => !v);
+        return;
+      }
+
+      if (!open) return;
+
+      // Escape closes (if not pinned)
+      if (e.key === 'Escape') {
+        if (!pinned) setOpen(false);
+        return;
+      }
+
+      // Don't capture physical keys when typing in input/select/textarea fields
+      const target = e.target as HTMLElement | null;
+      if (
+        target &&
+        (target.tagName === 'INPUT' ||
+          target.tagName === 'SELECT' ||
+          target.tagName === 'TEXTAREA' ||
+          target.isContentEditable)
+      ) {
+        return;
+      }
+
+      // Skip physical input for modes with their own UI (converter, linalg)
+      if (mode === 'converter' || mode === 'linalg') return;
+
+      const key = e.key;
+
+      if (mode === 'programmer') {
+        const base = progBase;
+        const validChars =
+          base === 2
+            ? '01'
+            : base === 8
+              ? '01234567'
+              : base === 16
+                ? '0123456789abcdefABCDEF'
+                : '0123456789';
+        if (validChars.includes(key)) {
+          e.preventDefault();
+          progInputDigit(key);
+        } else if (key === 'Backspace') {
+          e.preventDefault();
+          progBackspace();
+        } else if (key === 'Enter' || key === '=') {
+          e.preventDefault();
+          progEquals();
+        }
+        return;
+      }
+
+      // Basic / scientific mode physical input
+      if (key >= '0' && key <= '9') {
+        e.preventDefault();
+        inputDigit(key);
+      } else if (key === '+' || key === '-' || key === '*' || key === '/') {
+        e.preventDefault();
+        inputOperator(key);
+      } else if (key === 'Enter' || key === '=') {
+        e.preventDefault();
+        evaluate();
+      } else if (key === 'Backspace') {
+        e.preventDefault();
+        backspace();
+      } else if (key === '.') {
+        e.preventDefault();
+        inputDigit('.');
+      } else if (key === '(' || key === ')') {
+        e.preventDefault();
+        inputOperator(key);
+      }
+    };
+    window.addEventListener('keydown', handler);
+    return () => window.removeEventListener('keydown', handler);
+  }, [open, pinned, mode, progBase, display, expression, justEvaluated]);
 
   // Display values for all 4 bases
   const progDisplayInt = getProgInt();

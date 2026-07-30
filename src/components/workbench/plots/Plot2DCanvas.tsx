@@ -32,10 +32,12 @@ import {
 } from 'react';
 import {
   sampleFunction,
+  sampleCurve,
   findExtrema,
   formatCoord,
   niceNumber,
   autoYRange,
+  type Curve2DSpec,
   type PlotSample,
 } from '@/lib/plots/plot2d';
 import type { IntersectionPoint, TangentResult } from '@/lib/plots/plot2dAnalysis';
@@ -77,6 +79,14 @@ export interface Plot2DCanvasProps {
   equalAspect?: boolean;
   /** Advanced overlays: derivatives, tangent line, intersections. */
   overlays?: PlotOverlay;
+  /**
+   * Per-curve resolved specs (mode + expressions + parameter range) from
+   * the panel's curve editor. When a spec exists for a plot id it takes
+   * precedence over the legacy `plotType` + view-range sampling path —
+   * polar / parametric curves then sample over their own θ / t range and
+   * stay stable under pan & zoom.
+   */
+  curveSpecs?: Record<string, Curve2DSpec>;
 }
 
 /* --------------------------- Constants --------------------------- */
@@ -153,6 +163,7 @@ export function Plot2DCanvas({
   showMarkers = true,
   equalAspect = true,
   overlays,
+  curveSpecs,
 }: Plot2DCanvasProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
@@ -269,17 +280,26 @@ export function Plot2DCanvas({
       ? Math.max(135, Math.floor(baseCount / 3))
       : baseCount;
     return plots.map((p, idx) => {
-      // surface3d plots can't render in 2D — coerce to cartesian so the
-      // sampler still produces something (the engine shouldn't normally
-      // send surface3d plots here, but be defensive).
-      const plotType2d = (p.plotType === 'surface3d' ? 'cartesian' : p.plotType ?? 'cartesian') as
-        | 'cartesian' | 'polar' | 'parametric';
-      const samples = sampleFunction(
-        p.expression,
-        xRange,
-        plotType2d,
-        sampleCount,
-      );
+      // A resolved curve spec (from the panel's curve editor) takes
+      // precedence: polar / parametric curves sample over their own
+      // parameter range instead of the view window.
+      const spec = curveSpecs?.[p.id];
+      let samples: PlotSample[];
+      if (spec) {
+        samples = sampleCurve(spec, xRange, sampleCount);
+      } else {
+        // surface3d plots can't render in 2D — coerce to cartesian so the
+        // sampler still produces something (the engine shouldn't normally
+        // send surface3d plots here, but be defensive).
+        const plotType2d = (p.plotType === 'surface3d' ? 'cartesian' : p.plotType ?? 'cartesian') as
+          | 'cartesian' | 'polar' | 'parametric';
+        samples = sampleFunction(
+          p.expression,
+          xRange,
+          plotType2d,
+          sampleCount,
+        );
+      }
       const extrema = findExtrema(samples);
       return {
         config: { ...p, color: p.color || PLOT_COLORS[idx % PLOT_COLORS.length] },
@@ -288,8 +308,8 @@ export function Plot2DCanvas({
         visible: p.visible !== false,
       };
     });
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [plots, xRange, canvasSize.w, scopeVersion, lowQuality]);
+     
+  }, [plots, xRange, canvasSize.w, scopeVersion, lowQuality, curveSpecs]);
 
   /* ----------------------- Coordinate mapping ----------------------- */
 

@@ -1,0 +1,29 @@
+name: ci
+
+# 持续集成质量门禁：main 分支推送及所有 Pull Request 触发
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@v2
+
+      - name: Install dependencies
+        run: bun install --frozen-lockfile
+
+      - name: Type check
+        run: bunx tsc --noEmit
+
+      - name: Lint
+        run: bunx eslint . --max-warnings=0
+
+      - name: Run tests
+        run: bunx vitest run

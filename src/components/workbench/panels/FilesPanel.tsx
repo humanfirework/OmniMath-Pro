@@ -270,7 +270,7 @@ export function FilesPanel() {
 function FileTreeNode({ node, depth }: { node: FileNode; depth: number }) {
   const nodes = useFileSystemStore((s) => s.nodes);
   const activeFileId = useFileSystemStore((s) => s.activeFileId);
-  const setActiveFile = useFileSystemStore((s) => s.setActiveFile);
+  const openFile = useFileSystemStore((s) => s.openFile);
   const toggleFolderExpanded = useFileSystemStore((s) => s.toggleFolderExpanded);
   const renameNode = useFileSystemStore((s) => s.renameNode);
   const deleteNode = useFileSystemStore((s) => s.deleteNode);
@@ -340,12 +340,13 @@ function FileTreeNode({ node, depth }: { node: FileNode; depth: number }) {
     if (activeFileId === node.id) return;
     // Persist pending edits of the previously-open file before switching.
     flushActiveFileEdits(node.id);
-    setActiveFile(node.id);
+    // Open (or reactivate) the file's editor tab.
+    openFile(node.id);
     // Load content into editor.
     if (node.content !== undefined) {
       setEditorContent(node.content);
     }
-  }, [isFolder, node.id, node.content, activeFileId, toggleFolderExpanded, setActiveFile, setEditorContent]);
+  }, [isFolder, node.id, node.content, activeFileId, toggleFolderExpanded, openFile, setEditorContent]);
 
   const handleRename = useCallback(() => {
     setRenameValue(node.name);

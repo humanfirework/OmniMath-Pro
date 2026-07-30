@@ -13,7 +13,8 @@
  * No React, no DOM. Safe to unit-test in isolation.
  */
 
-import { math, getEvalScope } from '@/lib/engine/mathInstance';
+import { getEvalScope } from '@/lib/engine/mathInstance';
+import { compileCached } from '@/lib/engine/compileCache';
 import type { PlotSample } from './plot2d';
 import { sampleFunction } from './plot2d';
 
@@ -62,8 +63,10 @@ export function findIntersections(
   let c1: { evaluate: (s?: Record<string, unknown>) => unknown };
   let c2: { evaluate: (s?: Record<string, unknown>) => unknown };
   try {
-    c1 = math.compile(fn1) as unknown as { evaluate: (s?: Record<string, unknown>) => unknown };
-    c2 = math.compile(fn2) as unknown as { evaluate: (s?: Record<string, unknown>) => unknown };
+    // Compile via the LRU cache — both expressions are evaluated over
+    // the whole scan grid (and again during bisection refinement).
+    c1 = compileCached(fn1);
+    c2 = compileCached(fn2);
   } catch {
     return [];
   }
@@ -140,7 +143,7 @@ export function tangentLine(
 ): TangentResult | null {
   let compiled: { evaluate: (s?: Record<string, unknown>) => unknown };
   try {
-    compiled = math.compile(fn) as unknown as { evaluate: (s?: Record<string, unknown>) => unknown };
+    compiled = compileCached(fn);
   } catch {
     return null;
   }
@@ -193,7 +196,7 @@ export function numericDerivative(
 ): PlotSample[] {
   let compiled: { evaluate: (s?: Record<string, unknown>) => unknown };
   try {
-    compiled = math.compile(fn) as unknown as { evaluate: (s?: Record<string, unknown>) => unknown };
+    compiled = compileCached(fn);
   } catch {
     return [];
   }

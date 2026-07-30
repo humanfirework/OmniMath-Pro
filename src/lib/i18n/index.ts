@@ -597,6 +597,30 @@ export interface TranslationDict {
   plotTypeCartesian: string;
   plotTypePolar: string;
   plotTypeParametric: string;
+  plotCurveSettings: string;
+  plotExprY: string;
+  plotExprR: string;
+  plotExprX: string;
+  plotExprYParam: string;
+  plotThetaRange: string;
+  plotTRange: string;
+
+  /* ---------------- AI 助手（上下文与工具调用） ---------------- */
+  aiContextToggle: string;
+  aiContextAttached: string;
+  aiContextAttachedHint: string;
+  aiContextNoFile: string;
+  aiContextPlots: string;
+  aiContextVars: string;
+  aiToolCallLabel: string;
+  aiToolFailedLabel: string;
+  aiToolArgsLabel: string;
+  aiToolResultLabel: string;
+
+  /* ---------------- 编辑器标签页 ---------------- */
+  editorTabClose: string;
+  editorTabsEmptyTitle: string;
+  editorTabsEmptyHint: string;
 
   /* ---------------- Command palette ---------------- */
   cpTitle: string;
@@ -1310,6 +1334,26 @@ const zhCN: TranslationDict = {
   plotTypeCartesian: "直角坐标",
   plotTypePolar: "极坐标",
   plotTypeParametric: "参数方程",
+  plotCurveSettings: "曲线设置",
+  plotExprY: "y =",
+  plotExprR: "r(θ) =",
+  plotExprX: "x(t) =",
+  plotExprYParam: "y(t) =",
+  plotThetaRange: "θ 范围",
+  plotTRange: "t 范围",
+  aiContextToggle: "附带工作台上下文",
+  aiContextAttached: "已附加上下文",
+  aiContextAttachedHint: "发送时会附带当前文件、绘图与变量信息",
+  aiContextNoFile: "无文件",
+  aiContextPlots: "绘图",
+  aiContextVars: "变量",
+  aiToolCallLabel: "调用",
+  aiToolFailedLabel: "失败",
+  aiToolArgsLabel: "参数",
+  aiToolResultLabel: "结果",
+  editorTabClose: "关闭标签页",
+  editorTabsEmptyTitle: "没有打开的文件",
+  editorTabsEmptyHint: "在左侧文件树中点击文件开始编辑",
 
   /* Command palette */
   cpTitle: "命令面板",
@@ -2020,6 +2064,26 @@ const en: TranslationDict = {
   plotTypeCartesian: "Cartesian",
   plotTypePolar: "Polar",
   plotTypeParametric: "Parametric",
+  plotCurveSettings: "Curve Settings",
+  plotExprY: "y =",
+  plotExprR: "r(θ) =",
+  plotExprX: "x(t) =",
+  plotExprYParam: "y(t) =",
+  plotThetaRange: "θ range",
+  plotTRange: "t range",
+  aiContextToggle: "Attach workbench context",
+  aiContextAttached: "Context attached",
+  aiContextAttachedHint: "The current file, plots and variables are sent with each message",
+  aiContextNoFile: "No file",
+  aiContextPlots: "Plots",
+  aiContextVars: "Variables",
+  aiToolCallLabel: "Call",
+  aiToolFailedLabel: "Failed",
+  aiToolArgsLabel: "Arguments",
+  aiToolResultLabel: "Result",
+  editorTabClose: "Close tab",
+  editorTabsEmptyTitle: "No open files",
+  editorTabsEmptyHint: "Click a file in the file tree to start editing",
 
   /* Command palette */
   cpTitle: "Command Palette",

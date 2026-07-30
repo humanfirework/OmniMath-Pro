@@ -13,6 +13,9 @@
  *   - smartYRange(...)      — quantile-based smart Y range (P5/P95)
  *   - coordinatedYRange(..) — multi-curve coordinated Y range w/ outlier detection
  *   - sampleFunction(...)   — sample y = f(x) (cartesian / polar / parametric)
+ *   - samplePolar(...)      — sample r = f(θ) over an explicit θ range
+ *   - sampleParametric(...) — sample x = f(t), y = g(t) over a t range
+ *   - sampleCurve(...)      — dispatch on a Curve2DSpec (mode + exprs + range)
  *   - findExtrema(samples)  — local maxima, minima, and zero crossings
  *
  * Evaluation uses the shared configured mathjs instance and merges the
@@ -20,7 +23,8 @@
  * `plot(sin(a*x))` works) and the log/ln semantics match the console.
  */
 
-import { math, getEvalScope } from '@/lib/engine/mathInstance';
+import { getEvalScope } from '@/lib/engine/mathInstance';
+import { compileCached } from '@/lib/engine/compileCache';
 
 // Re-export the smart-range algorithm so callers can import everything
 // from a single module (`@/lib/plots/plot2d`).
@@ -51,6 +55,31 @@ export interface PlotSample {
 
 /** Supported 2D plot modes. */
 export type Plot2DType = 'cartesian' | 'polar' | 'parametric';
+
+/** Default θ range for polar plots (one full revolution). */
+export const DEFAULT_POLAR_THETA_RANGE: [number, number] = [0, Math.PI * 2];
+
+/** Default t range for parametric plots. */
+export const DEFAULT_PARAMETRIC_T_RANGE: [number, number] = [-10, 10];
+
+/**
+ * A fully-resolved 2D curve description: which mode to sample in, the
+ * expression(s), and the parameter range for non-cartesian modes.
+ *
+ * `xRange` (the view window) is NOT part of the spec — cartesian curves
+ * re-sample over whatever window is visible, while polar / parametric
+ * curves are fully determined by their own parameter range and stay
+ * stable under pan & zoom.
+ */
+export interface Curve2DSpec {
+  mode: Plot2DType;
+  /** Cartesian y = f(x), polar r = f(θ), or parametric x = f(t). */
+  exprX: string;
+  /** Parametric y = g(t). Only used when `mode === 'parametric'`. */
+  exprY: string;
+  /** θ range (polar) / t range (parametric). Ignored for cartesian. */
+  paramRange: [number, number];
+}
 
 /* ------------------------------------------------------------------ */
 /*  Numeric helpers                                                   */
@@ -191,9 +220,12 @@ export function sampleFunction(
   ) {
     return [];
   }
+  // Compile via the LRU cache: re-sampling the same expression (slider
+  // drags, scope changes) reuses the parsed expression instead of
+  // re-parsing on every call.
   let compiled: { evaluate: (scope?: Record<string, unknown>) => unknown };
   try {
-    compiled = math.compile(expr) as unknown as { evaluate: (scope?: Record<string, unknown>) => unknown };
+    compiled = compileCached(expr);
   } catch {
     return [];
   }
@@ -252,6 +284,153 @@ export function sampleFunction(
   }
 
   return samples;
+}
+
+/**
+ * Sample a polar curve r = f(θ) over an explicit θ range.
+ *
+ * The expression may reference `x`, `t`, or `theta` — all three are bound
+ * to the current θ, matching the engine's `polar(...)` / `polarplot(...)`
+ * conventions. Each sample is converted to cartesian
+ * `(r·cos θ, r·sin θ)` for rendering.
+ *
+ * Samples are returned in PARAMETER ORDER (θ ascending) and never
+ * re-sorted by x — the renderer connects them as a polyline, so sorting
+ * would scramble closed curves (e.g. a circle). Points where evaluation
+ * fails or yields a non-real / non-finite value become `{ NaN, NaN }`,
+ * which the renderer draws as a pen-up gap (same convention as
+ * `sampleFunction`).
+ *
+ * @param expr     r(θ) expression (mathjs syntax).
+ * @param thetaMin θ range lower bound.
+ * @param thetaMax θ range upper bound.
+ * @param count    Number of sample points (clamped to [2, 2000]).
+ * @returns        Array of `{ x, y }` samples, or `[]` when the range is
+ *                 malformed or the expression won't compile.
+ */
+export function samplePolar(
+  expr: string,
+  thetaMin: number,
+  thetaMax: number,
+  count = 600,
+): PlotSample[] {
+  if (!expr || !expr.trim()) return [];
+  if (
+    !Number.isFinite(thetaMin) || !Number.isFinite(thetaMax) ||
+    thetaMin === thetaMax
+  ) {
+    return [];
+  }
+  let compiled: { evaluate: (scope?: Record<string, unknown>) => unknown };
+  try {
+    compiled = compileCached(expr);
+  } catch {
+    return [];
+  }
+
+  const n = Math.max(2, Math.min(2000, Math.floor(count)));
+  const samples: PlotSample[] = new Array(n);
+  for (let i = 0; i < n; i++) {
+    const theta = thetaMin + ((thetaMax - thetaMin) * i) / (n - 1);
+    let xVal: number;
+    let yVal: number;
+    try {
+      const r = toNumber(compiled.evaluate(getEvalScope({ x: theta, t: theta, theta })));
+      xVal = r * Math.cos(theta);
+      yVal = r * Math.sin(theta);
+    } catch {
+      xVal = NaN;
+      yVal = NaN;
+    }
+    samples[i] = { x: xVal, y: yVal };
+  }
+  return samples;
+}
+
+/**
+ * Sample a parametric curve x = f(t), y = g(t) over an explicit t range.
+ *
+ * Both expressions may reference `t` (and `x`, bound to t, for parity
+ * with the engine's simple-mode conventions). Unlike the legacy
+ * `'parametric'` branch of `sampleFunction` (which expects ONE expression
+ * evaluating to a `[x, y]` vector), this takes the two component
+ * expressions separately — sidestepping the mathjs Matrix-vs-Array
+ * pitfall entirely.
+ *
+ * Samples are returned in PARAMETER ORDER (t ascending) and never
+ * re-sorted by x, so closed / self-intersecting curves (circles,
+ * Lissajous figures) render correctly. A point becomes `{ NaN, NaN }`
+ * (pen-up gap) when either component fails to evaluate or yields a
+ * non-real value — e.g. the t = 0 sample of `x = 1/t`.
+ *
+ * @param exprX x(t) expression (mathjs syntax).
+ * @param exprY y(t) expression (mathjs syntax).
+ * @param tMin  t range lower bound.
+ * @param tMax  t range upper bound.
+ * @param count Number of sample points (clamped to [2, 2000]).
+ * @returns     Array of `{ x, y }` samples, or `[]` when the range is
+ *              malformed or either expression won't compile.
+ */
+export function sampleParametric(
+  exprX: string,
+  exprY: string,
+  tMin: number,
+  tMax: number,
+  count = 600,
+): PlotSample[] {
+  if (!exprX || !exprX.trim() || !exprY || !exprY.trim()) return [];
+  if (
+    !Number.isFinite(tMin) || !Number.isFinite(tMax) ||
+    tMin === tMax
+  ) {
+    return [];
+  }
+  let compiledX: { evaluate: (scope?: Record<string, unknown>) => unknown };
+  let compiledY: { evaluate: (scope?: Record<string, unknown>) => unknown };
+  try {
+    compiledX = compileCached(exprX);
+    compiledY = compileCached(exprY);
+  } catch {
+    return [];
+  }
+
+  const n = Math.max(2, Math.min(2000, Math.floor(count)));
+  const samples: PlotSample[] = new Array(n);
+  for (let i = 0; i < n; i++) {
+    const t = tMin + ((tMax - tMin) * i) / (n - 1);
+    let xVal: number;
+    let yVal: number;
+    try {
+      xVal = toNumber(compiledX.evaluate(getEvalScope({ t, x: t })));
+      yVal = toNumber(compiledY.evaluate(getEvalScope({ t, x: t })));
+    } catch {
+      xVal = NaN;
+      yVal = NaN;
+    }
+    samples[i] = { x: xVal, y: yVal };
+  }
+  return samples;
+}
+
+/**
+ * Sample a fully-resolved curve spec.
+ *
+ * - cartesian  → `sampleFunction(exprX, xRange)` (view-following window),
+ * - polar      → `samplePolar(exprX, paramRange…)` (stable under pan/zoom),
+ * - parametric → `sampleParametric(exprX, exprY, paramRange…)`.
+ */
+export function sampleCurve(
+  spec: Curve2DSpec,
+  xRange: [number, number],
+  count = 600,
+): PlotSample[] {
+  if (spec.mode === 'polar') {
+    return samplePolar(spec.exprX, spec.paramRange[0], spec.paramRange[1], count);
+  }
+  if (spec.mode === 'parametric') {
+    return sampleParametric(spec.exprX, spec.exprY, spec.paramRange[0], spec.paramRange[1], count);
+  }
+  return sampleFunction(spec.exprX, xRange, 'cartesian', count);
 }
 
 /**

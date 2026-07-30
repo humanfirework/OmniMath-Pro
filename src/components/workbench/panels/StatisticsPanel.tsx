@@ -472,7 +472,7 @@ function DistributionTab() {
         return x >= a && x <= b ? 1 / (b - a) : 0;
       }
     }
-  // eslint-disable-next-line react-hooks/exhaustive-deps
+   
   }, [distType, xValue, paramValues]);
 
   const computeCdf = useCallback((): number => {
@@ -519,7 +519,7 @@ function DistributionTab() {
         return (x - a) / (b - a);
       }
     }
-  // eslint-disable-next-line react-hooks/exhaustive-deps
+   
   }, [distType, xValue, paramValues]);
 
   const handleCompute = () => {

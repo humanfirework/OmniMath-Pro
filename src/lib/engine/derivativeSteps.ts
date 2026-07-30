@@ -14,7 +14,7 @@
  * `EvalResult.steps` / `SymbolicResult.steps` 结构向后兼容。
  */
 
-import { math } from './mathInstance';
+import { symbolicMath } from './mathInstance';
 
 export interface DerivativeStepsResult {
   /** 化简后的导数 LaTeX */
@@ -83,10 +83,31 @@ function tex(node: MathNode): string {
   }
 }
 
+/**
+ * 把引擎自定义的 ln 规范化为 mathjs 内置的 log，供求导路径使用：
+ * mathjs 的求导函数表只认识内置函数，引擎覆盖加入的 ln 不在其中，
+ * 直接求导会抛 "Cannot process function"。
+ */
+function normalizeLnForDerivative(expr: string): string {
+  return expr.replace(/\bln\s*\(/g, 'log(');
+}
+
+/**
+ * 结果字符串中的自然对数统一改回 ln 记号：引擎共享实例里 log 是
+ * 10 底对数，若把 mathjs 求导产生的 log（自然对数）直接送回引擎
+ * 求值/绘图会得到错误数值；ln 才是引擎内自然对数的习惯记号。
+ */
+function toEngineSyntax(expr: string): string {
+  return expr.replace(/\blog\s*\(/g, 'ln(');
+}
+
 /** math.derivative 的安全包装（失败返回 null） */
 function safeDerivativeTex(node: MathNode, varName: string): string | null {
   try {
-    const d = math.derivative(node as never, varName);
+    const normalized = symbolicMath.parse(
+      normalizeLnForDerivative(String(node)),
+    );
+    const d = symbolicMath.derivative(normalized as never, varName);
     return (d as unknown as MathNode).toTex
       ? (d as unknown as MathNode).toTex!({ implicit: 'hide' })
       : String(d);
@@ -279,20 +300,28 @@ export function differentiateWithSteps(
   varName: string,
   inputLatex?: string,
 ): DerivativeStepsResult {
-  const node = math.parse(expr) as unknown as MathNode;
-  const dNode = math.derivative(node as never, varName);
+  // 显示用 AST 保留用户的原始记号（如 ln(x)）；求导用 AST 把 ln
+  // 归一化为 mathjs 求导表认识的 log。两条路径都必须使用未覆盖
+  // log 语义的 symbolicMath：共享实例把 log 覆盖成了 10 底对数，
+  // 会让 simplify 把 d/dx a^x 产生的 log(a) 折叠成 log10(a)，
+  // 造成数值错误（如 d/dx 2^x 的系数 0.301，正确为 ln 2 ≈ 0.693）。
+  const node = symbolicMath.parse(expr) as unknown as MathNode;
+  const computeNode = symbolicMath.parse(
+    normalizeLnForDerivative(expr),
+  ) as unknown as MathNode;
+  const dNode = symbolicMath.derivative(computeNode as never, varName);
 
   // 安全化简
   let simplified: MathNode;
   try {
-    simplified = math.simplify(dNode as never) as unknown as MathNode;
+    simplified = symbolicMath.simplify(dNode as never) as unknown as MathNode;
   } catch {
     simplified = dNode as unknown as MathNode;
   }
 
   const resultLatex = tex(simplified);
-  const resultString = String(
-    (simplified as unknown as { toString: () => string }).toString(),
+  const resultString = toEngineSyntax(
+    String((simplified as unknown as { toString: () => string }).toString()),
   );
 
   const steps: string[] = [];

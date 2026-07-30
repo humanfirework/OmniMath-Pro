@@ -14,7 +14,7 @@
  */
 
 import type { MathNode } from 'mathjs';
-import { math, getEvalScope } from '@/lib/engine/mathInstance';
+import { math, symbolicMath, getEvalScope } from '@/lib/engine/mathInstance';
 import { scanVariables } from '@/lib/engine/variableScanner';
 import type { TranslationDict } from '@/lib/i18n';
 
@@ -509,9 +509,9 @@ export const NODE_TYPES: Record<NodeType, NodeTypeDef> = {
           };
         }
         if (method === 'cholesky') {
-          // mathjs v15 的类型定义未包含 cholesky，保留原调用并断言其存在。
-          const chol = (math as unknown as { cholesky: (x: unknown) => unknown }).cholesky(m) as unknown;
-          return { result: { L: chol }, latex: 'A = L L^{T}' };
+          // mathjs v15 没有内置 cholesky —— 使用本地实现（要求对称正定）。
+          const L = choleskyDecompose(m);
+          return { result: { L }, latex: 'A = L L^{T}' };
         }
         return { result: 'unknown method', latex: '' };
       } catch (err) {
@@ -533,7 +533,9 @@ export const NODE_TYPES: Record<NodeType, NodeTypeDef> = {
     execute: (inputs, config) => {
       const expr = toExprString(inputs.expr) || 'x';
       const variable = String(config.variable ?? 'x');
-      const d = math.derivative(expr, variable) as MathNode;
+      // 用无覆盖的 symbolicMath 求导：共享实例把 log 覆盖成 log10，
+      // 会让 derivative 产生的 ln 系数被误算（如 d/dx 2^x 系数 0.301 → 正确 0.693）。
+      const d = symbolicMath.derivative(expr, variable) as MathNode;
       // Build a LaTeX representation so the node footer can render the
       // result as a proper formula instead of a raw mathjs node string.
       let latex = '';
@@ -616,7 +618,7 @@ export const NODE_TYPES: Record<NodeType, NodeTypeDef> = {
       let latex = '';
       try {
         // Lazy import to avoid loading algebrite until first use.
-        // eslint-disable-next-line @typescript-eslint/no-require-imports
+         
         // algebrite 运行时通过动态循环导出 integral，allowJs 推断不出该属性，断言补充。
         const algebrite = require('algebrite') as typeof import('algebrite') & {
           integral: (expr: string, variable: string) => unknown;
@@ -671,20 +673,25 @@ export const NODE_TYPES: Record<NodeType, NodeTypeDef> = {
     defaultConfig: { variable: 'x' },
     execute: (inputs, config) => {
       // Expects an equation like "x^2 - 4 = 0" or expression "x^2 - 4"
-      // (assumed = 0). mathjs.solve returns roots for polynomials.
+      // (assumed = 0). Roots are found numerically: sign-change scan
+      // over [-20, 20] + bisection refinement.
       const expr = toExprString(inputs.expr) || 'x';
       const variable = String(config.variable ?? 'x');
       try {
-        // mathjs `simplify` + `derivative` can find polynomial roots via
-        // solve; for non-polynomial, fall back to numeric root finding.
-        const eq = expr.includes('=') ? expr : `${expr} = 0`;
-        // mathjs doesn't expose `solve` directly; use parse + simplify
-        // for low-degree polynomials.
-        const node = math.parse(eq);
-        // Try algebraic solve via mathjs's `simplify` for linear/quadratic.
-        // For now, use a numeric Newton's method fallback for robustness.
-        // mathjs 运行时 evaluate 支持 MathNode（类型定义仅列出 MathExpression | Matrix），断言保留原调用。
-        const f = (xv: number) => Number(math.evaluate(node as unknown as string, getEvalScope({ [variable]: xv })));
+        // 先把等式移项成单边表达式 (lhs) - (rhs)：math.parse 把 '='
+        // 视为赋值运算符，直接解析 "x^2 - 4 = 0" 会抛
+        // "Invalid left hand side of assignment operator"。
+        const eqIdx = expr.indexOf('=');
+        const body =
+          eqIdx >= 0
+            ? `(${expr.slice(0, eqIdx).trim()}) - (${expr.slice(eqIdx + 1).trim()})`
+            : expr;
+        const node = math.parse(body);
+        // mathjs v15 的 math.evaluate 只接受字符串，MathNode 必须先
+        // compile 再以 scope 求值。
+        const code = node.compile();
+        const f = (xv: number) =>
+          Number(code.evaluate(getEvalScope({ [variable]: xv })));
         const roots: number[] = [];
         // Sample 200 points in [-20, 20], look for sign changes.
         const N = 200;
@@ -692,10 +699,20 @@ export const NODE_TYPES: Record<NodeType, NodeTypeDef> = {
         const hi = 20;
         const step = (hi - lo) / N;
         let prev = f(lo);
+        // 区间起点恰好是根时直接记录（严格符号变化检测不到 0 乘积）
+        if (Number.isFinite(prev) && Math.abs(prev) < 1e-9) {
+          roots.push(parseFloat(lo.toPrecision(8)));
+        }
         for (let i = 1; i <= N; i++) {
           const xv = lo + i * step;
           const cur = f(xv);
-          if (Number.isFinite(prev) && Number.isFinite(cur) && prev * cur < 0) {
+          if (Number.isFinite(cur) && Math.abs(cur) < 1e-9) {
+            // 采样点恰好落在根上：prev * cur === 0，走不到下方的
+            // 严格符号变化分支，这里直接记录。
+            if (!roots.some((r) => Math.abs(r - xv) < 1e-6)) {
+              roots.push(parseFloat(xv.toPrecision(8)));
+            }
+          } else if (Number.isFinite(prev) && Number.isFinite(cur) && prev * cur < 0) {
             // Bisection refinement between xv - step and xv.
             let a2 = xv - step;
             let b2 = xv;
@@ -871,6 +888,41 @@ export function buildPipelineDependencyIndex(
     out.set(n.id, getNodeVariableDeps(n, knownVars));
   }
   return out;
+}
+
+/* ------------------------------------------------------------------ *
+ * choleskyDecompose — mathjs v15 没有 cholesky，本地实现
+ * A = L · Lᵀ（L 为下三角矩阵，A 要求对称正定）；
+ * 非方阵 / 非对称 / 非正定时抛出明确错误，由节点 catch 转为 error 字段。
+ * ------------------------------------------------------------------ */
+function choleskyDecompose(m: any): any {
+  const A = (math.isMatrix(m) ? m.toArray() : m) as number[][];
+  const n = Array.isArray(A) ? A.length : 0;
+  if (n === 0 || A.some((row) => !Array.isArray(row) || row.length !== n)) {
+    throw new Error('Cholesky decomposition requires a square matrix');
+  }
+  // Symmetry check
+  for (let i = 0; i < n; i++) {
+    for (let j = i + 1; j < n; j++) {
+      if (Math.abs(Number(A[i][j]) - Number(A[j][i])) > 1e-9) {
+        throw new Error('Cholesky decomposition requires a symmetric matrix');
+      }
+    }
+  }
+  const L: number[][] = Array.from({ length: n }, () => new Array(n).fill(0));
+  for (let i = 0; i < n; i++) {
+    for (let j = 0; j <= i; j++) {
+      let sum = Number(A[i][j]) || 0;
+      for (let k = 0; k < j; k++) sum -= L[i][k] * L[j][k];
+      if (i === j) {
+        if (sum <= 0) throw new Error('Matrix is not positive definite');
+        L[i][j] = Math.sqrt(sum);
+      } else {
+        L[i][j] = sum / L[j][j];
+      }
+    }
+  }
+  return math.matrix(L);
 }
 
 /* ------------------------------------------------------------------ *

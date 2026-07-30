@@ -39,6 +39,7 @@ import {
   FileCode2,
   Loader2,
   Settings2,
+  X,
 } from 'lucide-react';
 import {
   Tooltip,
@@ -97,6 +98,14 @@ const MODE_DESCRIPTION: Record<InputMode, string> = {
   matlab: 'MATLAB 风格：A\\b 求解线性方程组，A\' 转置。',
 };
 
+/**
+ * i18n keys added by the multi-tab feature, pending merge into
+ * src/lib/i18n/index.ts (that file is owned by a separate change).
+ * t() falls back to the key string at runtime; the cast only satisfies
+ * the TranslationDict type constraint until the keys are merged.
+ */
+const tPending = (key: string): string => t(key as Parameters<typeof t>[0]);
+
 export function EditorPanel() {
   const editorContent = useWorkbenchStore((s) => s.editorContent);
   const setEditorContent = useWorkbenchStore((s) => s.setEditorContent);
@@ -137,6 +146,11 @@ export function EditorPanel() {
   const activeFileId = useFileSystemStore((s) => s.activeFileId);
   const loadFromStorage = useFileSystemStore((s) => s.loadFromStorage);
   const fsLoaded = useFileSystemStore((s) => s.loaded);
+  // Multi-tab state.
+  const openTabs = useFileSystemStore((s) => s.openTabs);
+  const fsNodes = useFileSystemStore((s) => s.nodes);
+  const openFile = useFileSystemStore((s) => s.openFile);
+  const closeTab = useFileSystemStore((s) => s.closeTab);
 
   useEffect(() => {
     if (!fsLoaded) void loadFromStorage();
@@ -211,6 +225,36 @@ export function EditorPanel() {
     }, 500);
     return () => clearTimeout(timer);
   }, [editorContent, activeFileId]);
+
+  /* ─── Tab bar interactions ─────────────────────────────────────── */
+  // Flush pending debounced edits for the currently-open file. Mirrors
+  // flushActiveFileEdits() in FilesPanel: switching/closing a tab within
+  // the 500ms auto-save window would otherwise drop the last keystrokes.
+  const flushCurrentEdits = useCallback(() => {
+    const { activeFileId: id, editorContent: content } = latestEditRef.current;
+    if (id && useFileSystemStore.getState().nodes[id]?.type === 'file') {
+      useFileSystemStore.getState().updateFileContent(id, content);
+    }
+  }, []);
+
+  const handleTabSelect = useCallback(
+    (tabId: string) => {
+      if (tabId === activeFileId) return;
+      flushCurrentEdits();
+      openFile(tabId);
+    },
+    [activeFileId, flushCurrentEdits, openFile],
+  );
+
+  const handleTabClose = useCallback(
+    (tabId: string, e?: React.MouseEvent) => {
+      e?.stopPropagation();
+      // Only the active tab can hold unflushed editor edits.
+      if (tabId === activeFileId) flushCurrentEdits();
+      closeTab(tabId);
+    },
+    [activeFileId, flushCurrentEdits, closeTab],
+  );
 
   // Clean up timers on unmount.
   useEffect(() => {
@@ -492,42 +536,110 @@ export function EditorPanel() {
         </div>
       </div>
 
-      {/* Live preview bar (simple mode only) */}
-      {inputMode === 'simple' && (
-        <div className="shrink-0 min-h-10 max-h-48 flex items-start gap-2 px-2.5 py-2 border-b border-border/60 bg-muted/30 border-l-2 border-l-primary/60 overflow-x-auto overflow-y-auto">
-          <span className="text-[12px] font-medium text-muted-foreground shrink-0 mt-0.5">
-            {t('editorLivePreview')}:
-          </span>
-          {previewLatex ? (
-            <FormulaRenderer
-              latex={previewLatex}
-              displayMode
-              className="min-w-0 flex-1 text-[13px]"
-            />
-          ) : (
-            <span className="text-[12px] text-muted-foreground/70 mt-0.5">
-              {t('editorLivePreviewHint')}
-            </span>
-          )}
+      {/* Tab bar */}
+      {openTabs.length > 0 && (
+        <div
+          role="tablist"
+          className="shrink-0 flex items-stretch overflow-x-auto border-b border-border/60 bg-muted/20"
+        >
+          {openTabs.map((tabId) => {
+            const node = fsNodes[tabId];
+            if (!node) return null;
+            const isActive = tabId === activeFileId;
+            // Only the active tab can be dirty: edits live in the editor
+            // and are flushed to the node on switch/close, so non-active
+            // tabs are always saved.
+            const isDirty = isActive && (node.content ?? '') !== editorContent;
+            return (
+              <div
+                key={tabId}
+                role="tab"
+                aria-selected={isActive}
+                title={node.name}
+                onClick={() => handleTabSelect(tabId)}
+                onAuxClick={(e) => {
+                  // Middle-click closes the tab (VSCode-style).
+                  if (e.button !== 1) return;
+                  e.preventDefault();
+                  handleTabClose(tabId);
+                }}
+                className={cn(
+                  'group flex items-center gap-1.5 h-7 pl-2.5 pr-1 shrink-0 cursor-pointer select-none',
+                  'border-r border-border/40 text-[11px] font-mono transition-colors',
+                  isActive
+                    ? 'bg-background text-foreground shadow-[inset_0_2px_0_0_var(--primary)]'
+                    : 'text-muted-foreground hover:bg-accent/40 hover:text-foreground',
+                )}
+              >
+                <span className="truncate max-w-36">{node.name}</span>
+                {isDirty && (
+                  <span className="size-1.5 shrink-0 rounded-full bg-primary" />
+                )}
+                <button
+                  type="button"
+                  aria-label={tPending('editorTabClose')}
+                  onClick={(e) => handleTabClose(tabId, e)}
+                  className="grid size-4 shrink-0 place-items-center rounded opacity-0 group-hover:opacity-100 hover:bg-accent hover:text-foreground transition-opacity"
+                >
+                  <X className="size-3" />
+                </button>
+              </div>
+            );
+          })}
         </div>
       )}
 
-      {/* Editor area */}
-      <div className="flex-1 min-h-0 flex overflow-hidden">
-        <CodeEditor
-          value={editorContent}
-          onChange={setEditorContent}
-          onRun={runScript}
-          onCursorChange={(line, col) => {
-            setCursor({ line, col });
-            // Debounced preview update.
-            if (previewTimerRef.current) clearTimeout(previewTimerRef.current);
-            previewTimerRef.current = setTimeout(() => setPreviewLine(line), 200);
-          }}
-          language={inputMode}
-          placeholder={t('editorPlaceholder')}
-        />
-      </div>
+      {fsLoaded && openTabs.length === 0 ? (
+        /* Empty state — no open tabs */
+        <div className="flex-1 min-h-0 flex flex-col items-center justify-center gap-2 px-6 text-center">
+          <FileCode2 className="size-9 text-muted-foreground/30" />
+          <p className="text-[12.5px] font-medium text-muted-foreground">
+            {tPending('editorTabsEmptyTitle')}
+          </p>
+          <p className="text-[11px] text-muted-foreground/70">
+            {tPending('editorTabsEmptyHint')}
+          </p>
+        </div>
+      ) : (
+        <>
+          {/* Live preview bar (simple mode only) */}
+          {inputMode === 'simple' && (
+            <div className="shrink-0 min-h-10 max-h-48 flex items-start gap-2 px-2.5 py-2 border-b border-border/60 bg-muted/30 border-l-2 border-l-primary/60 overflow-x-auto overflow-y-auto">
+              <span className="text-[12px] font-medium text-muted-foreground shrink-0 mt-0.5">
+                {t('editorLivePreview')}:
+              </span>
+              {previewLatex ? (
+                <FormulaRenderer
+                  latex={previewLatex}
+                  displayMode
+                  className="min-w-0 flex-1 text-[13px]"
+                />
+              ) : (
+                <span className="text-[12px] text-muted-foreground/70 mt-0.5">
+                  {t('editorLivePreviewHint')}
+                </span>
+              )}
+            </div>
+          )}
+
+          {/* Editor area */}
+          <div className="flex-1 min-h-0 flex overflow-hidden">
+            <CodeEditor
+              value={editorContent}
+              onChange={setEditorContent}
+              onRun={runScript}
+              onCursorChange={(line, col) => {
+                setCursor({ line, col });
+                // Debounced preview update.
+                if (previewTimerRef.current) clearTimeout(previewTimerRef.current);
+                previewTimerRef.current = setTimeout(() => setPreviewLine(line), 200);
+              }}
+              language={inputMode}
+              placeholder={t('editorPlaceholder')}
+            />
+          </div>
+        </>
+      )}
 
       {/* Bottom info bar */}
       <div className="shrink-0 h-6 flex items-center justify-between px-2.5 text-[10.5px] text-muted-foreground border-t border-border/60 bg-background/40">

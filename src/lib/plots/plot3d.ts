@@ -17,7 +17,8 @@
  * (e.g. `plot3d(sin(a*x)*cos(y))` follows the `a` slider).
  */
 
-import { math, getEvalScope } from '@/lib/engine/mathInstance';
+import { getEvalScope } from '@/lib/engine/mathInstance';
+import { compileCached } from '@/lib/engine/compileCache';
 
 /* ------------------------------------------------------------------ */
 /*  Types                                                             */
@@ -161,8 +162,10 @@ export function sampleSurface(
     throw new Error('Invalid sampling range');
   }
 
+  // Compile via the LRU cache so re-sampling the same surface (slider
+  // drags, resolution changes) reuses the parsed expression.
   // Throws on a parse error — let trySampleSurface catch it.
-  const compiled = math.compile(expr);
+  const compiled = compileCached(expr);
 
   const N = Math.max(2, Math.min(200, Math.floor(resolution)));
   const [xMin, xMax] = xRange;

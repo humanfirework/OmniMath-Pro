@@ -8,6 +8,13 @@
  * Supports: math Q&A, formula explanation, generating executable scripts,
  * inserting generated scripts into the editor, KaTeX rendering of math.
  *
+ * Agent capabilities (see `@/lib/ai-tools` + `chatWithTools` in `@/lib/ai-client`):
+ *  - 上下文注入：发送时把当前文件 / 绘图表达式 / 变量表 / 最近错误组装成
+ *    一条 system 消息随对话发送（可用输入框上方的开关关闭）。
+ *  - Function Calling：模型可通过 evaluate_expression / solve_equation /
+ *    plot_function / get_workspace_state 四个工具操作工作台；工具调用过程
+ *    以折叠条实时显示在消息流中。
+ *
  * The panel renders its full UI immediately on mount. The API key is only
  * checked when the user actually sends a message; if missing, a configuration
  * card is shown instead of a crash.
@@ -28,26 +35,54 @@ import {
   KeyRound,
   Eye,
   EyeOff,
+  Wrench,
+  ChevronDown,
+  Paperclip,
 } from 'lucide-react';
 import { useWorkbenchStore } from '@/lib/store/workbench';
-import { useT } from '@/lib/i18n';
+import { useFileSystemStore } from '@/lib/store/fileSystemStore';
+import { useT, t as translateRaw, type TranslationDict } from '@/lib/i18n';
 import { FormulaRenderer } from '@/components/workbench/FormulaRenderer';
 import { Button } from '@/components/ui/button';
 import { ScrollArea } from '@/components/ui/scroll-area';
+import { Switch } from '@/components/ui/switch';
 import {
-  chatComplete,
+  Collapsible,
+  CollapsibleContent,
+  CollapsibleTrigger,
+} from '@/components/ui/collapsible';
+import {
+  chatWithTools,
   loadAIConfig,
   saveAIConfig,
   DEFAULT_BASE_URL,
   DEFAULT_MODEL,
   type AIMessage,
   type AIConfig,
+  type AIToolCallRecord,
 } from '@/lib/ai-client';
+import {
+  WORKBENCH_TOOLS,
+  buildContextMessage,
+  collectWorkspaceSnapshot,
+  executeWorkbenchTool,
+} from '@/lib/ai-tools';
+
+/**
+ * 引用尚未合入 i18n 词典的新键：词典中存在时返回译文，
+ * 否则回退到给定的默认中文文案（待主代理统一合入词典后即可去掉回退）。
+ */
+function tAI(key: string, fallback: string): string {
+  const v = translateRaw(key as keyof TranslationDict);
+  return v === key ? fallback : v;
+}
 
 interface ChatMessage {
   role: 'user' | 'assistant';
   content: string;
   id: string;
+  /** 本轮回复中发生过的工具调用记录（折叠条展示）。 */
+  toolCalls?: AIToolCallRecord[];
 }
 
 const QUICK_PROMPTS = [
@@ -163,6 +198,61 @@ function friendlyError(error: string): string {
       }
       return `请求失败：${error}`;
   }
+}
+
+/** 工具参数的一行预览：`expr: "sin(x)"` — 超长截断。 */
+function formatArgsPreview(args: Record<string, unknown>): string {
+  const parts = Object.entries(args).map(([k, v]) => {
+    const val = JSON.stringify(v) ?? String(v);
+    return `${k}: ${val}`;
+  });
+  const text = parts.join(', ') || '…';
+  return text.length > 64 ? `${text.slice(0, 64)}…` : text;
+}
+
+/** 单条工具调用的折叠条 — "调用 plot_function(expr: "sin(x)")"，展开可见参数与结果。 */
+function ToolCallStrip({ record }: { record: AIToolCallRecord }) {
+  const [open, setOpen] = useState(false);
+  return (
+    <Collapsible
+      open={open}
+      onOpenChange={setOpen}
+      className="rounded-lg border border-violet-500/20 bg-violet-500/5"
+    >
+      <CollapsibleTrigger className="flex w-full items-center gap-1.5 px-2 py-1.5 text-left text-[11px] text-violet-600 dark:text-violet-300 hover:bg-violet-500/10 rounded-lg transition-colors">
+        <Wrench className="size-3 shrink-0" />
+        <span className="flex-1 min-w-0 truncate font-mono">
+          {tAI('aiToolCallLabel', '调用')} {record.name}({formatArgsPreview(record.args)})
+        </span>
+        {!record.ok && (
+          <span className="shrink-0 text-[9px] px-1 py-px rounded bg-rose-500/15 text-rose-500 border border-rose-500/20">
+            {tAI('aiToolFailedLabel', '失败')}
+          </span>
+        )}
+        <ChevronDown
+          className={`size-3 shrink-0 transition-transform ${open ? 'rotate-180' : ''}`}
+        />
+      </CollapsibleTrigger>
+      <CollapsibleContent className="px-2 pb-2 space-y-1">
+        <div>
+          <p className="text-[9.5px] text-muted-foreground/70 mb-0.5">
+            {tAI('aiToolArgsLabel', '参数')}
+          </p>
+          <pre className="text-[10.5px] font-mono text-foreground/70 whitespace-pre-wrap break-all max-h-24 overflow-y-auto scrollbar-none rounded bg-background/60 border border-border/40 p-1.5">
+            {JSON.stringify(record.args, null, 2)}
+          </pre>
+        </div>
+        <div>
+          <p className="text-[9.5px] text-muted-foreground/70 mb-0.5">
+            {tAI('aiToolResultLabel', '结果')}
+          </p>
+          <pre className="text-[10.5px] font-mono text-foreground/70 whitespace-pre-wrap break-all max-h-32 overflow-y-auto scrollbar-none rounded bg-background/60 border border-border/40 p-1.5">
+            {record.result}
+          </pre>
+        </div>
+      </CollapsibleContent>
+    </Collapsible>
+  );
 }
 
 /** Configuration card shown when no API key is set or user opens settings. */
@@ -284,18 +374,31 @@ export function AIPanel() {
   const [error, setError] = useState<string | null>(null);
   const [showConfig, setShowConfig] = useState(false);
   const [config, setConfig] = useState<AIConfig>(() => loadAIConfig());
+  // 上下文注入开关（默认开）— 发送时把工作台状态随对话一起发给模型。
+  const [attachContext, setAttachContext] = useState(true);
+  // 当前这轮对话里实时发生的工具调用（完成后归档到 assistant 消息上）。
+  const [activeToolCalls, setActiveToolCalls] = useState<AIToolCallRecord[]>([]);
   // The last user message we attempted — used to auto-retry after saving config.
   const lastPendingRef = useRef<string | null>(null);
   const pendingSendTimerRef = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
   const scrollRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
 
+  // 上下文指示器数据（只读订阅，切换文件/增删绘图与变量时自动刷新）。
+  const plotsCount = useWorkbenchStore((s) => s.plots.length);
+  const variablesCount = useWorkbenchStore((s) => Object.keys(s.variables).length);
+  const activeFileName = useFileSystemStore((s) => {
+    if (!s.activeFileId) return null;
+    const node = s.nodes[s.activeFileId];
+    return node && node.type === 'file' ? node.name : null;
+  });
+
   // Auto-scroll to bottom on new message
   useEffect(() => {
     if (scrollRef.current) {
       scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
     }
-  }, [messages, loading, showConfig]);
+  }, [messages, loading, showConfig, activeToolCalls]);
 
   const send = useCallback(
     async (text: string) => {
@@ -315,17 +418,32 @@ export function AIPanel() {
       setMessages((m) => [...m, userMsg]);
       setInput('');
       setLoading(true);
+      setActiveToolCalls([]);
 
-      const result = await chatComplete([
-        ...history,
-        { role: 'user', content: trimmed },
-      ]);
+      // 上下文注入：发送时采集工作台快照，组装成一条 system 消息随对话发送。
+      const context = attachContext
+        ? buildContextMessage(collectWorkspaceSnapshot())
+        : undefined;
+
+      // Function Calling：模型返回 tool_calls → 本地执行 → 回填 → 再请求，
+      // 直到拿到最终文本（循环上限与降级逻辑都在 chatWithTools 内部）。
+      const result = await chatWithTools(
+        [...history, { role: 'user', content: trimmed }],
+        WORKBENCH_TOOLS,
+        executeWorkbenchTool,
+        {
+          context,
+          onToolCall: (record) =>
+            setActiveToolCalls((calls) => [...calls, record]),
+        },
+      );
 
       if (result.ok) {
         const assistantMsg: ChatMessage = {
           role: 'assistant',
           content: result.reply || '(空回复)',
           id: `a-${Date.now()}`,
+          toolCalls: result.toolCalls.length > 0 ? result.toolCalls : undefined,
         };
         setMessages((m) => [...m, assistantMsg]);
         lastPendingRef.current = null;
@@ -346,14 +464,16 @@ export function AIPanel() {
             role: 'assistant',
             content: `⚠️ ${friendly}`,
             id: `e-${Date.now()}`,
+            toolCalls: result.toolCalls.length > 0 ? result.toolCalls : undefined,
           },
         ]);
         lastPendingRef.current = null;
       }
+      setActiveToolCalls([]);
       setLoading(false);
       inputRef.current?.focus();
     },
-    [loading, messages],
+    [loading, messages, attachContext],
   );
 
   const handleSaveConfig = useCallback(
@@ -529,12 +649,39 @@ export function AIPanel() {
                       {m.content}
                     </p>
                   ) : (
-                    renderAssistantContent(m.content, handleInsert)
+                    <>
+                      {m.toolCalls && m.toolCalls.length > 0 && (
+                        <div className="mb-2 space-y-1">
+                          {m.toolCalls.map((tc) => (
+                            <ToolCallStrip key={tc.id} record={tc} />
+                          ))}
+                        </div>
+                      )}
+                      {renderAssistantContent(m.content, handleInsert)}
+                    </>
                   )}
                 </div>
               </motion.div>
             ))}
           </AnimatePresence>
+
+          {/* 进行中的工具调用（实时展示，完成后归档到 assistant 消息内） */}
+          {activeToolCalls.length > 0 && (
+            <motion.div
+              initial={{ opacity: 0, y: 6 }}
+              animate={{ opacity: 1, y: 0 }}
+              className="flex gap-2"
+            >
+              <div className="flex-shrink-0 grid place-items-center size-6 rounded-lg bg-violet-500/10 border border-violet-500/25">
+                <Wrench className="size-3.5 text-violet-500" />
+              </div>
+              <div className="max-w-[82%] flex-1 space-y-1">
+                {activeToolCalls.map((tc) => (
+                  <ToolCallStrip key={tc.id} record={tc} />
+                ))}
+              </div>
+            </motion.div>
+          )}
 
           {loading && (
             <motion.div
@@ -574,6 +721,32 @@ export function AIPanel() {
 
       {/* Input */}
       <div className="border-t border-border/60 bg-muted/20 p-2.5">
+        {/* 上下文注入开关 + "已附加上下文" 指示 */}
+        <div className="flex items-center gap-1.5 px-1 pb-1.5">
+          <Switch
+            checked={attachContext}
+            onCheckedChange={setAttachContext}
+            aria-label={tAI('aiContextToggle', '附带工作台上下文')}
+            className="scale-[0.7] origin-left"
+          />
+          <span className="text-[10px] text-muted-foreground">
+            {tAI('aiContextToggle', '附带工作台上下文')}
+          </span>
+          {attachContext && (
+            <span
+              className="ml-auto inline-flex items-center gap-1 text-[9.5px] px-1.5 py-0.5 rounded-full bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20 max-w-[65%] truncate"
+              title={tAI('aiContextAttachedHint', '发送时会附带当前文件、绘图与变量信息')}
+            >
+              <Paperclip className="size-2.5 shrink-0" />
+              <span className="truncate">
+                {tAI('aiContextAttached', '已附加上下文')} ·{' '}
+                {activeFileName ?? tAI('aiContextNoFile', '无文件')} ·{' '}
+                {tAI('aiContextPlots', '绘图')}×{plotsCount} ·{' '}
+                {tAI('aiContextVars', '变量')}×{variablesCount}
+              </span>
+            </span>
+          )}
+        </div>
         <div className="flex items-end gap-2 rounded-xl border border-border/60 bg-background focus-within:border-primary/40 focus-within:ring-1 focus-within:ring-primary/20 transition-all">
           <textarea
             ref={inputRef}

@@ -551,7 +551,7 @@ function CameraReset({
     if (controlsRef.current) {
       controlsRef.current.reset();
     }
-  }, [resetSignal]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [resetSignal]);  
   return null;
 }
 
