@@ -68,7 +68,17 @@ export default function RootLayout({
                 document.documentElement.classList.remove('dark');
               }
             }
-          } catch (e) { /* ignore — fall back to default dark */ }`,
+          } catch (e) { /* ignore — fall back to default dark */ }
+          try {
+            var sr = localStorage.getItem('omnimath-settings-v1');
+            if (sr) {
+              var sd = JSON.parse(sr);
+              var fp = sd && sd.fontPreset;
+              if (fp === 'scholarly' || fp === 'system') {
+                document.documentElement.setAttribute('data-font-preset', fp);
+              }
+            }
+          } catch (e) { /* ignore */ }`,
         }} />
       </head>
       <body className="antialiased">

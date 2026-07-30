@@ -1,0 +1,2258 @@
+<!DOCTYPE html>
+<html lang="en"><head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Calculus — A Visual Field Guide</title>
+<script src="https://cdn.tailwindcss.com"></script>
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.css">
+<script defer="" src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.js"></script>
+<script defer="" src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/contrib/auto-render.min.js"></script>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin="">
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@300;400;500;600;700&amp;family=Newsreader:ital,wght@0,300;0,400;0,500;0,600;1,400;1,500&amp;family=JetBrains+Mono:wght@400;500&amp;display=swap" rel="stylesheet">
+<style>
+  :root {
+    --paper: #F5EEDC;
+    --paper-warm: #EDE3C9;
+    --paper-light: #FAF5E8;
+    --paper-white: #FCF9EF;
+    --ink: #0B2545;
+    --ink-2: #1A3A5C;
+    --ink-soft: rgba(11, 37, 69, 0.65);
+    --ink-faint: rgba(11, 37, 69, 0.35);
+    --ink-trace: rgba(11, 37, 69, 0.12);
+    --orange: #D75C2A;
+    --orange-deep: #A8421A;
+    --orange-soft: rgba(215, 92, 42, 0.16);
+    --orange-bright: #E8743A;
+    --green: #2A7553;
+    --green-deep: #1F5840;
+    --green-soft: rgba(42, 117, 83, 0.16);
+    --green-bright: #3A9572;
+    --grid-major: rgba(11, 37, 69, 0.22);
+    --grid-minor: rgba(11, 37, 69, 0.075);
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; padding: 0; background: var(--paper); color: var(--ink); }
+  body {
+    font-family: 'Newsreader', Georgia, serif;
+    font-size: 17px;
+    line-height: 1.55;
+    -webkit-font-smoothing: antialiased;
+    text-rendering: optimizeLegibility;
+    overflow-x: hidden;
+  }
+  .display { font-family: 'Space Grotesk', sans-serif; letter-spacing: -0.025em; }
+  .mono { font-family: 'JetBrains Mono', monospace; }
+  .serif-italic { font-family: 'Newsreader', serif; font-style: italic; }
+
+  /* Paper grain overlay */
+  body::before {
+    content: '';
+    position: fixed; inset: 0;
+    background-image:
+      linear-gradient(var(--grid-minor) 1px, transparent 1px),
+      linear-gradient(90deg, var(--grid-minor) 1px, transparent 1px);
+    background-size: 24px 24px;
+    pointer-events: none;
+    z-index: 0;
+    opacity: 0.6;
+  }
+  main, header, footer { position: relative; z-index: 1; }
+
+  /* Top nav */
+  .top-nav {
+    position: fixed; top: 0; left: 0; right: 0; z-index: 100;
+    backdrop-filter: blur(10px);
+    background: rgba(245, 238, 220, 0.82);
+    border-bottom: 1px solid var(--ink-faint);
+  }
+  .top-nav-inner {
+    max-width: 1400px; margin: 0 auto;
+    padding: 14px 32px;
+    display: flex; align-items: center; justify-content: space-between;
+    gap: 32px;
+  }
+  .brand {
+    font-family: 'Space Grotesk', sans-serif;
+    font-weight: 700; font-size: 18px;
+    letter-spacing: 0.02em;
+    display: flex; align-items: center; gap: 8px;
+  }
+  .brand-mark { color: var(--orange); font-size: 24px; line-height: 1; }
+  .nav-links { display: flex; gap: 28px; }
+  .nav-links a {
+    font-family: 'Space Grotesk', sans-serif;
+    font-size: 12px;
+    text-transform: uppercase;
+    letter-spacing: 0.12em;
+    color: var(--ink);
+    text-decoration: none;
+    opacity: 0.7;
+    transition: opacity 0.2s;
+    position: relative;
+    padding-bottom: 2px;
+  }
+  .nav-links a:hover { opacity: 1; }
+  .nav-links a::after {
+    content: '';
+    position: absolute; left: 0; right: 0; bottom: 0;
+    height: 1px; background: var(--ink);
+    transform: scaleX(0); transform-origin: left;
+    transition: transform 0.3s;
+  }
+  .nav-links a:hover::after { transform: scaleX(1); }
+  .nav-meta {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 11px;
+    color: var(--ink-soft);
+  }
+
+  /* Layout */
+  .container { max-width: 1400px; margin: 0 auto; padding: 0 32px; }
+  .section { padding: 120px 0 80px; position: relative; }
+  .section + .section { border-top: 1px solid var(--ink-faint); }
+
+  /* Hero */
+  .hero { padding-top: 100px; padding-bottom: 60px; }
+  .hero-meta {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 12px;
+    color: var(--ink-soft);
+    letter-spacing: 0.15em;
+    text-transform: uppercase;
+    margin-bottom: 28px;
+    display: flex; align-items: center; gap: 14px;
+  }
+  .hero-meta::before { content: ''; width: 32px; height: 1px; background: var(--ink); }
+  .hero-title {
+    font-family: 'Space Grotesk', sans-serif;
+    font-size: clamp(72px, 14vw, 200px);
+    font-weight: 700;
+    line-height: 0.88;
+    letter-spacing: -0.045em;
+    margin: 0 0 8px 0;
+  }
+  .hero-title .amp {
+    font-family: 'Newsreader', serif;
+    font-style: italic;
+    font-weight: 400;
+    color: var(--orange);
+  }
+  .hero-subtitle {
+    font-family: 'Newsreader', serif;
+    font-style: italic;
+    font-size: clamp(20px, 2.6vw, 32px);
+    color: var(--ink-2);
+    max-width: 620px;
+    margin: 16px 0 32px 0;
+    line-height: 1.3;
+  }
+  .hero-tags {
+    display: flex; gap: 14px; flex-wrap: wrap;
+    margin-bottom: 56px;
+  }
+  .pill {
+    font-family: 'Space Grotesk', sans-serif;
+    font-size: 11px;
+    text-transform: uppercase;
+    letter-spacing: 0.14em;
+    padding: 6px 14px;
+    border: 1px solid var(--ink);
+    display: inline-flex; align-items: center; gap: 8px;
+  }
+  .pill .dot { width: 6px; height: 6px; border-radius: 50%; background: var(--ink); }
+  .pill.orange .dot { background: var(--orange); }
+  .pill.green .dot { background: var(--green); }
+
+  /* Canvas frame */
+  .canvas-frame {
+    position: relative;
+    background: var(--paper-white);
+    border: 1px solid var(--ink);
+    overflow: hidden;
+  }
+  .canvas-frame canvas { display: block; width: 100%; height: 100%; }
+  .canvas-corner {
+    position: absolute;
+    width: 14px; height: 14px;
+    border: 1px solid var(--ink);
+    background: var(--paper-white);
+  }
+  .canvas-corner.tl { top: -1px; left: -1px; border-right: none; border-bottom: none; }
+  .canvas-corner.tr { top: -1px; right: -1px; border-left: none; border-bottom: none; }
+  .canvas-corner.bl { bottom: -1px; left: -1px; border-right: none; border-top: none; }
+  .canvas-corner.br { bottom: -1px; right: -1px; border-left: none; border-top: none; }
+
+  .hero-canvas-wrap {
+    margin-top: 8px;
+    position: relative;
+  }
+  .hero-canvas-frame {
+    height: clamp(360px, 52vh, 540px);
+  }
+  .hero-readout {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    border: 1px solid var(--ink);
+    border-top: none;
+    background: var(--paper-white);
+  }
+  .readout-cell {
+    padding: 14px 18px;
+    border-right: 1px solid var(--ink-faint);
+  }
+  .readout-cell:last-child { border-right: none; }
+  .readout-label {
+    font-family: 'Space Grotesk', sans-serif;
+    font-size: 10px;
+    text-transform: uppercase;
+    letter-spacing: 0.16em;
+    color: var(--ink-soft);
+    margin-bottom: 6px;
+  }
+  .readout-value {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 18px;
+    color: var(--ink);
+    font-weight: 500;
+  }
+  .readout-value .sign { color: var(--orange); }
+  .readout-value .sign.neg { color: var(--green); }
+
+  /* Buttons */
+  .btn {
+    font-family: 'Space Grotesk', sans-serif;
+    text-transform: uppercase;
+    letter-spacing: 0.12em;
+    font-size: 11px;
+    padding: 9px 14px;
+    border: 1px solid var(--ink);
+    color: var(--ink);
+    background: transparent;
+    cursor: pointer;
+    transition: all 0.2s;
+    display: inline-flex; align-items: center; gap: 8px;
+  }
+  .btn:hover { background: var(--ink); color: var(--paper); }
+  .btn.active { background: var(--ink); color: var(--paper); }
+  .btn.orange { border-color: var(--orange); color: var(--orange); }
+  .btn.orange:hover, .btn.orange.active { background: var(--orange); color: var(--paper-white); border-color: var(--orange); }
+  .btn.green { border-color: var(--green); color: var(--green); }
+  .btn.green:hover, .btn.green.active { background: var(--green); color: var(--paper-white); border-color: var(--green); }
+
+  /* Sliders */
+  input[type="range"] {
+    -webkit-appearance: none;
+    appearance: none;
+    width: 100%;
+    height: 24px;
+    background: transparent;
+    cursor: pointer;
+  }
+  input[type="range"]::-webkit-slider-runnable-track {
+    height: 2px;
+    background: var(--ink);
+  }
+  input[type="range"]::-moz-range-track {
+    height: 2px;
+    background: var(--ink);
+  }
+  input[type="range"]::-webkit-slider-thumb {
+    -webkit-appearance: none;
+    appearance: none;
+    width: 16px; height: 16px;
+    background: var(--paper-white);
+    border: 2px solid var(--ink);
+    border-radius: 50%;
+    margin-top: -7px;
+    cursor: grab;
+    transition: transform 0.15s;
+  }
+  input[type="range"]::-webkit-slider-thumb:hover { transform: scale(1.15); }
+  input[type="range"]:active::-webkit-slider-thumb { cursor: grabbing; background: var(--orange); border-color: var(--orange); }
+  input[type="range"].orange::-webkit-slider-thumb { border-color: var(--orange); }
+  input[type="range"].orange:active::-webkit-slider-thumb { background: var(--orange); }
+  input[type="range"].green::-webkit-slider-thumb { border-color: var(--green); }
+  input[type="range"].green:active::-webkit-slider-thumb { background: var(--green); }
+
+  /* Section header */
+  .section-head {
+    display: grid;
+    grid-template-columns: 1fr 2fr;
+    gap: 60px;
+    margin-bottom: 64px;
+    align-items: end;
+  }
+  .section-num {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 12px;
+    color: var(--ink-soft);
+    letter-spacing: 0.15em;
+  }
+  .section-title {
+    font-family: 'Space Grotesk', sans-serif;
+    font-size: clamp(56px, 9vw, 120px);
+    font-weight: 500;
+    line-height: 0.9;
+    letter-spacing: -0.035em;
+    margin: 8px 0 0 0;
+  }
+  .section-epigraph {
+    font-family: 'Newsreader', serif;
+    font-style: italic;
+    font-size: clamp(18px, 2vw, 24px);
+    color: var(--ink-2);
+    margin: 0;
+    max-width: 480px;
+    line-height: 1.35;
+  }
+
+  /* Grid layouts */
+  .grid-2 {
+    display: grid;
+    grid-template-columns: 1fr 1.4fr;
+    gap: 56px;
+    align-items: start;
+  }
+  .grid-3 {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 24px;
+  }
+  @media (max-width: 900px) {
+    .grid-2, .grid-3 { grid-template-columns: 1fr; gap: 32px; }
+    .section-head { grid-template-columns: 1fr; gap: 16px; }
+    .hero-readout { grid-template-columns: repeat(2, 1fr); }
+  }
+
+  /* Prose */
+  .prose-block p { margin: 0 0 18px 0; }
+  .prose-block p:last-child { margin-bottom: 0; }
+  .formula-block {
+    background: var(--paper-white);
+    border: 1px solid var(--ink-faint);
+    padding: 24px;
+    margin: 20px 0;
+    text-align: center;
+  }
+
+  /* Term hover */
+  .term {
+    border-bottom: 1px dashed var(--ink-faint);
+    cursor: help;
+    position: relative;
+    color: var(--ink);
+    transition: color 0.15s;
+  }
+  .term:hover { color: var(--orange); border-bottom-color: var(--orange); }
+  .popover {
+    position: fixed;
+    z-index: 200;
+    background: var(--ink);
+    color: var(--paper);
+    padding: 14px 18px;
+    border-radius: 2px;
+    font-family: 'Newsreader', serif;
+    font-size: 15px;
+    line-height: 1.4;
+    max-width: 280px;
+    pointer-events: none;
+    opacity: 0;
+    transform: translateY(6px);
+    transition: opacity 0.2s, transform 0.2s;
+    box-shadow: 0 12px 40px rgba(11, 37, 69, 0.3);
+  }
+  .popover.show { opacity: 1; transform: translateY(0); }
+  .popover::before {
+    content: '';
+    position: absolute;
+    top: -5px; left: 16px;
+    width: 10px; height: 10px;
+    background: var(--ink);
+    transform: rotate(45deg);
+  }
+  .popover strong {
+    color: var(--orange-bright);
+    font-family: 'Space Grotesk', sans-serif;
+    font-size: 11px;
+    text-transform: uppercase;
+    letter-spacing: 0.12em;
+    display: block;
+    margin-bottom: 6px;
+    font-weight: 600;
+  }
+
+  /* Derivatives section */
+  .deriv-stack { display: flex; flex-direction: column; gap: 20px; }
+  .deriv-canvas-label {
+    position: absolute;
+    top: 14px; left: 18px;
+    font-family: 'Space Grotesk', sans-serif;
+    font-size: 11px;
+    text-transform: uppercase;
+    letter-spacing: 0.16em;
+    color: var(--ink-soft);
+    z-index: 5;
+    background: var(--paper-white);
+    padding: 4px 8px;
+    border: 1px solid var(--ink-faint);
+  }
+  .deriv-canvas-label .swatch {
+    display: inline-block;
+    width: 8px; height: 8px;
+    margin-right: 6px;
+    vertical-align: middle;
+  }
+  .deriv-toolbar {
+    display: flex; align-items: center; gap: 10px;
+    margin-bottom: 16px;
+    flex-wrap: wrap;
+  }
+  .fn-selector {
+    display: flex; gap: 0;
+    border: 1px solid var(--ink);
+  }
+  .fn-selector button {
+    background: var(--paper-white);
+    border: none;
+    border-right: 1px solid var(--ink-faint);
+    padding: 9px 14px;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 13px;
+    cursor: pointer;
+    transition: all 0.2s;
+    color: var(--ink);
+  }
+  .fn-selector button:last-child { border-right: none; }
+  .fn-selector button:hover { background: var(--paper-warm); }
+  .fn-selector button.active { background: var(--ink); color: var(--paper); }
+
+  /* Proof walk-through */
+  .proof-block {
+    margin-top: 80px;
+    border-top: 1px solid var(--ink-faint);
+    padding-top: 48px;
+  }
+  .proof-head {
+    display: flex; align-items: baseline; gap: 24px;
+    margin-bottom: 28px;
+    flex-wrap: wrap;
+  }
+  .proof-head h3 {
+    font-family: 'Space Grotesk', sans-serif;
+    font-size: clamp(24px, 3vw, 36px);
+    font-weight: 500;
+    margin: 0;
+    letter-spacing: -0.02em;
+  }
+  .proof-steps {
+    background: var(--paper-white);
+    border: 1px solid var(--ink);
+    padding: 32px;
+    min-height: 280px;
+    position: relative;
+  }
+  .proof-step {
+    display: flex;
+    gap: 24px;
+    padding: 12px 0;
+    opacity: 0;
+    transform: translateY(8px);
+    transition: opacity 0.4s, transform 0.4s;
+    border-bottom: 1px solid var(--ink-trace);
+  }
+  .proof-step:last-child { border-bottom: none; }
+  .proof-step.shown { opacity: 1; transform: translateY(0); }
+  .step-num {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 12px;
+    color: var(--orange);
+    min-width: 32px;
+    padding-top: 4px;
+  }
+  .step-content { flex: 1; }
+  .step-content p { margin: 0 0 8px 0; font-size: 16px; }
+  .step-content .step-eq { font-size: 18px; }
+
+  .proof-controls {
+    display: flex; gap: 12px;
+    margin-top: 20px;
+    align-items: center;
+  }
+  .proof-progress {
+    flex: 1;
+    height: 2px;
+    background: var(--ink-trace);
+    position: relative;
+  }
+  .proof-progress-bar {
+    position: absolute;
+    top: 0; left: 0; height: 100%;
+    background: var(--orange);
+    transition: width 0.4s;
+  }
+
+  /* Integrals section */
+  .integral-canvas-wrap { position: relative; }
+  .integral-canvas-frame { height: 440px; }
+  .integral-controls {
+    display: grid;
+    grid-template-columns: 2fr 1fr;
+    gap: 32px;
+    margin-top: 20px;
+    padding: 20px;
+    border: 1px solid var(--ink);
+    border-top: none;
+    background: var(--paper-white);
+  }
+  .control-group { display: flex; flex-direction: column; gap: 8px; }
+  .control-label {
+    font-family: 'Space Grotesk', sans-serif;
+    font-size: 10px;
+    text-transform: uppercase;
+    letter-spacing: 0.16em;
+    color: var(--ink-soft);
+    display: flex; justify-content: space-between;
+  }
+  .control-value {
+    font-family: 'JetBrains Mono', monospace;
+    color: var(--ink);
+    font-weight: 500;
+  }
+  .method-buttons { display: flex; gap: 0; border: 1px solid var(--green); }
+  .method-buttons button {
+    flex: 1;
+    background: var(--paper-white);
+    border: none;
+    border-right: 1px solid var(--green-soft);
+    padding: 8px 6px;
+    font-family: 'Space Grotesk', sans-serif;
+    font-size: 10px;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    cursor: pointer;
+    color: var(--green);
+    transition: all 0.2s;
+  }
+  .method-buttons button:last-child { border-right: none; }
+  .method-buttons button:hover { background: var(--green-soft); }
+  .method-buttons button.active { background: var(--green); color: var(--paper-white); }
+
+  .integral-stats {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    border: 1px solid var(--ink);
+    border-top: none;
+    background: var(--paper-white);
+  }
+  .integral-stats .stat {
+    padding: 14px 18px;
+    border-right: 1px solid var(--ink-faint);
+  }
+  .integral-stats .stat:last-child { border-right: none; }
+  .stat-label {
+    font-family: 'Space Grotesk', sans-serif;
+    font-size: 10px;
+    text-transform: uppercase;
+    letter-spacing: 0.14em;
+    color: var(--ink-soft);
+    margin-bottom: 4px;
+  }
+  .stat-value {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 20px;
+    font-weight: 500;
+  }
+  .stat-value.green { color: var(--green); }
+  .stat-value.orange { color: var(--orange); }
+
+  /* Limits section */
+  .limits-layout {
+    display: grid;
+    grid-template-columns: 1.3fr 1fr;
+    gap: 40px;
+  }
+  @media (max-width: 900px) { .limits-layout { grid-template-columns: 1fr; } }
+  .limits-canvas-frame { height: 480px; }
+  .limits-panel {
+    display: flex;
+    flex-direction: column;
+    gap: 24px;
+  }
+  .limits-readout {
+    background: var(--paper-white);
+    border: 1px solid var(--ink);
+    padding: 24px;
+  }
+  .limits-readout h4 {
+    font-family: 'Space Grotesk', sans-serif;
+    font-size: 11px;
+    text-transform: uppercase;
+    letter-spacing: 0.16em;
+    margin: 0 0 16px 0;
+    color: var(--ink-soft);
+    font-weight: 500;
+  }
+  .limits-readout .eq-line {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 16px;
+    margin: 8px 0;
+    display: flex; justify-content: space-between;
+  }
+  .limits-readout .eq-line .val { font-weight: 500; }
+  .limits-readout .eq-line .val.green { color: var(--green); }
+  .limits-readout .eq-line .val.orange { color: var(--orange); }
+  .delta-status {
+    margin-top: 16px;
+    padding: 10px 14px;
+    background: var(--green-soft);
+    border-left: 3px solid var(--green);
+    font-size: 14px;
+    font-style: italic;
+  }
+  .delta-status.flashing { animation: flash-green 0.6s ease-out; }
+  @keyframes flash-green {
+    0% { background: var(--green-bright); border-left-color: var(--green-deep); }
+    100% { background: var(--green-soft); border-left-color: var(--green); }
+  }
+
+  /* Practice cards */
+  .practice-grid {
+    display: grid;
+    grid-template-columns: repeat(2, 1fr);
+    gap: 24px;
+  }
+  @media (max-width: 900px) { .practice-grid { grid-template-columns: 1fr; } }
+  .problem-card {
+    background: var(--paper-white);
+    border: 1px solid var(--ink);
+    padding: 28px;
+    position: relative;
+    transition: border-color 0.3s;
+  }
+  .problem-card:hover { border-color: var(--orange); }
+  .problem-tag {
+    display: inline-flex; align-items: center; gap: 8px;
+    font-family: 'Space Grotesk', sans-serif;
+    font-size: 10px;
+    text-transform: uppercase;
+    letter-spacing: 0.14em;
+    color: var(--ink-soft);
+    margin-bottom: 16px;
+  }
+  .problem-tag .dot { width: 6px; height: 6px; border-radius: 50%; }
+  .problem-tag.deriv .dot { background: var(--orange); }
+  .problem-tag.integ .dot { background: var(--green); }
+  .problem-tag.lim .dot { background: var(--ink); }
+  .problem-title {
+    font-family: 'Space Grotesk', sans-serif;
+    font-size: 22px;
+    font-weight: 500;
+    margin: 0 0 12px 0;
+    letter-spacing: -0.015em;
+    line-height: 1.2;
+  }
+  .problem-body {
+    font-size: 16px;
+    color: var(--ink-2);
+    margin-bottom: 16px;
+  }
+  .problem-hints {
+    border-top: 1px dashed var(--ink-faint);
+    padding-top: 16px;
+    margin-top: 16px;
+  }
+  .hint-row {
+    padding: 10px 0;
+    border-bottom: 1px dashed var(--ink-trace);
+    display: none;
+  }
+  .hint-row:last-child { border-bottom: none; }
+  .hint-row.shown { display: block; animation: slideDown 0.4s ease-out; }
+  @keyframes slideDown {
+    from { opacity: 0; transform: translateY(-6px); }
+    to { opacity: 1; transform: translateY(0); }
+  }
+  .hint-label {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 11px;
+    color: var(--orange);
+    text-transform: uppercase;
+    letter-spacing: 0.1em;
+    margin-right: 8px;
+  }
+  .problem-actions {
+    display: flex; gap: 8px;
+    margin-top: 14px;
+  }
+  .problem-answer {
+    margin-top: 14px;
+    padding: 12px 14px;
+    background: var(--ink);
+    color: var(--paper);
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 14px;
+    display: none;
+  }
+  .problem-answer.shown { display: block; animation: slideDown 0.4s ease-out; }
+
+  /* Footer */
+  footer {
+    padding: 80px 0 40px 0;
+    border-top: 1px solid var(--ink);
+    background: var(--ink);
+    color: var(--paper);
+    margin-top: 80px;
+  }
+  footer .container {
+    display: grid;
+    grid-template-columns: 2fr 1fr 1fr 1fr;
+    gap: 40px;
+  }
+  @media (max-width: 900px) { footer .container { grid-template-columns: 1fr 1fr; } }
+  footer h5 {
+    font-family: 'Space Grotesk', sans-serif;
+    font-size: 11px;
+    text-transform: uppercase;
+    letter-spacing: 0.16em;
+    color: rgba(245, 238, 220, 0.6);
+    margin: 0 0 16px 0;
+    font-weight: 500;
+  }
+  footer ul { list-style: none; padding: 0; margin: 0; }
+  footer li { margin-bottom: 8px; font-size: 15px; }
+  footer a { color: var(--paper); text-decoration: none; opacity: 0.85; }
+  footer a:hover { opacity: 1; color: var(--orange-bright); }
+  .footer-brand {
+    font-family: 'Space Grotesk', sans-serif;
+    font-size: 32px;
+    font-weight: 700;
+    margin-bottom: 12px;
+    letter-spacing: -0.02em;
+  }
+  .footer-tag {
+    font-family: 'Newsreader', serif;
+    font-style: italic;
+    color: rgba(245, 238, 220, 0.7);
+    max-width: 320px;
+  }
+  .footer-bottom {
+    max-width: 1400px; margin: 60px auto 0; padding: 24px 32px 0;
+    border-top: 1px solid rgba(245, 238, 220, 0.15);
+    display: flex; justify-content: space-between;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 11px;
+    color: rgba(245, 238, 220, 0.5);
+  }
+
+  /* Misc */
+  ::selection { background: var(--orange); color: var(--paper-white); }
+  ::-webkit-scrollbar { width: 10px; }
+  ::-webkit-scrollbar-track { background: var(--paper); }
+  ::-webkit-scrollbar-thumb { background: var(--ink-faint); border: 3px solid var(--paper); }
+  ::-webkit-scrollbar-thumb:hover { background: var(--ink-soft); }
+
+  .katex { font-size: 1.05em; color: var(--ink); }
+  .katex-display { margin: 0.5em 0; }
+
+  /* Hero paragraph */
+  .hero-paragraph {
+    margin-top: 56px;
+    max-width: 720px;
+    font-size: 19px;
+    line-height: 1.6;
+    color: var(--ink-2);
+  }
+  .hero-paragraph .lead {
+    font-family: 'Newsreader', serif;
+    font-style: italic;
+    font-size: 22px;
+    color: var(--ink);
+  }
+
+  /* Annotations on canvases */
+  .canvas-anno {
+    position: absolute;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 11px;
+    color: var(--ink-soft);
+    pointer-events: none;
+    z-index: 5;
+  }
+
+  /* Speed control */
+  .speed-control {
+    display: flex; align-items: center; gap: 12px;
+    padding: 12px 18px;
+    background: var(--paper-white);
+    border: 1px solid var(--ink-faint);
+  }
+  .speed-control label {
+    font-family: 'Space Grotesk', sans-serif;
+    font-size: 10px;
+    text-transform: uppercase;
+    letter-spacing: 0.14em;
+    color: var(--ink-soft);
+  }
+
+  /* Divider with text */
+  .divider-text {
+    display: flex; align-items: center; gap: 16px;
+    margin: 40px 0;
+    color: var(--ink-soft);
+  }
+  .divider-text::before, .divider-text::after {
+    content: ''; flex: 1; height: 1px; background: var(--ink-faint);
+  }
+  .divider-text span {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 11px;
+    letter-spacing: 0.16em;
+    text-transform: uppercase;
+  }
+</style>
+</head>
+<body>
+
+<header class="top-nav">
+  <div class="top-nav-inner">
+    <div class="brand">
+      <span class="brand-mark">∫</span>
+      <span>CALCULUS</span>
+    </div>
+    <nav class="nav-links">
+      <a href="#derivatives">01 · Derivatives</a>
+      <a href="#integrals">02 · Integrals</a>
+      <a href="#limits">03 · Limits</a>
+      <a href="#practice">04 · Practice</a>
+    </nav>
+    <div class="nav-meta">v.MMXXIV · field ed.</div>
+  </div>
+</header>
+
+<main>
+
+  <!-- HERO -->
+  <section class="hero">
+    <div class="container">
+      <div class="hero-meta">§ 00 — A Visual Field Guide</div>
+      <h1 class="hero-title">Calcu<span class="amp">·</span>lus</h1>
+      <p class="hero-subtitle">the architecture of change — rendered in three foundations, one language, and the slope of a single line.</p>
+      <div class="hero-tags">
+        <span class="pill orange"><span class="dot"></span>Derivatives</span>
+        <span class="pill green"><span class="dot"></span>Integrals</span>
+        <span class="pill"><span class="dot"></span>Limits</span>
+      </div>
+
+      <div class="hero-canvas-wrap">
+        <div class="canvas-frame hero-canvas-frame">
+          <div class="canvas-corner tl"></div>
+          <div class="canvas-corner tr"></div>
+          <div class="canvas-corner bl"></div>
+          <div class="canvas-corner br"></div>
+          <canvas id="hero-canvas"></canvas>
+          <div class="deriv-canvas-label" style="background:transparent;border:none;">
+            <span style="color:var(--ink-soft);">f(x) = sin(x) &nbsp;·&nbsp; f′(x) = cos(x)</span>
+          </div>
+        </div>
+        <div class="hero-readout">
+          <div class="readout-cell">
+            <div class="readout-label">Point x</div>
+            <div class="readout-value mono" id="hero-x">+0.000</div>
+          </div>
+          <div class="readout-cell">
+            <div class="readout-label">f(x)</div>
+            <div class="readout-value mono" id="hero-fx">+0.000</div>
+          </div>
+          <div class="readout-cell">
+            <div class="readout-label">slope f′(x)</div>
+            <div class="readout-value mono" id="hero-slope">+0.000</div>
+          </div>
+          <div class="readout-cell">
+            <div class="readout-label">tangent line</div>
+            <div class="readout-value mono" id="hero-eq" style="font-size:14px;">y = 0 + 0·(x − 0)</div>
+          </div>
+        </div>
+      </div>
+
+      <div class="hero-paragraph">
+        <p><span class="lead">Three foundations. One language for change.</span></p>
+        <p>The <span class="term" data-def="The derivative of a function at a point is the limit of the ratio of the change in the function to the change in the independent variable as the latter approaches zero.">derivative</span> measures how a quantity changes at a single instant. The <span class="term" data-def="The integral of a function over an interval is the limit of Riemann sums as the partition becomes arbitrarily fine; geometrically, the signed area between the graph and the x-axis.">integral</span> accumulates infinitely many such changes into a finite total. The <span class="term" data-def="A limit describes the value that a function approaches as the input approaches some specified point, even if the function is undefined there.">limit</span> is the rigorous scaffolding on which both are built — every continuous argument in mathematics passes through it.</p>
+      </div>
+
+      <div class="divider-text"><span>Drag any control · hover any underlined term</span></div>
+    </div>
+  </section>
+
+  <!-- DERIVATIVES -->
+  <section id="derivatives" class="section">
+    <div class="container">
+      <div class="section-head">
+        <div>
+          <div class="section-num">§ 01 / DERIVATIVES</div>
+        </div>
+        <div>
+          <h2 class="section-title">The Slope<br>of an Instant.</h2>
+        </div>
+      </div>
+      <p class="section-epigraph" style="margin-top:-32px; margin-bottom:48px;">A tangent line is the best linear approximation to a curve at a point — the line that "kisses" the graph and shares its direction.</p>
+
+      <div class="grid-2">
+        <div class="prose-block">
+          <p>For a function <em>f</em>, the derivative <em>f</em>′(<em>x</em>) at a point is the slope of the <span class="term" data-def="The unique line through a point on a smooth curve that locally approximates the curve to first order.">tangent line</span> there. Formally, it is the limit of the <span class="term" data-def="The ratio (f(x+h) − f(x))/h; the average rate of change of f over the interval [x, x+h].">difference quotient</span> as the step <em>h</em> shrinks to zero:</p>
+          <div class="formula-block" id="eq-derivative-def"></div>
+          <p>Drag the orange point along the curve. Watch the tangent line pivot. On the right, the slope at each <em>x</em> is plotted in orange as <em>f</em>′(<em>x</em>) — the derivative function, born from the original.</p>
+          <p style="font-style:italic; color:var(--ink-soft); font-size:15px;">↳ Try changing the function. Each shape has its own signature rate of change.</p>
+        </div>
+
+        <div>
+          <div class="deriv-toolbar">
+            <div class="fn-selector" id="fn-selector">
+              <button data-fn="sin" class="active">sin(x)</button>
+              <button data-fn="x2">x²</button>
+              <button data-fn="x3">x³</button>
+              <button data-fn="exp">eˣ</button>
+              <button data-fn="log">ln(x)</button>
+            </div>
+          </div>
+
+          <div class="deriv-stack">
+            <div class="canvas-frame" style="height:300px;">
+              <div class="canvas-corner tl"></div>
+              <div class="canvas-corner tr"></div>
+              <div class="canvas-corner bl"></div>
+              <div class="canvas-corner br"></div>
+              <canvas id="deriv-top"></canvas>
+              <div class="deriv-canvas-label"><span class="swatch" style="background:var(--ink);"></span>f(x)</div>
+            </div>
+            <div class="canvas-frame" style="height:220px;">
+              <div class="canvas-corner tl"></div>
+              <div class="canvas-corner tr"></div>
+              <div class="canvas-corner bl"></div>
+              <div class="canvas-corner br"></div>
+              <canvas id="deriv-bot"></canvas>
+              <div class="deriv-canvas-label"><span class="swatch" style="background:var(--orange);"></span>f′(x) — derivative</div>
+            </div>
+          </div>
+
+          <div class="integral-stats" style="border-top:none;">
+            <div class="stat">
+              <div class="stat-label">point x</div>
+              <div class="stat-value" id="deriv-x-val">+0.00</div>
+            </div>
+            <div class="stat">
+              <div class="stat-label">f(x)</div>
+              <div class="stat-value" id="deriv-fx-val">+0.00</div>
+            </div>
+            <div class="stat">
+              <div class="stat-label">slope f′(x)</div>
+              <div class="stat-value orange" id="deriv-dfx-val">+0.00</div>
+            </div>
+          </div>
+
+          <div style="margin-top:16px; padding:12px 14px; background:var(--paper-white); border:1px dashed var(--ink-faint); font-size:14px; color:var(--ink-soft);">
+            <strong style="font-family:'Space Grotesk',sans-serif; font-size:10px; text-transform:uppercase; letter-spacing:0.14em; color:var(--ink);">Hint:</strong> Click on the top plot and drag — or scroll to zoom · hover the bottom plot for the slope at that x.
+          </div>
+        </div>
+      </div>
+
+      <!-- PROOF WALK-THROUGH -->
+      <div class="proof-block">
+        <div class="proof-head">
+          <span class="pill orange"><span class="dot"></span>Step-through proof</span>
+          <h3>The derivative of sin(x) is cos(x).</h3>
+        </div>
+        <div class="proof-steps" id="proof-container">
+          <div class="proof-step" data-step="0">
+            <div class="step-num">01</div>
+            <div class="step-content">
+              <p>Begin with the limit definition.</p>
+              <div class="step-eq" id="proof-eq-1"></div>
+            </div>
+          </div>
+          <div class="proof-step" data-step="1">
+            <div class="step-num">02</div>
+            <div class="step-content">
+              <p>Apply the angle-addition identity for sine.</p>
+              <div class="step-eq" id="proof-eq-2"></div>
+            </div>
+          </div>
+          <div class="proof-step" data-step="2">
+            <div class="step-num">03</div>
+            <div class="step-content">
+              <p>Split into two fundamental limits — both evaluated at h = 0.</p>
+              <div class="step-eq" id="proof-eq-3"></div>
+            </div>
+          </div>
+          <div class="proof-step" data-step="3">
+            <div class="step-num">04</div>
+            <div class="step-content">
+              <p>Use the classical evaluations: <span class="mono">lim<sub>h→0</sub> sin(h)/h = 1</span> and <span class="mono">lim<sub>h→0</sub> (1 − cos(h))/h = 0</span>.</p>
+              <div class="step-eq" id="proof-eq-4"></div>
+            </div>
+          </div>
+          <div class="proof-step" data-step="4">
+            <div class="step-num">05</div>
+            <div class="step-content">
+              <p>Therefore, the derivative of sine is cosine. ∎</p>
+              <div class="step-eq" id="proof-eq-5"></div>
+            </div>
+          </div>
+        </div>
+        <div class="proof-controls">
+          <button class="btn orange" id="proof-next">Next step →</button>
+          <button class="btn" id="proof-reset">Reset</button>
+          <div class="proof-progress"><div class="proof-progress-bar" id="proof-bar" style="width:0%;"></div></div>
+          <span class="mono" style="font-size:12px; color:var(--ink-soft);" id="proof-count">0 / 5</span>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- INTEGRALS -->
+  <section id="integrals" class="section">
+    <div class="container">
+      <div class="section-head">
+        <div>
+          <div class="section-num">§ 02 / INTEGRALS</div>
+        </div>
+        <div>
+          <h2 class="section-title">Accumulation,<br>Rectified.</h2>
+        </div>
+      </div>
+      <p class="section-epigraph" style="margin-top:-32px; margin-bottom:48px;">Slice the area beneath a curve into infinitely many infinitesimally thin rectangles — and add them all up.</p>
+
+      <div class="grid-2">
+        <div class="prose-block">
+          <p>The <span class="term" data-def="A Riemann sum is an approximation of an integral formed by summing the areas of rectangles whose heights are determined by the function's value at sample points in each subinterval.">Riemann sum</span> partitions the interval [<em>a</em>, <em>b</em>] into <em>n</em> strips. As <em>n</em> grows, the rectangles hug the curve ever more tightly:</p>
+          <div class="formula-block" id="eq-integral-def"></div>
+          <p>In the limit, the sum converges to the <span class="term" data-def="The definite integral of f from a to b, denoted ∫ₐᵇ f(x) dx, equals the signed area between the graph of f and the x-axis over [a, b].">definite integral</span> — the exact signed area beneath the curve. Drag the partition slider below.</p>
+          <p style="font-style:italic; color:var(--ink-soft); font-size:15px;">↳ Switch between left, right, midpoint, and trapezoidal rules to see how each approximates the true area.</p>
+        </div>
+
+        <div>
+          <div class="integral-canvas-wrap">
+            <div class="canvas-frame integral-canvas-frame">
+              <div class="canvas-corner tl"></div>
+              <div class="canvas-corner tr"></div>
+              <div class="canvas-corner bl"></div>
+              <div class="canvas-corner br"></div>
+              <canvas id="integral-canvas"></canvas>
+              <div class="deriv-canvas-label"><span class="swatch" style="background:var(--green);"></span>f(x) = 0.4x² + 0.5  ·  on [0, 6]</div>
+            </div>
+            <div class="integral-controls">
+              <div class="control-group">
+                <div class="control-label">
+                  <span>Partitions n</span>
+                  <span class="control-value" id="integral-n-val">16</span>
+                </div>
+                <input type="range" id="integral-n" class="green" min="1" max="80" value="16">
+                <div class="control-label" style="margin-top:8px;">
+                  <span>Slice method</span>
+                </div>
+                <div class="method-buttons" id="method-buttons">
+                  <button data-method="left">Left</button>
+                  <button data-method="right">Right</button>
+                  <button data-method="mid" class="active">Mid</button>
+                  <button data-method="trap">Trap</button>
+                </div>
+              </div>
+              <div class="control-group">
+                <div style="font-family:'Space Grotesk',sans-serif; font-size:10px; text-transform:uppercase; letter-spacing:0.16em; color:var(--ink-soft); margin-bottom:6px;">Exact integral</div>
+                <div style="font-family:'JetBrains Mono',monospace; font-size:14px; line-height:1.6;">
+                  ∫₀⁶ f(x) dx<br>
+                  = <span style="font-size:22px; color:var(--green); font-weight:500;" id="integral-exact">17.280</span>
+                </div>
+                <div style="margin-top:10px; font-family:'JetBrains Mono',monospace; font-size:11px; color:var(--ink-soft);">via antiderivative F(b) − F(a)</div>
+              </div>
+            </div>
+            <div class="integral-stats" style="border-top:1px solid var(--ink); border-left:1px solid var(--ink); border-right:1px solid var(--ink); border-top:none;">
+              <div class="stat">
+                <div class="stat-label">approximation</div>
+                <div class="stat-value green" id="integral-approx">17.2695</div>
+              </div>
+              <div class="stat">
+                <div class="stat-label">error</div>
+                <div class="stat-value orange" id="integral-error">+0.0105</div>
+              </div>
+              <div class="stat">
+                <div class="stat-label">slice width Δx</div>
+                <div class="stat-value" id="integral-dx">0.3750</div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="divider-text"><span>Fundamental theorem · derivatives and integrals are inverses</span></div>
+
+      <div style="max-width:760px; margin:0 auto; text-align:center;">
+        <div id="eq-ftc" style="font-size:24px;"></div>
+        <p style="font-style:italic; color:var(--ink-soft); margin-top:16px;">Differentiation undoes integration, and integration undoes differentiation — the central discovery of calculus, binding the two halves into a single theory.</p>
+      </div>
+    </div>
+  </section>
+
+  <!-- LIMITS -->
+  <section id="limits" class="section">
+    <div class="container">
+      <div class="section-head">
+        <div>
+          <div class="section-num">§ 03 / LIMITS</div>
+        </div>
+        <div>
+          <h2 class="section-title">The ε–δ<br>Contract.</h2>
+        </div>
+      </div>
+      <p class="section-epigraph" style="margin-top:-32px; margin-bottom:48px;">A limit is a promise: for every tolerance you demand, there is a neighborhood that delivers.</p>
+
+      <div class="limits-layout">
+        <div>
+          <div class="canvas-frame limits-canvas-frame">
+            <div class="canvas-corner tl"></div>
+            <div class="canvas-corner tr"></div>
+            <div class="canvas-corner bl"></div>
+            <div class="canvas-corner br"></div>
+            <canvas id="limits-canvas"></canvas>
+            <div class="deriv-canvas-label"><span class="swatch" style="background:var(--ink);"></span>f(x) = x²  ·  lim<sub>x→2</sub> f(x) = 4</div>
+          </div>
+          <div style="margin-top:16px; padding:12px 14px; background:var(--paper-white); border:1px dashed var(--ink-faint); font-size:14px; color:var(--ink-soft);">
+            <strong style="font-family:'Space Grotesk',sans-serif; font-size:10px; text-transform:uppercase; letter-spacing:0.14em; color:var(--ink);">Drag ε</strong> — the green horizontal band sets the target y-tolerance. δ (orange vertical band) snaps to the maximum width that keeps the curve inside ε. Release to confirm.
+          </div>
+        </div>
+
+        <div class="limits-panel">
+          <div class="limits-readout">
+            <h4>The formal definition</h4>
+            <div style="text-align:center; padding:12px 0;" id="eq-edelta"></div>
+            <div style="border-top:1px dashed var(--ink-faint); padding-top:14px; margin-top:8px;">
+              <div class="eq-line">
+                <span>ε <span style="color:var(--ink-soft);">(y-tolerance)</span></span>
+                <span class="val green" id="eps-val">0.400</span>
+              </div>
+              <div class="eq-line">
+                <span>δ <span style="color:var(--ink-soft);">(x-neighborhood)</span></span>
+                <span class="val orange" id="delta-val">0.0975</span>
+              </div>
+              <div class="eq-line">
+                <span>limit L</span>
+                <span class="val">4.000</span>
+              </div>
+            </div>
+            <div class="delta-status" id="delta-status">
+              For all x with |x − 2| &lt; <strong id="status-delta">0.0975</strong>, we have |x² − 4| &lt; <strong id="status-eps">0.400</strong>.
+            </div>
+          </div>
+
+          <div class="limits-panel">
+            <div class="control-group">
+              <div class="control-label">
+                <span>ε — y-tolerance</span>
+                <span class="control-value green" id="eps-display">0.400</span>
+              </div>
+              <input type="range" id="eps-slider" class="green" min="0.1" max="1.5" step="0.01" value="0.4">
+            </div>
+            <div class="control-group">
+              <div class="control-label">
+                <span>δ — x-neighborhood (auto)</span>
+                <span class="control-value orange" id="delta-display">0.0975</span>
+              </div>
+              <input type="range" id="delta-slider" class="orange" min="0.01" max="0.5" step="0.001" value="0.0975">
+            </div>
+            <div style="font-size:13px; color:var(--ink-soft); font-style:italic; line-height:1.5;">
+              The maximal δ for f(x) = x² near x = 2 is δ = min(2 − √(4−ε), √(4+ε) − 2). Watch it snap when you change ε.
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- PRACTICE -->
+  <section id="practice" class="section">
+    <div class="container">
+      <div class="section-head">
+        <div>
+          <div class="section-num">§ 04 / PRACTICE</div>
+        </div>
+        <div>
+          <h2 class="section-title">Worked<br>Examples.</h2>
+        </div>
+      </div>
+      <p class="section-epigraph" style="margin-top:-32px; margin-bottom:48px;">Three applied problems, each with progressive hints. Reveal one step at a time — only when you're ready.</p>
+
+      <div class="practice-grid">
+        <!-- Problem 1 -->
+        <div class="problem-card">
+          <div class="problem-tag deriv"><span class="dot"></span>Related rates · differentiation</div>
+          <h3 class="problem-title">A ladder slides down a wall.</h3>
+          <div class="problem-body">
+            A 10 ft ladder leans against a vertical wall. The bottom is pulled away at <span class="mono">2 ft/s</span>. When the bottom is <span class="mono">6 ft</span> from the wall, how fast is the top sliding <em>down</em>?
+          </div>
+          <div class="problem-hints">
+            <div class="hint-row"><span class="hint-label">HINT 01</span>Let <em>x</em> be the bottom distance, <em>y</em> the height. Pythagoras: <span class="mono">x² + y² = 100</span>.</div>
+            <div class="hint-row"><span class="hint-label">HINT 02</span>Differentiate implicitly with respect to time <em>t</em>.</div>
+            <div class="hint-row"><span class="hint-label">HINT 03</span>At <em>x</em> = 6: <em>y</em> = √(100 − 36) = 8. Plug in.</div>
+            <div class="hint-row"><span class="hint-label">SOLVE</span>2x·dx/dt + 2y·dy/dt = 0 ⟹ dy/dt = −(x/y)·dx/dt = −(6/8)(2) = −1.5 ft/s.</div>
+          </div>
+          <div class="problem-actions">
+            <button class="btn orange hint-btn" data-target="0">Reveal hint</button>
+            <button class="btn answer-btn" data-target="0">Show answer</button>
+          </div>
+          <div class="problem-answer">The top slides down at 1.5 ft/s.</div>
+        </div>
+
+        <!-- Problem 2 -->
+        <div class="problem-card">
+          <div class="problem-tag integ"><span class="dot"></span>Optimization · integration</div>
+          <h3 class="problem-title">Minimize the surface area of a can.</h3>
+          <div class="problem-body">
+            Design a cylindrical can to hold <span class="mono">355 mL</span> (≈ 355 cm³) of liquid. What radius minimizes the total surface area (top, bottom, side)?
+          </div>
+          <div class="problem-hints">
+            <div class="hint-row"><span class="hint-label">HINT 01</span>Volume <em>V</em> = πr²h = 355. Surface <em>S</em> = 2πr² + 2πrh.</div>
+            <div class="hint-row"><span class="hint-label">HINT 02</span>Eliminate <em>h</em>: <em>h</em> = 355 / (πr²). Substitute into <em>S</em>.</div>
+            <div class="hint-row"><span class="hint-label">HINT 03</span>Set <em>dS/dr</em> = 0 to find the critical point.</div>
+            <div class="hint-row"><span class="hint-label">SOLVE</span>dS/dr = 4πr − 710/r² = 0 ⟹ r³ = 710/(4π) ≈ 56.5 ⟹ r ≈ 3.84 cm, h ≈ 7.67 cm.</div>
+          </div>
+          <div class="problem-actions">
+            <button class="btn green hint-btn" data-target="1">Reveal hint</button>
+            <button class="btn answer-btn" data-target="1">Show answer</button>
+          </div>
+          <div class="problem-answer">r ≈ 3.84 cm, h ≈ 7.67 cm  (height = diameter)</div>
+        </div>
+
+        <!-- Problem 3 -->
+        <div class="problem-card">
+          <div class="problem-tag lim"><span class="dot"></span>Limits · L'Hôpital</div>
+          <h3 class="problem-title">The indeterminate 0/0.</h3>
+          <div class="problem-body">
+            Evaluate <span class="mono">lim<sub>x→0</sub> (eˣ − 1 − x) / x²</span>. Direct substitution gives 0/0.
+          </div>
+          <div class="problem-hints">
+            <div class="hint-row"><span class="hint-label">HINT 01</span>Apply <span class="term">L'Hôpital's rule</span>: differentiate numerator and denominator separately.</div>
+            <div class="hint-row"><span class="hint-label">HINT 02</span>Numerator' = eˣ − 1, denominator' = 2x. Still 0/0 at <em>x</em> = 0.</div>
+            <div class="hint-row"><span class="hint-label">HINT 03</span>Apply L'Hôpital a second time.</div>
+            <div class="hint-row"><span class="hint-label">SOLVE</span>(eˣ − 1 − x)″ = eˣ, (x²)″ = 2. Limit = e⁰/2 = 1/2.</div>
+          </div>
+          <div class="problem-actions">
+            <button class="btn hint-btn" data-target="2">Reveal hint</button>
+            <button class="btn answer-btn" data-target="2">Show answer</button>
+          </div>
+          <div class="problem-answer">The limit equals 1/2.</div>
+        </div>
+
+        <!-- Problem 4 -->
+        <div class="problem-card">
+          <div class="problem-tag integ"><span class="dot"></span>Area between curves</div>
+          <h3 class="problem-title">Enclosed region between parabolas.</h3>
+          <div class="problem-body">
+            Find the area enclosed between <span class="mono">y = x²</span> and <span class="mono">y = 2x − x²</span>.
+          </div>
+          <div class="problem-hints">
+            <div class="hint-row"><span class="hint-label">HINT 01</span>Find intersection points: <em>x</em>² = 2<em>x</em> − <em>x</em>² ⟹ 2<em>x</em>² − 2<em>x</em> = 0.</div>
+            <div class="hint-row"><span class="hint-label">HINT 02</span>Intersections at <em>x</em> = 0 and <em>x</em> = 1. On (0,1), 2x − x² &gt; x².</div>
+            <div class="hint-row"><span class="hint-label">HINT 03</span>Integrate the difference: ∫₀¹ (2x − 2x²) dx.</div>
+            <div class="hint-row"><span class="hint-label">SOLVE</span>[x² − (2/3)x³]₀¹ = 1 − 2/3 = 1/3.</div>
+          </div>
+          <div class="problem-actions">
+            <button class="btn green hint-btn" data-target="3">Reveal hint</button>
+            <button class="btn answer-btn" data-target="3">Show answer</button>
+          </div>
+          <div class="problem-answer">The enclosed area is 1/3 square unit.</div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+</main>
+
+<footer>
+  <div class="container">
+    <div>
+      <div class="footer-brand">∫ Calculus</div>
+      <p class="footer-tag">A visual field guide to the architecture of change — drawn from limit, slope, and signed area.</p>
+    </div>
+    <div>
+      <h5>Foundations</h5>
+      <ul>
+        <li><a href="#derivatives">Derivatives</a></li>
+        <li><a href="#integrals">Integrals</a></li>
+        <li><a href="#limits">Limits</a></li>
+        <li><a href="#practice">Practice</a></li>
+      </ul>
+    </div>
+    <div>
+      <h5>Theorems</h5>
+      <ul>
+        <li><a href="#">Mean Value</a></li>
+        <li><a href="#">Fundamental</a></li>
+        <li><a href="#">Intermediate Value</a></li>
+        <li><a href="#">L'Hôpital's</a></li>
+      </ul>
+    </div>
+    <div>
+      <h5>Edition</h5>
+      <ul>
+        <li>Volume I · 2024</li>
+        <li>Field edition</li>
+        <li>Renders: KaTeX</li>
+        <li>Plots: Canvas 2D</li>
+      </ul>
+    </div>
+  </div>
+  <div class="footer-bottom">
+    <span>© MMXXIV · Typeset in Space Grotesk &amp; Newsreader</span>
+    <span>Continuously underivative</span>
+  </div>
+</footer>
+
+<div class="popover" id="popover"></div>
+
+<script>
+/* ============================================================
+   CALCULUS VISUAL FIELD GUIDE — interactive logic
+   ============================================================ */
+
+// ---------- DPI-aware canvas helper ----------
+function setupCanvas(canvas) {
+  const dpr = Math.max(1, window.devicePixelRatio || 1);
+  const rect = canvas.getBoundingClientRect();
+  canvas.width = Math.max(2, Math.floor(rect.width * dpr));
+  canvas.height = Math.max(2, Math.floor(rect.height * dpr));
+  const ctx = canvas.getContext('2d');
+  ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+  return { ctx, w: rect.width, h: rect.height, dpr };
+}
+
+// ---------- Grid drawing ----------
+function drawGrid(ctx, w, h, view) {
+  // Minor lines: every 0.1 unit
+  const minor = 0.1;
+  ctx.lineWidth = 0.5;
+  ctx.strokeStyle = 'rgba(11, 37, 69, 0.07)';
+  ctx.beginPath();
+  const xStartM = Math.ceil(view.xMin / minor) * minor;
+  for (let x = xStartM; x <= view.xMax; x += minor) {
+    const px = (x - view.xMin) / (view.xMax - view.xMin) * w;
+    ctx.moveTo(px, 0); ctx.lineTo(px, h);
+  }
+  const yStartM = Math.ceil(view.yMin / minor) * minor;
+  for (let y = yStartM; y <= view.yMax; y += minor) {
+    const py = h - (y - view.yMin) / (view.yMax - view.yMin) * h;
+    ctx.moveTo(0, py); ctx.lineTo(w, py);
+  }
+  ctx.stroke();
+
+  // Major lines: every 1 unit
+  ctx.lineWidth = 1;
+  ctx.strokeStyle = 'rgba(11, 37, 69, 0.18)';
+  ctx.beginPath();
+  const xStart = Math.ceil(view.xMin);
+  for (let x = xStart; x <= view.xMax; x++) {
+    const px = (x - view.xMin) / (view.xMax - view.xMin) * w;
+    ctx.moveTo(px, 0); ctx.lineTo(px, h);
+  }
+  const yStart = Math.ceil(view.yMin);
+  for (let y = yStart; y <= view.yMax; y++) {
+    const py = h - (y - view.yMin) / (view.yMax - view.yMin) * h;
+    ctx.moveTo(0, py); ctx.lineTo(w, py);
+  }
+  ctx.stroke();
+
+  // Axes
+  const x0 = (0 - view.xMin) / (view.xMax - view.xMin) * w;
+  const y0 = h - (0 - view.yMin) / (view.yMax - view.yMin) * h;
+  ctx.lineWidth = 1.2;
+  ctx.strokeStyle = 'rgba(11, 37, 69, 0.45)';
+  ctx.beginPath();
+  if (x0 >= 0 && x0 <= w) { ctx.moveTo(x0, 0); ctx.lineTo(x0, h); }
+  if (y0 >= 0 && y0 <= h) { ctx.moveTo(0, y0); ctx.lineTo(w, y0); }
+  ctx.stroke();
+
+  // Axis labels
+  ctx.fillStyle = 'rgba(11, 37, 69, 0.55)';
+  ctx.font = '10px "JetBrains Mono", monospace';
+  ctx.textAlign = 'center'; ctx.textBaseline = 'top';
+  for (let x = Math.ceil(view.xMin); x <= view.xMax; x++) {
+    if (x === 0) continue;
+    const px = (x - view.xMin) / (view.xMax - view.xMin) * w;
+    if (px > 12 && px < w - 12) ctx.fillText(x, px, y0 + 4);
+  }
+  ctx.textAlign = 'right'; ctx.textBaseline = 'middle';
+  for (let y = Math.ceil(view.yMin); y <= view.yMax; y++) {
+    if (y === 0) continue;
+    const py = h - (y - view.yMin) / (view.yMax - view.yMin) * h;
+    if (py > 8 && py < h - 8) ctx.fillText(y, x0 - 4, py);
+  }
+}
+
+// Plot a function
+function plotFn(ctx, f, view, w, h, options = {}) {
+  const { color = '#0B2545', width = 2, dash = [], samples = 600 } = options;
+  ctx.strokeStyle = color;
+  ctx.lineWidth = width;
+  ctx.setLineDash(dash);
+  ctx.beginPath();
+  const dx = (view.xMax - view.xMin) / samples;
+  let started = false;
+  for (let i = 0; i <= samples; i++) {
+    const x = view.xMin + i * dx;
+    let y;
+    try { y = f(x); } catch (e) { started = false; continue; }
+    if (!isFinite(y) || Math.abs(y) > 1e6) { started = false; continue; }
+    const px = (x - view.xMin) / (view.xMax - view.xMin) * w;
+    const py = h - (y - view.yMin) / (view.yMax - view.yMin) * h;
+    if (py < -1000 || py > h + 1000) { started = false; continue; }
+    if (!started) { ctx.moveTo(px, py); started = true; }
+    else ctx.lineTo(px, py);
+  }
+  ctx.stroke();
+  ctx.setLineDash([]);
+}
+
+const mathToPx = (x, y, view, w, h) => [
+  (x - view.xMin) / (view.xMax - view.xMin) * w,
+  h - (y - view.yMin) / (view.yMax - view.yMin) * h
+];
+const pxToMath = (px, py, view, w, h) => [
+  px / w * (view.xMax - view.xMin) + view.xMin,
+  (h - py) / h * (view.yMax - view.yMin) + view.yMin
+];
+
+/* ============================================================
+   HERO — sweeping tangent on sin(x)
+   ============================================================ */
+class HeroViz {
+  constructor() {
+    this.canvas = document.getElementById('hero-canvas');
+    this.x = -Math.PI;
+    this.speed = 0.7;
+    this.direction = 1;
+    this.range = Math.PI * 1.5;
+    this.playing = true;
+    this.lastT = performance.now();
+    this.resize();
+    window.addEventListener('resize', () => this.resize());
+    requestAnimationFrame(t => this.loop(t));
+
+    // Optional: pause on click
+    this.canvas.addEventListener('click', () => {
+      this.playing = !this.playing;
+    });
+  }
+  resize() {
+    const r = setupCanvas(this.canvas);
+    this.ctx = r.ctx; this.w = r.w; this.h = r.h;
+    // Top portion: sin(x); bottom portion: cos(x) traced
+    this.split = this.h * 0.62;
+    this.viewTop = { xMin: -Math.PI * 1.2, xMax: Math.PI * 1.2, yMin: -1.6, yMax: 1.6 };
+    this.viewBot = { xMin: -Math.PI * 1.2, xMax: Math.PI * 1.2, yMin: -1.6, yMax: 1.6 };
+  }
+  loop(t) {
+    const dt = Math.min(0.05, (t - this.lastT) / 1000);
+    this.lastT = t;
+    if (this.playing) {
+      this.x += this.direction * this.speed * dt;
+      if (this.x > this.range) { this.x = this.range; this.direction = -1; }
+      if (this.x < -this.range) { this.x = -this.range; this.direction = 1; }
+    }
+    this.draw();
+    requestAnimationFrame(t => this.loop(t));
+  }
+  draw() {
+    const { ctx, w, h } = this;
+    ctx.clearRect(0, 0, w, h);
+
+    // TOP: sin(x) with tangent
+    ctx.save();
+    ctx.beginPath();
+    ctx.rect(0, 0, w, this.split);
+    ctx.clip();
+    drawGrid(ctx, w, this.split, this.viewTop);
+    this.drawTop();
+    ctx.restore();
+
+    // Divider
+    ctx.strokeStyle = 'rgba(11, 37, 69, 0.3)';
+    ctx.lineWidth = 1;
+    ctx.beginPath();
+    ctx.moveTo(0, this.split);
+    ctx.lineTo(w, this.split);
+    ctx.stroke();
+
+    // BOTTOM: cos(x) being traced
+    ctx.save();
+    ctx.beginPath();
+    ctx.rect(0, this.split, w, h - this.split);
+    ctx.clip();
+    ctx.translate(0, this.split);
+    const bh = h - this.split;
+    drawGrid(ctx, w, bh, this.viewBot);
+    this.drawBottom(bh);
+    ctx.restore();
+
+    this.updateReadout();
+  }
+  drawTop() {
+    const { ctx, w } = this;
+    const H = this.split;
+    const f = Math.sin;
+    const fp = Math.cos;
+
+    // Curve
+    plotFn(ctx, f, this.viewTop, w, H, { color: '#0B2545', width: 2.4 });
+
+    // Tangent line
+    const x = this.x;
+    const slope = fp(x);
+    const y = f(x);
+    const [px, py] = mathToPx(x, y, this.viewTop, w, H);
+    // Tangent extends across the visible area
+    const x1 = this.viewTop.xMin;
+    const x2 = this.viewTop.xMax;
+    const y1 = y + slope * (x1 - x);
+    const y2 = y + slope * (x2 - x);
+    const [tx1, ty1] = mathToPx(x1, y1, this.viewTop, w, H);
+    const [tx2, ty2] = mathToPx(x2, y2, this.viewTop, w, H);
+    ctx.strokeStyle = 'rgba(215, 92, 42, 0.9)';
+    ctx.lineWidth = 1.8;
+    ctx.beginPath();
+    ctx.moveTo(tx1, ty1);
+    ctx.lineTo(tx2, ty2);
+    ctx.stroke();
+
+    // Vertical drop (dashed) showing x
+    const [pxBase] = mathToPx(x, 0, this.viewTop, w, H);
+    ctx.strokeStyle = 'rgba(215, 92, 42, 0.3)';
+    ctx.lineWidth = 1;
+    ctx.setLineDash([3, 4]);
+    ctx.beginPath();
+    ctx.moveTo(pxBase, py);
+    ctx.lineTo(pxBase, H);
+    ctx.stroke();
+    ctx.setLineDash([]);
+
+    // Point on curve
+    ctx.fillStyle = '#D75C2A';
+    ctx.strokeStyle = '#FCF9EF';
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    ctx.arc(px, py, 7, 0, Math.PI * 2);
+    ctx.fill(); ctx.stroke();
+
+    // Slope triangle (small visual cue)
+    const triDx = 0.4;
+    const triDy = slope * triDx;
+    const [tp1x, tp1y] = mathToPx(x, y, this.viewTop, w, H);
+    const [tp2x, tp2y] = mathToPx(x + triDx, y, this.viewTop, w, H);
+    const [tp3x, tp3y] = mathToPx(x + triDx, y + triDy, this.viewTop, w, H);
+    ctx.strokeStyle = 'rgba(215, 92, 42, 0.5)';
+    ctx.lineWidth = 1.2;
+    ctx.beginPath();
+    ctx.moveTo(tp1x, tp1y); ctx.lineTo(tp2x, tp2y);
+    ctx.moveTo(tp2x, tp2y); ctx.lineTo(tp3x, tp3y);
+    ctx.stroke();
+  }
+  drawBottom(bh) {
+    const { ctx, w } = this;
+    const fp = Math.cos;
+    // Plot cos(x)
+    plotFn(ctx, fp, this.viewBot, w, bh, { color: 'rgba(11, 37, 69, 0.4)', width: 1.5 });
+
+    // Filled trace from -range to current x
+    const samples = 200;
+    const xStart = -this.range;
+    ctx.beginPath();
+    let started = false;
+    for (let i = 0; i <= samples; i++) {
+      const xi = xStart + (this.x - xStart) * (i / samples);
+      const yi = fp(xi);
+      const [px, py] = mathToPx(xi, yi, this.viewBot, w, bh);
+      if (!started) { ctx.moveTo(px, py); started = true; }
+      else ctx.lineTo(px, py);
+    }
+    ctx.strokeStyle = '#D75C2A';
+    ctx.lineWidth = 2.5;
+    ctx.stroke();
+
+    // Point on derivative
+    const [px, py] = mathToPx(this.x, fp(this.x), this.viewBot, w, bh);
+    ctx.fillStyle = '#D75C2A';
+    ctx.strokeStyle = '#FCF9EF';
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    ctx.arc(px, py, 6, 0, Math.PI * 2);
+    ctx.fill(); ctx.stroke();
+
+    // Vertical guide
+    ctx.strokeStyle = 'rgba(215, 92, 42, 0.25)';
+    ctx.lineWidth = 1;
+    ctx.setLineDash([3, 4]);
+    ctx.beginPath();
+    ctx.moveTo(px, 0); ctx.lineTo(px, bh);
+    ctx.stroke();
+    ctx.setLineDash([]);
+
+    // Label
+    ctx.fillStyle = 'rgba(11, 37, 69, 0.55)';
+    ctx.font = '10px "JetBrains Mono", monospace';
+    ctx.textAlign = 'left';
+    ctx.textBaseline = 'bottom';
+    ctx.fillText("f′(x) = cos(x) — traced by the slope above", 12, bh - 8);
+  }
+  updateReadout() {
+    const x = this.x;
+    const fx = Math.sin(x);
+    const slope = Math.cos(x);
+    document.getElementById('hero-x').textContent = (x >= 0 ? '+' : '') + x.toFixed(3);
+    document.getElementById('hero-fx').textContent = (fx >= 0 ? '+' : '') + fx.toFixed(3);
+    document.getElementById('hero-slope').textContent = (slope >= 0 ? '+' : '') + slope.toFixed(3);
+    document.getElementById('hero-eq').textContent =
+      `y = ${fx.toFixed(2)} ${slope >= 0 ? '+' : '−'} ${Math.abs(slope).toFixed(2)}(x − ${x.toFixed(2)})`;
+  }
+}
+
+/* ============================================================
+   DERIVATIVES — drag a point, see tangent & f'(x) update
+   ============================================================ */
+const FN_LIBRARY = {
+  sin:  { f: x => Math.sin(x),        fp: x => Math.cos(x),        view: { xMin: -Math.PI*1.2, xMax: Math.PI*1.2, yMin: -2, yMax: 2 }, latex: "\\sin(x)", dlatex: "\\cos(x)" },
+  x2:   { f: x => x*x,                fp: x => 2*x,                view: { xMin: -3, xMax: 3, yMin: -2, yMax: 6 },                  latex: "x^2",     dlatex: "2x" },
+  x3:   { f: x => x*x*x,              fp: x => 3*x*x,              view: { xMin: -2.2, xMax: 2.2, yMin: -5, yMax: 5 },               latex: "x^3",     dlatex: "3x^2" },
+  exp:  { f: x => Math.exp(x),        fp: x => Math.exp(x),        view: { xMin: -2, xMax: 2, yMin: -1, yMax: 9 },                   latex: "e^x",     dlatex: "e^x" },
+  log:  { f: x => Math.log(x),        fp: x => 1/x,                view: { xMin: 0.05, xMax: 6, yMin: -3, yMax: 2.5 },               latex: "\\ln(x)", dlatex: "1/x" }
+};
+
+class DerivativeViz {
+  constructor() {
+    this.topCanvas = document.getElementById('deriv-top');
+    this.botCanvas = document.getElementById('deriv-bot');
+    this.fnKey = 'sin';
+    this.x = 0.6;
+    this.zoom = 1;
+    this.panX = 0;
+    this.panY = 0;
+    this.dragging = false;
+    this.hovering = false;
+    this.resize();
+    window.addEventListener('resize', () => { this.resize(); this.draw(); });
+
+    this.attachEvents();
+    this.draw();
+  }
+  resize() {
+    const a = setupCanvas(this.topCanvas);
+    const b = setupCanvas(this.botCanvas);
+    this.topCtx = a.ctx; this.topW = a.w; this.topH = a.h;
+    this.botCtx = b.ctx; this.botW = b.w; this.botH = b.h;
+  }
+  get fn() { return FN_LIBRARY[this.fnKey]; }
+  get viewTop() {
+    const v = this.fn.view;
+    const cx = (v.xMin + v.xMax) / 2 + this.panX;
+    const cy = (v.yMin + v.yMax) / 2 + this.panY;
+    const hw = (v.xMax - v.xMin) / 2 / this.zoom;
+    const hh = (v.yMax - v.yMin) / 2 / this.zoom;
+    return { xMin: cx - hw, xMax: cx + hw, yMin: cy - hh, yMax: cy + hh };
+  }
+  get viewBot() {
+    // Match top x-range; y-range centered on 0 typically
+    const v = this.fn.view;
+    const cx = (v.xMin + v.xMax) / 2 + this.panX;
+    const hw = (v.xMax - v.xMin) / 2 / this.zoom;
+    // y-range auto from derivative values? Use sensible defaults
+    const yRange = (v.yMax - v.yMin) / 2;
+    return { xMin: cx - hw, xMax: cx + hw, yMin: -yRange*0.8 + this.panY, yMax: yRange*0.8 + this.panY };
+  }
+  draw() {
+    this.drawTop();
+    this.drawBot();
+    this.updateReadout();
+  }
+  drawTop() {
+    const { topCtx: ctx, topW: w, topH: h } = this;
+    ctx.clearRect(0, 0, w, h);
+    drawGrid(ctx, w, h, this.viewTop);
+    plotFn(ctx, this.fn.f, this.viewTop, w, h, { color: '#0B2545', width: 2.5 });
+
+    // Tangent
+    const x = this.x;
+    const f = this.fn.f; const fp = this.fn.fp;
+    const y = f(x); const m = fp(x);
+    const x1 = this.viewTop.xMin, x2 = this.viewTop.xMax;
+    const y1 = y + m * (x1 - x), y2 = y + m * (x2 - x);
+    const [tx1, ty1] = mathToPx(x1, y1, this.viewTop, w, h);
+    const [tx2, ty2] = mathToPx(x2, y2, this.viewTop, w, h);
+    ctx.strokeStyle = '#D75C2A';
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    ctx.moveTo(tx1, ty1); ctx.lineTo(tx2, ty2);
+    ctx.stroke();
+
+    // Vertical guide
+    const [px, py] = mathToPx(x, y, this.viewTop, w, h);
+    const [, py0] = mathToPx(x, 0, this.viewTop, w, h);
+    ctx.strokeStyle = 'rgba(215, 92, 42, 0.3)';
+    ctx.lineWidth = 1;
+    ctx.setLineDash([3, 4]);
+    ctx.beginPath();
+    ctx.moveTo(px, Math.min(py, py0)); ctx.lineTo(px, Math.max(py, py0));
+    ctx.stroke();
+    ctx.setLineDash([]);
+
+    // Point
+    ctx.fillStyle = '#D75C2A';
+    ctx.strokeStyle = '#FCF9EF';
+    ctx.lineWidth = 2.5;
+    ctx.beginPath();
+    ctx.arc(px, py, 8, 0, Math.PI * 2);
+    ctx.fill(); ctx.stroke();
+
+    // Hover slope readout
+    if (this.hovering) {
+      ctx.fillStyle = 'rgba(11, 37, 69, 0.85)';
+      ctx.font = '11px "JetBrains Mono", monospace';
+      ctx.textAlign = 'left';
+      const label = `m = ${m >= 0 ? '+' : ''}${m.toFixed(3)}`;
+      const tx = Math.min(px + 14, w - 80);
+      const ty = Math.max(py - 14, 14);
+      const mets = ctx.measureText(label);
+      ctx.fillStyle = 'rgba(252, 249, 239, 0.95)';
+      ctx.fillRect(tx - 6, ty - 12, mets.width + 12, 18);
+      ctx.strokeStyle = 'rgba(11, 37, 69, 0.3)';
+      ctx.lineWidth = 1;
+      ctx.strokeRect(tx - 6, ty - 12, mets.width + 12, 18);
+      ctx.fillStyle = '#0B2545';
+      ctx.fillText(label, tx, ty);
+    }
+  }
+  drawBot() {
+    const { botCtx: ctx, botW: w, botH: h } = this;
+    ctx.clearRect(0, 0, w, h);
+    drawGrid(ctx, w, h, this.viewBot);
+    plotFn(ctx, this.fn.fp, this.viewBot, w, h, { color: '#D75C2A', width: 2.2 });
+
+    const x = this.x;
+    const fp = this.fn.fp;
+    const m = fp(x);
+    const [px, py] = mathToPx(x, m, this.viewBot, w, h);
+    const [, py0] = mathToPx(x, 0, this.viewBot, w, h);
+
+    // Vertical guide
+    ctx.strokeStyle = 'rgba(11, 37, 69, 0.25)';
+    ctx.lineWidth = 1;
+    ctx.setLineDash([3, 4]);
+    ctx.beginPath();
+    ctx.moveTo(px, 0); ctx.lineTo(px, h);
+    ctx.moveTo(0, py); ctx.lineTo(w, py);
+    ctx.stroke();
+    ctx.setLineDash([]);
+
+    // Point
+    ctx.fillStyle = '#0B2545';
+    ctx.strokeStyle = '#FCF9EF';
+    ctx.lineWidth = 2.5;
+    ctx.beginPath();
+    ctx.arc(px, py, 6, 0, Math.PI * 2);
+    ctx.fill(); ctx.stroke();
+  }
+  updateReadout() {
+    const x = this.x;
+    const fx = this.fn.f(x);
+    const dfx = this.fn.fp(x);
+    document.getElementById('deriv-x-val').textContent = (x >= 0 ? '+' : '') + x.toFixed(2);
+    document.getElementById('deriv-fx-val').textContent = (fx >= 0 ? '+' : '') + fx.toFixed(2);
+    document.getElementById('deriv-dfx-val').textContent = (dfx >= 0 ? '+' : '') + dfx.toFixed(2);
+  }
+  attachEvents() {
+    const c = this.topCanvas;
+    const getMouse = (e) => {
+      const r = c.getBoundingClientRect();
+      return { x: e.clientX - r.left, y: e.clientY - r.top };
+    };
+    c.addEventListener('mousedown', (e) => {
+      const m = getMouse(e);
+      const [mx] = pxToMath(m.x, m.y, this.viewTop, this.topW, this.topH);
+      this.x = mx;
+      this.dragging = true;
+      this.draw();
+    });
+    window.addEventListener('mousemove', (e) => {
+      const r = c.getBoundingClientRect();
+      if (e.clientX < r.left - 50 || e.clientX > r.right + 50 || e.clientY < r.top - 50 || e.clientY > r.bottom + 50) {
+        if (this.hovering) { this.hovering = false; this.draw(); }
+      }
+      const m = { x: e.clientX - r.left, y: e.clientY - r.top };
+      const inCanvas = m.x >= 0 && m.x <= this.topW && m.y >= 0 && m.y <= this.topH;
+      if (this.dragging) {
+        const [mx] = pxToMath(m.x, m.y, this.viewTop, this.topW, this.topH);
+        this.x = Math.max(this.viewTop.xMin, Math.min(this.viewTop.xMax, mx));
+        this.draw();
+      } else if (inCanvas) {
+        if (!this.hovering) { this.hovering = true; }
+        this.draw();
+      } else if (this.hovering) {
+        this.hovering = false;
+        this.draw();
+      }
+    });
+    window.addEventListener('mouseup', () => { this.dragging = false; });
+
+    // Wheel zoom anchored on cursor
+    c.addEventListener('wheel', (e) => {
+      e.preventDefault();
+      const m = getMouse(e);
+      const [mx, my] = pxToMath(m.x, m.y, this.viewTop, this.topW, this.topH);
+      const factor = e.deltaY > 0 ? 0.9 : 1.1;
+      this.zoom = Math.max(0.3, Math.min(5, this.zoom * factor));
+      // Adjust pan so cursor stays anchored
+      const newView = this.viewTop;
+      const [mx2, my2] = pxToMath(m.x, m.y, newView, this.topW, this.topH);
+      this.panX += (mx - mx2);
+      this.panY += (my - my2);
+      this.draw();
+    }, { passive: false });
+
+    // Function selector
+    document.getElementById('fn-selector').addEventListener('click', (e) => {
+      const btn = e.target.closest('button[data-fn]');
+      if (!btn) return;
+      this.fnKey = btn.dataset.fn;
+      this.zoom = 1; this.panX = 0; this.panY = 0;
+      // Clamp x to view
+      const v = FN_LIBRARY[this.fnKey].view;
+      this.x = Math.max(v.xMin + 0.2, Math.min(v.xMax - 0.2, this.x));
+      document.querySelectorAll('#fn-selector button').forEach(b => b.classList.toggle('active', b === btn));
+      this.draw();
+    });
+  }
+}
+
+/* ============================================================
+   INTEGRALS — Riemann sums
+   ============================================================ */
+class IntegralViz {
+  constructor() {
+    this.canvas = document.getElementById('integral-canvas');
+    this.n = 16;
+    this.method = 'mid';
+    this.a = 0; this.b = 6;
+    this.f = x => 0.4 * x * x + 0.5;
+    this.F = x => 0.4 * x * x * x / 3 + 0.5 * x; // antiderivative
+    this.view = { xMin: -0.5, xMax: 7, yMin: -0.5, yMax: 16 };
+    this.resize();
+    window.addEventListener('resize', () => { this.resize(); this.draw(); });
+    this.attachEvents();
+    this.draw();
+  }
+  resize() {
+    const r = setupCanvas(this.canvas);
+    this.ctx = r.ctx; this.w = r.w; this.h = r.h;
+  }
+  riemann() {
+    const dx = (this.b - this.a) / this.n;
+    let sum = 0;
+    const rects = [];
+    for (let i = 0; i < this.n; i++) {
+      const xL = this.a + i * dx;
+      const xR = this.a + (i + 1) * dx;
+      let h;
+      if (this.method === 'left') h = this.f(xL);
+      else if (this.method === 'right') h = this.f(xR);
+      else if (this.method === 'mid') h = this.f((xL + xR) / 2);
+      else if (this.method === 'trap') h = (this.f(xL) + this.f(xR)) / 2;
+      rects.push({ xL, xR, h, fL: this.f(xL), fR: this.f(xR) });
+      sum += h * dx;
+    }
+    return { sum, rects, dx };
+  }
+  draw() {
+    const { ctx, w, h } = this;
+    ctx.clearRect(0, 0, w, h);
+    drawGrid(ctx, w, h, this.view);
+
+    // Rectangles
+    const { rects, dx } = this.riemann();
+    ctx.fillStyle = 'rgba(42, 117, 83, 0.22)';
+    ctx.strokeStyle = 'rgba(42, 117, 83, 0.7)';
+    ctx.lineWidth = 1;
+    rects.forEach(r => {
+      const [px1, py1] = mathToPx(r.xL, 0, this.view, w, h);
+      const [px2, py2] = mathToPx(r.xR, r.h, this.view, w, h);
+      ctx.beginPath();
+      ctx.rect(px1, py2, px2 - px1, py1 - py2);
+      ctx.fill();
+      ctx.stroke();
+      // Trapezoid: also draw diagonal top
+      if (this.method === 'trap') {
+        const [, pyL] = mathToPx(r.xL, r.fL, this.view, w, h);
+        const [, pyR] = mathToPx(r.xR, r.fR, this.view, w, h);
+        ctx.beginPath();
+        ctx.moveTo(px1, pyL);
+        ctx.lineTo(px2, pyR);
+        ctx.strokeStyle = 'rgba(42, 117, 83, 0.9)';
+        ctx.lineWidth = 1.4;
+        ctx.stroke();
+        ctx.strokeStyle = 'rgba(42, 117, 83, 0.7)';
+        ctx.lineWidth = 1;
+      }
+    });
+
+    // Vertical lines at partition points
+    ctx.strokeStyle = 'rgba(42, 117, 83, 0.25)';
+    ctx.lineWidth = 0.8;
+    ctx.setLineDash([2, 3]);
+    rects.forEach(r => {
+      const [px] = mathToPx(r.xL, 0, this.view, w, h);
+      ctx.beginPath();
+      ctx.moveTo(px, 0); ctx.lineTo(px, h);
+      ctx.stroke();
+    });
+    ctx.setLineDash([]);
+
+    // Curve on top
+    plotFn(ctx, this.f, this.view, w, h, { color: '#0B2545', width: 2.5 });
+
+    // Endpoints markers
+    [this.a, this.b].forEach(x => {
+      const y = this.f(x);
+      const [px, py] = mathToPx(x, y, this.view, w, h);
+      ctx.fillStyle = '#0B2545';
+      ctx.strokeStyle = '#FCF9EF';
+      ctx.lineWidth = 2;
+      ctx.beginPath();
+      ctx.arc(px, py, 5, 0, Math.PI * 2);
+      ctx.fill(); ctx.stroke();
+    });
+
+    // Update readouts
+    const exact = this.F(this.b) - this.F(this.a);
+    const approx = rects.reduce((s, r) => s + r.h * dx, 0);
+    const err = approx - exact;
+    document.getElementById('integral-n-val').textContent = this.n;
+    document.getElementById('integral-exact').textContent = exact.toFixed(3);
+    document.getElementById('integral-approx').textContent = approx.toFixed(4);
+    document.getElementById('integral-error').textContent = (err >= 0 ? '+' : '−') + Math.abs(err).toFixed(4);
+    document.getElementById('integral-dx').textContent = dx.toFixed(4);
+  }
+  attachEvents() {
+    const slider = document.getElementById('integral-n');
+    slider.addEventListener('input', (e) => {
+      this.n = parseInt(e.target.value);
+      this.draw();
+    });
+    document.getElementById('method-buttons').addEventListener('click', (e) => {
+      const btn = e.target.closest('button[data-method]');
+      if (!btn) return;
+      this.method = btn.dataset.method;
+      document.querySelectorAll('#method-buttons button').forEach(b => b.classList.toggle('active', b === btn));
+      this.draw();
+    });
+  }
+}
+
+/* ============================================================
+   LIMITS — ε-δ tool
+   ============================================================ */
+class LimitsViz {
+  constructor() {
+    this.canvas = document.getElementById('limits-canvas');
+    this.a = 2;          // limit point
+    this.L = 4;          // limit value (a^2)
+    this.eps = 0.4;
+    this.delta = 0.0975;
+    this.deltaTarget = 0.0975;
+    this.deltaStart = 0.0975;
+    this.tweenStart = 0;
+    this.tweenDur = 500;
+    this.flashing = false;
+    this.view = { xMin: 1, xMax: 3, yMin: 0.5, yMax: 8 };
+    this.resize();
+    window.addEventListener('resize', () => { this.resize(); this.draw(); });
+    this.f = x => x * x;
+    this.attachEvents();
+    this.lastT = performance.now();
+    requestAnimationFrame(t => this.loop(t));
+  }
+  resize() {
+    const r = setupCanvas(this.canvas);
+    this.ctx = r.ctx; this.w = r.w; this.h = r.h;
+  }
+  computeDelta(eps) {
+    // For x^2 near x=2: |x^2 - 4| < eps when x in (sqrt(4-eps), sqrt(4+eps))
+    // delta = min(2 - sqrt(4-eps), sqrt(4+eps) - 2)
+    if (eps >= 4) return 1;
+    const lo = Math.sqrt(4 - eps);
+    const hi = Math.sqrt(4 + eps);
+    return Math.min(2 - lo, hi - 2);
+  }
+  snapDelta() {
+    this.deltaStart = this.delta;
+    this.deltaTarget = this.computeDelta(this.eps);
+    this.tweenStart = performance.now();
+  }
+  loop(t) {
+    const dt = t - this.tweenStart;
+    if (dt < this.tweenDur) {
+      const p = Math.min(1, dt / this.tweenDur);
+      const eased = 1 - Math.pow(1 - p, 3);
+      this.delta = this.deltaStart + (this.deltaTarget - this.deltaStart) * eased;
+    } else {
+      this.delta = this.deltaTarget;
+    }
+    this.draw();
+    requestAnimationFrame(t => this.loop(t));
+  }
+  draw() {
+    const { ctx, w, h } = this;
+    ctx.clearRect(0, 0, w, h);
+    drawGrid(ctx, w, h, this.view);
+
+    // ε band (horizontal, green)
+    const [, pyE1] = mathToPx(0, this.L - this.eps, this.view, w, h);
+    const [, pyE2] = mathToPx(0, this.L + this.eps, this.view, w, h);
+    ctx.fillStyle = 'rgba(42, 117, 83, 0.15)';
+    ctx.fillRect(0, pyE2, w, pyE1 - pyE2);
+    ctx.strokeStyle = 'rgba(42, 117, 83, 0.7)';
+    ctx.lineWidth = 1;
+    ctx.setLineDash([5, 4]);
+    ctx.beginPath();
+    ctx.moveTo(0, pyE1); ctx.lineTo(w, pyE1);
+    ctx.moveTo(0, pyE2); ctx.lineTo(w, pyE2);
+    ctx.stroke();
+    ctx.setLineDash([]);
+
+    // δ band (vertical, orange)
+    const [pxD1] = mathToPx(this.a - this.delta, 0, this.view, w, h);
+    const [pxD2] = mathToPx(this.a + this.delta, 0, this.view, w, h);
+    ctx.fillStyle = 'rgba(215, 92, 42, 0.13)';
+    ctx.fillRect(pxD1, 0, pxD2 - pxD1, h);
+    ctx.strokeStyle = 'rgba(215, 92, 42, 0.7)';
+    ctx.lineWidth = 1;
+    ctx.setLineDash([5, 4]);
+    ctx.beginPath();
+    ctx.moveTo(pxD1, 0); ctx.lineTo(pxD1, h);
+    ctx.moveTo(pxD2, 0); ctx.lineTo(pxD2, h);
+    ctx.stroke();
+    ctx.setLineDash([]);
+
+    // Plot curve
+    plotFn(ctx, this.f, this.view, w, h, { color: '#0B2545', width: 2.5 });
+
+    // Points where curve enters/exits δ band — these should land in ε band
+    const xEnter = this.a - this.delta;
+    const xExit = this.a + this.delta;
+    const yEnter = this.f(xEnter);
+    const yExit = this.f(xExit);
+    [
+      { x: xEnter, y: yEnter },
+      { x: xExit, y: yExit }
+    ].forEach(p => {
+      const [px, py] = mathToPx(p.x, p.y, this.view, w, h);
+      ctx.fillStyle = '#D75C2A';
+      ctx.strokeStyle = '#FCF9EF';
+      ctx.lineWidth = 2;
+      ctx.beginPath();
+      ctx.arc(px, py, 5, 0, Math.PI * 2);
+      ctx.fill(); ctx.stroke();
+    });
+
+    // The limit point (a, L) — open circle (since x^2 is continuous here, it's actually defined, but we draw it as the target)
+    const [pa, pL] = mathToPx(this.a, this.L, this.view, w, h);
+    ctx.fillStyle = '#FCF9EF';
+    ctx.strokeStyle = '#0B2545';
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    ctx.arc(pa, pL, 6, 0, Math.PI * 2);
+    ctx.fill(); ctx.stroke();
+
+    // Labels
+    ctx.fillStyle = 'rgba(11, 37, 69, 0.7)';
+    ctx.font = '11px "JetBrains Mono", monospace';
+    ctx.textAlign = 'left';
+    ctx.textBaseline = 'middle';
+    // ε labels (right side)
+    ctx.fillText(`L + ε = ${(this.L + this.eps).toFixed(3)}`, w - 130, pyE2);
+    ctx.fillText(`L − ε = ${(this.L - this.eps).toFixed(3)}`, w - 130, pyE1);
+    // δ labels (top)
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'top';
+    ctx.fillText(`a − δ`, pxD1, 8);
+    ctx.fillText(`a + δ`, pxD2, 8);
+    ctx.fillText(`a = ${this.a}`, pa, 8);
+
+    // Update text readouts
+    document.getElementById('eps-val').textContent = this.eps.toFixed(3);
+    document.getElementById('eps-display').textContent = this.eps.toFixed(3);
+    document.getElementById('delta-val').textContent = this.delta.toFixed(4);
+    document.getElementById('delta-display').textContent = this.delta.toFixed(4);
+    document.getElementById('status-delta').textContent = this.delta.toFixed(4);
+    document.getElementById('status-eps').textContent = this.eps.toFixed(3);
+    document.getElementById('delta-slider').value = this.delta;
+  }
+  attachEvents() {
+    const epsSlider = document.getElementById('eps-slider');
+    epsSlider.addEventListener('input', (e) => {
+      this.eps = parseFloat(e.target.value);
+      this.snapDelta();
+      this.flashing = true;
+      const status = document.getElementById('delta-status');
+      status.classList.remove('flashing');
+      void status.offsetWidth;
+      status.classList.add('flashing');
+    });
+  }
+}
+
+/* ============================================================
+   PROOF WALK-THROUGH
+   ============================================================ */
+class ProofWalkthrough {
+  constructor() {
+    this.steps = document.querySelectorAll('.proof-step');
+    this.total = this.steps.length;
+    this.shown = 0;
+    document.getElementById('proof-next').addEventListener('click', () => this.advance());
+    document.getElementById('proof-reset').addEventListener('click', () => this.reset());
+    document.addEventListener('keydown', (e) => {
+      if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA') return;
+      if (e.key === 'n' || e.key === 'N') this.advance();
+    });
+    this.update();
+  }
+  advance() {
+    if (this.shown < this.total) {
+      this.shown++;
+      this.update();
+    }
+  }
+  reset() {
+    this.shown = 0;
+    this.update();
+  }
+  update() {
+    this.steps.forEach((s, i) => s.classList.toggle('shown', i < this.shown));
+    document.getElementById('proof-bar').style.width = (this.shown / this.total * 100) + '%';
+    document.getElementById('proof-count').textContent = `${this.shown} / ${this.total}`;
+    const btn = document.getElementById('proof-next');
+    btn.textContent = this.shown === 0 ? 'Begin →' : (this.shown >= this.total ? 'Done ✓' : 'Next step →');
+    btn.disabled = this.shown >= this.total;
+    btn.style.opacity = this.shown >= this.total ? '0.5' : '1';
+  }
+}
+
+/* ============================================================
+   TERM POPOVERS
+   ============================================================ */
+function setupTermPopovers() {
+  const popover = document.getElementById('popover');
+  document.addEventListener('mouseover', (e) => {
+    const term = e.target.closest('.term');
+    if (!term) return;
+    const def = term.dataset.def;
+    if (!def) return;
+    popover.innerHTML = '<strong>definition</strong>' + def;
+    popover.classList.add('show');
+    const r = term.getBoundingClientRect();
+    const px = r.left;
+    const py = r.bottom + 8 + window.scrollY;
+    popover.style.left = Math.min(px, window.innerWidth - 300) + 'px';
+    popover.style.top = py + 'px';
+  });
+  document.addEventListener('mouseout', (e) => {
+    if (e.target.closest('.term')) {
+      popover.classList.remove('show');
+    }
+  });
+}
+
+/* ============================================================
+   PRACTICE CARDS — progressive hints
+   ============================================================ */
+function setupPractice() {
+  const hintState = {}; // target -> hints revealed count
+  document.querySelectorAll('.hint-btn').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const t = btn.dataset.target;
+      hintState[t] = (hintState[t] || 0) + 1;
+      const card = btn.closest('.problem-card');
+      const hints = card.querySelectorAll('.hint-row');
+      if (hintState[t] <= hints.length) {
+        hints[hintState[t] - 1].classList.add('shown');
+      }
+      if (hintState[t] >= hints.length) {
+        btn.textContent = 'No more hints';
+        btn.disabled = true;
+        btn.style.opacity = '0.5';
+      }
+    });
+  });
+  document.querySelectorAll('.answer-btn').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const t = btn.dataset.target;
+      const card = btn.closest('.problem-card');
+      card.querySelector('.problem-answer').classList.add('shown');
+      btn.textContent = '✓ revealed';
+      btn.disabled = true;
+      btn.style.opacity = '0.5';
+    });
+  });
+}
+
+/* ============================================================
+   KaTeX EQUATIONS
+   ============================================================ */
+function renderEquations() {
+  if (typeof katex === 'undefined') {
+    setTimeout(renderEquations, 50);
+    return;
+  }
+  const E = (id, tex, display = true) => {
+    const el = document.getElementById(id);
+    if (el) katex.render(tex, el, { displayMode: display, throwOnError: false });
+  };
+
+  E('eq-derivative-def', "f'(x) = \\lim_{h \\to 0} \\frac{f(x+h) - f(x)}{h}");
+  E('eq-integral-def', "\\int_a^b f(x)\\,dx = \\lim_{n \\to \\infty} \\sum_{i=1}^{n} f(x_i^*)\\,\\Delta x");
+  E('eq-ftc', "\\int_a^b f'(x)\\,dx = f(b) - f(a)");
+  E('eq-edelta', "\\forall \\varepsilon > 0,\\ \\exists\\ \\delta > 0 : 0 < |x - a| < \\delta \\implies |f(x) - L| < \\varepsilon");
+
+  E('proof-eq-1', "\\frac{d}{dx}[\\sin x] = \\lim_{h \\to 0} \\frac{\\sin(x+h) - \\sin x}{h}");
+  E('proof-eq-2', "\\sin(x + h) = \\sin x \\cos h + \\cos x \\sin h");
+  E('proof-eq-3', "\\frac{d}{dx}[\\sin x] = \\cos x \\cdot \\underbrace{\\lim_{h\\to 0}\\frac{\\sin h}{h}}_{=\\,1} - \\sin x \\cdot \\underbrace{\\lim_{h\\to 0}\\frac{1 - \\cos h}{h}}_{=\\,0}");
+  E('proof-eq-4', "\\frac{d}{dx}[\\sin x] = \\cos x \\cdot 1 - \\sin x \\cdot 0");
+  E('proof-eq-5', "\\boxed{\\frac{d}{dx}[\\sin x] = \\cos x}");
+}
+
+/* ============================================================
+   INIT
+   ============================================================ */
+window.addEventListener('DOMContentLoaded', () => {
+  new HeroViz();
+  window.derivViz = new DerivativeViz();
+  window.integralViz = new IntegralViz();
+  window.limitsViz = new LimitsViz();
+  new ProofWalkthrough();
+  setupTermPopovers();
+  setupPractice();
+  renderEquations();
+
+  // Smooth scroll for nav
+  document.querySelectorAll('.nav-links a').forEach(a => {
+    a.addEventListener('click', (e) => {
+      const id = a.getAttribute('href').slice(1);
+      const el = document.getElementById(id);
+      if (el) {
+        e.preventDefault();
+        const top = el.getBoundingClientRect().top + window.scrollY - 60;
+        window.scrollTo({ top, behavior: 'smooth' });
+      }
+    });
+  });
+});
+</script>
+
+
+</body></html>

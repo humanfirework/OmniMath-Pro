@@ -30,6 +30,89 @@
   src: url("/fonts/stix-two-math-latin-400-normal.woff2") format("woff2");
 }
 
+/* Space Grotesk — Scholarly 预设 UI 字体（几何无衬线，calculus-visual-field-guide 同款） */
+@font-face {
+  font-family: "Space Grotesk";
+  font-style: normal;
+  font-display: swap;
+  font-weight: 400;
+  src: url("/fonts/space-grotesk-latin-400-normal.woff2") format("woff2");
+}
+@font-face {
+  font-family: "Space Grotesk";
+  font-style: normal;
+  font-display: swap;
+  font-weight: 500;
+  src: url("/fonts/space-grotesk-latin-500-normal.woff2") format("woff2");
+}
+@font-face {
+  font-family: "Space Grotesk";
+  font-style: normal;
+  font-display: swap;
+  font-weight: 600;
+  src: url("/fonts/space-grotesk-latin-600-normal.woff2") format("woff2");
+}
+@font-face {
+  font-family: "Space Grotesk";
+  font-style: normal;
+  font-display: swap;
+  font-weight: 700;
+  src: url("/fonts/space-grotesk-latin-700-normal.woff2") format("woff2");
+}
+
+/* Newsreader — Scholarly 预设正文/阅读字体（优雅衬线，calculus-visual-field-guide 同款） */
+@font-face {
+  font-family: "Newsreader";
+  font-style: normal;
+  font-display: swap;
+  font-weight: 400;
+  src: url("/fonts/newsreader-latin-400-normal.woff2") format("woff2");
+}
+@font-face {
+  font-family: "Newsreader";
+  font-style: normal;
+  font-display: swap;
+  font-weight: 500;
+  src: url("/fonts/newsreader-latin-500-normal.woff2") format("woff2");
+}
+@font-face {
+  font-family: "Newsreader";
+  font-style: normal;
+  font-display: swap;
+  font-weight: 600;
+  src: url("/fonts/newsreader-latin-600-normal.woff2") format("woff2");
+}
+@font-face {
+  font-family: "Newsreader";
+  font-style: italic;
+  font-display: swap;
+  font-weight: 400;
+  src: url("/fonts/newsreader-latin-400-italic.woff2") format("woff2");
+}
+
+/* JetBrains Mono — Scholarly 预设等宽字体（calculus-visual-field-guide 同款） */
+@font-face {
+  font-family: "JetBrains Mono";
+  font-style: normal;
+  font-display: swap;
+  font-weight: 400;
+  src: url("/fonts/jetbrains-mono-latin-400-normal.woff2") format("woff2");
+}
+@font-face {
+  font-family: "JetBrains Mono";
+  font-style: normal;
+  font-display: swap;
+  font-weight: 500;
+  src: url("/fonts/jetbrains-mono-latin-500-normal.woff2") format("woff2");
+}
+@font-face {
+  font-family: "JetBrains Mono";
+  font-style: normal;
+  font-display: swap;
+  font-weight: 700;
+  src: url("/fonts/jetbrains-mono-latin-700-normal.woff2") format("woff2");
+}
+
 @font-face {
   font-family: "Inter";
   font-style: normal;
@@ -4183,3 +4266,26 @@ input[type="number"] {
     scroll-behavior: auto !important;
   }
 }
+
+/* ------------------------------------------------------------
+   字体预设系统 — 用户可在设置中切换 UI 字体风格
+   通过在 <html> 上设置 data-font-preset 属性来激活
+   ------------------------------------------------------------ */
+
+/* 预设: scholarly — 数学教科书风格（calculus-visual-field-guide 同款）
+   Space Grotesk UI + Newsreader 正文 + JetBrains Mono 等宽 + STIX 数学 */
+html[data-font-preset="scholarly"] {
+  --font-sans: "Space Grotesk", "Noto Sans SC", "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", -apple-system, BlinkMacSystemFont, "Segoe UI", ui-sans-serif, system-ui, sans-serif;
+  --font-mono: "JetBrains Mono", "SF Mono", "Fira Code", "Cascadia Code", ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  --font-math: "STIX Two Math", "Newsreader", "KaTeX_Math", "Cambria Math", serif;
+}
+
+/* 预设: system — 纯系统字体，最轻量 */
+html[data-font-preset="system"] {
+  --font-sans: -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", ui-sans-serif, system-ui, sans-serif;
+  --font-mono: ui-monospace, SFMono-Regular, Menlo, Consolas, "Courier New", monospace;
+  --font-math: "Cambria Math", "KaTeX_Math", serif;
+}
+
+/* 默认预设: modern（Inter + Noto Sans SC）—— 无需额外 class，
+   --font-sans/mono/math 在 @theme inline 中已定义 */

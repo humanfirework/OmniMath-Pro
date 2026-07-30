@@ -87,6 +87,8 @@ export function SettingsPanel() {
   const setDefaultFormulaFontSize = useSettingsStore((s) => s.setDefaultFormulaFontSize);
   const useMathFont = useSettingsStore((s) => s.useMathFont);
   const setUseMathFont = useSettingsStore((s) => s.setUseMathFont);
+  const fontPreset = useSettingsStore((s) => s.fontPreset);
+  const setFontPreset = useSettingsStore((s) => s.setFontPreset);
   const resetSettings = useSettingsStore((s) => s.resetToDefaults);
 
   // Workbench store
@@ -130,6 +132,13 @@ export function SettingsPanel() {
   useEffect(() => {
     loadSettings();
   }, [loadSettings]);
+
+  // Apply font preset to <html> — changes data-font-preset attribute which
+  // triggers CSS variable overrides in globals.css for the selected preset.
+  useEffect(() => {
+    if (typeof document === 'undefined') return;
+    document.documentElement.setAttribute('data-font-preset', fontPreset ?? 'modern');
+  }, [fontPreset]);
 
   useEffect(() => {
     if (typeof window !== 'undefined') {
@@ -288,6 +297,19 @@ export function SettingsPanel() {
                       <span className="text-xs">{t('menuLight')}</span>
                     </label>
                   </RadioGroup>
+                </SettingRow>
+
+                <SettingRow label={t('settingsFontPreset')}>
+                  <Select value={fontPreset ?? 'modern'} onValueChange={(v) => setFontPreset(v as 'modern' | 'scholarly' | 'system')}>
+                    <SelectTrigger className="w-40 h-8 text-xs">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="modern" className="text-xs">{t('fontPresetModern')} (Inter)</SelectItem>
+                      <SelectItem value="scholarly" className="text-xs">{t('fontPresetScholarly')} (Space Grotesk + Newsreader)</SelectItem>
+                      <SelectItem value="system" className="text-xs">{t('fontPresetSystem')}</SelectItem>
+                    </SelectContent>
+                  </Select>
                 </SettingRow>
 
                 <SettingRow label={t('settingsActivityBarPosition')}>

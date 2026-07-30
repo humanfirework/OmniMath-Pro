@@ -123,6 +123,10 @@ export interface TranslationDict {
   settingsDefaultExportDpi: string;
   settingsFormulaFontSize: string;
   settingsUseMathFont: string;
+  settingsFontPreset: string;
+  fontPresetModern: string;
+  fontPresetScholarly: string;
+  fontPresetSystem: string;
   settingsResetAll: string;
   settingsResetConfirm: string;
   settingsShortcuts: string;
@@ -832,6 +836,10 @@ const zhCN: TranslationDict = {
   settingsDefaultExportDpi: "默认导出分辨率",
   settingsFormulaFontSize: "公式字号",
   settingsUseMathFont: "使用数学字体",
+  settingsFontPreset: "字体预设",
+  fontPresetModern: "现代",
+  fontPresetScholarly: "学术",
+  fontPresetSystem: "系统",
   settingsResetAll: "重置全部设置",
   settingsResetConfirm: "确定要重置所有设置吗？此操作不可撤销。",
   settingsShortcuts: "快捷键",
@@ -1538,6 +1546,10 @@ const en: TranslationDict = {
   settingsDefaultExportDpi: "Default Export DPI",
   settingsFormulaFontSize: "Formula Font Size",
   settingsUseMathFont: "Use Math Font",
+  settingsFontPreset: "Font Preset",
+  fontPresetModern: "Modern",
+  fontPresetScholarly: "Scholarly",
+  fontPresetSystem: "System",
   settingsResetAll: "Reset All Settings",
   settingsResetConfirm: "Are you sure you want to reset all settings? This cannot be undone.",
   settingsShortcuts: "Shortcuts",

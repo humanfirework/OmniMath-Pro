@@ -16,6 +16,8 @@ interface SettingsState {
   defaultFormulaFontSize: number;
   /** 是否启用 KaTeX 数学字体（默认 true，关闭则使用系统字体） */
   useMathFont: boolean;
+  /** UI 字体预设：modern（Inter）/ scholarly（Space Grotesk + Newsreader）/ system */
+  fontPreset: 'modern' | 'scholarly' | 'system';
 
   /* 高级设置（结构化表单，原 JSON 编辑的替代） */
   /** 2D 曲线采样点数（100–2000），默认 800（对应 plot2dAnalysis 的 steps 默认值） */
@@ -40,6 +42,7 @@ interface SettingsState {
   setDefaultExportDpi: (dpi: 1 | 2 | 4) => void;
   setDefaultFormulaFontSize: (size: number) => void;
   setUseMathFont: (v: boolean) => void;
+  setFontPreset: (v: 'modern' | 'scholarly' | 'system') => void;
 
   setAdvancedPlotSamples: (n: number) => void;
   setAdvancedPlot3dResolution: (n: number) => void;
@@ -63,6 +66,7 @@ interface PersistedSettings {
   defaultExportDpi: 1 | 2 | 4;
   defaultFormulaFontSize: number;
   useMathFont: boolean;
+  fontPreset?: 'modern' | 'scholarly' | 'system';
   /* 高级设置项均为可选，兼容旧版本持久化数据 */
   advancedPlotSamples?: number;
   advancedPlot3dResolution?: number;
@@ -97,6 +101,7 @@ export const useSettingsStore = create<SettingsState>((set, get) => ({
   defaultExportDpi: 2,
   defaultFormulaFontSize: 28,
   useMathFont: true,
+  fontPreset: 'modern',
   ...ADVANCED_DEFAULTS,
 
   setOpen: (v) => set({ open: v }),
@@ -111,6 +116,10 @@ export const useSettingsStore = create<SettingsState>((set, get) => ({
   },
   setUseMathFont: (v) => {
     set({ useMathFont: v });
+    get().saveToStorage();
+  },
+  setFontPreset: (v) => {
+    set({ fontPreset: v });
     get().saveToStorage();
   },
 
@@ -162,6 +171,7 @@ export const useSettingsStore = create<SettingsState>((set, get) => ({
           defaultExportDpi: s.defaultExportDpi,
           defaultFormulaFontSize: s.defaultFormulaFontSize,
           useMathFont: s.useMathFont,
+          fontPreset: s.fontPreset,
           advancedPlotSamples: s.advancedPlotSamples,
           advancedPlot3dResolution: s.advancedPlot3dResolution,
           advancedResultPrecision: s.advancedResultPrecision,
@@ -191,6 +201,9 @@ export const useSettingsStore = create<SettingsState>((set, get) => ({
       }
       if (typeof data.useMathFont === 'boolean') {
         set({ useMathFont: data.useMathFont });
+      }
+      if (data.fontPreset === 'modern' || data.fontPreset === 'scholarly' || data.fontPreset === 'system') {
+        set({ fontPreset: data.fontPreset });
       }
       /* 高级设置：逐项校验合法性后再写入，避免损坏的持久化数据污染状态 */
       if (typeof data.advancedPlotSamples === 'number' && data.advancedPlotSamples >= 100 && data.advancedPlotSamples <= 2000) {
@@ -226,6 +239,7 @@ export const useSettingsStore = create<SettingsState>((set, get) => ({
       defaultExportDpi: 2,
       defaultFormulaFontSize: 28,
       useMathFont: true,
+      fontPreset: 'modern',
       ...ADVANCED_DEFAULTS,
     });
     get().saveToStorage();
