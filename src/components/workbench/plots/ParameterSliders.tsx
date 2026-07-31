@@ -126,7 +126,11 @@ export function ParameterSliders({ plots }: { plots: PlotConfig[] }) {
     playingParamsRef.current = playingParams;
   }, [playingParams]);
 
-  const tick = useCallback(() => {
+  // tickRef holds the latest animation callback so the rAF loop can
+  // reschedule itself without a self-referential useCallback (which
+  // triggers react-hooks/immutability: "accessed before declared").
+  const tickRef = useRef<FrameRequestCallback>(() => {});
+  tickRef.current = () => {
     const now = performance.now();
     const playing = playingParamsRef.current;
     const cfgs = configsRef.current;
@@ -145,21 +149,21 @@ export function ParameterSliders({ plots }: { plots: PlotConfig[] }) {
     }
     // 仍有参数在播放就续期，否则停止循环并把 rafRef 置空。
     if (playingParamsRef.current.size > 0) {
-      rafRef.current = requestAnimationFrame(tick);
+      rafRef.current = requestAnimationFrame(tickRef.current);
     } else {
       rafRef.current = null;
     }
-  }, [setPlotParam]);
+  };
 
   // 有参数开始播放时启动循环；全部停止时取消循环。
   useEffect(() => {
     if (playingParams.size > 0 && rafRef.current === null) {
-      rafRef.current = requestAnimationFrame(tick);
+      rafRef.current = requestAnimationFrame(tickRef.current);
     } else if (playingParams.size === 0 && rafRef.current !== null) {
       cancelAnimationFrame(rafRef.current);
       rafRef.current = null;
     }
-  }, [playingParams, tick]);
+  }, [playingParams]);
 
   // 卸载时取消循环并清空起始时间，避免泄漏 / 卸载后 setState。
   useEffect(() => {

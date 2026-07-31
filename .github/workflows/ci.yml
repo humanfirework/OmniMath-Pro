@@ -1,10 +1,7 @@
 name: ci
 
-# 持续集成质量门禁：main 分支推送及所有 Pull Request 触发
+# 持续集成质量门禁：仅 Pull Request 触发（release.yml 已覆盖标签推送时的测试）
 on:
-  push:
-    branches:
-      - main
   pull_request:
 
 jobs:

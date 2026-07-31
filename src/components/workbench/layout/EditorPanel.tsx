@@ -280,14 +280,6 @@ export function EditorPanel() {
     [activeFileId, flushCurrentEdits, closeTab],
   );
 
-  // Clean up timers on unmount.
-  useEffect(() => {
-    return () => {
-      if (previewTimerRef.current) clearTimeout(previewTimerRef.current);
-      if (runScriptTimerRef.current) clearTimeout(runScriptTimerRef.current);
-    };
-  }, []);
-
   const lineCount = useMemo(() => editorContent.split('\n').length, [editorContent]);
   const varCount = Object.keys(variables).length;
 
@@ -416,6 +408,14 @@ export function EditorPanel() {
     addPlot,
     setActivePreviewTab,
   ]);
+
+  // Clean up timers on unmount.
+  useEffect(() => {
+    return () => {
+      if (previewTimerRef.current) clearTimeout(previewTimerRef.current);
+      if (runScriptTimerRef.current) clearTimeout(runScriptTimerRef.current);
+    };
+  }, []);
 
   /* ─── Global run-all event from command palette ───────────────── */
   useEffect(() => {
