@@ -16,7 +16,9 @@ import {
   PointerSensor,
   useSensor,
   useSensors,
+  DragOverlay,
   type DragEndEvent,
+  type DragStartEvent,
 } from '@dnd-kit/core';
 import {
   SortableContext,
@@ -151,6 +153,9 @@ export function ActivityBar() {
   const [mounted, setMounted] = useState(false);
   useEffect(() => { setMounted(true); }, []);
 
+  // Currently-dragged item id, used to drive the DragOverlay visual feedback.
+  const [activeId, setActiveId] = useState<ActivityItemId | null>(null);
+
   // 清理 hide timer — 防止组件卸载后 timer 仍触发，污染全局 store
   useEffect(() => {
     return () => {
@@ -174,8 +179,11 @@ export function ActivityBar() {
     }
   };
 
+  // distance: 8 — a slightly larger activation threshold than the previous
+  // value of 5 so that a plain click does not accidentally trigger a drag
+  // (which made the bar feel "stuck"), while still being easy to drag.
   const sensors = useSensors(
-    useSensor(PointerSensor, { activationConstraint: { distance: 5 } }),
+    useSensor(PointerSensor, { activationConstraint: { distance: 8 } }),
   );
 
   const orderedIds = activityBarOrder
@@ -184,13 +192,44 @@ export function ActivityBar() {
     if (!orderedIds.includes(id)) orderedIds.push(id);
   }
 
+  const handleDragStart = (event: DragStartEvent) => {
+    setActiveId(event.active.id as ActivityItemId);
+  };
+
+  const handleDragCancel = () => {
+    setActiveId(null);
+  };
+
   const handleDragEnd = (event: DragEndEvent) => {
+    setActiveId(null);
     const { active, over } = event;
     if (!over || active.id === over.id) return;
     const oldIndex = orderedIds.indexOf(active.id as ActivityItemId);
     const newIndex = orderedIds.indexOf(over.id as ActivityItemId);
     if (oldIndex === -1 || newIndex === -1) return;
     setActivityBarOrder(arrayMove(orderedIds, oldIndex, newIndex));
+  };
+
+  // Visual copy of the dragged icon rendered into DragOverlay. Kept free of
+  // click handlers / tooltips so it floats cleanly under the cursor with a
+  // semi-transparent, shadowed, ringed appearance for clear drag feedback.
+  const renderOverlayItem = (id: ActivityItemId) => {
+    const reg = ACTIVITY_REGISTRY[id];
+    if (!reg) return null;
+    const Icon = reg.icon;
+    return (
+      <div
+        className={cn(
+          'grid place-items-center size-9 rounded-lg pointer-events-none',
+          'bg-primary/15 text-primary',
+          'shadow-lg shadow-primary/25',
+          'ring-2 ring-primary/50',
+          'opacity-95',
+        )}
+      >
+        <Icon className="size-[18px]" strokeWidth={2} />
+      </div>
+    );
   };
 
   const renderItem = (id: ActivityItemId, sortable = true) => {
@@ -489,10 +528,19 @@ export function ActivityBar() {
     >
       <div className="flex flex-col items-center gap-1 w-full">
         {mounted ? (
-          <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleDragEnd}>
+          <DndContext
+            sensors={sensors}
+            collisionDetection={closestCenter}
+            onDragStart={handleDragStart}
+            onDragEnd={handleDragEnd}
+            onDragCancel={handleDragCancel}
+          >
             <SortableContext items={orderedIds} strategy={verticalListSortingStrategy}>
               {orderedIds.map((id) => renderItem(id, true))}
             </SortableContext>
+            <DragOverlay dropAnimation={null}>
+              {activeId ? renderOverlayItem(activeId) : null}
+            </DragOverlay>
           </DndContext>
         ) : (
           /* SSR / pre-hydration placeholder — same visual layout but no dnd-kit,

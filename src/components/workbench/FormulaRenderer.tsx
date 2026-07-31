@@ -95,7 +95,7 @@ export function FormulaRenderer({
         strict: false,
         output: 'html',
         trust: false,
-        maxSize: 5,
+        maxSize: 10,
         macros: {
           '\\R': '\\mathbb{R}',
           '\\N': '\\mathbb{N}',
@@ -291,12 +291,12 @@ export function FormulaRenderer({
 
       <div
         className={cn(
-          'overflow-x-auto overflow-y-hidden',
+          'overflow-x-auto',
           displayMode && 'py-1',
+          isCollapsed && canCollapse
+            ? 'max-h-[120px] overflow-y-hidden'
+            : 'overflow-y-visible',
         )}
-        style={{
-          maxHeight: isCollapsed ? COLLAPSED_HEIGHT : undefined,
-        }}
       >
         <div
           ref={contentRef}

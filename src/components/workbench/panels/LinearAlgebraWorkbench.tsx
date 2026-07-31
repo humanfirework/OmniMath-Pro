@@ -450,8 +450,8 @@ export function LinearAlgebraWorkbench() {
         </ScrollArea>
       </aside>
 
-      {/* ─── 右侧主区域（min-width 600px） ───────────────────── */}
-      <main className="flex-1 min-w-[600px] min-h-0 flex flex-col">
+      {/* ─── 右侧主区域（响应式：min-w-0 避免窗口缩放/全屏时溢出错位） ── */}
+      <main className="flex-1 min-w-0 min-h-0 flex flex-col">
         <Tabs
           value={activeTab}
           onValueChange={setActiveTab}

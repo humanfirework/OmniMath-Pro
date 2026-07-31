@@ -27,6 +27,8 @@ import {
   sampleFunction,
   sampleCurve,
   niceNumber,
+  PLOT_FONT_FAMILY,
+  PLOT_MONO_FAMILY,
   type Curve2DSpec,
   type PlotSample,
 } from '@/lib/plots/plot2d';
@@ -249,8 +251,11 @@ function FacetPlot({ plot, color, xRange, yRange, theme, spec }: FacetPlotProps)
     ctx.lineTo(axisXScreen, h - PADDING.bottom);
     ctx.stroke();
 
-    // Tick labels.
-    ctx.font = '10px ui-monospace, "Geist Mono", monospace';
+    // Tick labels — use the shared UI font stack (Inter-based) so the font
+    // family matches the main Plot2DCanvas and doesn't jump when switching
+    // between overlay and facet compare modes. Bumped to 11px to match the
+    // main canvas tick label baseline.
+    ctx.font = `11px ${PLOT_FONT_FAMILY}`;
     ctx.fillStyle = tickLabelColor;
     ctx.textAlign = 'center';
     ctx.textBaseline = 'top';
@@ -329,7 +334,7 @@ function FacetPlot({ plot, color, xRange, yRange, theme, spec }: FacetPlotProps)
         `x = ${formatNum(hover.wx)}`,
         `y = ${formatNum(hover.wy)}`,
       ];
-      ctx.font = '10px ui-monospace, "Geist Mono", monospace';
+      ctx.font = `11px ${PLOT_MONO_FAMILY}`;
       const pad = 5;
       const lh = 13;
       let boxW = 0;

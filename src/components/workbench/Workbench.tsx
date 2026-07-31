@@ -20,9 +20,10 @@
  * - Mount effects: loadFromStorage(), apply theme class, set i18n locale.
  */
 
-import { useEffect } from 'react';
+import { useEffect, useState } from 'react';
 import { motion } from 'framer-motion';
 import { PanelLeftClose, PanelRight, PanelRightOpen, LayoutTemplate } from 'lucide-react';
+import { getCurrentWindow } from '@tauri-apps/api/window';
 import {
   ResizablePanelGroup,
   ResizablePanel,
@@ -31,6 +32,7 @@ import {
 import { useWorkbenchStore } from '@/lib/store/workbench';
 import { useLayoutStore } from '@/lib/store/layoutStore';
 import { useSettingsStore } from '@/lib/store/settingsStore';
+import { inTauri } from '@/lib/tauri';
 import { setLocale as setI18nLocale, getLocale, t } from '@/lib/i18n';
 import { useIsMobile } from '@/hooks/use-mobile';
 import { TitleBar } from '@/components/workbench/layout/TitleBar';
@@ -77,6 +79,15 @@ export function Workbench() {
   // 快捷键
   const loadShortcutsFromStorage = useShortcutsStore((s) => s.loadFromStorage);
   const setSettingsOpen = useSettingsStore((s) => s.setOpen);
+  // 编辑器字号（zoomIn/zoomOut/resetView 快捷键操作对象）
+  const editorFontSize = useSettingsStore((s) => s.editorFontSize);
+  const setEditorFontSize = useSettingsStore((s) => s.setEditorFontSize);
+
+  // 窗口尺寸/全屏切换的触发计数器。Tauri 窗口 maximize/fullscreen 时
+  // CSS 视口单位会变化但 React 不会自动重渲染，react-resizable-panels
+  // 也不会重算布局；用一个 tick 强制重渲染以避免子组件错位。
+  // Web 环境跳过（inTauri 守卫）。
+  const [, setResizeTick] = useState(0);
 
   // 激活全局快捷键监听（在 Workbench 挂载一次）
   useGlobalShortcuts();
@@ -118,6 +129,23 @@ export function Workbench() {
     else document.documentElement.classList.remove('dark');
   }, [theme]);
 
+  // 监听 Tauri 窗口尺寸变化（maximize/restore/拖拽边缘/dpi 变化等）。
+  // 触发 resizeTick 重渲染，让 react-resizable-panels 重新计算面板尺寸，
+  // 避免 maximize 或全屏切换后子组件错位。Web 环境跳过。
+  useEffect(() => {
+    if (!inTauri()) return;
+    const win = getCurrentWindow();
+    let unlisten: (() => void) | undefined;
+    win.onResized(() => {
+      setResizeTick((tick) => tick + 1);
+    }).then((fn) => {
+      unlisten = fn;
+    });
+    return () => {
+      if (unlisten) unlisten();
+    };
+  }, []);
+
   // 全局快捷键处理器注册（通过 shortcutsStore 配置，可自定义）
   useEffect(() => {
     const unregs: Array<() => void> = [];
@@ -139,8 +167,19 @@ export function Workbench() {
     unregs.push(registerShortcutHandler('togglePreview', () => {
       setPreviewVisible(!previewVisible);
     }));
+    // 编辑器字号缩放：setEditorFontSize 内部已对 [8,32] 钳制取整。
+    // zoomIn/zoomOut 闭包捕获 editorFontSize，因此依赖该值；resetView 重置为默认 14。
+    unregs.push(registerShortcutHandler('zoomIn', () => {
+      setEditorFontSize(editorFontSize + 1);
+    }));
+    unregs.push(registerShortcutHandler('zoomOut', () => {
+      setEditorFontSize(editorFontSize - 1);
+    }));
+    unregs.push(registerShortcutHandler('resetView', () => {
+      setEditorFontSize(14);
+    }));
     return () => unregs.forEach((u) => u());
-  }, [viewMode, setViewMode, toggleSidePanel, setSettingsOpen, setCommandPaletteOpen, setEditorContent, setPreviewVisible, previewVisible]);
+  }, [viewMode, setViewMode, toggleSidePanel, setSettingsOpen, setCommandPaletteOpen, setEditorContent, setPreviewVisible, previewVisible, editorFontSize, setEditorFontSize]);
 
   const isMobile = useIsMobile();
 

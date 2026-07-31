@@ -55,6 +55,7 @@ export function SolverStepsView({
   const [collapsed, setCollapsed] = useState(
     defaultExpandedCount !== undefined && defaultExpandedCount < steps.length,
   );
+  const [heightExpanded, setHeightExpanded] = useState(false);
 
   if (parsed.length === 0) return null;
 
@@ -78,29 +79,53 @@ export function SolverStepsView({
           {title}
           <span className="text-muted-foreground">({parsed.length})</span>
         </span>
-        {defaultExpandedCount !== undefined && parsed.length > defaultExpandedCount && (
+        <div className="flex items-center gap-2">
+          {defaultExpandedCount !== undefined && parsed.length > defaultExpandedCount && (
+            <button
+              type="button"
+              onClick={() => setCollapsed((v) => !v)}
+              className="inline-flex items-center gap-1 text-[10px] text-muted-foreground hover:text-foreground transition-colors"
+            >
+              {collapsed ? (
+                <>
+                  <ChevronDown className="size-3" />
+                  展开全部 ({hiddenCount})
+                </>
+              ) : (
+                <>
+                  <ChevronUp className="size-3" />
+                  收起
+                </>
+              )}
+            </button>
+          )}
           <button
             type="button"
-            onClick={() => setCollapsed((v) => !v)}
+            onClick={() => setHeightExpanded((v) => !v)}
             className="inline-flex items-center gap-1 text-[10px] text-muted-foreground hover:text-foreground transition-colors"
           >
-            {collapsed ? (
+            {heightExpanded ? (
               <>
-                <ChevronDown className="size-3" />
-                展开全部 ({hiddenCount})
+                <ChevronUp className="size-3" />
+                收起全部
               </>
             ) : (
               <>
-                <ChevronUp className="size-3" />
-                收起
+                <ChevronDown className="size-3" />
+                展开全部
               </>
             )}
           </button>
-        )}
+        </div>
       </div>
 
       {/* 步骤列表 */}
-      <div className="max-h-96 overflow-y-auto p-2 space-y-1.5">
+      <div
+        className={cn(
+          'p-2 space-y-1.5',
+          heightExpanded ? 'overflow-y-visible' : 'max-h-[600px] overflow-y-auto',
+        )}
+      >
         <AnimatePresence initial={false}>
           {visibleSteps.map((step, i) => (
             <motion.div

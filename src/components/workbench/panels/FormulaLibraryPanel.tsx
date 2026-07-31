@@ -30,6 +30,7 @@ import {
   Trash2,
   ChevronDown,
   ChevronRight,
+  Tags,
 } from 'lucide-react';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Input } from '@/components/ui/input';
@@ -77,10 +78,18 @@ interface Formula {
 interface CustomFormula {
   id: string;
   name: string;
-  category: CategoryKey;
+  // A built-in CategoryKey, a user-defined custom category id, or the
+  // 'custom' sentinel (uncategorized — falls back to the "Custom" bucket).
+  category: string;
   latex: string;
   description: string;
   example: string;
+}
+
+interface CustomCategory {
+  id: string;
+  name: string;
+  color?: string;
 }
 
 const CATEGORY_LABEL_KEY: Record<CategoryKey, keyof TranslationDict> = {
@@ -105,6 +114,34 @@ const CATEGORY_COLOR: Record<CategoryKey, string> = {
 
 const CUSTOM_COLOR =
   'text-fuchsia-600 dark:text-fuchsia-400 bg-fuchsia-500/10 border-fuchsia-500/30';
+
+// Preset palette for custom categories — reuses the built-in CATEGORY_COLOR
+// hues (plus CUSTOM_COLOR and two extras). `badge` is the class stored on the
+// category and reused for badges / group headers; `swatch` is a solid bg used
+// only for the picker dot so the color is clearly visible.
+interface CategoryColorPreset {
+  badge: string;
+  swatch: string;
+}
+
+const CATEGORY_COLOR_PRESETS: CategoryColorPreset[] = [
+  { badge: CATEGORY_COLOR.algebra, swatch: 'bg-teal-500' },
+  { badge: CATEGORY_COLOR.geometry, swatch: 'bg-amber-500' },
+  { badge: CATEGORY_COLOR.trigonometry, swatch: 'bg-rose-500' },
+  { badge: CATEGORY_COLOR.calculus, swatch: 'bg-violet-500' },
+  { badge: CATEGORY_COLOR.statistics, swatch: 'bg-emerald-500' },
+  { badge: CATEGORY_COLOR.physics, swatch: 'bg-orange-500' },
+  { badge: CATEGORY_COLOR.finance, swatch: 'bg-cyan-500' },
+  { badge: CUSTOM_COLOR, swatch: 'bg-fuchsia-500' },
+  {
+    badge: 'text-blue-600 dark:text-blue-400 bg-blue-500/10 border-blue-500/30',
+    swatch: 'bg-blue-500',
+  },
+  {
+    badge: 'text-pink-600 dark:text-pink-400 bg-pink-500/10 border-pink-500/30',
+    swatch: 'bg-pink-500',
+  },
+];
 
 const FORMULAS: Formula[] = [
   // Algebra
@@ -172,16 +209,25 @@ const DEFAULT_EXPANDED_CATEGORIES: CategoryKey[] = [
   'trigonometry',
 ];
 
-// Collapsible group keys: the 7 built-in categories plus the "custom" bucket.
-type GroupKey = CategoryKey | 'custom';
+// Collapsible group keys: a built-in CategoryKey, a custom category id, or
+// the "custom" bucket for uncategorized user formulas.
+type GroupKey = string;
 
-type ActiveFilter = CategoryKey | 'all' | 'custom';
+// Active filter: 'all', 'custom', a built-in CategoryKey, or a custom
+// category id.
+type ActiveFilter = string;
 
-interface DisplayFormula extends Formula {
+interface DisplayFormula extends Omit<Formula, 'category'> {
+  category: string;
   custom: boolean;
 }
 
 const CUSTOM_FORMULAS_KEY = 'omnimath-custom-formulas-v1';
+const CUSTOM_CATEGORIES_KEY = 'omnimath-custom-categories-v1';
+
+// Sentinel category value meaning "uncategorized custom formula" — such
+// formulas surface under the "Custom" bucket.
+const UNCATEGORIZED_SENTINEL = 'custom';
 
 function isValidCustomFormula(v: unknown): v is CustomFormula {
   if (typeof v !== 'object' || v === null) return false;
@@ -193,7 +239,19 @@ function isValidCustomFormula(v: unknown): v is CustomFormula {
     typeof f.description === 'string' &&
     typeof f.example === 'string' &&
     typeof f.category === 'string' &&
-    (ALL_CATEGORIES as string[]).includes(f.category)
+    f.category.length > 0
+  );
+}
+
+function isValidCustomCategory(v: unknown): v is CustomCategory {
+  if (typeof v !== 'object' || v === null) return false;
+  const c = v as Record<string, unknown>;
+  return (
+    typeof c.id === 'string' &&
+    c.id.length > 0 &&
+    typeof c.name === 'string' &&
+    c.name.length > 0 &&
+    (c.color === undefined || typeof c.color === 'string')
   );
 }
 
@@ -219,6 +277,63 @@ function saveCustomFormulas(list: CustomFormula[]) {
   }
 }
 
+function loadCustomCategories(): CustomCategory[] {
+  if (typeof window === 'undefined') return [];
+  try {
+    const raw = localStorage.getItem(CUSTOM_CATEGORIES_KEY);
+    if (!raw) return [];
+    const data = JSON.parse(raw);
+    if (!Array.isArray(data)) return [];
+    return data.filter(isValidCustomCategory);
+  } catch {
+    return [];
+  }
+}
+
+function saveCustomCategories(list: CustomCategory[]) {
+  if (typeof window === 'undefined') return;
+  try {
+    localStorage.setItem(CUSTOM_CATEGORIES_KEY, JSON.stringify(list));
+  } catch {
+    // ignore quota errors
+  }
+}
+
+function isBuiltinCategory(cat: string): cat is CategoryKey {
+  return (ALL_CATEGORIES as string[]).includes(cat);
+}
+
+// Resolve a category id (built-in, custom, or sentinel/stale) to a color
+// class string for badges / group headers.
+function resolveCategoryColor(
+  cat: string,
+  customCategories: CustomCategory[],
+): string {
+  if (isBuiltinCategory(cat)) return CATEGORY_COLOR[cat];
+  const cc = customCategories.find((c) => c.id === cat);
+  if (cc?.color) return cc.color;
+  return CUSTOM_COLOR;
+}
+
+// Resolve a category id to a human-readable label.
+function resolveCategoryLabel(
+  cat: string,
+  customCategories: CustomCategory[],
+): string {
+  if (isBuiltinCategory(cat)) return t(CATEGORY_LABEL_KEY[cat]);
+  const cc = customCategories.find((c) => c.id === cat);
+  if (cc) return cc.name;
+  return t('formulasCustom');
+}
+
+// A formula belongs to a "real" custom category (not the sentinel / stale).
+function isInCustomCategory(
+  cat: string,
+  customCategories: CustomCategory[],
+): boolean {
+  return customCategories.some((c) => c.id === cat);
+}
+
 export function FormulaLibraryPanel() {
   const setEditorContent = useWorkbenchStore((s) => s.setEditorContent);
   const [query, setQuery] = useState('');
@@ -227,6 +342,8 @@ export function FormulaLibraryPanel() {
   const [customFormulas, setCustomFormulas] = useState<CustomFormula[]>([]);
   const [formOpen, setFormOpen] = useState(false);
   const [editing, setEditing] = useState<CustomFormula | null>(null);
+  const [customCategories, setCustomCategories] = useState<CustomCategory[]>([]);
+  const [categoryManageOpen, setCategoryManageOpen] = useState(false);
   const [collapsedGroups, setCollapsedGroups] = useState<Set<GroupKey>>(
     () =>
       new Set(
@@ -236,9 +353,10 @@ export function FormulaLibraryPanel() {
       ),
   );
 
-  // Load persisted custom formulas after mount (SSR-safe).
+  // Load persisted custom formulas + categories after mount (SSR-safe).
   useEffect(() => {
     setCustomFormulas(loadCustomFormulas());
+    setCustomCategories(loadCustomCategories());
   }, []);
 
   const toggleGroup = (g: GroupKey) => {
@@ -334,7 +452,55 @@ export function FormulaLibraryPanel() {
     setSelected(null);
   };
 
-  const customCount = filtered.filter((f) => f.custom).length;
+  const handleCreateCategory = (name: string, color?: string) => {
+    const created: CustomCategory = {
+      id: `cat-${Date.now().toString(36)}-${Math.random()
+        .toString(36)
+        .slice(2, 8)}`,
+      name: name.trim(),
+      color: color ?? CUSTOM_COLOR,
+    };
+    setCustomCategories((prev) => {
+      const next = [...prev, created];
+      saveCustomCategories(next);
+      return next;
+    });
+  };
+
+  const handleRenameCategory = (id: string, name: string) => {
+    setCustomCategories((prev) => {
+      const next = prev.map((c) => (c.id === id ? { ...c, name } : c));
+      saveCustomCategories(next);
+      return next;
+    });
+  };
+
+  const handleDeleteCategory = (id: string) => {
+    setCustomCategories((prev) => {
+      const next = prev.filter((c) => c.id !== id);
+      saveCustomCategories(next);
+      return next;
+    });
+    // Reassign formulas in the deleted category to the uncategorized
+    // ("custom") bucket so they are not orphaned.
+    setCustomFormulas((prev) => {
+      const next = prev.map((f) =>
+        f.category === id ? { ...f, category: UNCATEGORIZED_SENTINEL } : f,
+      );
+      saveCustomFormulas(next);
+      return next;
+    });
+    // If the deleted category was the active filter, fall back to "all".
+    setActiveCat((prev) => (prev === id ? 'all' : prev));
+  };
+
+  // "Custom" bucket count: custom formulas NOT filed under a (still-existing)
+  // custom category. Built-in-categorized custom formulas are included, so
+  // existing behavior (where every custom formula showed under "Custom") is
+  // preserved when there are no custom categories.
+  const customCount = filtered.filter(
+    (f) => f.custom && !isInCustomCategory(f.category, customCategories),
+  ).length;
 
   return (
     <div className="flex flex-col h-full">
@@ -348,8 +514,19 @@ export function FormulaLibraryPanel() {
           <Button
             variant="ghost"
             size="sm"
-            onClick={openAddForm}
+            onClick={() => setCategoryManageOpen(true)}
             className="ml-auto h-6 px-1.5 text-[11px] gap-1 text-muted-foreground hover:text-primary"
+            aria-label={t('formulasCategoryManage')}
+            title={t('formulasCategoryManage')}
+          >
+            <Tags className="size-3.5" />
+            {t('formulasCategoryManage')}
+          </Button>
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={openAddForm}
+            className="h-6 px-1.5 text-[11px] gap-1 text-muted-foreground hover:text-primary"
             aria-label={t('formulasAddCustom')}
             title={t('formulasAddCustom')}
           >
@@ -380,6 +557,14 @@ export function FormulaLibraryPanel() {
               active={activeCat === c}
               onClick={() => setActiveCat(c)}
               label={t(CATEGORY_LABEL_KEY[c])}
+            />
+          ))}
+          {customCategories.map((cc) => (
+            <Chip
+              key={cc.id}
+              active={activeCat === cc.id}
+              onClick={() => setActiveCat(cc.id)}
+              label={cc.name}
             />
           ))}
           <Chip
@@ -422,10 +607,10 @@ export function FormulaLibraryPanel() {
                       variant="outline"
                       className={cn(
                         'h-5 px-2 text-[10px] font-medium',
-                        CATEGORY_COLOR[selected.category],
+                        resolveCategoryColor(selected.category, customCategories),
                       )}
                     >
-                      {t(CATEGORY_LABEL_KEY[selected.category])}
+                      {resolveCategoryLabel(selected.category, customCategories)}
                     </Badge>
                     {selected.custom && (
                       <Badge
@@ -530,6 +715,48 @@ export function FormulaLibraryPanel() {
                                       formula={f}
                                       index={i}
                                       onClick={() => setSelected(f)}
+                                      categoryColor={resolveCategoryColor(f.category, customCategories)}
+                                      categoryLabel={resolveCategoryLabel(f.category, customCategories)}
+                                    />
+                                  ))}
+                                </div>
+                              </motion.div>
+                            )}
+                          </AnimatePresence>
+                        </div>
+                      );
+                    })}
+                    {customCategories.map((cc) => {
+                      const items = filtered.filter((f) => f.category === cc.id);
+                      if (items.length === 0) return null;
+                      const isCollapsed = collapsedGroups.has(cc.id);
+                      return (
+                        <div key={cc.id} className="mb-1">
+                          <GroupHeader
+                            label={cc.name}
+                            colorClass={cc.color ?? CUSTOM_COLOR}
+                            count={items.length}
+                            collapsed={isCollapsed}
+                            onToggle={() => toggleGroup(cc.id)}
+                          />
+                          <AnimatePresence initial={false}>
+                            {!isCollapsed && (
+                              <motion.div
+                                initial={{ height: 0, opacity: 0 }}
+                                animate={{ height: 'auto', opacity: 1 }}
+                                exit={{ height: 0, opacity: 0 }}
+                                transition={{ duration: 0.2, ease: 'easeInOut' }}
+                                className="overflow-hidden"
+                              >
+                                <div className="space-y-1 pt-1">
+                                  {items.map((f, i) => (
+                                    <FormulaCard
+                                      key={f.id}
+                                      formula={f}
+                                      index={i}
+                                      onClick={() => setSelected(f)}
+                                      categoryColor={resolveCategoryColor(f.category, customCategories)}
+                                      categoryLabel={resolveCategoryLabel(f.category, customCategories)}
                                     />
                                   ))}
                                 </div>
@@ -559,13 +786,19 @@ export function FormulaLibraryPanel() {
                             >
                               <div className="space-y-1 pt-1">
                                 {filtered
-                                  .filter((f) => f.custom)
+                                  .filter(
+                                    (f) =>
+                                      f.custom &&
+                                      !isInCustomCategory(f.category, customCategories),
+                                  )
                                   .map((f, i) => (
                                     <FormulaCard
                                       key={f.id}
                                       formula={f}
                                       index={i}
                                       onClick={() => setSelected(f)}
+                                      categoryColor={resolveCategoryColor(f.category, customCategories)}
+                                      categoryLabel={resolveCategoryLabel(f.category, customCategories)}
                                     />
                                   ))}
                               </div>
@@ -582,6 +815,8 @@ export function FormulaLibraryPanel() {
                       formula={f}
                       index={i}
                       onClick={() => setSelected(f)}
+                      categoryColor={resolveCategoryColor(f.category, customCategories)}
+                      categoryLabel={resolveCategoryLabel(f.category, customCategories)}
                     />
                   ))
                 )}
@@ -594,11 +829,21 @@ export function FormulaLibraryPanel() {
       <CustomFormulaDialog
         open={formOpen}
         editing={editing}
+        customCategories={customCategories}
         onOpenChange={(open) => {
           setFormOpen(open);
           if (!open) setEditing(null);
         }}
         onSubmit={handleSubmitForm}
+      />
+
+      <CategoryManageDialog
+        open={categoryManageOpen}
+        customCategories={customCategories}
+        onOpenChange={setCategoryManageOpen}
+        onCreate={handleCreateCategory}
+        onRename={handleRenameCategory}
+        onDelete={handleDeleteCategory}
       />
     </div>
   );
@@ -607,17 +852,19 @@ export function FormulaLibraryPanel() {
 function CustomFormulaDialog({
   open,
   editing,
+  customCategories,
   onOpenChange,
   onSubmit,
 }: {
   open: boolean;
   editing: CustomFormula | null;
+  customCategories: CustomCategory[];
   onOpenChange: (open: boolean) => void;
   onSubmit: (values: Omit<CustomFormula, 'id'>) => void;
 }) {
   const [name, setName] = useState('');
   const [latex, setLatex] = useState('');
-  const [category, setCategory] = useState<CategoryKey>('algebra');
+  const [category, setCategory] = useState<string>('algebra');
   const [description, setDescription] = useState('');
   const [example, setExample] = useState('');
 
@@ -669,7 +916,7 @@ function CustomFormulaDialog({
             <Label className="text-[11.5px]">{t('formulasCategories')}</Label>
             <Select
               value={category}
-              onValueChange={(v) => setCategory(v as CategoryKey)}
+              onValueChange={(v) => setCategory(v)}
             >
               <SelectTrigger className="w-full h-8 text-[12px]">
                 <SelectValue />
@@ -680,6 +927,14 @@ function CustomFormulaDialog({
                     {t(CATEGORY_LABEL_KEY[c])}
                   </SelectItem>
                 ))}
+                {customCategories.map((cc) => (
+                  <SelectItem key={cc.id} value={cc.id} className="text-[12px]">
+                    {cc.name}
+                  </SelectItem>
+                ))}
+                <SelectItem value={UNCATEGORIZED_SENTINEL} className="text-[12px]">
+                  {t('formulasCustom')}
+                </SelectItem>
               </SelectContent>
             </Select>
           </div>
@@ -816,10 +1071,14 @@ function FormulaCard({
   formula,
   index,
   onClick,
+  categoryColor,
+  categoryLabel,
 }: {
   formula: DisplayFormula;
   index: number;
   onClick: () => void;
+  categoryColor: string;
+  categoryLabel: string;
 }) {
   return (
     <motion.button
@@ -845,19 +1104,220 @@ function FormulaCard({
               {t('formulasCustom')}
             </span>
           )}
-          <span
-            className={cn(
-              'inline-flex items-center text-[9.5px] font-medium px-1.5 py-0.5 rounded border',
-              CATEGORY_COLOR[formula.category],
-            )}
-          >
-            {t(CATEGORY_LABEL_KEY[formula.category])}
-          </span>
+          {formula.category !== UNCATEGORIZED_SENTINEL && (
+            <span
+              className={cn(
+                'inline-flex items-center text-[9.5px] font-medium px-1.5 py-0.5 rounded border',
+                categoryColor,
+              )}
+            >
+              {categoryLabel}
+            </span>
+          )}
         </span>
       </div>
       <p className="text-[11px] text-muted-foreground line-clamp-2">
         {formula.description}
       </p>
     </motion.button>
+  );
+}
+
+function CategoryManageDialog({
+  open,
+  customCategories,
+  onOpenChange,
+  onCreate,
+  onRename,
+  onDelete,
+}: {
+  open: boolean;
+  customCategories: CustomCategory[];
+  onOpenChange: (open: boolean) => void;
+  onCreate: (name: string, color?: string) => void;
+  onRename: (id: string, name: string) => void;
+  onDelete: (id: string) => void;
+}) {
+  const [newName, setNewName] = useState('');
+  const [newColor, setNewColor] = useState<string>(CATEGORY_COLOR_PRESETS[0].badge);
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [editName, setEditName] = useState('');
+
+  // Reset transient form state each time the dialog opens.
+  useEffect(() => {
+    if (open) {
+      setNewName('');
+      setNewColor(CATEGORY_COLOR_PRESETS[0].badge);
+      setEditingId(null);
+      setEditName('');
+    }
+  }, [open]);
+
+  const canCreate = newName.trim() !== '';
+
+  const confirmEdit = () => {
+    if (editingId && editName.trim()) {
+      onRename(editingId, editName.trim());
+    }
+    setEditingId(null);
+  };
+
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent className="sm:max-w-md">
+        <DialogHeader>
+          <DialogTitle className="text-[14px]">
+            {t('formulasCategoryManage')}
+          </DialogTitle>
+        </DialogHeader>
+        <div className="space-y-3">
+          {/* Create new category */}
+          <div className="space-y-2 rounded-md border border-border/60 p-2.5">
+            <div className="text-[11px] font-medium text-muted-foreground">
+              {t('formulasCategoryAdd')}
+            </div>
+            <div className="flex gap-2">
+              <Input
+                value={newName}
+                onChange={(e) => setNewName(e.target.value)}
+                placeholder={t('formulasCategoryName')}
+                className="h-8 text-[12px] flex-1"
+              />
+              <Button
+                size="sm"
+                disabled={!canCreate}
+                onClick={() => {
+                  onCreate(newName, newColor);
+                  setNewName('');
+                  setNewColor(CATEGORY_COLOR_PRESETS[0].badge);
+                }}
+                className="h-8 text-[12px] gap-1"
+              >
+                <Plus className="size-3.5" />
+                {t('formulasCategoryAdd')}
+              </Button>
+            </div>
+            <div className="flex flex-wrap gap-1.5 pt-1">
+              {CATEGORY_COLOR_PRESETS.map((p) => (
+                <button
+                  key={p.badge}
+                  type="button"
+                  onClick={() => setNewColor(p.badge)}
+                  aria-label={t('formulasCategoryColor')}
+                  className={cn(
+                    'size-5 rounded-full border-2 border-border/40 transition-all',
+                    p.swatch,
+                    newColor === p.badge
+                      ? 'ring-2 ring-primary/60 scale-110'
+                      : 'opacity-80 hover:opacity-100',
+                  )}
+                />
+              ))}
+            </div>
+          </div>
+
+          {/* Existing custom categories */}
+          <div className="space-y-1.5 max-h-60 overflow-auto">
+            {customCategories.length === 0 ? (
+              <div className="text-center py-6 text-[12px] text-muted-foreground">
+                {t('formulasCategoryEmpty')}
+              </div>
+            ) : (
+              customCategories.map((cc) => (
+                <div
+                  key={cc.id}
+                  className="flex items-center gap-2 rounded-md border border-border/60 p-2"
+                >
+                  <span
+                    className={cn(
+                      'inline-flex items-center text-[10.5px] font-medium px-1.5 py-0.5 rounded border',
+                      cc.color ?? CUSTOM_COLOR,
+                    )}
+                  >
+                    {editingId === cc.id ? (
+                      <input
+                        autoFocus
+                        value={editName}
+                        onChange={(e) => setEditName(e.target.value)}
+                        onKeyDown={(e) => {
+                          if (e.key === 'Enter') confirmEdit();
+                          if (e.key === 'Escape') setEditingId(null);
+                        }}
+                        className="bg-transparent outline-none w-24 text-[10.5px]"
+                      />
+                    ) : (
+                      cc.name
+                    )}
+                  </span>
+                  <span className="ml-auto flex items-center gap-1">
+                    {editingId === cc.id ? (
+                      <>
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={confirmEdit}
+                          className="h-6 px-2 text-[11px]"
+                        >
+                          {t('commonSave')}
+                        </Button>
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={() => setEditingId(null)}
+                          className="h-6 px-2 text-[11px]"
+                        >
+                          {t('commonCancel')}
+                        </Button>
+                      </>
+                    ) : (
+                      <>
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          onClick={() => {
+                            setEditingId(cc.id);
+                            setEditName(cc.name);
+                          }}
+                          className="h-6 px-2 text-[11px] gap-1"
+                        >
+                          <Pencil className="size-3" />
+                          {t('commonEdit')}
+                        </Button>
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          onClick={() => {
+                            if (
+                              typeof window !== 'undefined' &&
+                              window.confirm(t('formulasCategoryDeleteConfirm'))
+                            ) {
+                              onDelete(cc.id);
+                            }
+                          }}
+                          className="h-6 px-2 text-[11px] gap-1 text-destructive hover:text-destructive"
+                        >
+                          <Trash2 className="size-3" />
+                          {t('commonDelete')}
+                        </Button>
+                      </>
+                    )}
+                  </span>
+                </div>
+              ))
+            )}
+          </div>
+        </div>
+        <DialogFooter>
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => onOpenChange(false)}
+            className="h-8 text-[12px]"
+          >
+            {t('commonClose')}
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
   );
 }

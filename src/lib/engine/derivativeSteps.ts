@@ -294,12 +294,18 @@ function annotate(node: MathNode, varName: string, steps: string[], depth: numbe
 /**
  * 对 expr 关于 varName 求导，并生成带法则标注的分步说明。
  * 抛出异常时表示无法解析/求导（由调用方捕获）。
+ *
+ * `order`（默认 1）支持高阶求导：循环调用 math.derivative `order` 次，
+ * 每次迭代都会在 steps 中标注所用的求导法则。一阶时与既有行为完全
+ * 一致（首步 f(x)=…，次步 d/dx f(x)=…，末步 = resultLatex）。
  */
 export function differentiateWithSteps(
   expr: string,
   varName: string,
   inputLatex?: string,
+  order: number = 1,
 ): DerivativeStepsResult {
+  const safeOrder = Math.max(1, Math.floor(order));
   // 显示用 AST 保留用户的原始记号（如 ln(x)）；求导用 AST 把 ln
   // 归一化为 mathjs 求导表认识的 log。两条路径都必须使用未覆盖
   // log 语义的 symbolicMath：共享实例把 log 覆盖成了 10 底对数，
@@ -309,9 +315,17 @@ export function differentiateWithSteps(
   const computeNode = symbolicMath.parse(
     normalizeLnForDerivative(expr),
   ) as unknown as MathNode;
-  const dNode = symbolicMath.derivative(computeNode as never, varName);
 
-  // 安全化简
+  // 循环求 safeOrder 阶导数：每次基于上一次的结果继续求导。
+  let dNode = symbolicMath.derivative(computeNode as never, varName) as unknown as MathNode;
+  // 记录每一阶中间导数节点，供后续步骤标注使用。
+  const derivativeNodes: MathNode[] = [dNode];
+  for (let i = 1; i < safeOrder; i++) {
+    dNode = symbolicMath.derivative(dNode as never, varName) as unknown as MathNode;
+    derivativeNodes.push(dNode);
+  }
+
+  // 安全化简（基于最终的高阶导数）
   let simplified: MathNode;
   try {
     simplified = symbolicMath.simplify(dNode as never) as unknown as MathNode;
@@ -325,17 +339,35 @@ export function differentiateWithSteps(
   );
 
   const steps: string[] = [];
-  steps.push(
-    `f(${varName}) = ${inputLatex ?? tex(node)}`,
-    `\\frac{d}{d${varName}} f(${varName}) = \\frac{d}{d${varName}} \\left[ ${inputLatex ?? tex(node)} \\right]`,
-  );
+  const displayLatex = inputLatex ?? tex(node);
+  steps.push(`f(${varName}) = ${displayLatex}`);
+  if (safeOrder === 1) {
+    steps.push(
+      `\\frac{d}{d${varName}} f(${varName}) = \\frac{d}{d${varName}} \\left[ ${displayLatex} \\right]`,
+    );
+  } else {
+    steps.push(
+      `\\frac{d^{${safeOrder}}}{d${varName}^{${safeOrder}}} f(${varName}) = \\frac{d^{${safeOrder}}}{d${varName}^{${safeOrder}}} \\left[ ${displayLatex} \\right]`,
+    );
+  }
 
   if (!containsVar(node, varName)) {
     steps.push(
       `\\text{表达式不含 } ${varName} \\text{，按常数法则导数为 } 0`,
     );
   } else {
+    // 第一阶：在原始表达式上标注求导法则。
     annotate(node, varName, steps, 0);
+    // 高阶：对每一阶中间结果继续标注法则。
+    for (let i = 1; i < safeOrder; i++) {
+      const prev = derivativeNodes[i - 1];
+      steps.push(
+        `\\text{第 ${i + 1} 阶求导：对} \\frac{d^{${i}}}{d${varName}^{${i}}} f(${varName}) = ${tex(prev)} \\text{ 继续求导}`,
+      );
+      if (containsVar(prev, varName)) {
+        annotate(prev, varName, steps, 0);
+      }
+    }
   }
 
   steps.push(`= ${resultLatex}`);

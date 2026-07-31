@@ -83,6 +83,7 @@ import {
   symbolicLimit,
   type SymbolicResult,
 } from '@/lib/engine/symbolic';
+import { inputToLatex } from '@/lib/engine/latex';
 import { t } from '@/lib/i18n';
 import { cn } from '@/lib/utils';
 import { toast } from 'sonner';
@@ -340,6 +341,18 @@ function EquationSection() {
             }}
           />
         </div>
+        {/* 实时公式预览：方程含 '=' 时分别转换两侧 */}
+        {equation.trim() && (() => {
+          const eqIdx = equation.indexOf('=');
+          const latex = eqIdx === -1
+            ? inputToLatex(equation)
+            : `${inputToLatex(equation.slice(0, eqIdx))} = ${inputToLatex(equation.slice(eqIdx + 1))}`;
+          return latex ? (
+            <div className="rounded-md border border-border/50 bg-muted/30 px-3 py-2 overflow-x-auto">
+              <FormulaRenderer latex={latex} displayMode={false} className="text-sm" />
+            </div>
+          ) : null;
+        })()}
         <div className="grid grid-cols-3 gap-2">
           <div>
             <label className="text-[11px] text-muted-foreground">{t('solverCalcVar')}</label>
@@ -635,6 +648,7 @@ function DerivativeSection() {
   const sendToPlot = useSendToPlot();
   const [expr, setExpr] = useState('x^2 * sin(x)');
   const [varName, setVarName] = useState('x');
+  const [order, setOrder] = useState<1 | 2 | 3>(1);
   const [result, setResult] = useState<{
     latex: string;
     resultString: string;
@@ -652,9 +666,12 @@ function DerivativeSection() {
         setError(t('solverEnterEquation'));
         return;
       }
-      const { resultLatex, resultString, steps } = differentiateWithSteps(expr, varName);
+      const { resultLatex, resultString, steps } = differentiateWithSteps(expr, varName, undefined, order);
+      const lhs = order === 1
+        ? `\\frac{d}{d${varName}} \\left[ ${expr} \\right]`
+        : `\\frac{d^{${order}}}{d${varName}^{${order}}} \\left[ ${expr} \\right]`;
       setResult({
-        latex: `\\frac{d}{d${varName}} \\left[ ${expr} \\right] = ${resultLatex}`,
+        latex: `${lhs} = ${resultLatex}`,
         resultString,
         steps,
       });
@@ -664,6 +681,15 @@ function DerivativeSection() {
       setWorking(false);
     }
   };
+
+  // 实时公式预览：按当前阶数包装成 d^n/dx^n [f]。
+  const previewLatex = (() => {
+    const exprLatex = inputToLatex(expr);
+    if (!exprLatex) return '';
+    return order === 1
+      ? `\\frac{d}{d${varName}} \\left[ ${exprLatex} \\right]`
+      : `\\frac{d^{${order}}}{d${varName}^{${order}}} \\left[ ${exprLatex} \\right]`;
+  })();
 
   return (
     <div className="grid grid-cols-[minmax(300px,380px)_1fr] gap-5">
@@ -680,18 +706,44 @@ function DerivativeSection() {
             }}
           />
         </div>
-        <div>
-          <label className="text-[11px] text-muted-foreground">{t('solverCalcVar')}</label>
-          <Select value={varName} onValueChange={setVarName}>
-            <SelectTrigger className="h-8 w-28 text-[12px] mt-1 font-mono">
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              {['x', 'y', 'z', 't', 'n'].map((v) => (
-                <SelectItem key={v} value={v} className="text-[12px] font-mono">{v}</SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
+        {/* 实时公式预览 */}
+        {expr.trim() && previewLatex && (
+          <div className="rounded-md border border-border/50 bg-muted/30 px-3 py-2 overflow-x-auto">
+            <FormulaRenderer latex={previewLatex} displayMode={false} className="text-sm" />
+          </div>
+        )}
+        <div className="grid grid-cols-2 gap-2">
+          <div>
+            <label className="text-[11px] text-muted-foreground">{t('solverCalcVar')}</label>
+            <Select value={varName} onValueChange={setVarName}>
+              <SelectTrigger className="h-8 w-28 text-[12px] mt-1 font-mono">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                {['x', 'y', 'z', 't', 'n'].map((v) => (
+                  <SelectItem key={v} value={v} className="text-[12px] font-mono">{v}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+          <div className="flex items-end justify-between gap-2 pb-0.5">
+            <span className="text-[11px] text-muted-foreground">求导阶数</span>
+            <ToggleGroup
+              type="single"
+              value={String(order)}
+              onValueChange={(v) => {
+                const n = Number(v);
+                if (n === 1 || n === 2 || n === 3) setOrder(n);
+              }}
+              variant="outline"
+              size="sm"
+              className="h-8"
+            >
+              <ToggleGroupItem value="1" className="h-8 px-2.5 text-[11px]">1 阶</ToggleGroupItem>
+              <ToggleGroupItem value="2" className="h-8 px-2.5 text-[11px]">2 阶</ToggleGroupItem>
+              <ToggleGroupItem value="3" className="h-8 px-2.5 text-[11px]">3 阶</ToggleGroupItem>
+            </ToggleGroup>
+          </div>
         </div>
         <Button onClick={handleSolve} disabled={working} className="w-full h-9 text-[12.5px] gap-1.5" size="sm">
           <FunctionSquare className="size-4" />
@@ -808,6 +860,19 @@ function IntegralSection() {
             }}
           />
         </div>
+        {/* 实时公式预览：定积分带上下限，不定积分无界限 */}
+        {expr.trim() && (() => {
+          const exprLatex = inputToLatex(expr);
+          if (!exprLatex) return null;
+          const latex = definite
+            ? `\\int_{${lower}}^{${upper}} ${exprLatex} \\, d${varName}`
+            : `\\int ${exprLatex} \\, d${varName}`;
+          return (
+            <div className="rounded-md border border-border/50 bg-muted/30 px-3 py-2 overflow-x-auto">
+              <FormulaRenderer latex={latex} displayMode={false} className="text-sm" />
+            </div>
+          );
+        })()}
         <div className="grid grid-cols-2 gap-2">
           <div>
             <label className="text-[11px] text-muted-foreground">{t('solverCalcVar')}</label>
@@ -996,6 +1061,17 @@ function LimitSection() {
             }}
           />
         </div>
+        {/* 实时公式预览：lim_{var → point} f(var) */}
+        {expr.trim() && (() => {
+          const exprLatex = inputToLatex(expr);
+          if (!exprLatex) return null;
+          const latex = `\\lim_{${varName} \\to ${pointDisplay}} ${exprLatex}`;
+          return (
+            <div className="rounded-md border border-border/50 bg-muted/30 px-3 py-2 overflow-x-auto">
+              <FormulaRenderer latex={latex} displayMode={false} className="text-sm" />
+            </div>
+          );
+        })()}
         <div className="grid grid-cols-2 gap-2">
           <div>
             <label className="text-[11px] text-muted-foreground">{t('solverCalcVar')}</label>
@@ -1122,8 +1198,8 @@ export function SolverWorkbench() {
         </div>
       </aside>
 
-      {/* ─── 右侧主区域 ─────────────────────────────────────── */}
-      <main className="flex-1 min-w-[600px] min-h-0 flex flex-col">
+      {/* ─── 右侧主区域（响应式：min-w-0 避免窗口缩放/全屏时溢出错位） ── */}
+      <main className="flex-1 min-w-0 min-h-0 flex flex-col">
         {/* 标题条 */}
         <div className="shrink-0 h-11 px-4 flex items-center gap-2 border-b border-border/60 bg-background/30">
           <active.icon className="size-4 text-primary" />

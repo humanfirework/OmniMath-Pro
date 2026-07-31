@@ -9,8 +9,10 @@
  *
  * View model:
  *   - `defaultView` is derived from the current plots (memoized). It is the
- *     "natural" view for the active set of plots (auto-fit Y, square view
- *     for polar, latest xRange otherwise).
+ *     "natural" view for the active set of plots: X is the latest plot's
+ *     configured xRange, Y is the smart (P5/P95, outlier-clipped) range
+ *     sampled over that X. For polar plots the Y range is a fixed `[-4, 4]`
+ *     (no aspect-ratio enforcement — the canvas maps world→screen linearly).
  *   - `userView` is set when the user pans / zooms / edits the range inputs.
  *     When plots are added/removed, the override is cleared so the derived
  *     default takes over again — no useEffect cascade needed.
@@ -174,11 +176,33 @@ export function Plot2DPanel() {
     setSpecEdits((prev) => ({ ...prev, [id]: spec }));
   }, []);
 
+  // `scopeVersion` re-derives when a slider / variable changes the curves.
+  const scopeVersion = useScopeVersion();
+
+  // If the plot count has changed since the user set their view, drop the
+  // override so the derived default takes over.
+  const effectiveUserView =
+    userView && userView.plotCount === plots.length ? userView.view : null;
+
+  // The X range used both as the effective viewport X and as the sampling
+  // range for `smartY`. It tracks the user's current X (pan / zoom) so the
+  // smart Y range is recomputed over whatever is actually visible, instead
+  // of always sampling the curve's original configured xRange. Computed
+  // BEFORE `smartY` / `defaultView` to avoid a circular dependency:
+  // `defaultView.y` depends on `smartY`, so `smartY` cannot depend on
+  // `defaultView.x`. The result is referentially stable (a reference taken
+  // straight from `userView.view.x` or the store's `xRange`) so adding it
+  // to the `smartY` memo deps does not cause spurious re-computation.
+  const latestPlot = plots[plots.length - 1];
+  const sampleX: [number, number] =
+    effectiveUserView?.x ?? ((latestPlot?.xRange ?? DEFAULT_X) as [number, number]);
+
   // Derived adaptive Y range from the current set of plots (memoized).
   // This is the single "free" behaviour: quantile-based with outlier
   // clipping, union of all ordinary curves so everything stays visible.
-  // `scopeVersion` re-derives when a slider / variable changes the curves.
-  const scopeVersion = useScopeVersion();
+  // Sampled over `sampleX` (the current visible X range), so zooming X
+  // re-derives Y and adapts to whatever is on screen instead of using the
+  // stale curve-config xRange.
   const smartY = useMemo<CoordinatedRangeResult>(() => {
     void scopeVersion;
     if (plots.length === 0) {
@@ -189,31 +213,29 @@ export function Plot2DPanel() {
       const r = 4;
       return { range: [-r, r], outliers: [] };
     }
-    const latest = plots[plots.length - 1];
-    const x = (latest?.xRange ?? DEFAULT_X) as [number, number];
-    return deriveSmartY(plots, x, curveSpecs);
+    return deriveSmartY(plots, sampleX, curveSpecs);
+  }, [plots, scopeVersion, curveSpecs, sampleX]);
 
-  }, [plots, scopeVersion, curveSpecs]);
-
-  // The default view always uses the adaptive free range.
+  // The default view always uses the adaptive free range. The X is `sampleX`
+  // (the latest plot's configured xRange until the user pans/zooms, then
+  // their current X) so a fresh load shows the natural domain.
   const defaultView = useMemo<ViewBox>(() => {
     if (plots.length === 0) return { x: DEFAULT_X, y: DEFAULT_Y };
-    const latest = plots[plots.length - 1];
-    const x = (latest?.xRange ?? DEFAULT_X) as [number, number];
-    return { x, y: smartY.range };
-  }, [plots, smartY]);
+    return { x: sampleX, y: smartY.range };
+  }, [sampleX, smartY]);
 
-  // If the plot count has changed since the user set their view, drop the
-  // override so the derived default takes over.
-  const effectiveUserView =
-    userView && userView.plotCount === plots.length ? userView.view : null;
-
-  // 'manual' range mode uses the user-set Y if present; otherwise falls
-  // back to the adaptive free range from defaultView.
-  const effectiveX = effectiveUserView?.x ?? defaultView.x;
+  // X is always the sampled / current X (symmetric with how pan & zoom write
+  // `userView`).
+  const effectiveX = sampleX;
+  // 'manual' mode respects the user-set Y. In 'free' mode the adaptive smart
+  // range is used — BUT once the user has interacted (`effectiveUserView`
+  // exists) we must respect their Y too, otherwise the canvas sync effect
+  // bounces Y back to the smart range on every pan/zoom (rebound bug). Only
+  // the very first render, or after a reset (which clears `userView`), falls
+  // back to `defaultView.y`. X and Y are now symmetric.
   const effectiveY =
-    rangeMode === 'manual' && effectiveUserView
-      ? effectiveUserView.y
+    rangeMode === 'manual' || (rangeMode === 'free' && effectiveUserView)
+      ? effectiveUserView!.y
       : defaultView.y;
 
   // Per-plot independent Y ranges for facet mode. Each curve gets its own

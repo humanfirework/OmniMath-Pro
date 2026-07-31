@@ -36,7 +36,9 @@ import {
   findExtrema,
   formatCoord,
   niceNumber,
-  autoYRange,
+  PLOT_PADDING as PADDING,
+  PLOT_FONT_FAMILY,
+  PLOT_MONO_FAMILY,
   type Curve2DSpec,
   type PlotSample,
 } from '@/lib/plots/plot2d';
@@ -44,6 +46,7 @@ import type { IntersectionPoint, TangentResult } from '@/lib/plots/plot2dAnalysi
 import { AlertTriangle, RotateCcw, Maximize } from 'lucide-react';
 import type { PlotConfig } from '@/lib/store/workbench';
 import { useScopeVersion } from '@/lib/hooks/useScopeVersion';
+import { useSettingsStore } from '@/lib/store/settingsStore';
 
 /* ----------------------------- Props ----------------------------- */
 
@@ -97,23 +100,6 @@ const PLOT_COLORS = [
   '#6a1b9a', // purple
   '#00838f', // cyan
 ];
-
-/** Canvas padding (screen pixels). Declared at module level to avoid TDZ
- *  issues — the `computed` useMemo reads this during first render. */
-const PADDING = { left: 48, right: 16, top: 16, bottom: 32 };
-
-/** Canvas 文字统一 UI 字体栈，与 globals.css 的 --font-sans 保持一致。
- *  中文回退紧跟 Inter，避免界面文字与刻度标注之间出现字体 fallback 抖动。
- *  所有 canvas 刻度、交点标签、坐标标注、轴标签均通过该常量组合 ctx.font。
- *  注：Canvas 2D 不直接支持 CSS font-variant-numeric，刻度数字的等宽对齐
- *  依赖统一字体本身（同一字体下数字字形宽度一致已足够整齐）。 */
-const PLOT_FONT_FAMILY =
-  'Inter, "Noto Sans SC", "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", ui-sans-serif, system-ui, sans-serif';
-
-/** 数据读出（tooltip）用的等宽字体栈，与 globals.css 的 --font-mono 一致，
- *  保证悬浮读数中的坐标数字按列对齐。 */
-const PLOT_MONO_FAMILY =
-  '"JetBrains Mono", "SF Mono", "Fira Code", "Cascadia Code", "Roboto Mono", ui-monospace, SFMono-Regular, Menlo, Consolas, monospace';
 
 const EXAMPLES = [
   { expr: 'sin x', label: 'sin x' },
@@ -230,6 +216,10 @@ export function Plot2DCanvas({
   // changes (console assignment, slider drag, variable delete) — this is
   // what makes `a = 3` + `plot(sin(a*x))` + slider work live.
   const scopeVersion = useScopeVersion();
+
+  // 坐标轴字号设置（来自 settingsStore，默认 12，范围 8–24）。用于刻度
+  // 数字与坐标标注的 ctx.font，让用户在设置面板调节字号时画布实时跟随。
+  const axisFontSize = useSettingsStore((s) => s.plotAxisFontSize);
 
   /* ----------------- T7.1 滑块拖动降采样保帧率 -----------------
    * scopeVersion 在滑块拖动时会每帧 bump（高频变化）。若每次都用全精度
@@ -371,22 +361,24 @@ export function Plot2DCanvas({
       // the offscreen layers have been rasterized. (D4)
 
       const dark = theme === 'dark';
-      // GeoGebra/Desmos/JSXGraph style math software colors
-      const bg = dark ? '#1a1a1a' : '#ffffff';
-      const fg = dark ? '#e0e0e0' : '#212121';
-      const axisColor = dark ? '#9e9e9e' : '#424242';
+      // Themed colors read from CSS variables (cached per theme) so the canvas
+      // stays in sync with the app's design tokens instead of hard-coded hex.
+      const themed = getThemedColors(theme);
+      const bg = themed.bg;
+      const fg = themed.fg;
+      const axisColor = themed.mutedFg;
       const gridMajor = dark ? 'rgba(255,255,255,0.10)' : 'rgba(0,0,0,0.10)';
       const gridMinor = dark ? 'rgba(255,255,255,0.04)' : 'rgba(0,0,0,0.04)';
-      const tickLabelColor = dark ? '#9e9e9e' : '#616161';
-      const axisLabelColor = dark ? '#bdbdbd' : '#424242';
+      const tickLabelColor = themed.mutedFg;
+      const axisLabelColor = themed.fg;
       const crosshairColor = dark ? '#64b5f6' : '#1976d2';
 
       // Semantic marker / overlay colors for high contrast in both themes.
       const markerStroke = dark ? '#212121' : '#ffffff';
       const zeroFill = dark ? '#64b5f6' : '#1976d2';
-      const tooltipBg = dark ? '#303030' : '#ffffff';
-      const tooltipFg = dark ? '#f5f5f5' : '#212121';
-      const tooltipBorder = dark ? 'rgba(255,255,255,0.15)' : 'rgba(0,0,0,0.12)';
+      const tooltipBg = themed.popover;
+      const tooltipFg = themed.popoverFg;
+      const tooltipBorder = themed.border;
 
       const { x: vx, y: vy } = viewRef.current;
       const xNice = niceNumber(vx, 8);
@@ -411,7 +403,7 @@ export function Plot2DCanvas({
       if (!gridCtx || !curveCtx || !annotCtx) return;
       const viewStr = `${vx[0]}|${vx[1]}|${vy[0]}|${vy[1]}`;
       const sizeStr = `${targetW}|${targetH}`;
-      const l1Sig = `${theme}|${showGrid}|${showAxes}|${viewStr}|${sizeStr}`;
+      const l1Sig = `${theme}|${showGrid}|${showAxes}|${viewStr}|${sizeStr}|${axisFontSize}`;
       const l2Sig = `${theme}|${viewStr}|${sizeStr}`;
       const l3Sig = `${theme}|${showMarkers}|${viewStr}|${sizeStr}`;
       const sig = layerSigRef.current;
@@ -426,6 +418,9 @@ export function Plot2DCanvas({
       // and axes drawing code below rasterizes into gridLayer automatically.
       const ctx = gridCtx;
       ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+      // geometricPrecision improves text crispness for tick labels; ignored
+      // by older browsers so it's safe to set unconditionally.
+      ctx.textRendering = 'geometricPrecision';
       ctx.clearRect(0, 0, w, h);
       // Background lives on the bottommost layer so it is cached alongside
       // the grid and not repainted every hover frame.
@@ -516,7 +511,7 @@ export function Plot2DCanvas({
         ctx.fill();
 
         /* ---------- Tick labels ---------- */
-        ctx.font = `11px ${PLOT_FONT_FAMILY}`;
+        ctx.font = `${axisFontSize}px ${PLOT_FONT_FAMILY}`;
         ctx.fillStyle = tickLabelColor;
         ctx.textAlign = 'center';
         ctx.textBaseline = 'top';
@@ -594,6 +589,7 @@ export function Plot2DCanvas({
     if (l3Dirty) {
     const ctx = annotCtx;
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    ctx.textRendering = 'geometricPrecision';
     ctx.clearRect(0, 0, w, h);
     if (overlays) {
       // Derivative curve — dashed line, math style colors
@@ -657,7 +653,7 @@ export function Plot2DCanvas({
         ctx.arc(tsx, tsy, 4, 0, Math.PI * 2);
         ctx.fill();
         ctx.fillStyle = dark ? '#e0e0e0' : '#424242';
-        ctx.font = `10px ${PLOT_FONT_FAMILY}`;
+        ctx.font = `bold 12px ${PLOT_FONT_FAMILY}`;
         ctx.textAlign = 'left';
         ctx.textBaseline = 'bottom';
         ctx.fillText(`k=${t.slope.toFixed(3)}`, tsx + 8, tsy - 4);
@@ -681,8 +677,8 @@ export function Plot2DCanvas({
           ctx.fill();
           ctx.stroke();
           // Coordinate label: even indices above the dot, odd below.
-          const text = `(${p.x.toFixed(2)}, ${p.y.toFixed(2)})`;
-          ctx.font = `10px ${PLOT_FONT_FAMILY}`;
+          const text = `(${p.x.toFixed(3)}, ${p.y.toFixed(3)})`;
+          ctx.font = `bold 12px ${PLOT_FONT_FAMILY}`;
           const tw = ctx.measureText(text).width;
           const above = idx % 2 === 0;
           // Horizontal: prefer right of the dot; flip left near the edge.
@@ -693,7 +689,7 @@ export function Plot2DCanvas({
           const ly = Math.min(Math.max(lyRaw, PADDING.top + 6), h - PADDING.bottom - 6);
           // Translucent backdrop for readability.
           ctx.fillStyle = dark ? 'rgba(26,26,26,0.72)' : 'rgba(255,255,255,0.78)';
-          ctx.fillRect(lx - 2, ly - 6, tw + 4, 12);
+          ctx.fillRect(lx - 2, ly - 7, tw + 4, 14);
           ctx.fillStyle = dark ? '#e0e0e0' : '#424242';
           ctx.textAlign = 'left';
           ctx.textBaseline = 'middle';
@@ -733,10 +729,10 @@ export function Plot2DCanvas({
           ctx.stroke();
           // Label
           ctx.fillStyle = dark ? '#e0e0e0' : '#424242';
-          ctx.font = `10px ${PLOT_FONT_FAMILY}`;
+          ctx.font = `bold 12px ${PLOT_FONT_FAMILY}`;
           ctx.textAlign = 'center';
           ctx.textBaseline = 'bottom';
-          ctx.fillText(`max(${e.x.toFixed(2)}, ${e.y.toFixed(2)})`, sx, sy - 8);
+          ctx.fillText(`max(${e.x.toFixed(3)}, ${e.y.toFixed(3)})`, sx, sy - 8);
         }
         // Minima — red dots
         for (const e of plot.extrema.minima) {
@@ -752,10 +748,10 @@ export function Plot2DCanvas({
           ctx.stroke();
           // Label
           ctx.fillStyle = dark ? '#e0e0e0' : '#424242';
-          ctx.font = `10px ${PLOT_FONT_FAMILY}`;
+          ctx.font = `bold 12px ${PLOT_FONT_FAMILY}`;
           ctx.textAlign = 'center';
           ctx.textBaseline = 'top';
-          ctx.fillText(`min(${e.x.toFixed(2)}, ${e.y.toFixed(2)})`, sx, sy + 8);
+          ctx.fillText(`min(${e.x.toFixed(3)}, ${e.y.toFixed(3)})`, sx, sy + 8);
         }
       }
     }
@@ -765,13 +761,17 @@ export function Plot2DCanvas({
     } // end L3 annotations layer
 
     /* ---------- Composite L1+L2+L3 onto main canvas ---------- */
-    // drawImage copies the raw device-pixel buffer of each layer (its setTransform
-    // does not affect the source); with the main ctx scaled by dpr, drawing into
-    // a w×h CSS box maps 1:1 to each layer's targetW×targetH backing store.
+    // drawImage copies the raw device-pixel buffer of each layer (its
+    // setTransform does not affect the source). Each layer's backing store
+    // is the CSS size × dpr (a DPI buffer, NOT a 1:1 world-unit mapping):
+    // the main ctx is pre-scaled by dpr, so drawing into a w×h CSS box lands
+    // crisply on the device-pixel backing store. This is purely a DPI buffer
+    // passthrough — it does NOT enforce a square / 1:1 world aspect ratio.
     ctx.clearRect(0, 0, w, h);
     ctx.drawImage(gridLayer, 0, 0, w, h);
     ctx.drawImage(curveLayer, 0, 0, w, h);
     ctx.drawImage(annotLayer, 0, 0, w, h);
+    ctx.textRendering = 'geometricPrecision';
 
     /* ---------- L4: crosshair + snap ring + tooltip (every frame) ---------- */
     const hover = hoverRef.current;
@@ -860,7 +860,7 @@ export function Plot2DCanvas({
       console.error('[Plot2DCanvas] draw error:', err);
       setDrawError(err instanceof Error ? err.message : '绘制失败');
     }
-  }, [computed, theme, dataToScreen, screenToData, showGrid, showAxes, showMarkers, overlays]);
+  }, [computed, theme, dataToScreen, screenToData, showGrid, showAxes, showMarkers, overlays, axisFontSize]);
 
   // Keep the ref in sync so the rAF callback always uses the latest drawNow.
   // We must do this inside an effect (not during render) per React 19 rules.
@@ -898,12 +898,35 @@ export function Plot2DCanvas({
       resizeTimer = setTimeout(updateSize, 80);
     });
     ro.observe(container);
+
+    // Re-sample devicePixelRatio when it changes (e.g. the window is dragged
+    // between monitors with different DPI, or the browser zoom changes).
+    // Previously dpr was only read inside `updateSize` on container resize,
+    // so a DPI change WITHOUT a size change left the backing store at the
+    // stale dpr and the canvas rendered blurry. We register a matchMedia
+    // query for the CURRENT dpr; when it stops matching we re-sample and
+    // re-register against the new dpr so subsequent changes keep firing.
+    let detachDpr: (() => void) | null = null;
+    const setupDprListener = () => {
+      const ratio = window.devicePixelRatio || 1;
+      const mql = window.matchMedia(`(resolution: ${ratio}dppx)`);
+      const handler = () => {
+        updateSize();
+        mql.removeEventListener('change', handler);
+        setupDprListener();
+      };
+      mql.addEventListener('change', handler);
+      detachDpr = () => mql.removeEventListener('change', handler);
+    };
+    setupDprListener();
+
     // Initial measurement.
     updateSize();
     return () => {
       ro.disconnect();
       if (resizeTimer) clearTimeout(resizeTimer);
       if (rafId) cancelAnimationFrame(rafId);
+      detachDpr?.();
     };
   }, [scheduleRedraw]);
 
@@ -1065,11 +1088,41 @@ export function Plot2DCanvas({
             }
           }
         }
+        // Light snap-to-point: if the cursor is within 12px of an
+        // intersection or tangent point, snap the crosshair to the exact
+        // point so its readout shows the precise coordinate (not the loose
+        // cursor position). This makes clicking/inspecting intersections
+        // and tangents feel precise even without perfect aim.
+        let snapSx = sx;
+        let snapSy = sy;
+        let snapWx = wx;
+        let snapWy = wy;
+        if (overlays) {
+          const snapPts: Array<{ x: number; y: number }> = [];
+          for (const ip of overlays.intersections) {
+            if (Number.isFinite(ip.x) && Number.isFinite(ip.y)) snapPts.push({ x: ip.x, y: ip.y });
+          }
+          if (overlays.tangent) {
+            const tp = overlays.tangent.at;
+            if (Number.isFinite(tp.x) && Number.isFinite(tp.y)) snapPts.push({ x: tp.x, y: tp.y });
+          }
+          for (const pt of snapPts) {
+            const [psx, psy] = dataToScreen(pt.x, pt.y);
+            if (!Number.isFinite(psx) || !Number.isFinite(psy)) continue;
+            if (Math.hypot(psx - sx, psy - sy) < 12) {
+              snapSx = psx;
+              snapSy = psy;
+              snapWx = pt.x;
+              snapWy = pt.y;
+              break;
+            }
+          }
+        }
         hoverRef.current = {
-          sx,
-          sy,
-          wx,
-          wy,
+          sx: snapSx,
+          sy: snapSy,
+          wx: snapWx,
+          wy: snapWy,
           snap: best,
           snapColor: bestColor,
         };
@@ -1079,7 +1132,7 @@ export function Plot2DCanvas({
         setDrawError(err instanceof Error ? err.message : '绘制交互失败');
       }
     },
-    [screenToData, dataToScreen, computed, onViewChange, scheduleRedraw],
+    [screenToData, dataToScreen, computed, onViewChange, scheduleRedraw, overlays],
   );
 
   const handlePointerUp = useCallback((e: ReactPointerEvent<HTMLCanvasElement>) => {
@@ -1349,6 +1402,37 @@ function getCssVar(name: string, fallback: string): string {
   return value || fallback;
 }
 
+/**
+ * Per-theme cache of CSS-variable-derived colors. getCssVar reads computed
+ * style on every call, which is expensive when done inside the per-frame
+ * draw loop. We cache the full set of themed colors keyed by theme string so
+ * the computed style is only re-read when the theme actually changes.
+ */
+interface ThemedColors {
+  bg: string;
+  fg: string;
+  mutedFg: string;
+  popover: string;
+  popoverFg: string;
+  border: string;
+}
+const themedColorCache = new Map<'dark' | 'light', ThemedColors>();
+function getThemedColors(theme: 'dark' | 'light'): ThemedColors {
+  const cached = themedColorCache.get(theme);
+  if (cached) return cached;
+  const dark = theme === 'dark';
+  const colors: ThemedColors = {
+    bg: getCssVar('--background', dark ? '#1a1a1a' : '#ffffff'),
+    fg: getCssVar('--foreground', dark ? '#e0e0e0' : '#212121'),
+    mutedFg: getCssVar('--muted-foreground', dark ? '#9e9e9e' : '#616161'),
+    popover: getCssVar('--popover', dark ? '#303030' : '#ffffff'),
+    popoverFg: getCssVar('--popover-foreground', dark ? '#f5f5f5' : '#212121'),
+    border: getCssVar('--border', dark ? 'rgba(255,255,255,0.15)' : 'rgba(0,0,0,0.12)'),
+  };
+  themedColorCache.set(theme, colors);
+  return colors;
+}
+
 function clamp(v: number, min: number, max: number): number {
   return Math.min(max, Math.max(min, v));
 }
@@ -1399,7 +1483,3 @@ function formatTickLabel(v: number): string {
   const s = v.toPrecision(3);
   return parseFloat(s).toString();
 }
-
-// Expose autoYRange as a re-export for the panel (kept off the default export
-// to avoid pulling the math utilities into the bundle twice).
-export { autoYRange };
