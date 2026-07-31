@@ -39,6 +39,7 @@ import {
 import { cn } from '@/lib/utils';
 import { t } from '@/lib/i18n';
 import { useWorkbenchStore } from '@/lib/store/workbench';
+import { useSettingsStore } from '@/lib/store/settingsStore';
 import { exportFormula, type FormulaFormat } from '@/lib/formulaExport';
 
 interface FormulaRendererProps {
@@ -60,6 +61,10 @@ interface FormulaRendererProps {
   defaultCollapsed?: boolean;
   /** Font mode — `katex` (default KaTeX fonts), `stix` (STIX Two Math via CDN), or `system` (system-ui). */
   fontMode?: 'katex' | 'stix' | 'system';
+  /** Base font size (px) for the rendered/exported formula. When omitted,
+   *  falls back to the global `defaultFormulaFontSize` setting (default 28).
+   *  Pass an explicit value to override on a per-call basis. */
+  fontSize?: number;
 }
 
 const MIN_SCALE = 0.6;
@@ -77,6 +82,7 @@ export function FormulaRenderer({
   collapsible = false,
   defaultCollapsed = false,
   fontMode = 'katex',
+  fontSize,
 }: FormulaRendererProps) {
   const [copied, setCopied] = useState(false);
   const [scale, setScale] = useState(1);
@@ -85,6 +91,10 @@ export function FormulaRenderer({
   const [exporting, setExporting] = useState(false);
   const contentRef = useRef<HTMLDivElement>(null);
   const theme = useWorkbenchStore((s) => s.theme);
+  // 基础字号：prop 优先，其次取全局设置 defaultFormulaFontSize，
+  // 兜底 28（与历史硬编码值一致）。
+  const defaultFormulaFontSize = useSettingsStore((s) => s.defaultFormulaFontSize);
+  const baseFontSize = fontSize ?? defaultFormulaFontSize ?? 28;
 
   const html = useMemo(() => {
     if (!latex) return '';
@@ -140,20 +150,20 @@ export function FormulaRenderer({
       if (exporting) return;
       setExporting(true);
       try {
-        // 导出字号随当前缩放联动（28px × scale），保证导出与所见一致
+        // 导出字号随当前缩放联动（baseFontSize × scale），保证导出与所见一致
         await exportFormula(latex, {
           format,
           defaultName: `omnimath-formula-${Date.now()}`,
           dpi: 2,
           displayMode,
           theme,
-          fontSize: Math.round(28 * scale),
+          fontSize: Math.round(baseFontSize * scale),
         });
       } finally {
         setExporting(false);
       }
     },
-    [latex, displayMode, theme, scale, exporting],
+    [latex, displayMode, theme, scale, exporting, baseFontSize],
   );
 
   if (!latex) return null;

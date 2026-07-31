@@ -702,9 +702,9 @@ export function FormulaLibraryPanel() {
                           <AnimatePresence initial={false}>
                             {!isCollapsed && (
                               <motion.div
-                                initial={{ height: 0, opacity: 0 }}
-                                animate={{ height: 'auto', opacity: 1 }}
-                                exit={{ height: 0, opacity: 0 }}
+                                initial={{ maxHeight: 0, opacity: 0 }}
+                                animate={{ maxHeight: '1000px', opacity: 1 }}
+                                exit={{ maxHeight: 0, opacity: 0 }}
                                 transition={{ duration: 0.2, ease: 'easeInOut' }}
                                 className="overflow-hidden"
                               >
@@ -742,9 +742,9 @@ export function FormulaLibraryPanel() {
                           <AnimatePresence initial={false}>
                             {!isCollapsed && (
                               <motion.div
-                                initial={{ height: 0, opacity: 0 }}
-                                animate={{ height: 'auto', opacity: 1 }}
-                                exit={{ height: 0, opacity: 0 }}
+                                initial={{ maxHeight: 0, opacity: 0 }}
+                                animate={{ maxHeight: '1000px', opacity: 1 }}
+                                exit={{ maxHeight: 0, opacity: 0 }}
                                 transition={{ duration: 0.2, ease: 'easeInOut' }}
                                 className="overflow-hidden"
                               >
@@ -778,9 +778,9 @@ export function FormulaLibraryPanel() {
                         <AnimatePresence initial={false}>
                           {!collapsedGroups.has('custom') && (
                             <motion.div
-                              initial={{ height: 0, opacity: 0 }}
-                              animate={{ height: 'auto', opacity: 1 }}
-                              exit={{ height: 0, opacity: 0 }}
+                              initial={{ maxHeight: 0, opacity: 0 }}
+                              animate={{ maxHeight: '1000px', opacity: 1 }}
+                              exit={{ maxHeight: 0, opacity: 0 }}
                               transition={{ duration: 0.2, ease: 'easeInOut' }}
                               className="overflow-hidden"
                             >

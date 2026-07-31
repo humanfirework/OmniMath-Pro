@@ -8,7 +8,7 @@
  * draggable and their order is persisted in settingsStore.
  */
 
-import { useEffect, useRef, useState, type CSSProperties } from 'react';
+import { useEffect, useMemo, useRef, useState, type CSSProperties } from 'react';
 import { motion } from 'framer-motion';
 import {
   DndContext,
@@ -103,6 +103,17 @@ const ACTIVITY_REGISTRY: Record<ActivityItemId, RegistryEntry> = {
   settings: { icon: Settings, labelKey: 'settingsTitle' },
 };
 
+/** Top group: primary navigation and view-mode items (rendered at the top). */
+const TOP_GROUP_IDS: ActivityItemId[] = [
+  'history', 'variables', 'files', 'formulas', 'stats',
+  'solver', 'pipeline', 'whiteboard', 'linalg',
+];
+
+/** Bottom group: utility toggles and settings (rendered at the bottom). */
+const BOTTOM_GROUP_IDS: ActivityItemId[] = [
+  'toggleEditor', 'togglePreview', 'toggleSidebar', 'layoutMenu', 'settings',
+];
+
 function SortableWrapper({ id, children }: { id: string; children: React.ReactNode }) {
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id });
   const style: CSSProperties = {
@@ -186,11 +197,27 @@ export function ActivityBar() {
     useSensor(PointerSensor, { activationConstraint: { distance: 8 } }),
   );
 
-  const orderedIds = activityBarOrder
-    .filter((id): id is ActivityItemId => DEFAULT_ACTIVITY_BAR_ORDER.includes(id));
-  for (const id of DEFAULT_ACTIVITY_BAR_ORDER as ActivityItemId[]) {
-    if (!orderedIds.includes(id)) orderedIds.push(id);
-  }
+  const orderedIds = useMemo(() => {
+    const ids = activityBarOrder.filter((id): id is ActivityItemId =>
+      DEFAULT_ACTIVITY_BAR_ORDER.includes(id),
+    );
+    for (const id of DEFAULT_ACTIVITY_BAR_ORDER as ActivityItemId[]) {
+      if (!ids.includes(id)) ids.push(id);
+    }
+    return ids;
+  }, [activityBarOrder]);
+
+  // Split the persisted full order into the two visual groups while preserving
+  // per-group ordering. Persistence still stores the full list — these filters
+  // only determine which items render in which DndContext.
+  const topIds = useMemo(
+    () => orderedIds.filter((id) => TOP_GROUP_IDS.includes(id)),
+    [orderedIds],
+  );
+  const bottomIds = useMemo(
+    () => orderedIds.filter((id) => BOTTOM_GROUP_IDS.includes(id)),
+    [orderedIds],
+  );
 
   const handleDragStart = (event: DragStartEvent) => {
     setActiveId(event.active.id as ActivityItemId);
@@ -302,7 +329,7 @@ export function ActivityBar() {
                 <motion.span
                   layoutId="activity-indicator"
                   className={cn(
-                    'absolute top-1/2 -translate-y-1/2 w-[2px] h-5 bg-primary',
+                    'absolute top-1/2 -translate-y-1/2 w-[2px] h-5 bg-primary will-change-transform',
                     isRight ? 'right-0 rounded-l' : 'left-0 rounded-r',
                   )}
                   style={{ boxShadow: '0 0 8px oklch(0.7 0.15 165 / 70%)' }}
@@ -477,6 +504,37 @@ export function ActivityBar() {
     return null;
   };
 
+  // Renders one group of items wrapped in its own DndContext + SortableContext.
+  // Each group is independently sortable — items cannot be dragged across
+  // groups because each DndContext only knows about its own droppables.
+  // The DragOverlay is gated on `ids.includes(activeId)` so only the context
+  // that owns the active drag renders the floating clone.
+  const renderGroup = (ids: ActivityItemId[]) => {
+    if (!mounted) {
+      return (
+        <>
+          {ids.map((id) => renderItem(id, false))}
+        </>
+      );
+    }
+    return (
+      <DndContext
+        sensors={sensors}
+        collisionDetection={closestCenter}
+        onDragStart={handleDragStart}
+        onDragEnd={handleDragEnd}
+        onDragCancel={handleDragCancel}
+      >
+        <SortableContext items={ids} strategy={verticalListSortingStrategy}>
+          {ids.map((id) => renderItem(id, true))}
+        </SortableContext>
+        <DragOverlay dropAnimation={null}>
+          {activeId && ids.includes(activeId) ? renderOverlayItem(activeId) : null}
+        </DragOverlay>
+      </DndContext>
+    );
+  };
+
   // Auto-hide: collapsed trigger strip. Hovering reveals the full bar.
   if (activityBarHidden) {
     return (
@@ -527,28 +585,12 @@ export function ActivityBar() {
       }}
     >
       <div className="flex flex-col items-center gap-1 w-full">
-        {mounted ? (
-          <DndContext
-            sensors={sensors}
-            collisionDetection={closestCenter}
-            onDragStart={handleDragStart}
-            onDragEnd={handleDragEnd}
-            onDragCancel={handleDragCancel}
-          >
-            <SortableContext items={orderedIds} strategy={verticalListSortingStrategy}>
-              {orderedIds.map((id) => renderItem(id, true))}
-            </SortableContext>
-            <DragOverlay dropAnimation={null}>
-              {activeId ? renderOverlayItem(activeId) : null}
-            </DragOverlay>
-          </DndContext>
-        ) : (
-          /* SSR / pre-hydration placeholder — same visual layout but no dnd-kit,
-             so server and client markup match (avoids hydration mismatch). */
-          <div className="flex flex-col items-center gap-1 w-full">
-            {orderedIds.map((id) => renderItem(id, false))}
-          </div>
-        )}
+        {renderGroup(topIds)}
+      </div>
+      {/* Visual separator between the top navigation group and the bottom utility group. */}
+      <div className="w-6 border-t border-border/40 my-2 mx-auto" />
+      <div className="flex flex-col items-center gap-1 w-full mt-auto">
+        {renderGroup(bottomIds)}
       </div>
     </aside>
   );

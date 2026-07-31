@@ -4,8 +4,8 @@
  * OmniMath Pro — 2D 自由参数滑块（Desmos 式）
  *
  * 自动扫描所有可见 2D 表达式中的自由参数（如 `a*x^2+b` 中的 a、b），
- * 为每个参数生成一行紧凑控件：参数名 + 滑块 + 数值输入框 + 范围/步长
- * 设置弹层。拖动滑块时：
+ * 为每个参数生成一行紧凑控件：参数名 + 播放按钮 + 滑块 + 数值输入框 +
+ * 范围/步长设置弹层。拖动滑块时：
  *   1. `setScopeVar` 把值写入引擎共享作用域并 bump scopeVersion，
  *      曲线经 useScopeVersion 实时重采样（交点/切线等 overlay 同步刷新）；
  *   2. `setPlotParam` 把值持久化到 workbench store（localStorage，
@@ -13,15 +13,22 @@
  *
  * 仅当存在自由参数时才渲染；表达式编辑后参数列表自动更新（新参数补
  * 默认滑块，消失的参数移除滑块但其值保留在 store 中）。
+ *
+ * 增强特性：
+ *   - 折叠状态持久化到 settingsStore.slidersCollapsed（跨会话保留）。
+ *   - 每个参数一行"播放"按钮：点击后参数值按正弦波在 [min, max] 间往复
+ *     动画（3 秒/周期），用单个 requestAnimationFrame 循环驱动所有正在
+ *     播放的参数；再次点击停止并保留当前值。
+ *   - Desmos 风格滑块：更粗的轨道、更大的手柄、min→current 的主色渐变。
  */
 
-import { useEffect, useMemo, useState } from 'react';
-import { ChevronDown, ChevronRight, Settings2, SlidersHorizontal } from 'lucide-react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { ChevronDown, ChevronRight, Pause, Play, Settings2, SlidersHorizontal } from 'lucide-react';
 import { Collapsible, CollapsibleTrigger, CollapsibleContent } from '@/components/ui/collapsible';
 import { Popover, PopoverTrigger, PopoverContent } from '@/components/ui/popover';
-import { Slider } from '@/components/ui/slider';
 import { Label } from '@/components/ui/label';
 import { useWorkbenchStore, type PlotConfig, type PlotParamConfig } from '@/lib/store/workbench';
+import { useSettingsStore } from '@/lib/store/settingsStore';
 import { extractFreeParameters } from '@/lib/engine/variableScanner';
 import { getScope, setScopeVar } from '@/lib/engine/mathInstance';
 import { useScopeVersion } from '@/lib/hooks/useScopeVersion';
@@ -45,6 +52,9 @@ function formatParamValue(v: number): string {
   return parseFloat(v.toPrecision(6)).toString();
 }
 
+/** 播放动画的周期（秒/周期）。 */
+const PLAY_CYCLE_SECONDS = 3;
+
 /* ------------------------------------------------------------------ */
 /*  Component                                                         */
 /* ------------------------------------------------------------------ */
@@ -53,7 +63,9 @@ export function ParameterSliders({ plots }: { plots: PlotConfig[] }) {
   const variables = useWorkbenchStore((s) => s.variables);
   const plotParams = useWorkbenchStore((s) => s.plotParams);
   const setPlotParam = useWorkbenchStore((s) => s.setPlotParam);
-  const [open, setOpen] = useState(true);
+  // 折叠状态改为持久化到 settingsStore，跨会话保留用户偏好。
+  const slidersCollapsed = useSettingsStore((s) => s.slidersCollapsed);
+  const setSlidersCollapsed = useSettingsStore((s) => s.setSlidersCollapsed);
   // scopeVersion 变化（滑块拖动、变量增删、作用域重置/恢复）时重新对齐
   // 参数列表与引擎作用域中的值。
   const scopeVersion = useScopeVersion();
@@ -96,17 +108,112 @@ export function ParameterSliders({ plots }: { plots: PlotConfig[] }) {
     }
   }, [configs]);
 
+  /* ----------------------- 播放动画 ----------------------- */
+  // 每个参数是否正在播放；startTimesRef 记录每个参数开始播放的时刻
+  //（performance.now() 毫秒）。configsRef 让 rAF 回调读到最新 min/max
+  // 而无需重新订阅。所有正在播放的参数共用一个 requestAnimationFrame
+  // 循环（tick），添加/移除播放参数时只增删集合，循环自我续期。
+  const [playingParams, setPlayingParams] = useState<Set<string>>(new Set());
+  const playingParamsRef = useRef<Set<string>>(new Set());
+  const startTimesRef = useRef<Record<string, number>>({});
+  const configsRef = useRef<Record<string, PlotParamConfig>>(configs);
+  const rafRef = useRef<number | null>(null);
+
+  useEffect(() => {
+    configsRef.current = configs;
+  }, [configs]);
+  useEffect(() => {
+    playingParamsRef.current = playingParams;
+  }, [playingParams]);
+
+  const tick = useCallback(() => {
+    const now = performance.now();
+    const playing = playingParamsRef.current;
+    const cfgs = configsRef.current;
+    for (const name of playing) {
+      const cfg = cfgs[name];
+      if (!cfg || cfg.max <= cfg.min) continue;
+      const start = startTimesRef.current[name];
+      if (start === undefined) continue;
+      // value = center + (range/2) * sin(elapsed/duration * 2π)
+      const elapsed = (now - start) / 1000;
+      const center = (cfg.min + cfg.max) / 2;
+      const range = cfg.max - cfg.min;
+      const value = center + (range / 2) * Math.sin((elapsed / PLAY_CYCLE_SECONDS) * 2 * Math.PI);
+      setScopeVar(name, value);
+      setPlotParam(name, { value });
+    }
+    // 仍有参数在播放就续期，否则停止循环并把 rafRef 置空。
+    if (playingParamsRef.current.size > 0) {
+      rafRef.current = requestAnimationFrame(tick);
+    } else {
+      rafRef.current = null;
+    }
+  }, [setPlotParam]);
+
+  // 有参数开始播放时启动循环；全部停止时取消循环。
+  useEffect(() => {
+    if (playingParams.size > 0 && rafRef.current === null) {
+      rafRef.current = requestAnimationFrame(tick);
+    } else if (playingParams.size === 0 && rafRef.current !== null) {
+      cancelAnimationFrame(rafRef.current);
+      rafRef.current = null;
+    }
+  }, [playingParams, tick]);
+
+  // 卸载时取消循环并清空起始时间，避免泄漏 / 卸载后 setState。
+  useEffect(() => {
+    return () => {
+      if (rafRef.current !== null) {
+        cancelAnimationFrame(rafRef.current);
+        rafRef.current = null;
+      }
+      startTimesRef.current = {};
+    };
+  }, []);
+
+  // 参数从表达式中消失时停止其播放（保留当前值，不重置）。
+  useEffect(() => {
+    setPlayingParams((prev) => {
+      let changed = false;
+      const next = new Set<string>();
+      for (const name of prev) {
+        if (params.includes(name)) {
+          next.add(name);
+        } else {
+          changed = true;
+          delete startTimesRef.current[name];
+        }
+      }
+      return changed ? next : prev;
+    });
+  }, [params]);
+
+  const togglePlay = useCallback((name: string) => {
+    setPlayingParams((prev) => {
+      const next = new Set(prev);
+      if (next.has(name)) {
+        next.delete(name);
+        delete startTimesRef.current[name];
+      } else {
+        next.add(name);
+        startTimesRef.current[name] = performance.now();
+      }
+      return next;
+    });
+  }, []);
+
   if (params.length === 0) return null;
 
   return (
-    <Collapsible open={open} onOpenChange={setOpen} className="border-t border-border/60 bg-background/40">
+    <Collapsible open={!slidersCollapsed} onOpenChange={(o) => setSlidersCollapsed(!o)} className="border-t border-border/60 bg-background/40">
       <CollapsibleTrigger asChild>
         <button
           type="button"
           className="flex h-7 w-full items-center gap-1.5 px-2.5 text-[11px] font-medium text-muted-foreground hover:bg-accent/40 hover:text-foreground transition-colors"
-          aria-label={open ? '折叠参数滑块' : '展开参数滑块'}
+          aria-label={slidersCollapsed ? '展开参数滑块' : '折叠参数滑块'}
         >
-          {open ? <ChevronDown className="size-3" /> : <ChevronRight className="size-3" />}
+          {!slidersCollapsed ? <ChevronDown className="size-3" /> : <ChevronRight className="size-3" />}
           <SlidersHorizontal className="size-3" />
           <span>参数滑块</span>
           <span className="rounded-full bg-muted px-1.5 py-0.5 text-[9px]">
@@ -115,12 +222,14 @@ export function ParameterSliders({ plots }: { plots: PlotConfig[] }) {
         </button>
       </CollapsibleTrigger>
       <CollapsibleContent>
-        <div className="flex flex-col gap-1 px-2.5 pb-2 pt-0.5">
+        <div className="flex flex-col gap-1.5 px-2.5 pb-2 pt-1">
           {params.map((name) => (
             <ParamRow
               key={name}
               name={name}
               config={configs[name] ?? makeDefaultConfig()}
+              isPlaying={playingParams.has(name)}
+              onTogglePlay={() => togglePlay(name)}
               onValueChange={(v) => {
                 // 先写引擎作用域（触发重绘），再持久化到 store。
                 setScopeVar(name, v);
@@ -142,34 +251,53 @@ export function ParameterSliders({ plots }: { plots: PlotConfig[] }) {
 function ParamRow({
   name,
   config,
+  isPlaying,
+  onTogglePlay,
   onValueChange,
   onConfigChange,
 }: {
   name: string;
   config: PlotParamConfig;
+  isPlaying: boolean;
+  onTogglePlay: () => void;
   onValueChange: (v: number) => void;
   onConfigChange: (patch: Partial<PlotParamConfig>) => void;
 }) {
   const { value, min, max, step } = config;
   return (
-    <div className="flex items-center gap-2">
+    <div className="flex items-center gap-1.5">
       {/* 参数名：等宽斜体，对齐数学排版习惯 */}
-      <code className="w-8 shrink-0 truncate font-mono text-[12px] italic font-semibold text-primary">
+      <code className="w-7 shrink-0 truncate font-mono text-[12px] italic font-semibold text-primary">
         {name}
       </code>
-      <Slider
-        value={[Math.min(max, Math.max(min, value))]}
+      {/* 播放/暂停：点击在 [min, max] 间按正弦波动画参数值 */}
+      <button
+        type="button"
+        onClick={onTogglePlay}
+        className={
+          'grid size-6 shrink-0 place-items-center rounded transition-colors ' +
+          (isPlaying
+            ? 'bg-primary/15 text-primary'
+            : 'text-muted-foreground hover:bg-accent hover:text-primary')
+        }
+        aria-label={isPlaying ? `暂停参数 ${name} 动画` : `播放参数 ${name} 动画`}
+        title={isPlaying ? '暂停动画' : '播放动画'}
+      >
+        {isPlaying ? <Pause className="size-3.5" /> : <Play className="size-3.5" />}
+      </button>
+      <DesmosSlider
+        value={value}
         min={min}
         max={max}
         step={step}
-        onValueChange={(vals) => vals[0] !== undefined && onValueChange(vals[0])}
-        className="h-3 min-w-0 flex-1"
-        aria-label={`参数 ${name}`}
+        disabled={isPlaying}
+        onChange={onValueChange}
+        ariaLabel={`参数 ${name}`}
       />
       <NumberField
         value={value}
         onCommit={onValueChange}
-        className="h-6 w-16 shrink-0 rounded border border-border/60 bg-muted/40 px-1.5 text-right font-mono text-[11px] tabular-nums focus:border-primary/60 focus:outline-none"
+        className="h-6 w-16 shrink-0 rounded border border-border/60 bg-muted/40 px-1.5 text-right font-mono text-[12px] tabular-nums focus:border-primary/60 focus:outline-none"
         ariaLabel={`参数 ${name} 的值`}
       />
       <Popover>
@@ -217,6 +345,63 @@ function ParamRow({
         </PopoverContent>
       </Popover>
     </div>
+  );
+}
+
+/* ------------------------------------------------------------------ */
+/*  Desmos-style range slider                                         */
+/* ------------------------------------------------------------------ */
+
+/**
+ * 原生 range input 的 Desmos 风格封装：
+ *  - 视觉样式（粗轨道 / 大手柄 / 悬停放大）由 globals.css 的
+ *    `.desmos-range` 作用域类提供，不影响其它 Radix 滑块；
+ *  - 轨道渐变（min→current 为主色，current→max 为 muted）通过内联
+ *    background 实时刷新，拖动/动画时手柄位置与填充同步移动；
+ *  - 保留原生键盘可达性（←/→ 微调，Home/End 跳到端点）。
+ */
+function DesmosSlider({
+  value,
+  min,
+  max,
+  step,
+  disabled,
+  onChange,
+  ariaLabel,
+}: {
+  value: number;
+  min: number;
+  max: number;
+  step: number;
+  disabled?: boolean;
+  onChange: (v: number) => void;
+  ariaLabel: string;
+}) {
+  const clamped = Math.min(max, Math.max(min, value));
+  const pct = max > min ? ((clamped - min) / (max - min)) * 100 : 0;
+  const safePct = Math.max(0, Math.min(100, pct));
+  return (
+    <input
+      type="range"
+      min={min}
+      max={max}
+      step={step}
+      value={clamped}
+      disabled={disabled}
+      onChange={(e) => {
+        const v = parseFloat(e.target.value);
+        if (Number.isFinite(v)) onChange(v);
+      }}
+      className="desmos-range h-2 min-w-0 flex-1"
+      style={{
+        background:
+          `linear-gradient(to right, var(--primary, #2dd4bf) 0%, ` +
+          `var(--primary, #2dd4bf) ${safePct}%, ` +
+          `var(--muted, #3a3a3a) ${safePct}%, ` +
+          `var(--muted, #3a3a3a) 100%)`,
+      }}
+      aria-label={ariaLabel}
+    />
   );
 }
 

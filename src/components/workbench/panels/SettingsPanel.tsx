@@ -71,11 +71,22 @@ import {
 import { t } from '@/lib/i18n';
 import type { TranslationDict } from '@/lib/i18n';
 import { cn } from '@/lib/utils';
+import { inTauri } from '@/lib/tauri';
 import { toast } from 'sonner';
 
 type Category = 'appearance' | 'editor' | 'layout' | 'export' | 'language' | 'shortcuts' | 'advanced' | 'about';
 
-const APP_VERSION = '0.0.5';
+// 版本号优先取构建期注入的 NEXT_PUBLIC_APP_VERSION（与 package.json 对齐），
+// 缺失时回退到 package.json 中的版本（0.0.6）。
+const APP_VERSION = process.env.NEXT_PUBLIC_APP_VERSION ?? '0.0.6';
+
+// 关于页相关链接（仓库地址取自 package.json: humanfirework/OmniMath-Pro）。
+const ABOUT_LINKS: { emoji: string; label: string; url: string }[] = [
+  { emoji: '📖', label: '官方文档', url: 'https://github.com/humanfirework/OmniMath-Pro#readme' },
+  { emoji: '🐛', label: '反馈问题', url: 'https://github.com/humanfirework/OmniMath-Pro/issues' },
+  { emoji: '⭐', label: 'GitHub', url: 'https://github.com/humanfirework/OmniMath-Pro' },
+  { emoji: '💬', label: '讨论社区', url: 'https://github.com/humanfirework/OmniMath-Pro/discussions' },
+];
 
 export function SettingsPanel() {
   const open = useSettingsStore((s) => s.open);
@@ -197,20 +208,47 @@ export function SettingsPanel() {
     }
   };
 
+  // 检查更新：仅在 Tauri 桌面环境下联网查询 GitHub Releases 最新版本；
+  // Web 环境无法可靠检查更新（CORS / 无打包元数据），提示用户使用桌面应用。
+  // GitHub 仓库地址取自 package.json 的 repository 字段（humanfirework/OmniMath-Pro）。
   const checkForUpdates = async () => {
     setCheckingUpdate(true);
     setUpdateInfo(null);
     try {
-      // Simulate update check — in real Tauri build this would call GitHub API
-      await new Promise((r) => setTimeout(r, 1200));
-      // For demo purposes, show current is latest
+      if (!inTauri()) {
+        setUpdateInfo({
+          available: false,
+          notes: '请在桌面应用中检查更新',
+        });
+        return;
+      }
+      const response = await fetch(
+        'https://api.github.com/repos/humanfirework/OmniMath-Pro/releases/latest',
+      );
+      if (!response.ok) throw new Error('Failed to fetch release info');
+      const data = await response.json();
+      const latestVersion = (data?.tag_name ?? '').replace(/^v/, '');
+      const currentVersion = APP_VERSION;
+      if (latestVersion && latestVersion !== currentVersion) {
+        setUpdateInfo({
+          available: true,
+          latest: latestVersion,
+          notes: `发现新版本：v${latestVersion}（当前 v${currentVersion}）`,
+        });
+        toast.success(`发现新版本 v${latestVersion}`);
+      } else {
+        setUpdateInfo({
+          available: false,
+          latest: currentVersion,
+          notes: '已是最新版本',
+        });
+        toast.success('已是最新版本');
+      }
+    } catch {
       setUpdateInfo({
         available: false,
-        latest: APP_VERSION,
-        notes: '当前已是最新版本',
+        notes: '检查更新失败，请稍后重试',
       });
-      toast.success('已是最新版本');
-    } catch {
       toast.error('检查更新失败');
     } finally {
       setCheckingUpdate(false);
@@ -352,7 +390,7 @@ export function SettingsPanel() {
 
                 <div className="h-px bg-border/40 my-1" />
 
-                <SettingRow label="关闭窗口时最小化到托盘">
+                <SettingRow label="关闭窗口时最小化到托盘" experimental>
                   <Switch
                     checked={minimizeToTray}
                     onCheckedChange={setMinimizeToTray}
@@ -382,7 +420,7 @@ export function SettingsPanel() {
                   </Select>
                 </SettingRow>
 
-                <SettingRow label={t('settingsUseMathFont')}>
+                <SettingRow label={t('settingsUseMathFont')} experimental>
                   <Switch
                     checked={useMathFont}
                     onCheckedChange={setUseMathFont}
@@ -631,30 +669,16 @@ export function SettingsPanel() {
                 <div className="space-y-2">
                   <div className="text-[11px] uppercase tracking-wider text-muted-foreground">相关链接</div>
                   <div className="grid grid-cols-2 gap-2">
-                    <button
-                      type="button"
-                      className="rounded-md border border-border/60 px-3 py-2 text-xs text-left hover:bg-accent/40 transition-colors"
-                    >
-                      📖 官方文档
-                    </button>
-                    <button
-                      type="button"
-                      className="rounded-md border border-border/60 px-3 py-2 text-xs text-left hover:bg-accent/40 transition-colors"
-                    >
-                      🐛 反馈问题
-                    </button>
-                    <button
-                      type="button"
-                      className="rounded-md border border-border/60 px-3 py-2 text-xs text-left hover:bg-accent/40 transition-colors"
-                    >
-                      ⭐ GitHub
-                    </button>
-                    <button
-                      type="button"
-                      className="rounded-md border border-border/60 px-3 py-2 text-xs text-left hover:bg-accent/40 transition-colors"
-                    >
-                      💬 讨论社区
-                    </button>
+                    {ABOUT_LINKS.map((link) => (
+                      <button
+                        key={link.label}
+                        type="button"
+                        onClick={() => window.open(link.url, '_blank', 'noopener,noreferrer')}
+                        className="rounded-md border border-border/60 px-3 py-2 text-xs text-left hover:bg-accent/40 transition-colors"
+                      >
+                        {link.emoji} {link.label}
+                      </button>
+                    ))}
                   </div>
                 </div>
 
@@ -690,11 +714,31 @@ export function SettingsPanel() {
   );
 }
 
+/** "实验性"徽章：标记尚未接入实际逻辑、仅做占位/未来扩展的设置项。 */
+function ExperimentalBadge() {
+  return (
+    <span className="text-[9px] px-1 py-0.5 rounded bg-amber-500/20 text-amber-600 dark:text-amber-400">
+      实验性
+    </span>
+  );
+}
+
 /** 设置行：左侧标签 + 右侧控件 */
-function SettingRow({ label, children }: { label: string; children: React.ReactNode }) {
+function SettingRow({
+  label,
+  experimental,
+  children,
+}: {
+  label: string;
+  experimental?: boolean;
+  children: React.ReactNode;
+}) {
   return (
     <div className="flex items-center justify-between gap-4">
-      <Label className="text-xs text-foreground/85 font-normal">{label}</Label>
+      <div className="flex items-center gap-1.5">
+        <Label className="text-xs text-foreground/85 font-normal">{label}</Label>
+        {experimental && <ExperimentalBadge />}
+      </div>
       {children}
     </div>
   );
@@ -822,17 +866,22 @@ function AdvRow({
   label,
   desc,
   error,
+  experimental,
   children,
 }: {
   label: string;
   desc: string;
   error?: string;
+  experimental?: boolean;
   children: React.ReactNode;
 }) {
   return (
     <div className="space-y-1">
       <div className="flex items-center justify-between gap-4">
-        <Label className="text-xs text-foreground/85 font-normal">{label}</Label>
+        <div className="flex items-center gap-1.5">
+          <Label className="text-xs text-foreground/85 font-normal">{label}</Label>
+          {experimental && <ExperimentalBadge />}
+        </div>
         {children}
       </div>
       <p className="text-[11px] text-muted-foreground leading-relaxed">{desc}</p>
@@ -1023,6 +1072,7 @@ function AdvancedSettings() {
       <AdvRow
         label="三角函数角度单位"
         desc="sin/cos/tan 等三角函数求值时使用的角度单位。"
+        experimental
       >
         <Select value={angleUnit} onValueChange={(v) => setAngleUnit(v as 'rad' | 'deg')}>
           <SelectTrigger className="w-32 h-8 text-xs">
@@ -1046,6 +1096,7 @@ function AdvancedSettings() {
       <AdvRow
         label="启用界面过渡动画"
         desc="面板与视图切换时的过渡动效；关闭可减少动态效果、提升低端设备流畅度。"
+        experimental
       >
         <Switch checked={animations} onCheckedChange={setAnimations} />
       </AdvRow>
@@ -1055,6 +1106,7 @@ function AdvancedSettings() {
         label="导出文件名前缀"
         desc="导出图片/文件时的默认文件名前缀，如 omnimath-1717000000000.png。"
         error={errors.exportPrefix}
+        experimental
       >
         <Input
           type="text"

@@ -116,7 +116,7 @@ export function HistoryPanel() {
               filtered.map((r, i) => (
                 <motion.div
                   key={r.id}
-                  layout
+                  layout="position"
                   initial={{ opacity: 0, y: -6 }}
                   animate={{ opacity: 1, y: 0 }}
                   exit={{ opacity: 0, scale: 0.96 }}
@@ -210,7 +210,7 @@ function EmptyState({ query }: { query: string }) {
       <motion.div
         animate={{ y: [0, -6, 0] }}
         transition={{ duration: 3.2, repeat: Infinity, ease: 'easeInOut' }}
-        className="grid place-items-center size-14 rounded-2xl bg-primary/8 border border-primary/20 mb-3"
+        className="grid place-items-center size-14 rounded-2xl bg-primary/8 border border-primary/20 mb-3 will-change-transform"
       >
         <History className="size-6 text-primary/70" />
       </motion.div>

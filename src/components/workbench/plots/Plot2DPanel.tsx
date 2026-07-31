@@ -36,6 +36,7 @@ import { FacetGrid } from './FacetGrid';
 import { ParameterSliders } from './ParameterSliders';
 import { PlotCurveEditor } from './PlotCurveEditor';
 import { inputToLatex } from '@/lib/engine';
+import { extractFreeParameters } from '@/lib/engine/variableScanner';
 import {
   sampleCurve,
   DEFAULT_POLAR_THETA_RANGE,
@@ -44,6 +45,7 @@ import {
 } from '@/lib/plots/plot2d';
 import { coordinatedYRange, smartYRange, type CoordinatedRangeResult } from '@/lib/plots/smartRange';
 import { useScopeVersion } from '@/lib/hooks/useScopeVersion';
+import { useSettingsStore } from '@/lib/store/settingsStore';
 import { toast } from 'sonner';
 
 /* ----------------------- Defaults ---------------------------- */
@@ -131,6 +133,11 @@ export function Plot2DPanel() {
   const removePlot = useWorkbenchStore((s) => s.removePlot);
   const togglePlotVisibility = useWorkbenchStore((s) => s.togglePlotVisibility);
   const setEditorContent = useWorkbenchStore((s) => s.setEditorContent);
+  // 自由参数滑块面板的折叠态持久化在 settingsStore；工具栏徽标和
+  // ParameterSliders 共用这一份状态。
+  const variables = useWorkbenchStore((s) => s.variables);
+  const slidersCollapsed = useSettingsStore((s) => s.slidersCollapsed);
+  const setSlidersCollapsed = useSettingsStore((s) => s.setSlidersCollapsed);
 
   // userView === null means "use the derived default".
   // We store the plots.length at the time the user last set a view, so when
@@ -178,6 +185,16 @@ export function Plot2DPanel() {
 
   // `scopeVersion` re-derives when a slider / variable changes the curves.
   const scopeVersion = useScopeVersion();
+
+  // 工具栏参数徽标用的自由参数数量。与 ParameterSliders 的发现逻辑保持
+  // 一致（仅可见 2D 表达式、排除已定义变量），scopeVersion 变化时刷新。
+  const freeParamCount = useMemo(() => {
+    void scopeVersion;
+    const exprs = plots
+      .filter((p) => p.visible && p.plotType !== 'surface3d')
+      .map((p) => p.expression);
+    return extractFreeParameters(exprs, Object.keys(variables)).length;
+  }, [plots, variables, scopeVersion]);
 
   // If the plot count has changed since the user set their view, drop the
   // override so the derived default takes over.
@@ -396,6 +413,9 @@ export function Plot2DPanel() {
         onExportPNG={handleExportPNG}
         onCopyLatex={handleCopyLatex}
         onExpand={() => setExpandOpen(true)}
+        freeParamCount={freeParamCount}
+        slidersCollapsed={slidersCollapsed}
+        onToggleSliders={() => setSlidersCollapsed(!slidersCollapsed)}
       />
       <PlotCurveEditor plots={plots} specs={curveSpecs} onSpecChange={handleSpecChange} />
       <Plot2DAdvancedPanel

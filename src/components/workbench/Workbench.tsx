@@ -32,6 +32,9 @@ import {
 import { useWorkbenchStore } from '@/lib/store/workbench';
 import { useLayoutStore } from '@/lib/store/layoutStore';
 import { useSettingsStore } from '@/lib/store/settingsStore';
+import { setDefaultSampleCount } from '@/lib/plots/plot2d';
+import { setDefault3DResolution } from '@/lib/plots/plot3d';
+import { setResultPrecision } from '@/lib/engine/latex';
 import { inTauri } from '@/lib/tauri';
 import { setLocale as setI18nLocale, getLocale, t } from '@/lib/i18n';
 import { useIsMobile } from '@/hooks/use-mobile';
@@ -82,6 +85,17 @@ export function Workbench() {
   // 编辑器字号（zoomIn/zoomOut/resetView 快捷键操作对象）
   const editorFontSize = useSettingsStore((s) => s.editorFontSize);
   const setEditorFontSize = useSettingsStore((s) => s.setEditorFontSize);
+  // 符号面板开关（Ctrl/Cmd+/ 快捷键操作对象）
+  const symbolPaletteOpen = useSettingsStore((s) => s.symbolPaletteOpen);
+  const setSymbolPaletteOpen = useSettingsStore((s) => s.setSymbolPaletteOpen);
+
+  // 高级设置（模块级变量同步）：plot2d 采样点 / plot3d 分辨率 / latex 精度。
+  // 这些库文件无 React 上下文，无法直接订阅 store，故在 Workbench 挂载时
+  // 及设置变化时通过 setter 函数同步。历史记录上限（advancedHistoryLimit）
+  // 由 workbench store 的 addResult action 用 getState() 即时读取，无需此处同步。
+  const advancedPlotSamples = useSettingsStore((s) => s.advancedPlotSamples);
+  const advancedPlot3dResolution = useSettingsStore((s) => s.advancedPlot3dResolution);
+  const advancedResultPrecision = useSettingsStore((s) => s.advancedResultPrecision);
 
   // 窗口尺寸/全屏切换的触发计数器。Tauri 窗口 maximize/fullscreen 时
   // CSS 视口单位会变化但 React 不会自动重渲染，react-resizable-panels
@@ -128,6 +142,19 @@ export function Workbench() {
     if (theme === 'dark') document.documentElement.classList.add('dark');
     else document.documentElement.classList.remove('dark');
   }, [theme]);
+
+  // 同步高级设置到 plot2d / plot3d / latex 的模块级默认值变量。
+  // 这些纯库文件不持有 React 上下文，需通过命令式 setter 在挂载及设置
+  // 变化时更新，保证采样密度 / 3D 网格分辨率 / 数值精度与用户设置一致。
+  useEffect(() => {
+    setDefaultSampleCount(advancedPlotSamples);
+  }, [advancedPlotSamples]);
+  useEffect(() => {
+    setDefault3DResolution(advancedPlot3dResolution);
+  }, [advancedPlot3dResolution]);
+  useEffect(() => {
+    setResultPrecision(advancedResultPrecision);
+  }, [advancedResultPrecision]);
 
   // 监听 Tauri 窗口尺寸变化（maximize/restore/拖拽边缘/dpi 变化等）。
   // 触发 resizeTick 重渲染，让 react-resizable-panels 重新计算面板尺寸，
@@ -180,6 +207,22 @@ export function Workbench() {
     }));
     return () => unregs.forEach((u) => u());
   }, [viewMode, setViewMode, toggleSidePanel, setSettingsOpen, setCommandPaletteOpen, setEditorContent, setPreviewVisible, previewVisible, editorFontSize, setEditorFontSize]);
+
+  // 符号面板快捷键：Ctrl/Cmd + / 切换符号面板展开/折叠。
+  // 编辑器内 Ctrl+/ 仍由 CodeMirror 用于行注释，故仅当焦点不在
+  // CodeMirror 编辑器内时才触发，避免与注释快捷键冲突。
+  useEffect(() => {
+    const handler = (e: KeyboardEvent) => {
+      if ((e.metaKey || e.ctrlKey) && e.key === '/') {
+        const target = e.target as HTMLElement | null;
+        if (target?.closest?.('.cm-editor')) return;
+        e.preventDefault();
+        setSymbolPaletteOpen(!symbolPaletteOpen);
+      }
+    };
+    window.addEventListener('keydown', handler);
+    return () => window.removeEventListener('keydown', handler);
+  }, [symbolPaletteOpen, setSymbolPaletteOpen]);
 
   const isMobile = useIsMobile();
 

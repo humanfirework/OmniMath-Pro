@@ -7,7 +7,6 @@ import {
   Ruler, ArrowLeftRight, ChevronDown, ChevronUp,
   FlaskConical, Binary, Grid3x3, History, NotebookPen,
 } from 'lucide-react';
-import { useWorkbenchStore } from '@/lib/store/workbench';
 import { evaluateExpression, math } from '@/lib/engine';
 import { cn } from '@/lib/utils';
 
@@ -148,6 +147,9 @@ function formatMatrixString(m: unknown[][]): string {
   return m.map((row) => row.map((v) => formatMathValue(v)).join('\t')).join('\n');
 }
 
+// -1 means "use the CSS default position" (bottom-right corner via bottom-4 right-4)
+const DEFAULT_FAB_POS = { x: -1, y: -1 };
+
 export function FloatingCalculator() {
   const [open, setOpen] = useState(false);
   const [pinned, setPinned] = useState(false);
@@ -168,6 +170,16 @@ export function FloatingCalculator() {
   const [position, setPosition] = useState({ x: 20, y: 80 });
   const [dragging, setDragging] = useState(false);
   const dragRef = useRef({ startX: 0, startY: 0, startPosX: 0, startPosY: 0 });
+
+  // FAB drag state — lets the user reposition the floating toggle button
+  const [fabPosition, setFabPosition] = useState<{x: number, y: number}>(() => {
+    try {
+      const saved = localStorage.getItem('omnimath-fab-position');
+      return saved ? JSON.parse(saved) : DEFAULT_FAB_POS;
+    } catch { return DEFAULT_FAB_POS; }
+  });
+  const [fabDragging, setFabDragging] = useState(false);
+  const fabDragRef = useRef({ startX: 0, startY: 0, startPosX: 0, startPosY: 0, moved: false });
 
   // Programmer state
   const [progBase, setProgBase] = useState<ProgrammerBase>(10);
@@ -365,6 +377,68 @@ export function FloatingCalculator() {
       window.removeEventListener('mouseup', handleUp);
     };
   }, [dragging, showNotepad]);
+
+  // FAB drag — record start position on mouse down. Don't preventDefault so a
+  // normal click still registers; we distinguish click vs drag via the moved flag.
+  const handleFabMouseDown = useCallback((e: React.MouseEvent<HTMLButtonElement>) => {
+    // Use the live bounding rect so dragging works from either the CSS default
+    // corner or a previously-saved custom position.
+    const rect = e.currentTarget.getBoundingClientRect();
+    fabDragRef.current = {
+      startX: e.clientX,
+      startY: e.clientY,
+      startPosX: rect.left,
+      startPosY: rect.top,
+      moved: false,
+    };
+    setFabDragging(true);
+  }, []);
+
+  // FAB drag — attach window listeners while dragging. On a click (no movement)
+  // we toggle the calculator; on a real drag we persist the new position.
+  useEffect(() => {
+    if (!fabDragging) return;
+    const FAB_SIZE = 44;
+    const DRAG_THRESHOLD = 3;
+    let lastPosX = fabDragRef.current.startPosX;
+    let lastPosY = fabDragRef.current.startPosY;
+    const handleMove = (e: MouseEvent) => {
+      const dx = e.clientX - fabDragRef.current.startX;
+      const dy = e.clientY - fabDragRef.current.startY;
+      if (Math.abs(dx) > DRAG_THRESHOLD || Math.abs(dy) > DRAG_THRESHOLD) {
+        fabDragRef.current.moved = true;
+      }
+      lastPosX = Math.max(0, Math.min(window.innerWidth - FAB_SIZE, fabDragRef.current.startPosX + dx));
+      lastPosY = Math.max(0, Math.min(window.innerHeight - FAB_SIZE, fabDragRef.current.startPosY + dy));
+      setFabPosition({ x: lastPosX, y: lastPosY });
+    };
+    const handleUp = () => {
+      setFabDragging(false);
+      if (!fabDragRef.current.moved) {
+        // It was a click, not a drag — toggle the calculator open/closed
+        setOpen((v) => !v);
+      } else {
+        // Persist the new FAB position
+        try {
+          localStorage.setItem('omnimath-fab-position', JSON.stringify({ x: lastPosX, y: lastPosY }));
+        } catch { /* ignore */ }
+      }
+    };
+    window.addEventListener('mousemove', handleMove);
+    window.addEventListener('mouseup', handleUp);
+    return () => {
+      window.removeEventListener('mousemove', handleMove);
+      window.removeEventListener('mouseup', handleUp);
+    };
+  }, [fabDragging]);
+
+  // Double-click the FAB to reset its position to the default bottom-right corner
+  const handleFabDoubleClick = useCallback(() => {
+    setFabPosition(DEFAULT_FAB_POS);
+    try {
+      localStorage.removeItem('omnimath-fab-position');
+    } catch { /* ignore */ }
+  }, []);
 
   const inputDigit = useCallback((digit: string) => {
     if (justEvaluated) {
@@ -833,12 +907,18 @@ export function FloatingCalculator() {
 
   return (
     <>
-      {/* Toggle button (fixed corner) */}
+      {/* Toggle button (fixed corner, draggable) */}
       <button
         type="button"
-        onClick={() => setOpen(!open)}
-        className="fixed bottom-4 right-4 z-[75] size-11 rounded-full bg-primary text-primary-foreground shadow-lg hover:shadow-xl transition-all hover:scale-105 active:scale-95 flex items-center justify-center"
-        title="Floating Calculator (Ctrl+Shift+C)"
+        onMouseDown={handleFabMouseDown}
+        onDoubleClick={handleFabDoubleClick}
+        className={cn(
+          'fixed z-[75] size-11 rounded-full bg-primary text-primary-foreground shadow-lg hover:shadow-xl transition-all hover:scale-105 active:scale-95 flex items-center justify-center',
+          fabPosition.x === -1 ? 'bottom-4 right-4' : '',
+          fabDragging ? 'cursor-grabbing' : 'cursor-grab'
+        )}
+        style={fabPosition.x === -1 ? undefined : { left: fabPosition.x, top: fabPosition.y }}
+        title="Floating Calculator (Ctrl+Shift+C · drag to move · double-click to reset)"
       >
         <Calculator className="size-5" />
       </button>

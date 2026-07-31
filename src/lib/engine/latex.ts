@@ -25,6 +25,25 @@ import { math } from './mathInstance';
  * so sharing the app-wide configured instance is safe and keeps parse
  * semantics (e.g. the log/ln overrides) identical to the evaluator. */
 
+/**
+ * Module-level result precision (significant digits) used by `formatNumber`
+ * when rounding plain numeric results.
+ *
+ * Pure library file (no React) so it cannot read the settingsStore directly.
+ * Workbench mounts a `useEffect` that calls `setResultPrecision(...)` with
+ * the value of `advancedResultPrecision` whenever that setting changes,
+ * keeping numeric output precision in sync with the user's
+ * "高级 → 结果有效数字位数".
+ */
+let resultPrecision = 10;
+
+/** Update the module-level result precision used by `formatNumber` when
+ * rounding plain numeric results. Called from a React effect in Workbench. */
+export function setResultPrecision(n: number): void {
+  if (!Number.isFinite(n)) return;
+  resultPrecision = Math.max(2, Math.min(15, Math.round(n)));
+}
+
 /* ------------------------------------------------------------------ *
  * formatNumber — smart scalar formatter
  * ------------------------------------------------------------------ *
@@ -53,8 +72,8 @@ export function formatNumber(n: number): string {
     return `${mant} \\times 10^{${powInt}}`;
   }
 
-  // Default: round to 10 significant digits, strip trailing zeros.
-  const fixed = parseFloat(n.toPrecision(10)).toString();
+  // Default: round to the configured significant digits, strip trailing zeros.
+  const fixed = parseFloat(n.toPrecision(resultPrecision)).toString();
   return fixed;
 }
 

@@ -9,6 +9,9 @@ interface SettingsState {
   /** 设置面板是否打开 */
   open: boolean;
 
+  /** 符号面板是否展开（编辑器下方可点击符号条） */
+  symbolPaletteOpen: boolean;
+
   /* 全局默认设置 */
   /** 默认导出 DPI 倍数（1/2/4），默认 2 */
   defaultExportDpi: 1 | 2 | 4;
@@ -43,8 +46,12 @@ interface SettingsState {
   /** 导出文件名前缀（字母/数字/连字符/下划线，≤40 字符），默认 'omnimath' */
   advancedExportPrefix: string;
 
+  /** 2D 参数滑块面板是否折叠（持久化，跨会话保留用户的展开偏好） */
+  slidersCollapsed: boolean;
+
   setOpen: (v: boolean) => void;
   toggleOpen: () => void;
+  setSymbolPaletteOpen: (v: boolean) => void;
   setDefaultExportDpi: (dpi: 1 | 2 | 4) => void;
   setDefaultFormulaFontSize: (size: number) => void;
   setUseMathFont: (v: boolean) => void;
@@ -61,6 +68,8 @@ interface SettingsState {
   setAdvancedShowSteps: (v: boolean) => void;
   setAdvancedAnimations: (v: boolean) => void;
   setAdvancedExportPrefix: (v: string) => void;
+  /** 切换 2D 参数滑块面板的折叠状态（持久化） */
+  setSlidersCollapsed: (v: boolean) => void;
   /** 仅重置高级区设置项（不影响其他分类） */
   resetAdvanced: () => void;
 
@@ -96,6 +105,8 @@ interface PersistedSettings {
   advancedShowSteps?: boolean;
   advancedAnimations?: boolean;
   advancedExportPrefix?: string;
+  slidersCollapsed?: boolean;
+  symbolPaletteOpen?: boolean;
 }
 
 /** 高级区各项默认值（resetAdvanced / resetToDefaults 共用） */
@@ -118,6 +129,7 @@ let saveTimer: ReturnType<typeof setTimeout> | null = null;
 
 export const useSettingsStore = create<SettingsState>((set, get) => ({
   open: false,
+  symbolPaletteOpen: false,
   defaultExportDpi: 2,
   defaultFormulaFontSize: 28,
   useMathFont: true,
@@ -126,9 +138,14 @@ export const useSettingsStore = create<SettingsState>((set, get) => ({
   editorFontSize: 14,
   plotAxisFontSize: 12,
   ...ADVANCED_DEFAULTS,
+  slidersCollapsed: false,
 
   setOpen: (v) => set({ open: v }),
   toggleOpen: () => set((s) => ({ open: !s.open })),
+  setSymbolPaletteOpen: (v) => {
+    set({ symbolPaletteOpen: v });
+    get().saveToStorage();
+  },
   setDefaultExportDpi: (dpi) => {
     set({ defaultExportDpi: dpi });
     get().saveToStorage();
@@ -191,6 +208,10 @@ export const useSettingsStore = create<SettingsState>((set, get) => ({
     set({ advancedExportPrefix: v });
     get().saveToStorage();
   },
+  setSlidersCollapsed: (v) => {
+    set({ slidersCollapsed: v });
+    get().saveToStorage();
+  },
   resetAdvanced: () => {
     set({ ...ADVANCED_DEFAULTS });
     get().saveToStorage();
@@ -218,6 +239,8 @@ export const useSettingsStore = create<SettingsState>((set, get) => ({
           advancedShowSteps: s.advancedShowSteps,
           advancedAnimations: s.advancedAnimations,
           advancedExportPrefix: s.advancedExportPrefix,
+          slidersCollapsed: s.slidersCollapsed,
+          symbolPaletteOpen: s.symbolPaletteOpen,
         };
         localStorage.setItem(SETTINGS_KEY, JSON.stringify(payload));
       } catch {
@@ -285,6 +308,12 @@ export const useSettingsStore = create<SettingsState>((set, get) => ({
       if (typeof data.advancedExportPrefix === 'string' && data.advancedExportPrefix.length > 0 && data.advancedExportPrefix.length <= 40) {
         set({ advancedExportPrefix: data.advancedExportPrefix });
       }
+      if (typeof data.slidersCollapsed === 'boolean') {
+        set({ slidersCollapsed: data.slidersCollapsed });
+      }
+      if (typeof data.symbolPaletteOpen === 'boolean') {
+        set({ symbolPaletteOpen: data.symbolPaletteOpen });
+      }
     } catch {
       // ignore parse errors
     }
@@ -299,6 +328,8 @@ export const useSettingsStore = create<SettingsState>((set, get) => ({
       editorFontSize: 14,
       plotAxisFontSize: 12,
       ...ADVANCED_DEFAULTS,
+      slidersCollapsed: false,
+      symbolPaletteOpen: false,
     });
     get().saveToStorage();
   },

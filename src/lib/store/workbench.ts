@@ -2,6 +2,7 @@ import { create } from 'zustand';
 import type { InputMode } from '@/lib/engine/types';
 import type { Locale } from '@/lib/i18n';
 import { deleteScopeVar, resetScope, syncScope, math } from '@/lib/engine/mathInstance';
+import { useSettingsStore } from './settingsStore';
 
 export interface CalculationResult {
   id: string;
@@ -294,7 +295,16 @@ export const useWorkbenchStore = create<WorkbenchState>((set, get) => ({
   setCursorPosition: (pos) => set({ cursorPosition: pos }),
 
   addResult: (result) => {
-    set((s) => ({ results: [result, ...s.results].slice(0, 200), currentResult: result }));
+    // 历史记录上限取自 settingsStore 的 advancedHistoryLimit（默认 200）。
+    // 用 getState() 在 action 调用时即时读取，无需订阅；若读取失败则兜底 200。
+    let limit = 200;
+    try {
+      const v = useSettingsStore.getState().advancedHistoryLimit;
+      if (typeof v === 'number' && Number.isFinite(v)) limit = v;
+    } catch {
+      // settingsStore 尚未初始化时忽略，沿用兜底值
+    }
+    set((s) => ({ results: [result, ...s.results].slice(0, limit), currentResult: result }));
     get().saveToStorage();
   },
   setCurrentResult: (result) => set({ currentResult: result }),

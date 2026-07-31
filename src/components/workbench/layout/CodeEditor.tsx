@@ -264,6 +264,21 @@ export function CodeEditor({
     });
   }, [language]);
 
+  /* ─── Insert symbol at cursor (SymbolPalette → custom event) ─── */
+  useEffect(() => {
+    const handler = (e: Event) => {
+      const text = (e as CustomEvent<string>).detail;
+      if (typeof text !== 'string') return;
+      const view = viewRef.current;
+      if (!view) return;
+      const sel = view.state.selection.main;
+      view.dispatch({ changes: { from: sel.from, to: sel.to, insert: text } });
+      view.focus();
+    };
+    window.addEventListener('omnimath-insert-symbol', handler);
+    return () => window.removeEventListener('omnimath-insert-symbol', handler);
+  }, []);
+
   return <div ref={containerRef} className="cm-editor-container h-full w-full overflow-hidden" />;
 }
 

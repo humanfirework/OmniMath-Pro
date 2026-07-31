@@ -40,6 +40,7 @@ import {
   Loader2,
 } from 'lucide-react';
 import { saveCanvasToFile } from '@/lib/nativeExport';
+import { useSettingsStore } from '@/lib/store/settingsStore';
 import { toast } from 'sonner';
 
 export interface ExportDialogProps {
@@ -71,15 +72,17 @@ export function ExportDialog({
   title = '导出图像',
   description = '选择分辨率后导出 PNG 图像',
 }: ExportDialogProps) {
-  const [dpi, setDpi] = useState<DpiOption>(2);
+  // DPI 默认值来自全局设置（defaultExportDpi），用户在导出对话框中
+  // 切换 DPI 时同步回写设置，实现"上次选择的分辨率"持久化。
+  const dpi = useSettingsStore((s) => s.defaultExportDpi);
+  const setDefaultExportDpi = useSettingsStore((s) => s.setDefaultExportDpi);
   const [fileName, setFileName] = useState(defaultName);
   const [exporting, setExporting] = useState(false);
 
-  // 每次打开时重置文件名为默认名
+  // 每次打开时重置文件名为默认名（DPI 不再重置，沿用全局设置）
   useEffect(() => {
     if (open) {
       setFileName(defaultName);
-      setDpi(2);
       setExporting(false);
     }
   }, [open, defaultName]);
@@ -143,7 +146,7 @@ export function ExportDialog({
             <Label className="text-xs text-muted-foreground">分辨率</Label>
             <RadioGroup
               value={String(dpi)}
-              onValueChange={(v) => setDpi(Number(v) as DpiOption)}
+              onValueChange={(v) => setDefaultExportDpi(Number(v) as DpiOption)}
               className="grid grid-cols-3 gap-2"
             >
               {DPI_OPTIONS.map((opt) => (

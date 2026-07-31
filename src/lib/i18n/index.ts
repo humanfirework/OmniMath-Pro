@@ -358,6 +358,38 @@ export interface TranslationDict {
   /* ---------------- Statistics ---------------- */
   statsTitle: string;
 
+  /* ---------------- Statistics panel — extended ---------------- */
+  statsTabRegression: string;
+  statsHistogram: string;
+  statsBoxPlot: string;
+  statsScatterPlot: string;
+  statsDatasets: string;
+  statsSaveCurrent: string;
+  statsLoad: string;
+  statsExportCSV: string;
+  statsImportCSV: string;
+  statsNoDatasets: string;
+  statsDatasetSaved: string;
+  statsDatasetDeleted: string;
+  statsDatasetLoaded: string;
+  statsXData: string;
+  statsYData: string;
+  statsRegressionEquation: string;
+  statsSlope: string;
+  statsIntercept: string;
+  statsRSquared: string;
+  statsFitGood: string;
+  statsFitModerate: string;
+  statsFitWeak: string;
+  statsFitPoor: string;
+  statsNeedPairs: string;
+  statsDistChiSquare: string;
+  statsDistT: string;
+  statsDistF: string;
+  statsDistGeometric: string;
+  statsDistNegBinomial: string;
+  statsDiscreteNoPlot: string;
+
   /* ---------------- Matrix editor ---------------- */
   matrixTitle: string;
   matrixRows: string;
@@ -436,6 +468,41 @@ export interface TranslationDict {
   linalgSwapRows: string;
   linalgSingularHint: string;
   linalgConstVecSize: string;
+
+  /* Vector operations tab */
+  linalgTabVector: string;
+  linalgVectorA: string;
+  linalgVectorB: string;
+  linalgVectorInputHint: string;
+  linalgDotProduct: string;
+  linalgCrossProduct: string;
+  linalgMagnitude: string;
+  linalgAngle: string;
+  linalgProjection: string;
+  linalgGramSchmidt: string;
+  linalgVectorDimMismatch: string;
+  linalgCross3DOnly: string;
+  linalgOrthogonalized: string;
+  linalgGramSchmidtHint: string;
+  linalgGramSchmidtSteps: string;
+
+  /* Matrix norms & properties */
+  linalgNormsProps: string;
+  linalgNorm1: string;
+  linalgNormInf: string;
+  linalgNormFrobenius: string;
+  linalgNormSpectral: string;
+  linalgSymmetric: string;
+  linalgPositiveDefinite: string;
+  linalgInvertible: string;
+  linalgOrthogonal: string;
+
+  /* Homogeneous system & enhanced infinite solution */
+  linalgHomogeneousSystem: string;
+  linalgNonHomogeneousSystem: string;
+  linalgFreeVars: string;
+  linalgGeneralSolution: string;
+  linalgFundamentalSystem: string;
 
   /* ---------------- Solver panel — extended ---------------- */
   solverTabEquation: string;
@@ -718,6 +785,12 @@ export interface TranslationDict {
   symCombinatorics: string;
   symConstants: string;
   symInsert: string;
+  symbolPaletteTitle: string;
+  symbolPaletteToggle: string;
+  symCatInverseTrig: string;
+  symCatPower: string;
+  symCatRounding: string;
+  symCatComplex: string;
 
   /* ---------------- Common UI ---------------- */
   commonCopy: string;
@@ -1107,6 +1180,36 @@ const zhCN: TranslationDict = {
 
   /* Statistics */
   statsTitle: "概率统计",
+  statsTabRegression: "回归分析",
+  statsHistogram: "直方图",
+  statsBoxPlot: "箱线图",
+  statsScatterPlot: "散点图",
+  statsDatasets: "数据集",
+  statsSaveCurrent: "保存当前数据",
+  statsLoad: "载入",
+  statsExportCSV: "导出 CSV",
+  statsImportCSV: "导入 CSV",
+  statsNoDatasets: "暂无保存的数据集",
+  statsDatasetSaved: "数据集已保存",
+  statsDatasetDeleted: "数据集已删除",
+  statsDatasetLoaded: "数据集已载入",
+  statsXData: "X 数据",
+  statsYData: "Y 数据",
+  statsRegressionEquation: "回归方程",
+  statsSlope: "斜率 a",
+  statsIntercept: "截距 b",
+  statsRSquared: "决定系数 R²",
+  statsFitGood: "拟合优度极佳",
+  statsFitModerate: "拟合优度良好",
+  statsFitWeak: "拟合优度较弱",
+  statsFitPoor: "拟合优度很差",
+  statsNeedPairs: "需要至少 2 组有效 (x, y) 数据",
+  statsDistChiSquare: "卡方分布 χ²(df)",
+  statsDistT: "t 分布 t(df)",
+  statsDistF: "F 分布 F(d1, d2)",
+  statsDistGeometric: "几何分布 Geo(p)",
+  statsDistNegBinomial: "负二项分布 NB(r, p)",
+  statsDiscreteNoPlot: "离散分布不支持发送 PDF 曲线",
 
   /* Matrix editor */
   matrixTitle: "矩阵编辑器",
@@ -1186,6 +1289,41 @@ const zhCN: TranslationDict = {
   linalgSwapRows: "交换行",
   linalgSingularHint: "det(A) = 0，方程组可能无解或有无穷多解",
   linalgConstVecSize: "b 的长度需与 A 的行数相同",
+
+  /* Vector operations tab */
+  linalgTabVector: "向量运算",
+  linalgVectorA: "向量 A",
+  linalgVectorB: "向量 B",
+  linalgVectorInputHint: "逗号或空格分隔的数字",
+  linalgDotProduct: "点积",
+  linalgCrossProduct: "叉积",
+  linalgMagnitude: "模长",
+  linalgAngle: "夹角",
+  linalgProjection: "投影",
+  linalgGramSchmidt: "Gram-Schmidt 正交化",
+  linalgVectorDimMismatch: "向量维度不匹配",
+  linalgCross3DOnly: "叉积仅支持 3D 向量",
+  linalgOrthogonalized: "正交化结果",
+  linalgGramSchmidtHint: "每行一个向量，逗号或空格分隔",
+  linalgGramSchmidtSteps: "正交化步骤",
+
+  /* Matrix norms & properties */
+  linalgNormsProps: "矩阵范数与性质",
+  linalgNorm1: "1-范数",
+  linalgNormInf: "∞-范数",
+  linalgNormFrobenius: "Frobenius 范数",
+  linalgNormSpectral: "谱范数",
+  linalgSymmetric: "对称性",
+  linalgPositiveDefinite: "正定性",
+  linalgInvertible: "可逆性",
+  linalgOrthogonal: "正交性",
+
+  /* Homogeneous system & enhanced infinite solution */
+  linalgHomogeneousSystem: "齐次方程组",
+  linalgNonHomogeneousSystem: "非齐次方程组",
+  linalgFreeVars: "自由变量",
+  linalgGeneralSolution: "通解",
+  linalgFundamentalSystem: "基础解系",
 
   /* Solver panel — extended */
   solverTabEquation: "方程求解",
@@ -1464,6 +1602,12 @@ const zhCN: TranslationDict = {
   symCombinatorics: "组合",
   symConstants: "常数",
   symInsert: "插入",
+  symbolPaletteTitle: "符号面板",
+  symbolPaletteToggle: "切换符号面板",
+  symCatInverseTrig: "反三角",
+  symCatPower: "幂与根",
+  symCatRounding: "取整",
+  symCatComplex: "复数",
 
   /* Common */
   commonCopy: "复制",
@@ -1851,6 +1995,36 @@ const en: TranslationDict = {
 
   /* Statistics */
   statsTitle: "Statistics",
+  statsTabRegression: "Regression",
+  statsHistogram: "Histogram",
+  statsBoxPlot: "Box Plot",
+  statsScatterPlot: "Scatter",
+  statsDatasets: "Datasets",
+  statsSaveCurrent: "Save Current Data",
+  statsLoad: "Load",
+  statsExportCSV: "Export CSV",
+  statsImportCSV: "Import CSV",
+  statsNoDatasets: "No saved datasets",
+  statsDatasetSaved: "Dataset saved",
+  statsDatasetDeleted: "Dataset deleted",
+  statsDatasetLoaded: "Dataset loaded",
+  statsXData: "X data",
+  statsYData: "Y data",
+  statsRegressionEquation: "Regression equation",
+  statsSlope: "Slope a",
+  statsIntercept: "Intercept b",
+  statsRSquared: "R²",
+  statsFitGood: "Excellent fit",
+  statsFitModerate: "Good fit",
+  statsFitWeak: "Weak fit",
+  statsFitPoor: "Poor fit",
+  statsNeedPairs: "Need at least 2 valid (x, y) pairs",
+  statsDistChiSquare: "Chi-square χ²(df)",
+  statsDistT: "t-distribution t(df)",
+  statsDistF: "F-distribution F(d1, d2)",
+  statsDistGeometric: "Geometric Geo(p)",
+  statsDistNegBinomial: "Negative Binomial NB(r, p)",
+  statsDiscreteNoPlot: "Discrete distributions cannot send PDF curve",
 
   /* Matrix editor */
   matrixTitle: "Matrix Editor",
@@ -1930,6 +2104,41 @@ const en: TranslationDict = {
   linalgSwapRows: "Swap rows",
   linalgSingularHint: "det(A) = 0; system may have no solution or infinitely many.",
   linalgConstVecSize: "Length of b must equal number of rows in A",
+
+  /* Vector operations tab */
+  linalgTabVector: "Vector Ops",
+  linalgVectorA: "Vector A",
+  linalgVectorB: "Vector B",
+  linalgVectorInputHint: "comma or space separated numbers",
+  linalgDotProduct: "Dot product",
+  linalgCrossProduct: "Cross product",
+  linalgMagnitude: "Magnitude",
+  linalgAngle: "Angle",
+  linalgProjection: "Projection",
+  linalgGramSchmidt: "Gram-Schmidt",
+  linalgVectorDimMismatch: "Vector dimension mismatch",
+  linalgCross3DOnly: "Cross product only supports 3D vectors",
+  linalgOrthogonalized: "Orthogonalized vectors",
+  linalgGramSchmidtHint: "one vector per line, comma or space separated",
+  linalgGramSchmidtSteps: "Orthogonalization steps",
+
+  /* Matrix norms & properties */
+  linalgNormsProps: "Matrix Norms & Properties",
+  linalgNorm1: "1-Norm",
+  linalgNormInf: "∞-Norm",
+  linalgNormFrobenius: "Frobenius Norm",
+  linalgNormSpectral: "Spectral Norm",
+  linalgSymmetric: "Symmetric",
+  linalgPositiveDefinite: "Positive Definite",
+  linalgInvertible: "Invertible",
+  linalgOrthogonal: "Orthogonal",
+
+  /* Homogeneous system & enhanced infinite solution */
+  linalgHomogeneousSystem: "Homogeneous system",
+  linalgNonHomogeneousSystem: "Non-homogeneous system",
+  linalgFreeVars: "Free variables",
+  linalgGeneralSolution: "General solution",
+  linalgFundamentalSystem: "Fundamental solution system",
 
   /* Solver panel — extended */
   solverTabEquation: "Equation",
@@ -2208,6 +2417,12 @@ const en: TranslationDict = {
   symCombinatorics: "Combinatorics",
   symConstants: "Constants",
   symInsert: "Insert",
+  symbolPaletteTitle: "Symbol Palette",
+  symbolPaletteToggle: "Toggle Symbol Palette",
+  symCatInverseTrig: "Inverse Trig",
+  symCatPower: "Power & Root",
+  symCatRounding: "Rounding",
+  symCatComplex: "Complex",
 
   /* Common */
   commonCopy: "Copy",

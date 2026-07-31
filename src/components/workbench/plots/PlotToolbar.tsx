@@ -22,7 +22,9 @@ import {
   Download,
   Copy,
   Radar,
+  SlidersHorizontal,
 } from 'lucide-react';
+import { AnimatePresence, motion } from 'framer-motion';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import {
@@ -46,6 +48,13 @@ export interface PlotToolbarProps {
   onExportPNG: () => void;
   onCopyLatex: () => void;
   onExpand?: () => void;
+  /** 当前可见 2D 表达式中的自由参数数量；>0 时在工具栏显示一个可点击的
+   *  圆角徽标，点击切换参数滑块面板的展开/折叠。 */
+  freeParamCount?: number;
+  /** 参数滑块面板是否处于折叠态（用于徽标的高亮/提示文案）。 */
+  slidersCollapsed?: boolean;
+  /** 点击参数徽标时触发，由 Plot2DPanel 接到 settingsStore。 */
+  onToggleSliders?: () => void;
 }
 
 export function PlotToolbar({
@@ -61,6 +70,9 @@ export function PlotToolbar({
   onExportPNG,
   onCopyLatex,
   onExpand,
+  freeParamCount = 0,
+  slidersCollapsed = false,
+  onToggleSliders,
 }: PlotToolbarProps) {
   const hasPolar = plots.some((p) => p.plotType === 'polar');
   const hasParametric = plots.some((p) => p.plotType === 'parametric');
@@ -160,6 +172,38 @@ export function PlotToolbar({
                 <Crosshair className="h-3 w-3" /> 参数方程
               </span>
             )}
+            {/* 自由参数徽标：仅当存在自由参数时以弹性动画出现，点击切换
+                参数滑块面板的展开/折叠（状态持久化在 settingsStore）。 */}
+            <AnimatePresence initial={false}>
+              {freeParamCount > 0 && (
+                <motion.button
+                  key="param-badge"
+                  type="button"
+                  onClick={onToggleSliders}
+                  initial={{ opacity: 0, scale: 0.6, width: 0 }}
+                  animate={{ opacity: 1, scale: 1, width: 'auto' }}
+                  exit={{ opacity: 0, scale: 0.6, width: 0 }}
+                  transition={{ type: 'spring', stiffness: 500, damping: 30 }}
+                  whileTap={{ scale: 0.92 }}
+                  className={
+                    'inline-flex items-center gap-1 overflow-hidden rounded-full px-2 py-0.5 text-[10px] font-medium transition-colors ' +
+                    (slidersCollapsed
+                      ? 'bg-muted text-muted-foreground hover:bg-accent hover:text-foreground'
+                      : 'bg-primary/15 text-primary hover:bg-primary/25')
+                  }
+                  aria-label={
+                    slidersCollapsed ? '展开参数滑块' : '折叠参数滑块'
+                  }
+                  aria-expanded={!slidersCollapsed}
+                >
+                  <SlidersHorizontal className="h-3 w-3" />
+                  <span>参数</span>
+                  <span className="rounded-full bg-background/60 px-1 font-mono tabular-nums">
+                    {freeParamCount}
+                  </span>
+                </motion.button>
+              )}
+            </AnimatePresence>
           </div>
 
           {/* Right side: expand + export */}

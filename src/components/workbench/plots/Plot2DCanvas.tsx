@@ -224,11 +224,19 @@ export function Plot2DCanvas({
   /* ----------------- T7.1 滑块拖动降采样保帧率 -----------------
    * scopeVersion 在滑块拖动时会每帧 bump（高频变化）。若每次都用全精度
    * 采样（可达 2000 点/曲线）重绘，拖动会卡顿。策略：scopeVersion 一旦
-   * 变化就立即进入 lowQuality（采样密度降至约 1/3）保 60fps；停止变化
-   * 约 150ms 后退出 lowQuality，本组件的 computed useMemo 会以全密度
-   * 重采样，已有的 scheduleRedraw 机制随即触发一次高精度重绘。 */
+   * 变化就立即进入 lowQuality（采样密度降至约 1/3）保 60fps；停止变化后
+   * 退出 lowQuality，本组件的 computed useMemo 会以全密度重采样，已有的
+   * scheduleRedraw 机制随即触发一次高精度重绘。
+   *
+   * 恢复延时为自适应（依据上一帧 drawNow 实际耗时，见 lastDrawMsRef）：
+   * 上一帧掉帧（>16ms）则延后到 200ms 恢复，很便宜（<8ms）则 80ms 恢复，
+   * 正常情况 120ms。这样在重场景下避免恢复即卡顿，在轻场景下尽快变清晰。 */
   const [lowQuality, setLowQuality] = useState(false);
   const lowQualityTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  // 上一帧 drawNow 的实际耗时（ms）。用作 lowQuality 恢复延时的自适应
+  // 依据：全精度绘制越贵，停拖后越晚恢复，避免在用户可能继续拖动时立刻
+  // 触发昂贵重绘造成卡顿；绘制很便宜则快速恢复清晰。首帧为 0，走默认档。
+  const lastDrawMsRef = useRef<number>(0);
   // 记录上一次见到的 scopeVersion，用于跳过首次挂载（避免初始渲染就被降采样）。
   const scopeVersionPrevRef = useRef<number>(scopeVersion);
   useEffect(() => {
@@ -238,12 +246,17 @@ export function Plot2DCanvas({
     // scopeVersion 变化（滑块拖动 / 控制台赋值 / 变量删除）：立即降采样。
     setLowQuality(true);
     if (lowQualityTimerRef.current) clearTimeout(lowQualityTimerRef.current);
-    // 停止变化约 150ms 后恢复全精度：定时器触发 setLowQuality(false)，
-    // computed 随之重算（全密度），已有 redraw-on-computed effect 触发重绘。
+    // 自适应恢复延时（原固定 150ms）：
+    //   - 上一帧 > 16ms（掉帧）：200ms，留出更多缓冲，避免恢复全精度后
+    //     紧接着的一次拖动又触发昂贵重绘造成二次卡顿；
+    //   - 上一帧 < 8ms（很便宜）：80ms，尽快恢复清晰，体感更跟手；
+    //   - 其余（正常 60fps 帧预算内）：120ms 折中。
+    const last = lastDrawMsRef.current;
+    const delay = last > 16 ? 200 : last < 8 ? 80 : 120;
     lowQualityTimerRef.current = setTimeout(() => {
       setLowQuality(false);
       lowQualityTimerRef.current = null;
-    }, 150);
+    }, delay);
   }, [scopeVersion]);
   // 卸载时清理防抖定时器，避免泄漏 / 卸载后 setState。
   useEffect(() => {
@@ -335,6 +348,7 @@ export function Plot2DCanvas({
 
   /* ----------------------- Actual draw ------------------------------ */
   const drawNow = useCallback(() => {
+    const t0 = performance.now();
     try {
       const canvas = canvasRef.current;
       if (!canvas) return;
@@ -859,6 +873,9 @@ export function Plot2DCanvas({
     } catch (err) {
       console.error('[Plot2DCanvas] draw error:', err);
       setDrawError(err instanceof Error ? err.message : '绘制失败');
+    } finally {
+      // 记录本帧耗时，供 lowQuality 自适应恢复延时参考（见 lastDrawMsRef）。
+      lastDrawMsRef.current = performance.now() - t0;
     }
   }, [computed, theme, dataToScreen, screenToData, showGrid, showAxes, showMarkers, overlays, axisFontSize]);
 

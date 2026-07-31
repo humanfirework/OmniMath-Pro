@@ -33,6 +33,9 @@ import {
   RotateCcw,
   Cog,
   Sigma,
+  ArrowRight,
+  Check,
+  Ruler,
 } from 'lucide-react';
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs';
 import { Button } from '@/components/ui/button';
@@ -55,6 +58,7 @@ import { FormulaRenderer } from '@/components/workbench/FormulaRenderer';
 import { MatrixTransformViz } from '@/components/workbench/linalg/MatrixTransformViz';
 import { useWorkbenchStore, type VariableEntry } from '@/lib/store/workbench';
 import { setScopeVar } from '@/lib/engine';
+import { t, type TranslationDict } from '@/lib/i18n';
 import { cn } from '@/lib/utils';
 import { toast } from 'sonner';
 import { math } from '@/lib/engine/mathInstance';
@@ -90,6 +94,13 @@ interface SystemSolution {
   rankA?: number;
   rankAug?: number;
   nUnknowns?: number;
+  vector?: number[];
+  particular?: number[];
+  nullBasis?: number[][];
+  pivotCols?: number[];
+  freeCols?: number[];
+  isHomogeneous?: boolean;
+  steps?: string[];
 }
 
 /* ------------------------------------------------------------------ *
@@ -457,7 +468,7 @@ export function LinearAlgebraWorkbench() {
           onValueChange={setActiveTab}
           className="flex-1 min-h-0 flex flex-col gap-3 p-4"
         >
-          <TabsList className="h-9 grid grid-cols-5 w-full max-w-xl text-[11.5px]">
+          <TabsList className="h-9 grid grid-cols-6 w-full max-w-2xl text-[11.5px]">
             <TabsTrigger value="edit" className="text-[11.5px] gap-1.5">
               <Grid3x3 className="size-3.5" />
               矩阵编辑
@@ -473,6 +484,10 @@ export function LinearAlgebraWorkbench() {
             <TabsTrigger value="system" className="text-[11.5px] gap-1.5">
               <Equal className="size-3.5" />
               方程组
+            </TabsTrigger>
+            <TabsTrigger value="vector" className="text-[11.5px] gap-1.5">
+              <ArrowRight className="size-3.5" />
+              {t('linalgTabVector')}
             </TabsTrigger>
             <TabsTrigger value="transform" className="text-[11.5px] gap-1.5">
               <Activity className="size-3.5" />
@@ -500,6 +515,10 @@ export function LinearAlgebraWorkbench() {
 
           <TabsContent value="system" className="flex-1 min-h-0 overflow-hidden">
             <LinearSystemTab defaultMatrix={selected?.data} />
+          </TabsContent>
+
+          <TabsContent value="vector" className="flex-1 min-h-0 overflow-hidden">
+            <VectorOpsTab />
           </TabsContent>
 
           <TabsContent value="transform" className="flex-1 min-h-0 overflow-hidden">
@@ -1065,8 +1084,646 @@ function OperationsTab({ matrices }: { matrices: MatrixEntry[] }) {
           </AnimatePresence>
         </div>
       </div>
+
+      {/* Matrix Norms & Properties (Task 14) — always-on section for selected matrix A */}
+      <MatrixNormsSection matrix={matrixA} matrixName={opA} />
     </div>
   );
+}
+
+/* ------------------------------------------------------------------ *
+ * Matrix Norms & Properties section (Task 14)
+ * ------------------------------------------------------------------ */
+function MatrixNormsSection({
+  matrix,
+  matrixName,
+}: {
+  matrix: Matrix | undefined;
+  matrixName: string;
+}) {
+  const norms = useMemo(() => {
+    if (!matrix || matrix.length === 0) return null;
+    return {
+      n1: norm1(matrix),
+      nInf: normInf(matrix),
+      nFro: normFrobenius(matrix),
+      nSpec: normSpectral(matrix),
+      symmetric: isSymmetric(matrix),
+      positiveDefinite: isPositiveDefinite(matrix),
+      invertible: isInvertible(matrix),
+      orthogonal: isOrthogonal(matrix),
+    };
+  }, [matrix]);
+
+  if (!matrix || matrix.length === 0 || !norms) {
+    return (
+      <div className="mt-4 rounded-md border border-border/60 bg-muted/20 p-3 text-[11.5px] text-muted-foreground">
+        {t('linalgNormsProps')} — {t('linalgEmpty')}
+      </div>
+    );
+  }
+
+  const normRows: Array<{ label: keyof TranslationDict; value: number }> = [
+    { label: 'linalgNorm1', value: norms.n1 },
+    { label: 'linalgNormInf', value: norms.nInf },
+    { label: 'linalgNormFrobenius', value: norms.nFro },
+    { label: 'linalgNormSpectral', value: norms.nSpec },
+  ];
+
+  const propRows: Array<{ label: keyof TranslationDict; value: boolean }> = [
+    { label: 'linalgSymmetric', value: norms.symmetric },
+    { label: 'linalgPositiveDefinite', value: norms.positiveDefinite },
+    { label: 'linalgInvertible', value: norms.invertible },
+    { label: 'linalgOrthogonal', value: norms.orthogonal },
+  ];
+
+  return (
+    <div className="mt-4 rounded-md border border-border/60 bg-card/30 p-3">
+      <div className="text-[12px] font-semibold text-foreground/80 mb-2 flex items-center gap-1.5">
+        <Ruler className="size-3.5 text-primary" />
+        {t('linalgNormsProps')}
+        <span className="text-[10.5px] text-muted-foreground font-normal font-mono">
+          ({matrixName}, {matrix.length}×{matrix[0]?.length ?? 0})
+        </span>
+      </div>
+      <div className="grid grid-cols-2 gap-3">
+        {/* Norms */}
+        <div className="space-y-1.5">
+          <div className="text-[10.5px] text-muted-foreground">{t('linalgNorm1')} / {t('linalgNormInf')} / {t('linalgNormFrobenius')} / {t('linalgNormSpectral')}</div>
+          {normRows.map((row) => (
+            <div
+              key={row.label}
+              className="flex items-center justify-between gap-2 px-2 py-1 rounded border border-border/40 bg-muted/20 text-[11.5px]"
+            >
+              <span className="text-muted-foreground">{t(row.label)}</span>
+              <span className="font-mono font-medium tabular-nums">
+                {Number.isFinite(row.value) ? numToLatex(row.value) : '—'}
+              </span>
+            </div>
+          ))}
+        </div>
+
+        {/* Properties */}
+        <div className="space-y-1.5">
+          <div className="text-[10.5px] text-muted-foreground">{t('linalgSymmetric')} / {t('linalgPositiveDefinite')} / {t('linalgInvertible')} / {t('linalgOrthogonal')}</div>
+          {propRows.map((row) => (
+            <div
+              key={row.label}
+              className={cn(
+                'flex items-center justify-between gap-2 px-2 py-1 rounded border text-[11.5px]',
+                row.value
+                  ? 'border-emerald-500/30 bg-emerald-500/5 text-emerald-700 dark:text-emerald-300'
+                  : 'border-rose-500/30 bg-rose-500/5 text-rose-700 dark:text-rose-300',
+              )}
+            >
+              <span className="font-medium">{t(row.label)}</span>
+              {row.value ? (
+                <Check className="size-3.5" />
+              ) : (
+                <X className="size-3.5" />
+              )}
+            </div>
+          ))}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+/* ------------------------------------------------------------------ *
+ * Matrix norms & properties helpers
+ * ------------------------------------------------------------------ */
+
+/** 1-范数：最大列绝对值之和 */
+function norm1(m: Matrix): number {
+  if (m.length === 0) return 0;
+  const cols = m[0].length;
+  let max = 0;
+  for (let c = 0; c < cols; c++) {
+    let sum = 0;
+    for (let r = 0; r < m.length; r++) sum += Math.abs(m[r][c]);
+    if (sum > max) max = sum;
+  }
+  return max;
+}
+
+/** ∞-范数：最大行绝对值之和 */
+function normInf(m: Matrix): number {
+  let max = 0;
+  for (const row of m) {
+    let sum = 0;
+    for (const v of row) sum += Math.abs(v);
+    if (sum > max) max = sum;
+  }
+  return max;
+}
+
+/** Frobenius 范数：√(Σ aij²) */
+function normFrobenius(m: Matrix): number {
+  let sum = 0;
+  for (const row of m) for (const v of row) sum += v * v;
+  return Math.sqrt(sum);
+}
+
+/** 谱范数：A^T*A 的最大特征值的平方根（即最大奇异值） */
+function normSpectral(m: Matrix): number {
+  if (m.length === 0) return 0;
+  const at = transpose(m);
+  const ata = math.multiply(at, m) as Matrix;
+  try {
+    const eig = math.eigs(math.matrix(ata));
+    const values = (eig as unknown as { values: { toArray: () => unknown[] } }).values.toArray();
+    let max = 0;
+    for (const v of values) {
+      const real = Math.abs(Number(v));
+      if (real > max) max = real;
+    }
+    return Math.sqrt(max);
+  } catch {
+    return NaN;
+  }
+}
+
+/** 对称性：A === A^T */
+function isSymmetric(m: Matrix): boolean {
+  if (!isSquare(m)) return false;
+  const n = m.length;
+  for (let i = 0; i < n; i++) {
+    for (let j = i + 1; j < n; j++) {
+      if (Math.abs(m[i][j] - m[j][i]) > 1e-9) return false;
+    }
+  }
+  return true;
+}
+
+/** 正定性：对称且所有特征值 > 0 */
+function isPositiveDefinite(m: Matrix): boolean {
+  if (!isSquare(m)) return false;
+  if (!isSymmetric(m)) return false;
+  try {
+    const eig = math.eigs(math.matrix(m));
+    const values = (eig as unknown as { values: { toArray: () => unknown[] } }).values.toArray();
+    return values.every((v) => Number(v) > 1e-12);
+  } catch {
+    return false;
+  }
+}
+
+/** 可逆性：det(A) !== 0 */
+function isInvertible(m: Matrix): boolean {
+  if (!isSquare(m)) return false;
+  try {
+    return Math.abs(math.det(m)) > 1e-12;
+  } catch {
+    return false;
+  }
+}
+
+/** 正交性：A^T * A === I */
+function isOrthogonal(m: Matrix): boolean {
+  if (!isSquare(m)) return false;
+  const n = m.length;
+  const at = transpose(m);
+  const ata = math.multiply(at, m) as Matrix;
+  for (let i = 0; i < n; i++) {
+    for (let j = 0; j < n; j++) {
+      const expected = i === j ? 1 : 0;
+      if (Math.abs(ata[i][j] - expected) > 1e-9) return false;
+    }
+  }
+  return true;
+}
+
+/* ================================================================== *
+ * TAB — Vector Operations (Task 13)
+ * ================================================================== */
+type VectorOp = 'dot' | 'cross' | 'magnitude' | 'angle' | 'projection';
+
+const VECTOR_OP_LABELS: Record<VectorOp, keyof TranslationDict> = {
+  dot: 'linalgDotProduct',
+  cross: 'linalgCrossProduct',
+  magnitude: 'linalgMagnitude',
+  angle: 'linalgAngle',
+  projection: 'linalgProjection',
+};
+
+/** Parse a comma/space-separated list of numbers into a number[] vector. */
+function parseVectorInput(text: string): number[] | null {
+  const trimmed = text.trim();
+  if (!trimmed) return null;
+  const cells = trimmed.split(/[\s,]+/).map((c) => c.trim()).filter(Boolean);
+  if (cells.length === 0) return null;
+  const nums = cells.map((c) => parseFloat(c));
+  if (nums.some((n) => Number.isNaN(n))) return null;
+  return nums;
+}
+
+function VectorOpsTab() {
+  const [vecAText, setVecAText] = useState('1, 2, 3');
+  const [vecBText, setVecBText] = useState('4, 5, 6');
+  const [op, setOp] = useState<VectorOp>('dot');
+  const [result, setResult] = useState<OpResult | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const [working, setWorking] = useState(false);
+
+  // Gram-Schmidt state
+  const [gsText, setGsText] = useState('1, 1, 0\n1, 0, 1\n0, 1, 1');
+  const [gsResult, setGsResult] = useState<{
+    vectors: number[][];
+    steps: string[];
+  } | null>(null);
+  const [gsError, setGsError] = useState<string | null>(null);
+
+  const needsB = op === 'dot' || op === 'cross' || op === 'angle' || op === 'projection';
+
+  const handleCompute = () => {
+    setWorking(true);
+    setError(null);
+    setResult(null);
+    try {
+      const a = parseVectorInput(vecAText);
+      if (!a || a.length === 0) {
+        setError(t('linalgVectorDimMismatch') + ' (A)');
+        return;
+      }
+      let b: number[] | null = null;
+      if (needsB) {
+        b = parseVectorInput(vecBText);
+        if (!b || b.length === 0) {
+          setError(t('linalgVectorDimMismatch') + ' (B)');
+          return;
+        }
+        if (a.length !== b.length) {
+          setError(t('linalgVectorDimMismatch'));
+          return;
+        }
+      }
+
+      let res: OpResult;
+      switch (op) {
+        case 'dot': {
+          const d = math.dot(a, b as number[]) as number;
+          res = {
+            latex: `A \\cdot B = ${numToLatex(d)}`,
+            text: `dot = ${d}`,
+            isMatrix: false,
+            steps: [
+              `A = ${vectorToLatex(a)}, \\quad B = ${vectorToLatex(b as number[])}`,
+              `A \\cdot B = \\sum_{i=1}^{n} a_i b_i = ${numToLatex(d)}`,
+            ],
+          };
+          break;
+        }
+        case 'cross': {
+          if (a.length !== 3 || (b as number[]).length !== 3) {
+            setError(t('linalgCross3DOnly'));
+            return;
+          }
+          const c = math.cross(a, b as number[]) as number[];
+          res = {
+            latex: `A \\times B = ${vectorToLatex(c)}`,
+            text: `cross = [${c.join(', ')}]`,
+            isMatrix: true,
+            matrix: [c],
+            steps: [
+              `A = ${vectorToLatex(a)}, \\quad B = ${vectorToLatex(b as number[])}`,
+              `A \\times B = ${vectorToLatex(c)}`,
+            ],
+          };
+          break;
+        }
+        case 'magnitude': {
+          const mag = Math.sqrt(a.reduce((s, x) => s + x * x, 0));
+          res = {
+            latex: `\\lVert A \\rVert = ${numToLatex(mag)}`,
+            text: `|A| = ${mag}`,
+            isMatrix: false,
+            steps: [
+              `A = ${vectorToLatex(a)}`,
+              `\\lVert A \\rVert = \\sqrt{\\sum_{i=1}^{n} a_i^2} = ${numToLatex(mag)}`,
+            ],
+          };
+          break;
+        }
+        case 'angle': {
+          const d = math.dot(a, b as number[]) as number;
+          const magA = Math.sqrt(a.reduce((s, x) => s + x * x, 0));
+          const magB = Math.sqrt((b as number[]).reduce((s, x) => s + x * x, 0));
+          if (magA < 1e-12 || magB < 1e-12) {
+            setError(t('linalgVectorDimMismatch'));
+            return;
+          }
+          const cos = Math.max(-1, Math.min(1, d / (magA * magB)));
+          const angleRad = Math.acos(cos);
+          const angleDeg = (angleRad * 180) / Math.PI;
+          res = {
+            latex: `\\theta = \\arccos\\left(\\frac{A \\cdot B}{\\lVert A \\rVert \\lVert B \\rVert}\\right) = ${numToLatex(angleDeg)}^{\\circ}`,
+            text: `angle = ${angleDeg}°`,
+            isMatrix: false,
+            steps: [
+              `A \\cdot B = ${numToLatex(d)}`,
+              `\\lVert A \\rVert = ${numToLatex(magA)}, \\quad \\lVert B \\rVert = ${numToLatex(magB)}`,
+              `\\cos\\theta = ${numToLatex(cos)} \\Rightarrow \\theta = ${numToLatex(angleDeg)}^{\\circ}`,
+            ],
+          };
+          break;
+        }
+        case 'projection': {
+          const bb = b as number[];
+          const dotAB = math.dot(a, bb) as number;
+          const dotBB = bb.reduce((s, x) => s + x * x, 0);
+          if (Math.abs(dotBB) < 1e-12) {
+            setError(t('linalgVectorDimMismatch') + ' (B = 0)');
+            return;
+          }
+          const coef = dotAB / dotBB;
+          const proj = bb.map((x) => coef * x);
+          res = {
+            latex: `\\operatorname{proj}_{B}(A) = ${vectorToLatex(proj)}`,
+            text: `proj = [${proj.join(', ')}]`,
+            isMatrix: true,
+            matrix: [proj],
+            steps: [
+              `A \\cdot B = ${numToLatex(dotAB)}, \\quad B \\cdot B = ${numToLatex(dotBB)}`,
+              `\\operatorname{proj}_{B}(A) = \\frac{A \\cdot B}{B \\cdot B} B = ${numToLatex(coef)} \\cdot ${vectorToLatex(bb)}`,
+              `\\operatorname{proj}_{B}(A) = ${vectorToLatex(proj)}`,
+            ],
+          };
+          break;
+        }
+        default:
+          setError(t('linalgError'));
+          return;
+      }
+      setResult(res);
+    } catch (err) {
+      setError((err as Error).message || t('linalgError'));
+    } finally {
+      setWorking(false);
+    }
+  };
+
+  const handleGramSchmidt = () => {
+    setGsError(null);
+    setGsResult(null);
+    try {
+      const lines = gsText.split(/\r?\n/).map((l) => l.trim()).filter(Boolean);
+      if (lines.length === 0) {
+        setGsError(t('linalgVectorDimMismatch'));
+        return;
+      }
+      const vectors: number[][] = [];
+      let dim = -1;
+      for (const line of lines) {
+        const v = parseVectorInput(line);
+        if (!v) {
+          setGsError(t('linalgVectorDimMismatch'));
+          return;
+        }
+        if (dim === -1) dim = v.length;
+        else if (v.length !== dim) {
+          setGsError(t('linalgVectorDimMismatch'));
+          return;
+        }
+        vectors.push(v);
+      }
+      const { orthogonal, steps } = gramSchmidt(vectors);
+      setGsResult({ vectors: orthogonal, steps });
+    } catch (err) {
+      setGsError((err as Error).message || t('linalgError'));
+    }
+  };
+
+  return (
+    <div className="h-full overflow-auto">
+      <div className="grid grid-cols-[1fr_1fr] gap-5 p-2">
+        {/* Left: vector ops */}
+        <div className="space-y-3">
+          <div className="text-[12px] font-semibold text-foreground/80 flex items-center gap-1.5">
+            <ArrowRight className="size-3.5 text-primary" />
+            {t('linalgTabVector')}
+          </div>
+
+          <div>
+            <label className="text-[11px] text-muted-foreground">
+              {t('linalgVectorA')} ({t('linalgVectorInputHint')})
+            </label>
+            <Input
+              value={vecAText}
+              onChange={(e) => setVecAText(e.target.value)}
+              className="h-8 text-[12px] font-mono mt-1"
+              placeholder="1, 2, 3"
+            />
+          </div>
+
+          {needsB && (
+            <div>
+              <label className="text-[11px] text-muted-foreground">
+                {t('linalgVectorB')} ({t('linalgVectorInputHint')})
+              </label>
+              <Input
+                value={vecBText}
+                onChange={(e) => setVecBText(e.target.value)}
+                className="h-8 text-[12px] font-mono mt-1"
+                placeholder="4, 5, 6"
+              />
+            </div>
+          )}
+
+          <div>
+            <label className="text-[11px] text-muted-foreground">{t('linalgOperation')}</label>
+            <Select value={op} onValueChange={(v) => setOp(v as VectorOp)}>
+              <SelectTrigger className="h-8 text-[12px] mt-1">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                {(Object.keys(VECTOR_OP_LABELS) as VectorOp[]).map((k) => (
+                  <SelectItem key={k} value={k} className="text-[12px]">
+                    {t(VECTOR_OP_LABELS[k])}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+
+          <Button
+            onClick={handleCompute}
+            disabled={working}
+            className="w-full h-9 text-[12px] gap-1.5"
+            size="sm"
+          >
+            <Cog className="size-4" />
+            {t('linalgCompute')}
+          </Button>
+
+          <AnimatePresence mode="wait">
+            {error && (
+              <motion.div
+                key="err"
+                initial={{ opacity: 0, y: -4 }}
+                animate={{ opacity: 1, y: 0 }}
+                exit={{ opacity: 0 }}
+                className="rounded-md border border-rose-500/40 bg-rose-500/10 p-3 text-[12px] text-rose-600 dark:text-rose-300"
+              >
+                <div className="flex items-start gap-1.5">
+                  <X className="size-4 mt-0.5 shrink-0" />
+                  <span>{error}</span>
+                </div>
+              </motion.div>
+            )}
+
+            {result && !error && (
+              <motion.div
+                key="res"
+                initial={{ opacity: 0, y: 4 }}
+                animate={{ opacity: 1, y: 0 }}
+                exit={{ opacity: 0 }}
+                className="rounded-md border border-primary/30 bg-primary/5 p-3 glow-card-teal"
+              >
+                <div className="text-[11px] text-muted-foreground mb-2">{t('linalgResult')}</div>
+                <div className="overflow-x-auto">
+                  <FormulaRenderer latex={result.latex} displayMode />
+                </div>
+                {result.steps && result.steps.length > 0 && (
+                  <details className="mt-3 group">
+                    <summary className="cursor-pointer text-[11px] text-muted-foreground hover:text-foreground select-none">
+                      {t('linalgSteps')} ({result.steps.length})
+                    </summary>
+                    <div className="mt-2 space-y-1.5 overflow-x-auto">
+                      {result.steps.map((s, i) => (
+                        <div key={i} className="text-[11.5px] text-foreground/80">
+                          <FormulaRenderer latex={s} displayMode />
+                        </div>
+                      ))}
+                    </div>
+                  </details>
+                )}
+              </motion.div>
+            )}
+          </AnimatePresence>
+        </div>
+
+        {/* Right: Gram-Schmidt */}
+        <div className="space-y-3">
+          <div className="text-[12px] font-semibold text-foreground/80 flex items-center gap-1.5">
+            <Ruler className="size-3.5 text-primary" />
+            {t('linalgGramSchmidt')}
+          </div>
+
+          <div>
+            <label className="text-[11px] text-muted-foreground">
+              {t('linalgGramSchmidtHint')}
+            </label>
+            <textarea
+              value={gsText}
+              onChange={(e) => setGsText(e.target.value)}
+              className={cn(
+                'min-h-[88px] w-full p-2.5 text-[12px] font-mono mt-1',
+                'bg-muted/40 border border-border/60 rounded-md',
+                'focus:outline-none focus:border-primary focus:ring-2 focus:ring-primary/40',
+                'resize-y',
+              )}
+              placeholder={'1, 1, 0\n1, 0, 1\n0, 1, 1'}
+            />
+          </div>
+
+          <Button
+            onClick={handleGramSchmidt}
+            className="w-full h-9 text-[12px] gap-1.5"
+            size="sm"
+          >
+            <Ruler className="size-4" />
+            {t('linalgGramSchmidt')}
+          </Button>
+
+          <AnimatePresence mode="wait">
+            {gsError && (
+              <motion.div
+                key="gs-err"
+                initial={{ opacity: 0, y: -4 }}
+                animate={{ opacity: 1, y: 0 }}
+                exit={{ opacity: 0 }}
+                className="rounded-md border border-rose-500/40 bg-rose-500/10 p-3 text-[12px] text-rose-600 dark:text-rose-300"
+              >
+                <div className="flex items-start gap-1.5">
+                  <X className="size-4 mt-0.5 shrink-0" />
+                  <span>{gsError}</span>
+                </div>
+              </motion.div>
+            )}
+
+            {gsResult && !gsError && (
+              <motion.div
+                key="gs-res"
+                initial={{ opacity: 0, y: 4 }}
+                animate={{ opacity: 1, y: 0 }}
+                exit={{ opacity: 0 }}
+                className="rounded-md border border-primary/30 bg-primary/5 p-3 glow-card-teal space-y-2"
+              >
+                <div className="text-[11px] text-muted-foreground">{t('linalgOrthogonalized')}</div>
+                {gsResult.vectors.map((v, i) => (
+                  <div key={i} className="overflow-x-auto">
+                    <FormulaRenderer
+                      latex={`q_{${i + 1}} = ${vectorToLatex(v)}`}
+                      displayMode
+                    />
+                  </div>
+                ))}
+                {gsResult.steps.length > 0 && (
+                  <details className="mt-2 group">
+                    <summary className="cursor-pointer text-[11px] text-muted-foreground hover:text-foreground select-none">
+                      {t('linalgGramSchmidtSteps')} ({gsResult.steps.length})
+                    </summary>
+                    <div className="mt-2 space-y-1.5 overflow-x-auto">
+                      {gsResult.steps.map((s, i) => (
+                        <div key={i} className="text-[11.5px] text-foreground/80">
+                          <FormulaRenderer latex={s} displayMode />
+                        </div>
+                      ))}
+                    </div>
+                  </details>
+                )}
+              </motion.div>
+            )}
+          </AnimatePresence>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+/** Gram-Schmidt orthogonalization with per-step LaTeX recording. */
+function gramSchmidt(vectors: number[][]): { orthogonal: number[][]; steps: string[] } {
+  const steps: string[] = [];
+  const orthogonal: number[][] = [];
+  for (let i = 0; i < vectors.length; i++) {
+    const v = [...vectors[i]];
+    let q = v;
+    for (let j = 0; j < orthogonal.length; j++) {
+      const qj = orthogonal[j];
+      const dot = qj.reduce((s, x, k) => s + x * v[k], 0);
+      const normSq = qj.reduce((s, x) => s + x * x, 0);
+      if (Math.abs(normSq) < 1e-12) continue;
+      q = q.map((x, k) => x - (dot / normSq) * qj[k]);
+      steps.push(
+        `v_{${i + 1}} \\leftarrow v_{${i + 1}} - \\frac{v_{${i + 1}} \\cdot q_{${j + 1}}}{q_{${j + 1}} \\cdot q_{${j + 1}}} q_{${j + 1}} = ${vectorToLatex(q)}`,
+      );
+    }
+    const norm = Math.sqrt(q.reduce((s, x) => s + x * x, 0));
+    let unit: number[];
+    if (norm < 1e-12) {
+      // Linearly dependent — keep zero vector (won't be normalized)
+      unit = q.map(() => 0);
+      steps.push(`\\lVert v_{${i + 1}} \\rVert = 0 \\Rightarrow \\text{线性相关，跳过}`);
+    } else {
+      unit = q.map((x) => x / norm);
+      steps.push(
+        `q_{${i + 1}} = \\frac{v_{${i + 1}}}{\\lVert v_{${i + 1}} \\rVert} = ${vectorToLatex(unit)}`,
+      );
+    }
+    orthogonal.push(unit);
+  }
+  return { orthogonal, steps };
 }
 
 /* ================================================================== *
@@ -1508,24 +2165,41 @@ function LinearSystemTab({ defaultMatrix }: { defaultMatrix: Matrix | undefined 
                 className="space-y-3"
               >
                 <div className="rounded-md border border-border/60 bg-muted/30 p-3 overflow-x-auto">
-                  <div className="text-[11px] text-muted-foreground mb-1.5">增广矩阵</div>
+                  <div className="text-[11px] text-muted-foreground mb-1.5">
+                    {t('linalgAugmented')}
+                  </div>
                   <FormulaRenderer latex={solution.augmentedLatex} displayMode />
                 </div>
 
-                <div
-                  className={cn(
-                    'rounded-md border px-3 py-2 text-[12px] font-medium',
-                    solution.kind === 'unique' &&
-                      'border-emerald-500/30 bg-emerald-500/10 text-emerald-700 dark:text-emerald-300',
-                    solution.kind === 'none' &&
-                      'border-rose-500/40 bg-rose-500/10 text-rose-700 dark:text-rose-300',
-                    solution.kind === 'infinite' &&
-                      'border-amber-500/40 bg-amber-500/10 text-amber-700 dark:text-amber-300',
-                  )}
-                >
-                  {solution.kind === 'unique' && '唯一解'}
-                  {solution.kind === 'none' && '无解'}
-                  {solution.kind === 'infinite' && '无穷多解'}
+                {/* System type badge: 齐次 / 非齐次 + solution kind */}
+                <div className="flex flex-wrap items-center gap-2">
+                  <div
+                    className={cn(
+                      'rounded-md border px-2.5 py-1.5 text-[11.5px] font-medium',
+                      solution.isHomogeneous
+                        ? 'border-sky-500/40 bg-sky-500/10 text-sky-700 dark:text-sky-300'
+                        : 'border-indigo-500/40 bg-indigo-500/10 text-indigo-700 dark:text-indigo-300',
+                    )}
+                  >
+                    {solution.isHomogeneous
+                      ? t('linalgHomogeneousSystem')
+                      : t('linalgNonHomogeneousSystem')}
+                  </div>
+                  <div
+                    className={cn(
+                      'rounded-md border px-2.5 py-1.5 text-[11.5px] font-medium',
+                      solution.kind === 'unique' &&
+                        'border-emerald-500/30 bg-emerald-500/10 text-emerald-700 dark:text-emerald-300',
+                      solution.kind === 'none' &&
+                        'border-rose-500/40 bg-rose-500/10 text-rose-700 dark:text-rose-300',
+                      solution.kind === 'infinite' &&
+                        'border-amber-500/40 bg-amber-500/10 text-amber-700 dark:text-amber-300',
+                    )}
+                  >
+                    {solution.kind === 'unique' && t('linalgUniqueSolution')}
+                    {solution.kind === 'none' && t('linalgNoSolution')}
+                    {solution.kind === 'infinite' && t('linalgInfiniteSolution')}
+                  </div>
                 </div>
 
                 {solution.rankA !== undefined && solution.rankAug !== undefined && (
@@ -1534,12 +2208,74 @@ function LinearSystemTab({ defaultMatrix }: { defaultMatrix: Matrix | undefined 
                     {solution.nUnknowns !== undefined && (
                       <>，未知数 n = {solution.nUnknowns}</>
                     )}
+                    {solution.kind === 'infinite' &&
+                      solution.nUnknowns !== undefined &&
+                      solution.rankA !== undefined &&
+                      `，${t('linalgFreeVars')} = ${solution.nUnknowns - solution.rankA}`}
                   </div>
                 )}
 
+                {/* Free variable identification */}
+                {solution.kind === 'infinite' &&
+                  solution.freeCols &&
+                  solution.freeCols.length > 0 && (
+                    <div className="text-[11px] text-amber-700 dark:text-amber-300 bg-amber-500/5 border border-amber-500/30 rounded px-2.5 py-1.5">
+                      <span className="font-medium">{t('linalgFreeVars')}：</span>
+                      <span className="font-mono">
+                        {' '}
+                        {solution.freeCols.map((c) => `x_{${c + 1}}`).join(', ')}
+                      </span>
+                      <span className="text-muted-foreground">
+                        {' '}
+                        （{solution.freeCols.length} 个）
+                      </span>
+                    </div>
+                  )}
+
                 <div className="rounded-md border border-primary/30 bg-primary/5 p-3 glow-card-teal overflow-x-auto">
+                  <div className="text-[11px] text-muted-foreground mb-1.5">
+                    {solution.kind === 'infinite'
+                      ? t('linalgGeneralSolution')
+                      : t('linalgResult')}
+                  </div>
                   <FormulaRenderer latex={solution.latex} displayMode />
                 </div>
+
+                {/* Infinite: split into 特解 + 基础解系 */}
+                {solution.kind === 'infinite' &&
+                  solution.particular &&
+                  solution.nullBasis &&
+                  solution.nullBasis.length > 0 && (
+                    <div className="space-y-2">
+                      {/* For homogeneous systems the particular solution is the zero vector,
+                          so we hide it and just show the fundamental solution system. */}
+                      {!solution.isHomogeneous && (
+                        <div className="rounded-md border border-emerald-500/30 bg-emerald-500/5 p-2.5 overflow-x-auto">
+                          <div className="text-[11px] text-emerald-700 dark:text-emerald-300 mb-1 font-medium">
+                            {t('linalgParticularSolution')} η*
+                          </div>
+                          <FormulaRenderer
+                            latex={'\\eta^* = ' + vectorToLatex(solution.particular)}
+                            displayMode
+                          />
+                        </div>
+                      )}
+                      <div className="rounded-md border border-violet-500/30 bg-violet-500/5 p-2.5 overflow-x-auto">
+                        <div className="text-[11px] text-violet-700 dark:text-violet-300 mb-1 font-medium">
+                          {t('linalgFundamentalSystem')}
+                          {solution.isHomogeneous && ` (${t('linalgHomogeneousSystem')})`}
+                        </div>
+                        {solution.nullBasis.map((v, i) => (
+                          <div key={i} className="mb-1 last:mb-0">
+                            <FormulaRenderer
+                              latex={`\\xi_{${i + 1}} = ` + vectorToLatex(v)}
+                              displayMode
+                            />
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
               </motion.div>
             )}
 
@@ -1592,6 +2328,9 @@ function solveLinearSystem(A: Matrix, b: number[]): SystemSolution {
   const augMat: Matrix = A.map((row, i) => [...row, b[i] ?? 0]);
   const rankAug = matrixRank(augMat);
 
+  // Homogeneous detection: all b values are zero
+  const isHomogeneous = b.every((v) => Math.abs(v) < eps);
+
   if (rankA < rankAug) {
     return {
       kind: 'none',
@@ -1600,6 +2339,7 @@ function solveLinearSystem(A: Matrix, b: number[]): SystemSolution {
       rankAug,
       nUnknowns: cols,
       augmentedLatex: '',
+      isHomogeneous,
     };
   }
 
@@ -1633,10 +2373,14 @@ function solveLinearSystem(A: Matrix, b: number[]): SystemSolution {
     return {
       kind: 'unique',
       latex: 'x = ' + vectorToLatex(x),
+      vector: x,
       rankA,
       rankAug,
       nUnknowns: cols,
       augmentedLatex: '',
+      pivotCols,
+      freeCols,
+      isHomogeneous,
     };
   }
 
@@ -1660,9 +2404,14 @@ function solveLinearSystem(A: Matrix, b: number[]): SystemSolution {
   return {
     kind: 'infinite',
     latex: 'x = ' + terms.join(' '),
+    particular,
+    nullBasis,
+    pivotCols,
+    freeCols,
     rankA,
     rankAug,
     nUnknowns: cols,
     augmentedLatex: '',
+    isHomogeneous,
   };
 }

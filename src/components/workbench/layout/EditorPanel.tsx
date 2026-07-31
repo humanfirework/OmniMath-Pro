@@ -39,6 +39,7 @@ import {
   FileCode2,
   Loader2,
   Settings2,
+  Sigma,
   X,
 } from 'lucide-react';
 import {
@@ -62,6 +63,7 @@ import { cn } from '@/lib/utils';
 import { toast } from 'sonner';
 import type { CalculationResult, PlotConfig } from '@/lib/store/workbench';
 import { CodeEditor } from '@/components/workbench/layout/CodeEditor';
+import { SymbolPalette } from '@/components/workbench/SymbolPalette';
 import { FormulaRenderer } from '@/components/workbench/FormulaRenderer';
 
 const DEFAULT_SCRIPT = `# OmniMath Pro — 示例脚本
@@ -132,6 +134,8 @@ export function EditorPanel() {
   /* ─── Editor font size from settings store ───────────────────── */
   const editorFontSize = useSettingsStore((s) => s.editorFontSize);
   const setEditorFontSize = useSettingsStore((s) => s.setEditorFontSize);
+  const symbolPaletteOpen = useSettingsStore((s) => s.symbolPaletteOpen);
+  const setSymbolPaletteOpen = useSettingsStore((s) => s.setSymbolPaletteOpen);
 
   /* ─── Ctrl/Cmd + wheel zoom ───────────────────────────────────── */
   useEffect(() => {
@@ -490,6 +494,24 @@ export function EditorPanel() {
             <TooltipTrigger asChild>
               <button
                 type="button"
+                onClick={() => setSymbolPaletteOpen(!symbolPaletteOpen)}
+                aria-label={t('symbolPaletteToggle')}
+                className={cn(
+                  'grid place-items-center size-7 rounded-md transition-colors',
+                  symbolPaletteOpen
+                    ? 'bg-primary/15 text-primary'
+                    : 'text-muted-foreground hover:bg-accent hover:text-foreground',
+                )}
+              >
+                <Sigma className="size-3.5" />
+              </button>
+            </TooltipTrigger>
+            <TooltipContent side="bottom">{t('symbolPaletteToggle')}</TooltipContent>
+          </Tooltip>
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <button
+                type="button"
                 onClick={handleReset}
                 aria-label={t('editorReset')}
                 className="grid place-items-center size-7 rounded-md text-muted-foreground hover:bg-accent hover:text-foreground transition-colors"
@@ -661,6 +683,9 @@ export function EditorPanel() {
           </div>
         </>
       )}
+
+      {/* Symbol palette (collapsible) */}
+      <SymbolPalette />
 
       {/* Bottom info bar */}
       <div className="shrink-0 h-6 flex items-center justify-between px-2.5 text-[10.5px] text-muted-foreground border-t border-border/60 bg-background/40">
