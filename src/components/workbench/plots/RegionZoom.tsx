@@ -8,7 +8,7 @@
  *   2. 在画布上拖拽选择矩形区域
  *   3. 松开鼠标后，视图自动缩放到所选区域
  *
- * 坐标变换基于 Plot2DCanvas 的 PADDING 常量
+ * 坐标变换基于 Plot2DCanvas 共享的 PLOT_PADDING 常量
  * ({ left:48, right:16, top:16, bottom:32 })，将屏幕像素映射回世界坐标。
  *
  * 使用方式（在 Plot2DPanel 的 canvasWrapperRef 内渲染）：
@@ -23,9 +23,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { ZoomIn, X } from 'lucide-react';
 import { cn } from '@/lib/utils';
-
-// 必须与 Plot2DCanvas 中的 PADDING 保持一致
-const PADDING = { left: 48, right: 16, top: 16, bottom: 32 };
+import { PLOT_PADDING as PADDING } from '@/lib/plots/plot2d';
 
 export interface RegionZoomProps {
   wrapperRef: React.RefObject<HTMLElement | null>;

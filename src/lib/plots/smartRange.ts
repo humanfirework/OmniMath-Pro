@@ -196,13 +196,9 @@ export function coordinatedYRange(
   const outliers: string[] = [];
   let sharedMin = Infinity;
   let sharedMax = -Infinity;
-  let allMin = Infinity;
-  let allMax = -Infinity;
 
   for (const { samples, label } of plots) {
     const [lo, hi] = smartYRange(samples, options);
-    if (Number.isFinite(lo)) allMin = Math.min(allMin, lo);
-    if (Number.isFinite(hi)) allMax = Math.max(allMax, hi);
 
     if (isOutlierCurve(samples, options)) {
       outliers.push(label);
@@ -212,11 +208,37 @@ export function coordinatedYRange(
     if (Number.isFinite(hi)) sharedMax = Math.max(sharedMax, hi);
   }
 
-  // Fallback: if every curve was an outlier, use the union of all curves
-  // so the plot still shows something meaningful.
+  // Fallback: if every curve was an outlier (e.g. `e^x` + `e^(2x)` on the
+  // same plot), the per-curve smart ranges would still let the most extreme
+  // curve dominate and squeeze the others. Instead, pool every curve's
+  // finite samples and take the P5/P95 quantiles across the combined set —
+  // symmetric with the single-curve `smartYRange` behaviour and keeps the
+  // shared Y range readable instead of snapping to the raw extremes.
   if (!Number.isFinite(sharedMin) || !Number.isFinite(sharedMax)) {
-    sharedMin = allMin;
-    sharedMax = allMax;
+    const {
+      lowerQuantile: loQ = 0.05,
+      upperQuantile: hiQ = 0.95,
+    } = options;
+    const ys: number[] = [];
+    for (const { samples } of plots) {
+      for (const s of samples) {
+        if (Number.isFinite(s.y)) ys.push(s.y);
+      }
+    }
+    if (ys.length > 0) {
+      ys.sort((a, b) => a - b);
+      // For very small combined sets fall back to the actual min/max so a
+      // 2-point plot doesn't degenerate (mirrors `smartYRange`).
+      if (ys.length < 20) {
+        sharedMin = ys[0];
+        sharedMax = ys[ys.length - 1];
+      } else {
+        const loIdx = Math.floor(loQ * (ys.length - 1));
+        const hiIdx = Math.ceil(hiQ * (ys.length - 1));
+        sharedMin = ys[loIdx];
+        sharedMax = ys[hiIdx];
+      }
+    }
   }
 
   if (!Number.isFinite(sharedMin) || !Number.isFinite(sharedMax)) {

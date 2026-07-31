@@ -246,19 +246,32 @@ async function loadAlgebrite(): Promise<typeof import('algebrite')['default']> {
  * Compute the symbolic derivative of `expr` w.r.t. `varName`.
  * Returns a LaTeX string suitable for KaTeX.
  *
+ * `order` (default 1) repeats Algebrite's `d()` so higher-order
+ * derivatives (2nd, 3rd, …) can be previewed. The previous
+ * implementation only called `d()` once and always returned the
+ * first derivative regardless of the requested order.
+ *
  * Dynamic-imports algebrite so the ~1MB CAS stays out of the initial
  * bundle.
  */
 export async function symbolicDerivative(
   expr: string,
   varName: string = 'x',
+  order: number = 1,
 ): Promise<{ latex: string; expression: string; success: boolean; error?: string }> {
   try {
     const Algebrite = await loadAlgebrite();
-    const normalized = expr.replace(/\^/g, '**');
-    const expression = Algebrite.run(`d(${normalized}, ${varName})`);
-    const latex = Algebrite.run(`printlatex(d(${normalized}, ${varName}))`);
-    return { latex: latex || expression, expression, success: true };
+    const safeOrder = Math.max(1, Math.floor(order));
+    // Normalize the user's input once (mathjs-style `^` → `**`).
+    // Subsequent iterations operate on Algebrite's own output, which is
+    // already in native Algebrite syntax, so no further normalization is
+    // needed.
+    let current = expr.replace(/\^/g, '**');
+    for (let i = 0; i < safeOrder; i++) {
+      current = Algebrite.run(`d(${current}, ${varName})`).toString();
+    }
+    const latex = Algebrite.run(`printlatex(${current})`).toString();
+    return { latex: latex || current, expression: current, success: true };
   } catch (err) {
     return {
       latex: '',

@@ -279,12 +279,12 @@ function CompactNumberInput({
       type="number"
       step="any"
       aria-label={ariaLabel}
-      value={Number.isFinite(value) ? Number(value.toFixed(3)) : 0}
+      value={Number.isFinite(value) ? value : 0}
       onChange={(e) => {
         const v = parseFloat(e.target.value);
         if (Number.isFinite(v)) onChange(v);
       }}
-      className="h-7 w-16 rounded border-border/60 bg-background/40 px-1.5 font-mono text-xs tabular-nums"
+      className="h-7 w-20 rounded border-border/60 bg-background/40 px-1.5 font-mono text-xs tabular-nums"
     />
   );
 }

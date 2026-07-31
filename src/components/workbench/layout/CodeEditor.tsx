@@ -27,7 +27,9 @@ import { tags as t } from '@lezer/highlight';
 import { math } from '@/lib/editor/mathLanguage';
 import { checkSyntax } from '@/lib/editor/syntaxCheck';
 
-const DEFAULT_FONT_PX = 13.5;
+// 字号默认值与 settingsStore.editorFontSize (14) 保持一致，
+// 避免组件本地默认与全局默认不一致导致首次渲染行号与内容字号不匹配。
+const DEFAULT_FONT_PX = 14;
 
 export interface CodeEditorProps {
   value: string;
@@ -95,7 +97,7 @@ export function CodeEditor({
     '&.cm-focused': { outline: 'none' },
     '.cm-scroller': {
       fontFamily: 'ui-monospace, "Geist Mono", "JetBrains Mono", monospace',
-      lineHeight: '1.65',
+      lineHeight: '1.5',
     },
     '.cm-gutters': {
       backgroundColor: 'transparent',
@@ -103,7 +105,10 @@ export function CodeEditor({
       color: 'var(--muted-foreground, #888)',
       opacity: '0.8',
       fontFamily: 'ui-monospace, "Geist Mono", "JetBrains Mono", monospace',
-      lineHeight: '1.65',
+      // 行号字号必须与正文一致，否则行号竖向高度与正文行高不匹配会导致
+      // 行号与内容竖向错位（越往下累积越明显）。
+      fontSize: `${fontSize}px`,
+      lineHeight: '1.5',
     },
     // VSCode-style active line highlight: subtle teal background on both
     // the line content and the gutter. 0.08 is visible but not distracting.
@@ -124,8 +129,11 @@ export function CodeEditor({
     },
     '.cm-content': {
       caretColor: 'var(--primary, #2dd4bf)',
-      lineHeight: '1.65',
-      padding: '0',
+      lineHeight: '1.5',
+      // 恢复 CodeMirror 默认顶部 padding（4px 0）。之前设为 '0' 去掉了
+      // 顶部 4px padding，导致行号槽与内容首行竖向基线错位。与 gutter
+      // 的默认 padding 对齐，避免第 1 行行号与内容竖向错位累积。
+      padding: '4px 0',
     },
     '.cm-cursor': { borderLeftColor: 'var(--primary, #2dd4bf)' },
     '.cm-selectionBackground, ::selection': { backgroundColor: 'rgba(45, 212, 191, 0.2)' },

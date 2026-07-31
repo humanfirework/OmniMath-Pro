@@ -63,6 +63,29 @@ export const DEFAULT_POLAR_THETA_RANGE: [number, number] = [0, Math.PI * 2];
 export const DEFAULT_PARAMETRIC_T_RANGE: [number, number] = [-10, 10];
 
 /**
+ * Canvas padding (screen pixels) shared between Plot2DCanvas and RegionZoom
+ * so the screen→world coordinate transform is identical in both. Previously
+ * each file hard-coded its own copy, which silently drifted.
+ */
+export const PLOT_PADDING = { left: 48, right: 16, top: 16, bottom: 32 } as const;
+
+/**
+ * Canvas 文字统一 UI 字体栈，与 globals.css 的 --font-sans 保持一致。
+ * 中文回退紧跟 Inter，避免界面文字与刻度标注之间出现字体 fallback 抖动。
+ * 所有 canvas 刻度、交点标签、坐标标注、轴标签均通过该常量组合 ctx.font。
+ * 导出供 Plot2DCanvas / FacetGrid 等共享，避免切换模式时刻度字体跳变。
+ */
+export const PLOT_FONT_FAMILY =
+  'Inter, "Noto Sans SC", "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", ui-sans-serif, system-ui, sans-serif';
+
+/**
+ * 数据读出（tooltip）用的等宽字体栈，与 globals.css 的 --font-mono 一致，
+ * 保证悬浮读数中的坐标数字按列对齐。
+ */
+export const PLOT_MONO_FAMILY =
+  '"JetBrains Mono", "SF Mono", "Fira Code", "Cascadia Code", "Roboto Mono", ui-monospace, SFMono-Regular, Menlo, Consolas, monospace';
+
+/**
  * A fully-resolved 2D curve description: which mode to sample in, the
  * expression(s), and the parameter range for non-cartesian modes.
  *

@@ -22,6 +22,8 @@ import {
   Minus,
   Square,
   X,
+  Maximize,
+  Minimize2,
 } from 'lucide-react';
 import { getCurrentWindow } from '@tauri-apps/api/window';
 import {
@@ -56,9 +58,45 @@ export function TitleBar() {
   // 初始渲染一律为 false（SSR / 浏览器），挂载后再判定，
   // 避免 hydration 不一致。
   const [isDesktop, setIsDesktop] = useState(false);
+  // 全屏状态：初始化读取当前窗口全屏态，并随窗口尺寸变化重新查询同步。
+  // 本版本 @tauri-apps/api 未提供 onFullscreenChange 便捷监听，但全屏切换
+  // 会改变窗口尺寸从而触发 onResized，故在 onResized 中重新查询 isFullscreen
+  // 即可正确同步图标（涵盖按钮触发 / 外部触发 / OS 手势等所有路径）。
+  const [isFullscreen, setIsFullscreen] = useState(false);
   useEffect(() => {
-    setIsDesktop(inTauri());
+    if (!inTauri()) return;
+    setIsDesktop(true);
+    const win = getCurrentWindow();
+    let unlisten: (() => void) | undefined;
+    const syncFullscreen = () => {
+      win.isFullscreen()
+        .then(setIsFullscreen)
+        .catch(() => {
+          // 读取失败时保持当前状态，不阻塞渲染
+        });
+    };
+    // 读取初始全屏态
+    syncFullscreen();
+    // 全屏切换会触发 resize，借 onResized 重新查询以同步图标
+    win
+      .onResized(() => {
+        syncFullscreen();
+      })
+      .then((fn) => {
+        unlisten = fn;
+      });
+    return () => {
+      if (unlisten) unlisten();
+    };
   }, []);
+
+  const handleToggleFullscreen = () => {
+    if (!inTauri()) return;
+    // 乐观更新：立即翻转图标，onResized 回调会用真实状态再校准一次
+    const next = !isFullscreen;
+    setIsFullscreen(next);
+    void getCurrentWindow().setFullscreen(next);
+  };
 
   const handleLocaleChange = (next: Locale) => {
     setLocale(next);
@@ -232,6 +270,25 @@ export function TitleBar() {
             >
               <Square className="size-3" />
             </button>
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <button
+                  type="button"
+                  onClick={handleToggleFullscreen}
+                  aria-label={isFullscreen ? 'Exit fullscreen' : 'Enter fullscreen'}
+                  className="grid place-items-center size-7 rounded-md text-muted-foreground hover:bg-accent hover:text-foreground transition-colors"
+                >
+                  {isFullscreen ? (
+                    <Minimize2 className="size-3.5" />
+                  ) : (
+                    <Maximize className="size-3.5" />
+                  )}
+                </button>
+              </TooltipTrigger>
+              <TooltipContent side="bottom">
+                {isFullscreen ? 'Exit fullscreen' : 'Fullscreen'}
+              </TooltipContent>
+            </Tooltip>
             <button
               type="button"
               onClick={() => void getCurrentWindow().close()}

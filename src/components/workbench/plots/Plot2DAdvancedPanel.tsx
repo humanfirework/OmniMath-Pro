@@ -492,13 +492,13 @@ function DerivativeTab({
     const p = visiblePlots[Math.min(idx, visiblePlots.length - 1)];
     if (!p) return;
     let cancelled = false;
-    symbolicDerivative(p.expression, 'x').then((res) => {
+    symbolicDerivative(p.expression, 'x', order).then((res) => {
       if (!cancelled) setSymbolic({ latex: res.latex, success: res.success });
     });
     return () => {
       cancelled = true;
     };
-  }, [enabled, visiblePlots, idx, scopeVersion]);
+  }, [enabled, visiblePlots, idx, scopeVersion, order]);
 
   useEffect(() => {
     onOverlaysChange({

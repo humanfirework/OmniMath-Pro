@@ -33,6 +33,7 @@ import {
   ChevronDown,
   ChevronRight,
   Maximize2,
+  AlertTriangle,
 } from 'lucide-react';
 import { useWorkbenchStore } from '@/lib/store/workbench';
 import { sampleSurface, trySampleSurface, type Surface3DData } from '@/lib/plots/plot3d';
@@ -61,6 +62,8 @@ import {
   DropdownMenuSeparator,
 } from '@/components/ui/dropdown-menu';
 import { usePlot3DExport } from './Plot3DExport';
+import { FormulaRenderer } from '@/components/workbench/FormulaRenderer';
+import { inputToLatex } from '@/lib/engine/latex';
 import { toast } from 'sonner';
 
 /* ----------------------- Dynamic load (no SSR) ------------------------ */
@@ -132,6 +135,16 @@ export function Plot3DPanel() {
   const [resetSignal, setResetSignal] = useState(0);
   const [expandOpen, setExpandOpen] = useState(false);
 
+  /* --------------------- Live LaTeX preview of the input ----------- */
+  // Convert the raw `z =` input to display LaTeX on every keystroke so the
+  // user sees the normalized math form (e.g. `2x` → `2 x`, `sqrt(x^2+y^2)`
+  // → `√(x²+y²)`) as they type. Empty input yields an empty string, which
+  // the preview row replaces with a placeholder.
+  const exprLatex = useMemo(
+    () => (exprInput.trim() ? inputToLatex(exprInput) : ''),
+    [exprInput],
+  );
+
   /* --------------------- Surfaces from store ----------------------- */
   // Filter for 3D-relevant plots only.
   const surface3dPlots = useMemo(
@@ -143,25 +156,67 @@ export function Plot3DPanel() {
   // resolution changes — NOT on every theme / wireframe / etc. toggle.
   // `scopeVersion` also re-samples when a slider / variable changes so
   // surfaces like `sin(a*x)*cos(y)` follow the Variables panel live.
+  //
+  // We keep both the sampled `data` and any `error` per plot so that a
+  // sampling failure (compile error, invalid range, etc.) or a "compiles
+  // but produces no geometry" result is surfaced to the user instead of
+  // silently collapsing to an empty canvas (root cause of 3D not showing).
   const scopeVersion = useScopeVersion();
-  const surfaces: Surface3DData[] = useMemo(() => {
+  const sampledSurfaces = useMemo(() => {
     void scopeVersion;
-    const out: Surface3DData[] = [];
+    const out: Array<{
+      plotId: string;
+      expression: string;
+      data: Surface3DData | null;
+      error: string | null;
+    }> = [];
     for (let i = 0; i < surface3dPlots.length; i++) {
       const p = surface3dPlots[i];
       if (!p.visible) continue;
-      const data = trySampleSurface(
+      const { data, error } = trySampleSurface(
         p.expression,
         p.xRange,
         p.yRange,
         resolution,
         p.color || PLOT_COLORS[i % PLOT_COLORS.length],
       );
-      if (data) out.push(data);
+      out.push({ plotId: p.id, expression: p.expression, data, error });
     }
     return out;
-     
   }, [surface3dPlots, resolution, scopeVersion]);
+
+  // Valid meshes handed to Plot3DScene. Sampling failures are excluded so
+  // the renderer never sees null geometry.
+  const surfaces: Surface3DData[] = useMemo(
+    () =>
+      sampledSurfaces
+        .map((s) => s.data)
+        .filter((d): d is Surface3DData => d !== null),
+    [sampledSurfaces],
+  );
+
+  // Human-readable error messages for display. Covers two failure modes:
+  //   1. Sampling threw (`error !== null`) — show the thrown message.
+  //   2. Sampling succeeded but produced 0 valid triangles
+  //      (`data.validTriangleCount === 0`) — typically wrong variable
+  //      names or an expression that is constant NaN over the domain.
+  // This also catches surfaces that were valid when added but later
+  // became invalid because a scope variable changed (scopeVersion bump).
+  const surfaceErrors = useMemo(() => {
+    const msgs: Array<{ plotId: string; expression: string; message: string }> = [];
+    for (const s of sampledSurfaces) {
+      if (s.error) {
+        msgs.push({ plotId: s.plotId, expression: s.expression, message: s.error });
+      } else if (s.data && s.data.validTriangleCount === 0) {
+        msgs.push({
+          plotId: s.plotId,
+          expression: s.expression,
+          message: '表达式未生成可绘制的几何（请确认变量为 x 和 y）',
+        });
+      }
+    }
+    return msgs;
+  }, [sampledSurfaces]);
 
   /* --------------------- Add surface ------------------------------- */
   const handleAddSurface = useCallback(() => {
@@ -171,7 +226,18 @@ export function Plot3DPanel() {
       return;
     }
     // Quick sanity check before adding — sample at low resolution.
-    const probe = trySampleSurface(expr, xRange, yRange, 8, '#2dd4bf');
+    const { data: probe, error: probeError } = trySampleSurface(
+      expr,
+      xRange,
+      yRange,
+      8,
+      '#2dd4bf',
+    );
+    if (probeError) {
+      // Surface the concrete error instead of a generic "无法求值".
+      toast.error(`表达式无法求值：${probeError}`);
+      return;
+    }
     if (!probe || probe.validTriangleCount === 0) {
       toast.error('表达式无法求值，请检查变量是否为 x 和 y');
       return;
@@ -191,7 +257,17 @@ export function Plot3DPanel() {
 
   const handleAddExample = useCallback(
     (expr: string) => {
-      const probe = trySampleSurface(expr, xRange, yRange, 8, '#2dd4bf');
+      const { data: probe, error: probeError } = trySampleSurface(
+        expr,
+        xRange,
+        yRange,
+        8,
+        '#2dd4bf',
+      );
+      if (probeError) {
+        toast.error(`示例表达式无法求值：${probeError}`);
+        return;
+      }
       if (!probe || probe.validTriangleCount === 0) {
         toast.error('示例表达式无法求值');
         return;
@@ -322,6 +398,28 @@ export function Plot3DPanel() {
               </TooltipTrigger>
               <TooltipContent side="bottom">导出 3D 场景为 PNG</TooltipContent>
             </Tooltip>
+          </div>
+
+          {/* ---------- Live LaTeX preview of the z = input ----------
+              Renders the normalized math form of whatever the user typed
+              (via inputToLatex) so they can confirm the parsing before
+              adding the surface. The container is horizontally scrollable
+              for long expressions and shows a placeholder when empty. */}
+          <div className="flex min-h-6 items-center gap-1.5 overflow-x-auto rounded-md border border-border/40 bg-background/40 px-2 py-0.5">
+            <span className="shrink-0 font-mono text-[10px] text-muted-foreground">
+              预览
+            </span>
+            {exprLatex ? (
+              <FormulaRenderer
+                latex={`z = ${exprLatex}`}
+                displayMode={false}
+                className="min-w-0 flex-1"
+              />
+            ) : (
+              <span className="shrink-0 text-[11px] italic text-muted-foreground/60">
+                输入表达式后将显示 LaTeX 预览，例如 z = sin(x)·cos(y)
+              </span>
+            )}
           </div>
 
           {/* ---------- Collapsible controls panel ---------- */}
@@ -577,7 +675,14 @@ export function Plot3DPanel() {
           }}
         >
           {surfaces.length === 0 ? (
-            <EmptyState3D />
+            /* If every visible surface failed to sample, show the concrete
+               errors instead of the generic empty state — otherwise the
+               user sees a blank canvas with no clue why (root cause 1/2). */
+            surfaceErrors.length > 0 ? (
+              <SurfaceErrorState errors={surfaceErrors} />
+            ) : (
+              <EmptyState3D />
+            )
           ) : expandOpen ? (
             /* Avoid double WebGL context while the expand dialog is open. */
             <div className="h-full w-full" />
@@ -606,6 +711,15 @@ export function Plot3DPanel() {
               <Maximize2 className="h-3.5 w-3.5" />
               <span className="hidden sm:inline">放大</span>
             </button>
+          )}
+
+          {/* Error overlay (top-left) — some surfaces rendered but at least
+              one failed (compile error, invalid range, or 0 triangles).
+              Shown inline rather than as a toast so it persists while the
+              broken surface stays in the list. Hidden while the expand
+              dialog is open to avoid duplicating it there. */}
+          {surfaces.length > 0 && surfaceErrors.length > 0 && !expandOpen && (
+            <SurfaceErrorOverlay errors={surfaceErrors} />
           )}
 
           {/* Hint overlay (bottom-left) when surfaces exist */}
@@ -747,6 +861,76 @@ function CompactNumberInput({
       }}
       className="h-6 w-14 rounded border-border/60 bg-background/40 px-1.5 font-mono text-[11px] tabular-nums"
     />
+  );
+}
+
+/* ------------------------------------------------------------------ */
+/*  Surface sampling errors                                           */
+/* ------------------------------------------------------------------ */
+
+interface SurfaceError {
+  plotId: string;
+  expression: string;
+  message: string;
+}
+
+/**
+ * Full-canvas replacement shown when every visible surface failed to
+ * sample (so there is nothing to render). Lists each broken expression
+ * with its concrete error message instead of a blank canvas.
+ */
+function SurfaceErrorState({ errors }: { errors: SurfaceError[] }) {
+  return (
+    <div className="absolute inset-0 flex flex-col items-center justify-center gap-3 p-6 text-center">
+      <div className="flex items-center gap-2 text-rose-500">
+        <AlertTriangle className="h-5 w-5" />
+        <span className="text-sm font-medium">3D 曲面采样失败</span>
+      </div>
+      <div className="flex w-full max-w-md flex-col gap-1.5">
+        {errors.map((e) => (
+          <div
+            key={e.plotId}
+            className="rounded-md border border-rose-500/40 bg-rose-500/10 px-2.5 py-1.5 text-left"
+          >
+            <div className="truncate font-mono text-[11px] text-rose-600 dark:text-rose-400">
+              {e.expression}
+            </div>
+            <div className="mt-0.5 break-words text-[11px] text-foreground/70">
+              {e.message}
+            </div>
+          </div>
+        ))}
+      </div>
+      <p className="max-w-xs text-[11px] text-muted-foreground">
+        请修正上方表达式后重新添加，或检查变量 / 范围设置。
+      </p>
+    </div>
+  );
+}
+
+/**
+ * Compact overlay shown when at least one surface failed but others are
+ * still rendering. Pinned to the top-left so it doesn't collide with the
+ * expand button (top-right).
+ */
+function SurfaceErrorOverlay({ errors }: { errors: SurfaceError[] }) {
+  return (
+    <div className="absolute left-2 top-2 z-20 flex max-w-xs flex-col gap-1 rounded-md border border-rose-500/50 bg-background/90 p-1.5 text-left shadow-lg backdrop-blur-sm">
+      <div className="flex items-center gap-1.5 text-[11px] font-medium text-rose-500">
+        <AlertTriangle className="h-3 w-3" />
+        <span>{errors.length} 个曲面采样失败</span>
+      </div>
+      {errors.map((e) => (
+        <div key={e.plotId} className="min-w-0">
+          <div className="truncate font-mono text-[10px] text-rose-600 dark:text-rose-400">
+            {e.expression}
+          </div>
+          <div className="break-words text-[10px] text-foreground/70">
+            {e.message}
+          </div>
+        </div>
+      ))}
+    </div>
   );
 }
 

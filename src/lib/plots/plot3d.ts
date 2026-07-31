@@ -10,7 +10,7 @@
  *   - Surface3DData            — mesh + metadata consumed by Plot3DScene
  *   - solidColorArray(n, hex)  — flat RGB Float32Array for solid mode
  *   - sampleSurface(...)       — sample z = f(x, y) into a mesh (throws)
- *   - trySampleSurface(...)    — safe wrapper → Surface3DData | null
+ *   - trySampleSurface(...)    — safe wrapper → { data: Surface3DData | null; error: string | null }
  *
  * Evaluation uses the shared configured mathjs instance and merges the
  * live user scope, so surfaces see console variables and slider changes
@@ -294,12 +294,18 @@ export function sampleSurface(
 }
 
 /**
- * Safe wrapper around `sampleSurface`. Returns the sampled mesh, or
- * `null` if the expression can't be compiled or sampling throws.
+ * Safe wrapper around `sampleSurface`. Returns `{ data, error }`:
+ *   - on success → `{ data: Surface3DData, error: null }`
+ *   - on failure (compile error / sampling throw) → `{ data: null, error: <message> }`
  *
- * Callers use `validTriangleCount === 0` on a non-null result to detect
- * expressions that compile but produce no plottable geometry (e.g.
- * wrong variable names).
+ * Previously this returned `Surface3DData | null` and silently swallowed
+ * the thrown error, which made sampling failures look like "no surfaces"
+ * and hid the real cause from the UI. The error string is now surfaced
+ * so Plot3DPanel can show a concrete message instead of an empty canvas.
+ *
+ * Callers use `data.validTriangleCount === 0` (on a non-null `data`) to
+ * detect expressions that compile but produce no plottable geometry
+ * (e.g. wrong variable names).
  */
 export function trySampleSurface(
   expr: string,
@@ -307,11 +313,15 @@ export function trySampleSurface(
   yRange: [number, number],
   resolution = 60,
   color = '#2dd4bf',
-): Surface3DData | null {
+): { data: Surface3DData | null; error: string | null } {
   try {
-    return sampleSurface(expr, xRange, yRange, resolution, color);
-  } catch {
-    return null;
+    const data = sampleSurface(expr, xRange, yRange, resolution, color);
+    return { data, error: null };
+  } catch (err) {
+    return {
+      data: null,
+      error: err instanceof Error ? err.message : String(err),
+    };
   }
 }
 

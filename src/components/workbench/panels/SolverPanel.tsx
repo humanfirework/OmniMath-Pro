@@ -83,6 +83,7 @@ import {
   symbolicDefiniteIntegral,
   symbolicLimit,
 } from '@/lib/engine/symbolic';
+import { inputToLatex } from '@/lib/engine/latex';
 import { t } from '@/lib/i18n';
 import { cn } from '@/lib/utils';
 import { toast } from 'sonner';
@@ -165,6 +166,14 @@ function EquationSolverSection() {
     }
   };
 
+  // 实时预览：方程含 '=' 时分别转换两侧，使预览呈现 lhs = rhs。
+  const equationPreviewLatex = (() => {
+    if (!equation.trim()) return '';
+    const eqIdx = equation.indexOf('=');
+    if (eqIdx === -1) return inputToLatex(equation);
+    return `${inputToLatex(equation.slice(0, eqIdx))} = ${inputToLatex(equation.slice(eqIdx + 1))}`;
+  })();
+
   return (
     <div className="space-y-2.5">
       {/* Equation input */}
@@ -180,6 +189,13 @@ function EquationSolverSection() {
           }}
         />
       </div>
+
+      {/* 实时公式预览 */}
+      {equation.trim() && equationPreviewLatex && (
+        <div className="rounded-md border border-border/50 bg-muted/30 px-3 py-2 overflow-x-auto">
+          <FormulaRenderer latex={equationPreviewLatex} displayMode={false} className="text-sm" />
+        </div>
+      )}
 
       {/* Variable + range */}
       <div className="grid grid-cols-3 gap-1.5">
@@ -588,9 +604,33 @@ function CalculusSection() {
   const [upper, setUpper] = useState(1);
   const [point, setPoint] = useState(0);
   const [order, setOrder] = useState(5);
+  const [derivOrder, setDerivOrder] = useState<1 | 2 | 3>(1);
   const [result, setResult] = useState<CalcResult | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [working, setWorking] = useState(false);
+
+  // 实时公式预览：把表达式转 LaTeX，并按当前模式包装成有意义的数学记号。
+  const previewLatex = useMemo(() => {
+    const exprLatex = inputToLatex(expr);
+    if (!exprLatex) return '';
+    if (mode === 'deriv') {
+      return derivOrder === 1
+        ? `\\frac{d}{d${varName}} \\left[ ${exprLatex} \\right]`
+        : `\\frac{d^{${derivOrder}}}{d${varName}^{${derivOrder}}} \\left[ ${exprLatex} \\right]`;
+    }
+    if (mode === 'integral') {
+      return `\\int_{${lower}}^{${upper}} ${exprLatex} \\, d${varName}`;
+    }
+    if (mode === 'limit') {
+      const ptStr = Number.isFinite(point)
+        ? String(point)
+        : point > 0
+          ? '\\infty'
+          : '-\\infty';
+      return `\\lim_{${varName} \\to ${ptStr}} ${exprLatex}`;
+    }
+    return exprLatex;
+  }, [expr, mode, varName, derivOrder, lower, upper, point]);
 
   // Update example when mode changes
   const switchMode = (m: typeof mode) => {
@@ -606,7 +646,7 @@ function CalculusSection() {
     setResult(null);
     try {
       // 复用 engine 模块（求导法则标注 / 积分提示与数值回退 / 符号极限）
-      const engineResult = await computeCalculus(mode, expr, varName, { lower, upper, point, order });
+      const engineResult = await computeCalculus(mode, expr, varName, { lower, upper, point, order, derivOrder });
       if (engineResult.error) {
         setError(engineResult.error);
         return;
@@ -664,6 +704,13 @@ function CalculusSection() {
           }}
         />
       </div>
+
+      {/* 实时公式预览 */}
+      {expr.trim() && previewLatex && (
+        <div className="rounded-md border border-border/50 bg-muted/30 px-3 py-2 overflow-x-auto">
+          <FormulaRenderer latex={previewLatex} displayMode={false} className="text-sm" />
+        </div>
+      )}
 
       {/* Variable + mode-specific inputs */}
       <div className="grid grid-cols-2 gap-1.5">
@@ -741,6 +788,28 @@ function CalculusSection() {
           </div>
         )}
       </div>
+
+      {/* 求导阶数切换器（仅求导模式显示） */}
+      {mode === 'deriv' && (
+        <div className="flex items-center justify-between gap-2">
+          <span className="text-[10.5px] text-muted-foreground">求导阶数</span>
+          <ToggleGroup
+            type="single"
+            value={String(derivOrder)}
+            onValueChange={(v) => {
+              const n = Number(v);
+              if (n === 1 || n === 2 || n === 3) setDerivOrder(n);
+            }}
+            variant="outline"
+            size="sm"
+            className="h-6"
+          >
+            <ToggleGroupItem value="1" className="h-6 px-2 text-[11px]">1 阶</ToggleGroupItem>
+            <ToggleGroupItem value="2" className="h-6 px-2 text-[11px]">2 阶</ToggleGroupItem>
+            <ToggleGroupItem value="3" className="h-6 px-2 text-[11px]">3 阶</ToggleGroupItem>
+          </ToggleGroup>
+        </div>
+      )}
 
       <Button onClick={handleCompute} disabled={working} className="w-full h-8 text-[11.5px] gap-1.5" size="sm">
         <Calculator className="size-3.5" />
@@ -967,14 +1036,19 @@ async function computeCalculus(
   mode: 'deriv' | 'integral' | 'limit' | 'taylor',
   expr: string,
   varName: string,
-  opts: { lower: number; upper: number; point: number; order: number },
+  opts: { lower: number; upper: number; point: number; order: number; derivOrder: number },
 ): Promise<CalcResult> {
   try {
     if (mode === 'deriv') {
       // Task 4.1 — 分步求导并标注所用法则（幂/乘积/商/链式/和差…）
-      const { resultLatex, steps } = differentiateWithSteps(expr, varName);
+      // 支持高阶求导：传入 derivOrder 循环求导。
+      const ord = Math.max(1, Math.min(3, Math.floor(opts.derivOrder)));
+      const { resultLatex, steps } = differentiateWithSteps(expr, varName, undefined, ord);
+      const lhs = ord === 1
+        ? `\\frac{d}{d${varName}} \\left[ ${expr} \\right]`
+        : `\\frac{d^{${ord}}}{d${varName}^{${ord}}} \\left[ ${expr} \\right]`;
       return {
-        latex: `\\frac{d}{d${varName}} \\left[ ${expr} \\right] = ${resultLatex}`,
+        latex: `${lhs} = ${resultLatex}`,
         steps,
       };
     }
@@ -1208,6 +1282,13 @@ function NumericRootSection() {
           className="h-8 text-[12px] font-mono mt-0.5"
         />
       </div>
+
+      {/* 实时公式预览 */}
+      {expr.trim() && (
+        <div className="rounded-md border border-border/50 bg-muted/30 px-3 py-2 overflow-x-auto">
+          <FormulaRenderer latex={`y = ${inputToLatex(expr)}`} displayMode={false} className="text-sm" />
+        </div>
+      )}
 
       <div className="grid grid-cols-2 gap-1.5">
         <div>

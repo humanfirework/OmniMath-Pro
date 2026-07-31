@@ -272,6 +272,12 @@ export interface TranslationDict {
   formulasDescription: string;
   formulasExampleInput: string;
   formulasCustomEmpty: string;
+  formulasCategoryManage: string;
+  formulasCategoryAdd: string;
+  formulasCategoryName: string;
+  formulasCategoryColor: string;
+  formulasCategoryEmpty: string;
+  formulasCategoryDeleteConfirm: string;
 
   /* ---------------- Equation solver ---------------- */
   solverTitle: string;
@@ -1016,6 +1022,12 @@ const zhCN: TranslationDict = {
   formulasDescription: "描述",
   formulasExampleInput: "示例输入",
   formulasCustomEmpty: "暂无自定义公式",
+  formulasCategoryManage: "分类管理",
+  formulasCategoryAdd: "新增分类",
+  formulasCategoryName: "分类名称",
+  formulasCategoryColor: "颜色",
+  formulasCategoryEmpty: "暂无自定义分类",
+  formulasCategoryDeleteConfirm: "删除该分类后，其下公式将归入「自定义」。确认删除？",
 
   /* Solver */
   solverTitle: "方程求解",
@@ -1753,6 +1765,13 @@ const en: TranslationDict = {
   formulasDescription: "Description",
   formulasExampleInput: "Example input",
   formulasCustomEmpty: "No custom formulas",
+  formulasCategoryManage: "Manage categories",
+  formulasCategoryAdd: "Add category",
+  formulasCategoryName: "Category name",
+  formulasCategoryColor: "Color",
+  formulasCategoryEmpty: "No custom categories",
+  formulasCategoryDeleteConfirm:
+    "Formulas in this category will be moved to Custom. Delete this category?",
 
   /* Solver */
   solverTitle: "Equation Solver",
