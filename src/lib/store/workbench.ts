@@ -109,8 +109,9 @@ interface WorkbenchState {
   togglePlotVisibility: (id: string) => void;
   clearPlots: () => void;
   updatePlot: (id: string, patch: Partial<PlotConfig>) => void;
-  /** 合并写入某个 2D 自由参数的滑块配置（value/min/max/step 可部分更新）。 */
-  setPlotParam: (name: string, patch: Partial<PlotParamConfig>) => void;
+  /** 合并写入某个 2D 自由参数的滑块配置（value/min/max/step 可部分更新）。
+   *  传入 patch === undefined 时清除该参数的持久化记录（下次出现时用默认）。 */
+  setPlotParam: (name: string, patch: Partial<PlotParamConfig> | undefined) => void;
 
   setTheme: (theme: Theme) => void;
   toggleTheme: () => void;
@@ -356,6 +357,13 @@ export const useWorkbenchStore = create<WorkbenchState>((set, get) => ({
   },
   setPlotParam: (name, patch) => {
     set((s) => {
+      if (patch === undefined) {
+        // Task 9.C: 清除该参数的持久化 patch，下次出现时走默认值路径。
+        if (!(name in s.plotParams)) return s;
+        const next = { ...s.plotParams };
+        delete next[name];
+        return { plotParams: next };
+      }
       // 未出现过的参数先给一份默认配置，再套用 patch。
       const prev: PlotParamConfig = s.plotParams[name] ?? {
         value: 1,

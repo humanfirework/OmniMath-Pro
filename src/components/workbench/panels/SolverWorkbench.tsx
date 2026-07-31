@@ -349,7 +349,7 @@ function EquationSection() {
             : `${inputToLatex(equation.slice(0, eqIdx))} = ${inputToLatex(equation.slice(eqIdx + 1))}`;
           return latex ? (
             <div className="rounded-md border border-border/50 bg-muted/30 px-3 py-2 overflow-x-auto">
-              <FormulaRenderer latex={latex} displayMode={false} className="text-sm" />
+              <FormulaRenderer latex={latex} displayMode fitToContainer={true} className="text-sm" />
             </div>
           ) : null;
         })()}
@@ -439,11 +439,11 @@ function EquationSection() {
               )}
               {result.kind === 'symbolic' && result.symbolicLatex && (
                 <div className="mb-2 overflow-x-auto">
-                  <FormulaRenderer latex={`${varName} \\in ${result.symbolicLatex}`} displayMode />
+                  <FormulaRenderer latex={`${varName} \\in ${result.symbolicLatex}`} displayMode fitToContainer={true} />
                 </div>
               )}
-              <div className="overflow-x-auto">
-                <FormulaRenderer latex={result.latex} displayMode />
+              <div className="overflow-x-auto min-h-max">
+                <FormulaRenderer latex={result.latex} displayMode fitToContainer={true} />
               </div>
               {result.roots.length > 0 && (
                 <div className="mt-2 grid grid-cols-1 sm:grid-cols-2 gap-1">
@@ -586,8 +586,8 @@ function SystemSection() {
                     rank(A) = {solution.rankA}，rank([A|b]) = {solution.rankAug}，n = {solution.nUnknowns}
                   </span>
                 </div>
-                <div className="overflow-x-auto">
-                  <FormulaRenderer latex={solution.latex} displayMode />
+                <div className="overflow-x-auto min-h-max">
+                  <FormulaRenderer latex={solution.latex} displayMode fitToContainer={true} />
                 </div>
                 {solution.kind === 'unique' && solution.vector && varList.length > 0 && (
                   <div className="mt-2 grid grid-cols-2 sm:grid-cols-3 gap-1">
@@ -709,7 +709,7 @@ function DerivativeSection() {
         {/* 实时公式预览 */}
         {expr.trim() && previewLatex && (
           <div className="rounded-md border border-border/50 bg-muted/30 px-3 py-2 overflow-x-auto">
-            <FormulaRenderer latex={previewLatex} displayMode={false} className="text-sm" />
+            <FormulaRenderer latex={previewLatex} displayMode fitToContainer={true} className="text-sm" />
           </div>
         )}
         <div className="grid grid-cols-2 gap-2">
@@ -764,8 +764,8 @@ function DerivativeSection() {
                 label="求导结果"
                 onSendToPlot={() => sendToPlot([expr, result.resultString])}
               />
-              <div className="overflow-x-auto">
-                <FormulaRenderer latex={result.latex} displayMode />
+              <div className="overflow-x-auto min-h-max">
+                <FormulaRenderer latex={result.latex} displayMode fitToContainer={true} />
               </div>
               <div className="mt-1 text-[10.5px] font-mono text-muted-foreground break-all">
                 <span className="text-foreground/60">f′({varName}) = </span>
@@ -869,7 +869,7 @@ function IntegralSection() {
             : `\\int ${exprLatex} \\, d${varName}`;
           return (
             <div className="rounded-md border border-border/50 bg-muted/30 px-3 py-2 overflow-x-auto">
-              <FormulaRenderer latex={latex} displayMode={false} className="text-sm" />
+              <FormulaRenderer latex={latex} displayMode fitToContainer={true} className="text-sm" />
             </div>
           );
         })()}
@@ -945,7 +945,7 @@ function IntegralSection() {
                 label="积分结果"
                 onSendToPlot={() => sendToPlot([expr])}
               />
-              <div className="overflow-x-auto">
+              <div className="overflow-x-auto min-h-max">
                 <FormulaRenderer
                   latex={
                     definite
@@ -953,6 +953,7 @@ function IntegralSection() {
                       : `\\int ${expr} \\, d${varName} = ${result.latex}`
                   }
                   displayMode
+                  fitToContainer={true}
                 />
               </div>
               {result.numerical !== undefined && (
@@ -1068,7 +1069,7 @@ function LimitSection() {
           const latex = `\\lim_{${varName} \\to ${pointDisplay}} ${exprLatex}`;
           return (
             <div className="rounded-md border border-border/50 bg-muted/30 px-3 py-2 overflow-x-auto">
-              <FormulaRenderer latex={latex} displayMode={false} className="text-sm" />
+              <FormulaRenderer latex={latex} displayMode fitToContainer={true} className="text-sm" />
             </div>
           );
         })()}
@@ -1115,10 +1116,11 @@ function LimitSection() {
                 label="极限结果"
                 onSendToPlot={() => sendToPlot([expr])}
               />
-              <div className="overflow-x-auto">
+              <div className="overflow-x-auto min-h-max">
                 <FormulaRenderer
                   latex={`\\lim_{${varName} \\to ${pointDisplay}} ${expr} = ${result.latex}`}
                   displayMode
+                  fitToContainer={true}
                 />
               </div>
               {result.numerical !== undefined && (

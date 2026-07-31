@@ -48,6 +48,10 @@ export interface PlotToolbarProps {
   onExportPNG: () => void;
   onCopyLatex: () => void;
   onExpand?: () => void;
+  /** Task 8.E: 当前是否显示画布内图例，用于 Eye/EyeOff 按钮高亮与图标。 */
+  showLegend?: boolean;
+  /** Task 8.E: 点击图例切换按钮时触发。 */
+  onToggleLegend?: () => void;
   /** 当前可见 2D 表达式中的自由参数数量；>0 时在工具栏显示一个可点击的
    *  圆角徽标，点击切换参数滑块面板的展开/折叠。 */
   freeParamCount?: number;
@@ -70,6 +74,8 @@ export function PlotToolbar({
   onExportPNG,
   onCopyLatex,
   onExpand,
+  showLegend = true,
+  onToggleLegend,
   freeParamCount = 0,
   slidersCollapsed = false,
   onToggleSliders,
@@ -206,8 +212,33 @@ export function PlotToolbar({
             </AnimatePresence>
           </div>
 
-          {/* Right side: expand + export */}
+          {/* Right side: legend toggle + expand + export */}
           <div className="ml-auto flex items-center gap-0.5">
+            {/* Task 8.E: In-canvas legend Eye/EyeOff toggle */}
+            {plots.length > 0 && (
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    className={
+                      'h-8 w-8 transition-colors ' +
+                      (showLegend
+                        ? 'text-primary hover:bg-primary/10 hover:text-primary'
+                        : 'text-muted-foreground hover:text-foreground')
+                    }
+                    onClick={onToggleLegend}
+                    aria-label={showLegend ? '隐藏画布内图例' : '显示画布内图例'}
+                    aria-pressed={showLegend}
+                  >
+                    {showLegend ? <Eye className="h-4 w-4" /> : <EyeOff className="h-4 w-4" />}
+                  </Button>
+                </TooltipTrigger>
+                <TooltipContent side="bottom">
+                  {showLegend ? '隐藏画布内图例' : '显示画布内图例'}
+                </TooltipContent>
+              </Tooltip>
+            )}
             {onExpand && plots.length > 0 && (
               <Tooltip>
                 <TooltipTrigger asChild>

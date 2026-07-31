@@ -69,7 +69,7 @@ export function MatrixNodeView({ value, className }: MatrixNodeViewProps) {
   const cellPad = cols > 6 ? 'px-0.5 py-0' : 'px-1 py-0.5';
 
   return (
-    <div className={cn('w-full overflow-x-auto scrollbar-none', className)}>
+    <div className={cn('w-full overflow-x-auto scrollbar-none formula-card-glow', className)}>
       <table
         className="mx-auto border-collapse"
         style={{ fontSize, fontFamily: 'var(--font-mono, ui-monospace, monospace)' }}

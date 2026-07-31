@@ -27,6 +27,10 @@ import {
   Download,
   Upload,
   Trash2,
+  ClipboardList,
+  Sparkles,
+  ZoomIn,
+  ChevronDown,
 } from 'lucide-react';
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs';
 import { Button } from '@/components/ui/button';
@@ -45,6 +49,18 @@ import {
   TooltipContent,
   TooltipTrigger,
 } from '@/components/ui/tooltip';
+import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from '@/components/ui/popover';
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu';
+import { parseNumericInput } from '@/lib/engine/dataInputParser';
 import { FormulaRenderer } from '@/components/workbench/FormulaRenderer';
 import { useWorkbenchStore } from '@/lib/store/workbench';
 import { math } from '@/lib/engine/mathInstance';
@@ -194,6 +210,56 @@ function fmt(v: number, digits = 6): string {
 }
 
 /* ================================================================== *
+ * Task 10a/10b — Preset dataset generators
+ * ================================================================== */
+
+/** Box-Muller 标准正态 N(0,1) 采样 */
+function boxMuller(): number {
+  let u = 0, v = 0;
+  while (u === 0) u = Math.random();
+  while (v === 0) v = Math.random();
+  return Math.sqrt(-2 * Math.log(u)) * Math.cos(2 * Math.PI * v);
+}
+
+function normalSample(n: number, mu = 0, sigma = 1): number[] {
+  const arr: number[] = [];
+  for (let i = 0; i < n; i++) arr.push(mu + sigma * boxMuller());
+  return arr;
+}
+
+function trimodalSample(nPerMode = 20): number[] {
+  const arr: number[] = [];
+  for (let i = 0; i < nPerMode; i++) arr.push(60 + boxMuller() * 2.5);
+  for (let i = 0; i < nPerMode; i++) arr.push(75 + boxMuller() * 2.5);
+  for (let i = 0; i < nPerMode; i++) arr.push(90 + boxMuller() * 2.5);
+  return arr;
+}
+
+function diceSample(n = 200): number[] {
+  const arr: number[] = [];
+  for (let i = 0; i < n; i++) arr.push(1 + Math.floor(Math.random() * 6));
+  return arr;
+}
+
+type PresetKey = 'height' | 'exam' | 'dice' | 'normal';
+
+function generatePreset(key: PresetKey): number[] {
+  switch (key) {
+    case 'height': return normalSample(100, 170, 7);
+    case 'exam': return trimodalSample(20);
+    case 'dice': return diceSample(200);
+    case 'normal': return normalSample(200, 0, 1);
+  }
+}
+
+const PRESET_LABELS: Record<PresetKey, string> = {
+  height: '身高数据 (N(170,7²), 100)',
+  exam: '考试成绩 (trimodal 60/75/90, 60)',
+  dice: '掷骰子模拟 (1-6 均匀, 200)',
+  normal: '正态分布样本 (N(0,1), 200)',
+};
+
+/* ================================================================== *
  * Dataset storage utilities (Task 10)
  * ================================================================== */
 const DATASET_STORAGE_KEY = 'omnimath-stat-datasets';
@@ -294,9 +360,18 @@ function ChartEmpty({ label }: { label: string }) {
   );
 }
 
-function HistogramChart({ data }: { data: number[] }) {
+interface HistogramChartProps {
+  data: number[];
+  zoomed?: boolean;
+}
+
+const MIN_BAR_WIDTH = 28;
+
+function HistogramChart({ data, zoomed = false }: HistogramChartProps) {
   const [hover, setHover] = useState<number | null>(null);
   const n = data.length;
+  const containerRef = useRef<HTMLDivElement>(null);
+
   if (n < 2) return <ChartEmpty label="需要至少 2 个数据点" />;
   const min = Math.min(...data);
   const max = Math.max(...data);
@@ -311,64 +386,105 @@ function HistogramChart({ data }: { data: number[] }) {
     bins[idx]++;
   }
   const maxFreq = Math.max(...bins, 1);
-  const plotW = CHART_W - CHART_PAD.l - CHART_PAD.r;
-  const plotH = CHART_H - CHART_PAD.t - CHART_PAD.b;
+  const yCeil = zoomed ? Math.ceil(maxFreq * 1.15) : maxFreq;
+  const ch = zoomed ? 280 : 200;
+  const contentW = Math.max(CHART_W, k * MIN_BAR_WIDTH + CHART_PAD.l + CHART_PAD.r);
+  const plotW = contentW - CHART_PAD.l - CHART_PAD.r;
+  const plotH = ch - CHART_PAD.t - CHART_PAD.b;
   const barW = plotW / k;
-  const yScale = (f: number) => CHART_PAD.t + plotH - (f / maxFreq) * plotH;
+  const yScale = (f: number) => CHART_PAD.t + plotH - (f / yCeil) * plotH;
+  const showTopLabels = k <= 15;
 
   return (
-    <svg viewBox={`0 0 ${CHART_W} ${CHART_H}`} className="w-full" style={{ height: 200 }}>
-      {/* y-axis ticks */}
-      {[0, 0.5, 1].map((t) => {
-        const y = CHART_PAD.t + plotH - t * plotH;
-        return (
-          <g key={t}>
-            <line x1={CHART_PAD.l} y1={y} x2={CHART_W - CHART_PAD.r} y2={y} stroke="currentColor" strokeOpacity={0.08} />
-            <text x={CHART_PAD.l - 4} y={y + 3} textAnchor="end" fontSize={8} fill="currentColor" opacity={0.55}>
-              {Math.round(t * maxFreq)}
-            </text>
-          </g>
-        );
-      })}
-      {/* bars */}
-      {bins.map((f, i) => {
-        const x = CHART_PAD.l + i * barW;
-        const y = yScale(f);
-        const h = CHART_PAD.t + plotH - y;
-        const lo = min + i * binWidth;
-        const hi = i === k - 1 ? max : min + (i + 1) * binWidth;
-        return (
-          <g key={i} onMouseEnter={() => setHover(i)} onMouseLeave={() => setHover(null)}>
-            <rect
-              x={x + 1}
-              y={y}
-              width={Math.max(1, barW - 2)}
-              height={Math.max(0, h)}
-              fill={hover === i ? '#2dd4bf' : '#2dd4bf'}
-              fillOpacity={hover === i ? 0.95 : 0.65}
-              rx={1}
-            />
-            {/* x-axis labels (every other bin to avoid crowding) */}
-            {i % Math.ceil(k / 6) === 0 && (
-              <text x={x + barW / 2} y={CHART_H - CHART_PAD.b + 12} textAnchor="middle" fontSize={8} fill="currentColor" opacity={0.55}>
-                {fmt(lo, 3)}
+    <div
+      ref={containerRef}
+      className="relative w-full"
+      style={{
+        overflowX: k * MIN_BAR_WIDTH > CHART_W - CHART_PAD.l - CHART_PAD.r ? 'auto' : 'visible',
+        paddingBottom: 2,
+      }}
+    >
+      <svg
+        viewBox={`0 0 ${contentW} ${ch}`}
+        className="relative"
+        style={{ width: contentW, height: ch, minWidth: '100%' }}
+      >
+        {[0, 0.5, 1].map((t) => {
+          const y = CHART_PAD.t + plotH - t * plotH;
+          const yVal = Math.round(t * yCeil);
+          return (
+            <g key={t}>
+              <line x1={CHART_PAD.l} y1={y} x2={contentW - CHART_PAD.r} y2={y} stroke="currentColor" strokeOpacity={0.08} />
+              <text x={CHART_PAD.l - 4} y={y + 3} textAnchor="end" fontSize={8} fill="currentColor" opacity={0.55}>
+                {yVal}
               </text>
-            )}
-            {hover === i && (
-              <g>
-                <rect x={x + barW / 2 - 36} y={y - 26} width={72} height={20} rx={3} fill="#0f172a" opacity={0.92} />
-                <text x={x + barW / 2} y={y - 12} textAnchor="middle" fontSize={8.5} fill="#fff">
-                  {`[${fmt(lo, 2)}, ${fmt(hi, 2)}): ${f}`}
+            </g>
+          );
+        })}
+        {bins.map((f, i) => {
+          const x = CHART_PAD.l + i * barW;
+          const y = yScale(f);
+          const h = CHART_PAD.t + plotH - y;
+          const lo = min + i * binWidth;
+          const hi = i === k - 1 ? max : min + (i + 1) * binWidth;
+          const pct = ((f / n) * 100).toFixed(1);
+          const tip = `[${fmt(lo, 2)}, ${fmt(hi, 2)}): ${f} (${pct}%)`;
+          return (
+            <g key={i} onMouseEnter={() => setHover(i)} onMouseLeave={() => setHover(null)}>
+              <title>{tip}</title>
+              <rect
+                x={x + 1}
+                y={y}
+                width={Math.max(1, barW - 2)}
+                height={Math.max(0, h)}
+                fill="#2dd4bf"
+                fillOpacity={hover === i ? 0.95 : 0.65}
+                rx={1}
+              />
+              {showTopLabels && f > 0 && (
+                <text
+                  x={x + barW / 2}
+                  y={y - 3}
+                  textAnchor="middle"
+                  fontSize={7.5}
+                  fill="currentColor"
+                  opacity={0.85}
+                >
+                  {`${f} (${pct}%)`}
                 </text>
-              </g>
-            )}
-          </g>
-        );
-      })}
-      {/* axes */}
-      <line x1={CHART_PAD.l} y1={CHART_PAD.t} x2={CHART_PAD.l} y2={CHART_PAD.t + plotH} stroke="currentColor" strokeOpacity={0.3} />
-      <line x1={CHART_PAD.l} y1={CHART_PAD.t + plotH} x2={CHART_W - CHART_PAD.r} y2={CHART_PAD.t + plotH} stroke="currentColor" strokeOpacity={0.3} />
-    </svg>
+              )}
+              {i % Math.ceil(k / 6) === 0 && (
+                <text x={x + barW / 2} y={ch - CHART_PAD.b + 12} textAnchor="middle" fontSize={8} fill="currentColor" opacity={0.55}>
+                  {fmt(lo, 3)}
+                </text>
+              )}
+              {hover === i && !showTopLabels && (
+                <g>
+                  <rect x={x + barW / 2 - 48} y={y - 28} width={96} height={22} rx={3} fill="#0f172a" opacity={0.92} />
+                  <text x={x + barW / 2} y={y - 13} textAnchor="middle" fontSize={8.5} fill="#fff">
+                    {`[${fmt(lo, 2)}, ${fmt(hi, 2)}): ${f} (${pct}%)`}
+                  </text>
+                </g>
+              )}
+            </g>
+          );
+        })}
+        <line x1={CHART_PAD.l} y1={CHART_PAD.t} x2={CHART_PAD.l} y2={CHART_PAD.t + plotH} stroke="currentColor" strokeOpacity={0.3} />
+        <line x1={CHART_PAD.l} y1={CHART_PAD.t + plotH} x2={contentW - CHART_PAD.r} y2={CHART_PAD.t + plotH} stroke="currentColor" strokeOpacity={0.3} />
+      </svg>
+      {k * MIN_BAR_WIDTH > CHART_W - CHART_PAD.l - CHART_PAD.r && (
+        <div
+          aria-hidden
+          className="pointer-events-none absolute top-0 right-0 h-full"
+          style={{
+            width: 24,
+            background:
+              'linear-gradient(to right, rgba(255,255,255,0) 0%, var(--background, #fff) 100%)',
+            opacity: 0.85,
+          }}
+        />
+      )}
+    </div>
   );
 }
 
@@ -683,15 +799,74 @@ function computeDescriptive(data: number[]): DescResult | null {
   };
 }
 
+interface FiveNumSummary {
+  min: number;
+  q1: number;
+  median: number;
+  q3: number;
+  max: number;
+  outliers: number[];
+}
+
+function fiveNumSummary(data: number[]): FiveNumSummary | null {
+  if (data.length < 2) return null;
+  const sorted = [...data].sort((a, b) => a - b);
+  const q1 = quantileSorted(sorted, 0.25);
+  const median = quantileSorted(sorted, 0.5);
+  const q3 = quantileSorted(sorted, 0.75);
+  const iqr = q3 - q1;
+  const loFence = q1 - 1.5 * iqr;
+  const hiFence = q3 + 1.5 * iqr;
+  const outliers = sorted.filter((v) => v < loFence || v > hiFence);
+  return {
+    min: Math.min(...sorted),
+    q1,
+    median,
+    q3,
+    max: Math.max(...sorted),
+    outliers,
+  };
+}
+
+interface DistSummary {
+  skewLabel: string;
+  cvLabel: string;
+  jbLabel: string;
+}
+
+function computeDistSummary(r: DescResult): DistSummary {
+  const skew = (r.mean - r.median) / (r.std || 1);
+  let skewLabel = '近似对称';
+  if (skew > 0.2) skewLabel = '正偏态 (均值>中位数, 右尾较长)';
+  else if (skew < -0.2) skewLabel = '负偏态 (均值<中位数, 左尾较长)';
+
+  let cvLabel = '—';
+  if (Math.abs(r.mean) > 1e-12) {
+    const cv = r.std / Math.abs(r.mean);
+    if (cv < 0.1) cvLabel = '高度集中 (CV < 0.1)';
+    else if (cv <= 0.3) cvLabel = `中等变异 (CV=${fmt(cv, 3)})`;
+    else cvLabel = `离散度较大 (CV=${fmt(cv, 3)})`;
+  }
+
+  const n = r.count;
+  const s = r.skewness;
+  const k = r.kurtosis; // excess kurtosis
+  const jb = n > 0 ? (s * s) / 6 + (k * k) / 24 : 0;
+  const jbLabel = jb < 6 ? `近似正态 (JB=${fmt(jb, 3)} < 6)` : `与正态显著偏离 (JB=${fmt(jb, 3)} ≥ 6)`;
+
+  return { skewLabel, cvLabel, jbLabel };
+}
+
 function DescriptiveStatsTab() {
   const [input, setInput] = useState('1.2, 2.3, 3.1, 4.5, 2.8, 3.7, 5.1, 2.9, 3.4, 4.0');
-  const data = useMemo(() => parseData(input), [input]);
+  const parsed = useMemo(() => parseNumericInput(input), [input]);
+  const data = parsed.numbers;
+  const invalidItems = parsed.invalid;
   const result = useMemo(() => computeDescriptive(data), [data]);
 
-  // Task 9: in-panel chart toggle
   const [chartType, setChartType] = useState<ChartType | null>(null);
+  const [histZoomed, setHistZoomed] = useState(false);
 
-  // Task 10: dataset recording
   const [datasets, setDatasets] = useState<SavedDataset[]>([]);
   const [showDatasets, setShowDatasets] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -749,6 +924,29 @@ function DescriptiveStatsTab() {
     e.target.value = '';
   };
 
+  const handleParsePaste = () => {
+    const r = parseNumericInput(input);
+    if (r.invalid.length > 0) {
+      toast.warning(`识别 ${r.numbers.length} 个数字，跳过 ${r.invalid.length} 项非法`);
+    } else {
+      toast.success(`识别 ${r.numbers.length} 个数字`);
+    }
+    if (r.numbers.length > 0) {
+      setInput(r.numbers.join(', '));
+    }
+  };
+
+  const handlePreset = (key: PresetKey) => {
+    const ds = generatePreset(key);
+    setInput(ds.join(', '));
+    toast.success(`已载入 ${PRESET_LABELS[key]}`);
+  };
+
+  const handleClear = () => {
+    setInput('');
+    setHistZoomed(false);
+  };
+
   const stats = useMemo<{ label: string; value: number | undefined; latex?: string }[]>(
     () =>
       result
@@ -772,24 +970,122 @@ function DescriptiveStatsTab() {
     [result],
   );
 
-  // Scatter plot uses (index, value) pairs for univariate data
   const scatterPoints = useMemo(
     () => data.map((v, i) => ({ x: i + 1, y: v })),
     [data],
   );
 
+  const five = useMemo(() => (result ? fiveNumSummary(data) : null), [data, result]);
+  const distSummary = useMemo(() => (result ? computeDistSummary(result) : null), [result]);
+
+  const rangeBadge = useMemo(() => {
+    if (!result) return null;
+    const okMin = Number.isFinite(result.min);
+    const okMax = Number.isFinite(result.max);
+    if (!okMin || !okMax) return null;
+    return `[${fmt(result.min, 3)}..${fmt(result.max, 3)}]`;
+  }, [result]);
+
   return (
     <div className="p-3 space-y-3">
+      {/* ===== Task 10a: 实时预览徽章 ===== */}
+      <div className="flex flex-wrap gap-1.5 items-center">
+        <Badge variant="secondary" className="text-[10.5px] gap-1">
+          <span className="text-emerald-600 dark:text-emerald-400">●</span>
+          已识别 {data.length}
+        </Badge>
+        {invalidItems.length > 0 ? (
+          <Popover>
+            <PopoverTrigger asChild>
+              <Badge variant="destructive" className="text-[10.5px] cursor-pointer gap-1">
+                跳过 {invalidItems.length} 项非法
+              </Badge>
+            </PopoverTrigger>
+            <PopoverContent className="w-64 p-2 text-[11px]">
+              <div className="text-[10.5px] text-muted-foreground mb-1">非法项列表：</div>
+              <div className="flex flex-wrap gap-1 max-h-[120px] overflow-auto">
+                {invalidItems.map((it, i) => (
+                  <span
+                    key={i}
+                    className="bg-rose-500/15 text-rose-600 dark:text-rose-400 rounded px-1.5 py-0.5 text-[10px] font-mono"
+                  >
+                    {it}
+                  </span>
+                ))}
+              </div>
+            </PopoverContent>
+          </Popover>
+        ) : (
+          <Badge variant="outline" className="text-[10.5px] opacity-70">
+            跳过 0 非法
+          </Badge>
+        )}
+        {rangeBadge && (
+          <Badge variant="outline" className="text-[10.5px] font-mono tabular-nums">
+            范围 {rangeBadge}
+          </Badge>
+        )}
+      </div>
+
+      {/* ===== 数据输入区 ===== */}
       <div>
         <label className="text-[11px] text-muted-foreground mb-1 block">
-          数据（逗号/空格/换行分隔）
+          数据（逗号/空格/换行/分号/Tab 分隔）
         </label>
         <Textarea
           value={input}
           onChange={(e) => setInput(e.target.value)}
-          placeholder="例如: 1.2, 2.3, 3.1, 4.5"
-          className="min-h-[60px] text-[12px] font-mono resize-y"
+          placeholder="例如: 1.2, 2.3, 3.1, 4.5 或粘贴 Excel 列"
+          className="min-h-[80px] text-[12px] font-mono resize-y focus-visible:ring-2 focus-visible:ring-ring"
         />
+
+        {/* ===== Task 10a: 按钮行 ===== */}
+        <div className="mt-1.5 flex flex-wrap gap-1 items-center">
+          <Button
+            variant="outline"
+            size="sm"
+            className="h-7 text-[10.5px] gap-1 px-2"
+            onClick={handleParsePaste}
+          >
+            <ClipboardList className="size-3.5" />
+            解析粘贴文本
+          </Button>
+
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button
+                variant="outline"
+                size="sm"
+                className="h-7 text-[10.5px] gap-1 px-2"
+              >
+                <Sparkles className="size-3.5" />
+                示例数据
+                <ChevronDown className="size-3 opacity-70" />
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="start" className="w-[260px]">
+              {(['height', 'exam', 'dice', 'normal'] as PresetKey[]).map((k) => (
+                <DropdownMenuItem
+                  key={k}
+                  className="text-[11.5px]"
+                  onClick={() => handlePreset(k)}
+                >
+                  {PRESET_LABELS[k]}
+                </DropdownMenuItem>
+              ))}
+            </DropdownMenuContent>
+          </DropdownMenu>
+
+          <Button
+            variant="ghost"
+            size="sm"
+            className="h-7 text-[10.5px] gap-1 px-2 text-muted-foreground hover:text-rose-600 dark:hover:text-rose-400"
+            onClick={handleClear}
+          >
+            <Trash2 className="size-3.5" />
+            清空
+          </Button>
+        </div>
       </div>
 
       {/* Dataset recording section (Task 10) */}
@@ -933,7 +1229,7 @@ function DescriptiveStatsTab() {
         )}
       </AnimatePresence>
 
-      {/* In-panel charts (Task 9) */}
+      {/* ===== Task 9/10b: 图表区 ===== */}
       {result && (
         <div className="space-y-2">
           <div className="flex gap-1">
@@ -962,12 +1258,96 @@ function DescriptiveStatsTab() {
                 initial={{ opacity: 0, y: 4 }}
                 animate={{ opacity: 1, y: 0 }}
                 exit={{ opacity: 0 }}
-                className="rounded-md border border-border/40 bg-background/30 p-1.5 text-foreground"
+                className="rounded-md border border-border/40 bg-background/30 p-1.5 text-foreground space-y-2"
               >
-                {chartType === 'scatter' ? (
+                {chartType === 'histogram' && (
+                  <div className="grid grid-cols-1 lg:grid-cols-[1fr_auto] gap-2">
+                    <div className="relative">
+                      <div className="flex items-center justify-between mb-1 px-1">
+                        <div className="text-[10.5px] text-muted-foreground">频数直方图</div>
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          className="h-5 text-[10px] px-1.5 gap-0.5"
+                          onClick={() => setHistZoomed((z) => !z)}
+                          title="缩放到合适范围 (y 轴 × 1.15)"
+                        >
+                          <ZoomIn className="size-3" />
+                          {histZoomed ? '已缩放' : '↕ Zoom'}
+                        </Button>
+                      </div>
+                      <HistogramChart data={data} zoomed={histZoomed} />
+                    </div>
+                    {distSummary && (
+                      <div className="grid grid-cols-1 gap-2 text-xs rounded-md border border-border/40 bg-muted/20 p-2 lg:w-[220px]">
+                        <div className="text-[10.5px] font-medium text-muted-foreground">分布摘要</div>
+                        <div className="space-y-1">
+                          <div className="rounded bg-background/40 px-2 py-1.5">
+                            <div className="text-[10px] text-muted-foreground">偏态</div>
+                            <div className="text-[11px] font-medium tabular-nums">{distSummary.skewLabel}</div>
+                          </div>
+                          <div className="rounded bg-background/40 px-2 py-1.5">
+                            <div className="text-[10px] text-muted-foreground">离散度 CV</div>
+                            <div className="text-[11px] font-medium tabular-nums">{distSummary.cvLabel}</div>
+                          </div>
+                          <div className="rounded bg-background/40 px-2 py-1.5">
+                            <div className="text-[10px] text-muted-foreground">粗略正态性 (JB)</div>
+                            <div className="text-[11px] font-medium tabular-nums">{distSummary.jbLabel}</div>
+                          </div>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                )}
+
+                {chartType === 'boxplot' && (
+                  <div className="space-y-2">
+                    <StatChart type="boxplot" data={data} />
+                    {five && (
+                      <>
+                        <div className="grid grid-cols-5 gap-2 text-center text-xs">
+                          {[
+                            ['min', five.min],
+                            ['Q1', five.q1],
+                            ['median', five.median],
+                            ['Q3', five.q3],
+                            ['max', five.max],
+                          ].map(([lbl, v]) => (
+                            <div
+                              key={lbl}
+                              className="rounded-md border border-border/40 bg-muted/30 px-1.5 py-1.5"
+                            >
+                              <div className="text-[9.5px] text-muted-foreground">{lbl}</div>
+                              <div className="text-[11px] font-mono font-semibold tabular-nums text-primary">
+                                {fmt(v as number, 4)}
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                        <div className="text-[10.5px] px-1">
+                          {five.outliers.length > 0 ? (
+                            <div className="text-rose-600 dark:text-rose-400">
+                              离群点：
+                              {five.outliers.map((o, i) => (
+                                <span
+                                  key={i}
+                                  className="inline-block font-mono tabular-nums bg-rose-500/10 rounded px-1 mx-0.5"
+                                >
+                                  x={fmt(o, 3)}
+                                </span>
+                              ))}
+                            </div>
+                          ) : (
+                            <div className="text-muted-foreground">无离群点</div>
+                          )}
+                        </div>
+                      </>
+                    )}
+                  </div>
+                )}
+
+                {chartType === 'scatter' && (
                   <StatChart type="scatter" points={scatterPoints} />
-                ) : (
-                  <StatChart type={chartType} data={data} />
                 )}
               </motion.div>
             )}
@@ -1702,12 +2082,13 @@ function TTestForm() {
               </div>
             </div>
 
-            <div className="rounded-md border border-primary/30 bg-primary/5 p-2.5">
+            <div className="rounded-md border border-primary/30 bg-primary/5 p-2.5 formula-card-glow min-w-[260px]">
               <div className="text-[10.5px] text-muted-foreground mb-1.5">检验统计量</div>
               <div className="overflow-x-auto">
                 <FormulaRenderer
                   latex={`t = \\frac{\\bar{x} - \\mu_0}{s / \\sqrt{n}} = \\frac{${fmt(result.mean)} - ${fmt(mu0)}}{${fmt(result.std)} / \\sqrt{${result.n}}} = ${fmt(result.t)}`}
                   displayMode
+                  fitToContainer={true}
                 />
               </div>
               <div className="mt-2 flex justify-between text-[11px]">
@@ -1877,11 +2258,12 @@ function ChiSquareForm() {
               </div>
             </div>
 
-            <div className="rounded-md border border-primary/30 bg-primary/5 p-2.5">
+            <div className="rounded-md border border-primary/30 bg-primary/5 p-2.5 formula-card-glow min-w-[260px]">
               <div className="overflow-x-auto mb-2">
                 <FormulaRenderer
                   latex={`\\chi^2 = \\sum \\frac{(O - E)^2}{E} = ${fmt(result.chi2)}`}
                   displayMode
+                  fitToContainer={true}
                 />
               </div>
               <div className="flex justify-between text-[11px]">
@@ -2062,10 +2444,10 @@ function RegressionTab() {
             exit={{ opacity: 0 }}
             className="space-y-2"
           >
-            <div className="rounded-md border border-primary/30 bg-primary/5 p-2.5">
+            <div className="rounded-md border border-primary/30 bg-primary/5 p-2.5 min-w-[260px]">
               <div className="text-[10.5px] text-muted-foreground mb-1.5">回归方程</div>
               <div className="overflow-x-auto">
-                <FormulaRenderer latex={eqLatex} displayMode />
+                <FormulaRenderer latex={eqLatex} displayMode fitToContainer={true} />
               </div>
             </div>
 
@@ -2088,7 +2470,7 @@ function RegressionTab() {
               </div>
             </div>
 
-            <div className="rounded-md border border-primary/30 bg-primary/5 p-2.5">
+            <div className="rounded-md border border-primary/30 bg-primary/5 p-2.5 min-w-[260px]">
               <div className="flex justify-between text-[11px]">
                 <span className="text-muted-foreground">决定系数 R²</span>
                 <span className="font-mono font-semibold tabular-nums text-primary">
@@ -2099,6 +2481,7 @@ function RegressionTab() {
                 <FormulaRenderer
                   latex={`R^2 = 1 - \\frac{SS_{res}}{SS_{tot}} = 1 - \\frac{${fmt(result.ssres)}}{${fmt(result.sstot)}} = ${fmt(result.rSquared)}`}
                   displayMode
+                  fitToContainer={true}
                 />
               </div>
             </div>

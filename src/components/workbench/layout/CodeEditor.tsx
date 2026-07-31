@@ -26,10 +26,7 @@ import { python } from '@codemirror/lang-python';
 import { tags as t } from '@lezer/highlight';
 import { math } from '@/lib/editor/mathLanguage';
 import { checkSyntax } from '@/lib/editor/syntaxCheck';
-
-// 字号默认值与 settingsStore.editorFontSize (14) 保持一致，
-// 避免组件本地默认与全局默认不一致导致首次渲染行号与内容字号不匹配。
-const DEFAULT_FONT_PX = 14;
+import { useSettingsStore } from '@/lib/store/settingsStore';
 
 export interface CodeEditorProps {
   value: string;
@@ -48,7 +45,7 @@ export function CodeEditor({
   onCursorChange,
   language = 'simple',
   placeholder,
-  fontSize = DEFAULT_FONT_PX,
+  fontSize: fontSizeProp,
 }: CodeEditorProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const viewRef = useRef<EditorView | null>(null);
@@ -57,6 +54,9 @@ export function CodeEditor({
   const onChangeRef = useRef(onChange);
   const onRunRef = useRef(onRun);
   const onCursorChangeRef = useRef(onCursorChange);
+
+  const storeFontSize = useSettingsStore((s) => s.editorFontSize);
+  const fontSize = fontSizeProp ?? storeFontSize;
 
   // Keep refs in sync without re-creating the editor.
   useEffect(() => {
@@ -109,6 +109,7 @@ export function CodeEditor({
       // 行号与内容竖向错位（越往下累积越明显）。
       fontSize: `${fontSize}px`,
       lineHeight: '1.5',
+      padding: '4px 0',
     },
     // VSCode-style active line highlight: subtle teal background on both
     // the line content and the gutter. 0.08 is visible but not distracting.
@@ -227,7 +228,21 @@ export function CodeEditor({
     const view = new EditorView({ state, parent: containerRef.current });
     viewRef.current = view;
 
+    const handleWheel = (e: WheelEvent) => {
+      if (e.ctrlKey || e.metaKey) {
+        e.preventDefault();
+        const current = useSettingsStore.getState().editorFontSize;
+        const delta = e.deltaY < 0 ? 1 : -1;
+        const next = current + delta;
+        if (next >= 10 && next <= 24) {
+          useSettingsStore.getState().setEditorFontSize(next);
+        }
+      }
+    };
+    containerRef.current.addEventListener('wheel', handleWheel, { passive: false });
+
     return () => {
+      containerRef.current?.removeEventListener('wheel', handleWheel);
       view.destroy();
       viewRef.current = null;
     };

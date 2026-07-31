@@ -217,7 +217,11 @@ function ToolCallStrip({ record }: { record: AIToolCallRecord }) {
     <Collapsible
       open={open}
       onOpenChange={setOpen}
-      className="rounded-lg border border-violet-500/20 bg-violet-500/5"
+      className="backdrop-blur-sm border rounded-md p-2"
+      style={{
+        backgroundColor: 'var(--ai-tool-bg)',
+        borderColor: 'var(--ai-tool-border)',
+      }}
     >
       <CollapsibleTrigger className="flex w-full items-center gap-1.5 px-2 py-1.5 text-left text-[11px] text-violet-600 dark:text-violet-300 hover:bg-violet-500/10 rounded-lg transition-colors">
         <Wrench className="size-3 shrink-0" />
@@ -274,7 +278,11 @@ function ConfigCard({
     <motion.div
       initial={{ opacity: 0, y: -6 }}
       animate={{ opacity: 1, y: 0 }}
-      className="rounded-xl border border-amber-500/30 bg-amber-500/5 p-3 space-y-2.5"
+      className="backdrop-blur-sm border rounded-lg p-3 space-y-2.5"
+      style={{
+        backgroundColor: 'var(--ai-card-bg)',
+        borderColor: 'var(--ai-card-border)',
+      }}
     >
       <div className="flex items-center gap-2 text-amber-600 dark:text-amber-400">
         <KeyRound className="size-3.5" />
@@ -603,7 +611,23 @@ export function AIPanel() {
                   <button
                     key={p}
                     onClick={() => send(p)}
-                    className="text-left text-[11px] rounded-md border border-border/60 bg-muted/30 hover:bg-primary/5 hover:border-primary/30 px-2.5 py-1.5 text-foreground/80 hover:text-foreground transition-colors"
+                    className="backdrop-blur-sm border rounded-md px-2.5 py-1.5 text-xs cursor-pointer transition-colors text-left text-foreground/80 hover:text-foreground"
+                    style={{
+                      backgroundColor: 'var(--ai-quick-bg)',
+                      borderColor: 'var(--ai-quick-border)',
+                    }}
+                    onMouseEnter={(e) => {
+                      (e.currentTarget as HTMLButtonElement).style.backgroundColor =
+                        'rgba(45,212,191,0.08)';
+                      (e.currentTarget as HTMLButtonElement).style.borderColor =
+                        'rgba(45,212,191,0.30)';
+                    }}
+                    onMouseLeave={(e) => {
+                      (e.currentTarget as HTMLButtonElement).style.backgroundColor =
+                        'var(--ai-quick-bg)';
+                      (e.currentTarget as HTMLButtonElement).style.borderColor =
+                        'var(--ai-quick-border)';
+                    }}
                   >
                     ✦ {p}
                   </button>
@@ -638,11 +662,22 @@ export function AIPanel() {
                   )}
                 </div>
                 <div
-                  className={`max-w-[82%] rounded-xl px-3 py-2 ${
-                    m.role === 'user'
-                      ? 'bg-primary text-primary-foreground'
-                      : 'bg-muted/50 border border-border/60'
+                  className={`max-w-[82%] rounded-xl px-3 py-2 backdrop-blur-sm border ${
+                    m.role === 'user' ? '' : 'bg-slate-800/40'
                   }`}
+                  style={
+                    m.role === 'user'
+                      ? {
+                          backgroundColor: 'var(--ai-user-bg)',
+                          borderColor: 'var(--ai-user-border)',
+                          color: 'var(--ai-user-fg)',
+                        }
+                      : {
+                          backgroundColor: 'var(--ai-assistant-bg)',
+                          borderColor: 'var(--ai-assistant-border)',
+                          color: 'var(--ai-assistant-fg)',
+                        }
+                  }
                 >
                   {m.role === 'user' ? (
                     <p className="text-[12.5px] leading-relaxed whitespace-pre-wrap break-words">
@@ -692,7 +727,14 @@ export function AIPanel() {
               <div className="flex-shrink-0 grid place-items-center size-6 rounded-lg bg-violet-500/10 border border-violet-500/25">
                 <Bot className="size-3.5 text-violet-500" />
               </div>
-              <div className="rounded-xl px-3 py-2.5 bg-muted/50 border border-border/60 flex items-center gap-2">
+              <div
+                className="rounded-xl px-3 py-2.5 backdrop-blur-sm border bg-slate-800/40 flex items-center gap-2"
+                style={{
+                  backgroundColor: 'var(--ai-assistant-bg)',
+                  borderColor: 'var(--ai-assistant-border)',
+                  color: 'var(--ai-assistant-fg)',
+                }}
+              >
                 <Loader2 className="size-3.5 animate-spin text-primary" />
                 <span className="text-[11.5px]">思考中…</span>
                 <span className="flex gap-0.5">
@@ -747,7 +789,9 @@ export function AIPanel() {
             </span>
           )}
         </div>
-        <div className="flex items-end gap-2 rounded-xl border border-border/60 bg-background focus-within:border-primary/40 focus-within:ring-1 focus-within:ring-primary/20 transition-all">
+        <div
+          className="flex items-end gap-2 rounded-xl border border-border/60 bg-background focus-within:border-primary/40 focus-within:ring-1 focus-within:ring-primary/20 transition-all"
+        >
           <textarea
             ref={inputRef}
             value={input}
@@ -755,7 +799,11 @@ export function AIPanel() {
             onKeyDown={handleKeyDown}
             placeholder={t('aiInputPlaceholder') || '问任何数学问题…'}
             rows={2}
-            className="flex-1 resize-none bg-transparent text-[12.5px] leading-relaxed px-3 py-2 outline-none placeholder:text-muted-foreground/60 max-h-32"
+            className="flex-1 resize-none text-[12.5px] leading-relaxed px-3 py-2 outline-none placeholder:text-muted-foreground/60 max-h-32 rounded-xl"
+            style={{
+              backgroundColor: 'var(--ai-input-bg)',
+              borderColor: 'var(--ai-input-border)',
+            }}
           />
           <Button
             size="sm"

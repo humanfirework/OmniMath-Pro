@@ -335,11 +335,66 @@ export function trySampleSurface(
 ): { data: Surface3DData | null; error: string | null } {
   try {
     const data = sampleSurface(expr, xRange, yRange, resolution, color);
+    if (data.validTriangleCount === 0) {
+      return {
+        data,
+        error: '表达式未生成可绘制几何：请确认使用 x、y 作为自变量',
+      };
+    }
     return { data, error: null };
   } catch (err) {
+    const rawMsg = err instanceof Error ? err.message : String(err);
+
+    if (rawMsg.includes('Invalid sampling range')) {
+      return {
+        data: null,
+        error: '采样范围错误：请确保 x、y 范围为有效数字且 min < max',
+      };
+    }
+
+    const undefinedMatch =
+      rawMsg.match(/Undefined symbol ['"]([^'"]+)['"]/i) ||
+      rawMsg.match(/['"]([^'"]+)['"]\s+is\s+not\s+defined/i) ||
+      rawMsg.match(/Undefined\s+['"]?([^'"\s]+)['"]?/i);
+    if (
+      rawMsg.includes('Undefined symbol') ||
+      rawMsg.includes('Undefined') ||
+      rawMsg.includes('not defined')
+    ) {
+      const varName = undefinedMatch ? undefinedMatch[1] : null;
+      return {
+        data: null,
+        error: varName
+          ? `变量未定义：${varName}`
+          : '表达式包含未定义的变量，请检查是否为 x、y 或已声明的变量',
+      };
+    }
+
+    const exprLower = expr.toLowerCase();
+    const hasDomainFn =
+      exprLower.includes('log') ||
+      exprLower.includes('sqrt') ||
+      exprLower.includes('ln') ||
+      exprLower.includes('asin') ||
+      exprLower.includes('acos') ||
+      exprLower.includes('asec') ||
+      exprLower.includes('acsc');
+    if (hasDomainFn && (
+      rawMsg.includes('non-positive') ||
+      rawMsg.includes('out of range') ||
+      rawMsg.includes('domain') ||
+      rawMsg.includes('complex')
+    )) {
+      return {
+        data: null,
+        error: '定义域错误：log / sqrt 等函数的参数可能包含非正值或复数',
+      };
+    }
+
+    const truncated = rawMsg.length > 60 ? rawMsg.slice(0, 60) + '…' : rawMsg;
     return {
       data: null,
-      error: err instanceof Error ? err.message : String(err),
+      error: `表达式解析错误：${truncated}`,
     };
   }
 }

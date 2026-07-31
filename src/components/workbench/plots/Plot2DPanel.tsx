@@ -168,6 +168,9 @@ export function Plot2DPanel() {
     derivativeOrder: 1,
   });
 
+  // Task 8.E: show/hide in-canvas legend. Default true.
+  const [showLegend, setShowLegend] = useState(true);
+
   // Per-curve spec edits from the PlotCurveEditor (mode / expressions /
   // parameter range). Keyed by plot id; entries without an edit fall back
   // to the default derived from the PlotConfig.
@@ -391,10 +394,11 @@ export function Plot2DPanel() {
       onInsertExample: handleInsertExample,
       showGrid: true,
       showMarkers: true,
+      showLegend,
       overlays,
       curveSpecs,
     }),
-    [plots, theme, effectiveX, effectiveY, handleViewChange, handleResetView, handleInsertExample, overlays, curveSpecs],
+    [plots, theme, effectiveX, effectiveY, handleViewChange, handleResetView, handleInsertExample, showLegend, overlays, curveSpecs],
   );
 
   /* ----------------------- Render ----------------------------------- */
@@ -413,9 +417,15 @@ export function Plot2DPanel() {
         onExportPNG={handleExportPNG}
         onCopyLatex={handleCopyLatex}
         onExpand={() => setExpandOpen(true)}
+        showLegend={showLegend}
+        onToggleLegend={() => setShowLegend((v) => !v)}
         freeParamCount={freeParamCount}
         slidersCollapsed={slidersCollapsed}
         onToggleSliders={() => setSlidersCollapsed(!slidersCollapsed)}
+      />
+      <ParameterSliders
+        plots={plots.filter(p => p.plotType !== 'surface3d')}
+        className="parameter-sliders-container"
       />
       <PlotCurveEditor plots={plots} specs={curveSpecs} onSpecChange={handleSpecChange} />
       <Plot2DAdvancedPanel
@@ -457,8 +467,6 @@ export function Plot2DPanel() {
           </>
         )}
       </div>
-      {/* 自由参数滑块：仅当可见表达式含自由参数时显示（紧凑、可折叠） */}
-      <ParameterSliders plots={plots} />
       <PlotExpandDialog open={expandOpen} onClose={() => setExpandOpen(false)} curveSpecs={curveSpecs} />
 
       <ExportDialog

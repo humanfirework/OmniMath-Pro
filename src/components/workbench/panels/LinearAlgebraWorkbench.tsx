@@ -721,7 +721,7 @@ function MatrixEditorTab({
         <div className="space-y-2">
           <div className="text-[11px] text-muted-foreground">KaTeX 预览</div>
           <div className="rounded-lg border border-primary/30 bg-primary/5 p-4 glow-card-teal min-h-[140px] grid place-items-center overflow-x-auto">
-            <FormulaRenderer latex={name + ' = ' + matrixToLatex(matrix)} displayMode />
+            <FormulaRenderer latex={name + ' = ' + matrixToLatex(matrix)} displayMode fitToContainer={true} />
           </div>
           <div className="text-[10.5px] text-muted-foreground leading-relaxed">
             提示：支持粘贴 TSV / CSV / MATLAB 风格 <code className="font-mono">[1,2;3,4]</code>，
@@ -1057,7 +1057,7 @@ function OperationsTab({ matrices }: { matrices: MatrixEntry[] }) {
               >
                 <div className="text-[11px] text-muted-foreground mb-2">计算结果</div>
                 <div className="overflow-x-auto">
-                  <FormulaRenderer latex={result.latex} displayMode />
+                  <FormulaRenderer latex={result.latex} displayMode fitToContainer={true} />
                 </div>
                 {result.steps && result.steps.length > 0 && (
                   <details className="mt-3 group">
@@ -1067,7 +1067,7 @@ function OperationsTab({ matrices }: { matrices: MatrixEntry[] }) {
                     <div className="mt-2 space-y-1.5 overflow-x-auto">
                       {result.steps.map((s, i) => (
                         <div key={i} className="text-[11.5px] text-foreground/80">
-                          <FormulaRenderer latex={s} displayMode />
+                          <FormulaRenderer latex={s} displayMode fitToContainer={true} />
                         </div>
                       ))}
                     </div>
@@ -1582,7 +1582,7 @@ function VectorOpsTab() {
               >
                 <div className="text-[11px] text-muted-foreground mb-2">{t('linalgResult')}</div>
                 <div className="overflow-x-auto">
-                  <FormulaRenderer latex={result.latex} displayMode />
+                  <FormulaRenderer latex={result.latex} displayMode fitToContainer={true} />
                 </div>
                 {result.steps && result.steps.length > 0 && (
                   <details className="mt-3 group">
@@ -1592,7 +1592,7 @@ function VectorOpsTab() {
                     <div className="mt-2 space-y-1.5 overflow-x-auto">
                       {result.steps.map((s, i) => (
                         <div key={i} className="text-[11.5px] text-foreground/80">
-                          <FormulaRenderer latex={s} displayMode />
+                          <FormulaRenderer latex={s} displayMode fitToContainer={true} />
                         </div>
                       ))}
                     </div>
@@ -1666,6 +1666,7 @@ function VectorOpsTab() {
                     <FormulaRenderer
                       latex={`q_{${i + 1}} = ${vectorToLatex(v)}`}
                       displayMode
+                      fitToContainer={true}
                     />
                   </div>
                 ))}
@@ -1677,7 +1678,7 @@ function VectorOpsTab() {
                     <div className="mt-2 space-y-1.5 overflow-x-auto">
                       {gsResult.steps.map((s, i) => (
                         <div key={i} className="text-[11.5px] text-foreground/80">
-                          <FormulaRenderer latex={s} displayMode />
+                          <FormulaRenderer latex={s} displayMode fitToContainer={true} />
                         </div>
                       ))}
                     </div>
@@ -1932,10 +1933,10 @@ function DecompositionTab({
                       className="rounded-md border border-border/60 bg-muted/30 p-3"
                     >
                       <div className="text-[11px] text-muted-foreground mb-1.5 overflow-x-auto">
-                        <FormulaRenderer latex={part.label} displayMode={false} />
+                        <FormulaRenderer latex={part.label} displayMode fitToContainer={true} />
                       </div>
                       <div className="overflow-x-auto">
-                        <FormulaRenderer latex={part.latex} displayMode />
+                        <FormulaRenderer latex={part.latex} displayMode fitToContainer={true} />
                       </div>
                     </motion.div>
                   ))}
@@ -2164,11 +2165,11 @@ function LinearSystemTab({ defaultMatrix }: { defaultMatrix: Matrix | undefined 
                 exit={{ opacity: 0 }}
                 className="space-y-3"
               >
-                <div className="rounded-md border border-border/60 bg-muted/30 p-3 overflow-x-auto">
+                <div className="rounded-md border border-border/60 bg-muted/30 p-3 overflow-x-auto min-w-[240px]">
                   <div className="text-[11px] text-muted-foreground mb-1.5">
                     {t('linalgAugmented')}
                   </div>
-                  <FormulaRenderer latex={solution.augmentedLatex} displayMode />
+                  <FormulaRenderer latex={solution.augmentedLatex} displayMode fitToContainer={true} />
                 </div>
 
                 {/* System type badge: 齐次 / 非齐次 + solution kind */}
@@ -2232,13 +2233,13 @@ function LinearSystemTab({ defaultMatrix }: { defaultMatrix: Matrix | undefined 
                     </div>
                   )}
 
-                <div className="rounded-md border border-primary/30 bg-primary/5 p-3 glow-card-teal overflow-x-auto">
+                <div className="rounded-md border border-primary/30 bg-primary/5 p-3 glow-card-teal overflow-x-auto min-w-[240px]">
                   <div className="text-[11px] text-muted-foreground mb-1.5">
                     {solution.kind === 'infinite'
                       ? t('linalgGeneralSolution')
                       : t('linalgResult')}
                   </div>
-                  <FormulaRenderer latex={solution.latex} displayMode />
+                  <FormulaRenderer latex={solution.latex} displayMode fitToContainer={true} />
                 </div>
 
                 {/* Infinite: split into 特解 + 基础解系 */}
@@ -2257,6 +2258,7 @@ function LinearSystemTab({ defaultMatrix }: { defaultMatrix: Matrix | undefined 
                           <FormulaRenderer
                             latex={'\\eta^* = ' + vectorToLatex(solution.particular)}
                             displayMode
+                            fitToContainer={true}
                           />
                         </div>
                       )}
@@ -2270,6 +2272,7 @@ function LinearSystemTab({ defaultMatrix }: { defaultMatrix: Matrix | undefined 
                             <FormulaRenderer
                               latex={`\\xi_{${i + 1}} = ` + vectorToLatex(v)}
                               displayMode
+                              fitToContainer={true}
                             />
                           </div>
                         ))}

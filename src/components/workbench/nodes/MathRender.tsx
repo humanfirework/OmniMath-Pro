@@ -61,7 +61,10 @@ export function MathRender({ value, className }: MathRenderProps) {
     // FormulaRenderer already handles raw strings gracefully by displaying
     // them as-is when KaTeX can't parse them.
     return (
-      <span className={cn('text-[11px] font-mono text-foreground/80 break-all whitespace-normal', className)}>
+      <span
+        className={cn('text-[11px] font-mono text-foreground/80 break-all whitespace-normal', className)}
+        style={{ wordBreak: 'break-word' }}
+      >
         {value}
       </span>
     );
@@ -107,7 +110,10 @@ export function MathRender({ value, className }: MathRenderProps) {
 
   // Fallback
   return (
-    <span className={cn('text-[11px] font-mono text-foreground/80 truncate', className)}>
+    <span
+      className={cn('text-[11px] font-mono text-foreground/80 break-all whitespace-normal', className)}
+      style={{ wordBreak: 'break-word' }}
+    >
       {String(value)}
     </span>
   );

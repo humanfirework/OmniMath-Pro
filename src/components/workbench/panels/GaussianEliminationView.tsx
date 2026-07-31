@@ -155,7 +155,7 @@ export function GaussianEliminationView({
                 animate={{ opacity: 1, x: 0 }}
                 transition={{ delay: Math.min(i * 0.03, 0.3), duration: 0.2 }}
                 className={cn(
-                  'flex items-start gap-2 rounded-md border px-2 py-1.5',
+                  'grid grid-cols-[auto,1fr] gap-3 max-[480px]:grid-cols-1 rounded-md border px-2 py-1.5',
                   cfg.bg,
                   cfg.border,
                 )}
@@ -178,10 +178,11 @@ export function GaussianEliminationView({
                 )}
 
                 {/* 矩阵渲染 */}
-                <div className="flex-1 min-w-0 overflow-x-auto">
+                <div className="min-w-0 overflow-x-auto">
                   <FormulaRenderer
                     latex={step.matrix}
                     displayMode
+                    fitToContainer={true}
                     className="text-[11px]"
                   />
                 </div>

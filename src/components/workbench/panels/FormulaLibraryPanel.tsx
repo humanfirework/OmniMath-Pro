@@ -18,7 +18,7 @@
  * the key "omnimath-custom-formulas-v1".
  */
 
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
   BookOpen,
@@ -201,14 +201,6 @@ const ALL_CATEGORIES: CategoryKey[] = [
   'finance',
 ];
 
-// Default expanded: first 3 categories (algebra / geometry / trigonometry).
-// The rest start collapsed.
-const DEFAULT_EXPANDED_CATEGORIES: CategoryKey[] = [
-  'algebra',
-  'geometry',
-  'trigonometry',
-];
-
 // Collapsible group keys: a built-in CategoryKey, a custom category id, or
 // the "custom" bucket for uncategorized user formulas.
 type GroupKey = string;
@@ -224,6 +216,7 @@ interface DisplayFormula extends Omit<Formula, 'category'> {
 
 const CUSTOM_FORMULAS_KEY = 'omnimath-custom-formulas-v1';
 const CUSTOM_CATEGORIES_KEY = 'omnimath-custom-categories-v1';
+const COLLAPSE_KEY = 'omnimath-formulas-collapse-v1';
 
 // Sentinel category value meaning "uncategorized custom formula" — such
 // formulas surface under the "Custom" bucket.
@@ -345,18 +338,74 @@ export function FormulaLibraryPanel() {
   const [customCategories, setCustomCategories] = useState<CustomCategory[]>([]);
   const [categoryManageOpen, setCategoryManageOpen] = useState(false);
   const [collapsedGroups, setCollapsedGroups] = useState<Set<GroupKey>>(
-    () =>
-      new Set(
-        ALL_CATEGORIES.filter(
-          (c) => !DEFAULT_EXPANDED_CATEGORIES.includes(c),
-        ),
-      ),
+    () => new Set([...ALL_CATEGORIES, UNCATEGORIZED_SENTINEL]),
   );
+
+  // Tracks which group ids appeared in the persisted COLLAPSE_KEY string at
+  // mount, so the custom-categories load effect can distinguish:
+  //   (a) an id that was explicitly recorded in localStorage (whether
+  //       collapsed or expanded) → user has set a preference, do not override
+  //   (b) an id never seen in localStorage → brand-new custom category,
+  //       default to collapsed per spec.
+  const persistedCollapseIdsRef = useRef<Set<GroupKey> | null>(null);
+
+  // Load persisted collapse state on mount (SSR-safe). Falls back to the
+  // all-collapsed default if the key is missing, empty, or malformed.
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    let raw: string | null = null;
+    try {
+      raw = localStorage.getItem(COLLAPSE_KEY);
+    } catch {
+      // ignore read errors — fall back to all-collapsed default
+      return;
+    }
+    if (!raw) return;
+    const parts = raw
+      .split(',')
+      .map((s) => s.trim())
+      .filter(Boolean);
+    if (parts.length === 0) return;
+
+    // Remember all ids that appeared in the persisted string (for the
+    // custom-categories effect below), regardless of legality.
+    persistedCollapseIdsRef.current = new Set(parts);
+
+    const legalBase = new Set([...ALL_CATEGORIES, UNCATEGORIZED_SENTINEL]);
+    const loaded = new Set<GroupKey>();
+    for (const p of parts) {
+      if (legalBase.has(p)) loaded.add(p);
+    }
+    // Stale custom category ids are also accepted here — they will simply
+    // never match a rendered group and are effectively ignored.
+    for (const p of parts) {
+      if (!legalBase.has(p)) loaded.add(p);
+    }
+    setCollapsedGroups(loaded);
+  }, []);
 
   // Load persisted custom formulas + categories after mount (SSR-safe).
   useEffect(() => {
     setCustomFormulas(loadCustomFormulas());
-    setCustomCategories(loadCustomCategories());
+    const loadedCats = loadCustomCategories();
+    setCustomCategories(loadedCats);
+    // Collapse any custom categories whose ids were NOT present in the
+    // original persisted COLLAPSE_KEY value at mount time (i.e. brand new
+    // categories never explicitly set by the user → default collapsed).
+    // Custom categories that DID appear in the persisted value are left
+    // alone (the first effect already applied their collapsed/expanded state
+    // based on presence in the stored string).
+    setCollapsedGroups((prev) => {
+      const next = new Set(prev);
+      const persisted = persistedCollapseIdsRef.current;
+      for (const cc of loadedCats) {
+        const explicitlyPersisted = persisted !== null && persisted.has(cc.id);
+        if (!explicitlyPersisted) {
+          next.add(cc.id);
+        }
+      }
+      return next;
+    });
   }, []);
 
   const toggleGroup = (g: GroupKey) => {
@@ -364,6 +413,13 @@ export function FormulaLibraryPanel() {
       const next = new Set(prev);
       if (next.has(g)) next.delete(g);
       else next.add(g);
+      if (typeof window !== 'undefined') {
+        try {
+          localStorage.setItem(COLLAPSE_KEY, Array.from(next).join(','));
+        } catch {
+          // ignore quota errors
+        }
+      }
       return next;
     });
   };

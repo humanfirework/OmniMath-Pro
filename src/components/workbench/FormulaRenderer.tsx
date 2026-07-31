@@ -65,6 +65,13 @@ interface FormulaRendererProps {
    *  falls back to the global `defaultFormulaFontSize` setting (default 28).
    *  Pass an explicit value to override on a per-call basis. */
   fontSize?: number;
+  /** Enable auto-shrink to fit container width using ResizeObserver.
+   *  If rendered scrollWidth exceeds container clientWidth, shrinks 0.5pt
+   *  at a time (minimum 10px) until it fits. Default false. */
+  fitToContainer?: boolean;
+  /** Optional max height for the formula area (collapsed state uses this value
+   *  when collapsible is enabled). Default undefined = no limit. */
+  maxHeight?: number;
 }
 
 const MIN_SCALE = 0.6;
@@ -83,6 +90,8 @@ export function FormulaRenderer({
   defaultCollapsed = false,
   fontMode = 'katex',
   fontSize,
+  fitToContainer = false,
+  maxHeight,
 }: FormulaRendererProps) {
   const [copied, setCopied] = useState(false);
   const [scale, setScale] = useState(1);
@@ -90,22 +99,26 @@ export function FormulaRenderer({
   const [canCollapse, setCanCollapse] = useState(false);
   const [exporting, setExporting] = useState(false);
   const contentRef = useRef<HTMLDivElement>(null);
+  const outerRef = useRef<HTMLDivElement>(null);
   const theme = useWorkbenchStore((s) => s.theme);
-  // 基础字号：prop 优先，其次取全局设置 defaultFormulaFontSize，
-  // 兜底 28（与历史硬编码值一致）。
   const defaultFormulaFontSize = useSettingsStore((s) => s.defaultFormulaFontSize);
   const baseFontSize = fontSize ?? defaultFormulaFontSize ?? 28;
+
+  const hasComplexEnv = useMemo(() => {
+    const envRegex = /\\begin\{(matrix|bmatrix|pmatrix|vmatrix|Vmatrix|smallmatrix|cases|aligned|gathered|multline)\}/;
+    return envRegex.test(latex);
+  }, [latex]);
 
   const html = useMemo(() => {
     if (!latex) return '';
     try {
-      return katex.renderToString(latex, {
+      const rendered = katex.renderToString(latex, {
         displayMode,
         throwOnError: false,
         strict: false,
         output: 'html',
         trust: false,
-        maxSize: 10,
+        maxSize: 12,
         macros: {
           '\\R': '\\mathbb{R}',
           '\\N': '\\mathbb{N}',
@@ -114,19 +127,59 @@ export function FormulaRenderer({
           '\\C': '\\mathbb{C}',
         },
       });
+      if (hasComplexEnv) {
+        return `<span style="padding: 0.25em 0.4em; display: inline-block;">${rendered}</span>`;
+      }
+      return rendered;
     } catch {
-      // Shouldn't happen with throwOnError:false, but be defensive.
       return `<span class="katex-error">${escapeHtml(latex)}</span>`;
     }
-  }, [latex, displayMode]);
+  }, [latex, displayMode, hasComplexEnv]);
 
   useLayoutEffect(() => {
     if (collapsible && contentRef.current) {
-      setCanCollapse(contentRef.current.scrollHeight > COLLAPSED_HEIGHT);
+      const collapseHeight = maxHeight ?? COLLAPSED_HEIGHT;
+      setCanCollapse(contentRef.current.scrollHeight > collapseHeight);
     } else {
       setCanCollapse(false);
     }
-  }, [collapsible, html]);
+  }, [collapsible, html, maxHeight]);
+
+  useLayoutEffect(() => {
+    if (!fitToContainer || !outerRef.current || !contentRef.current) return;
+
+    const container = outerRef.current;
+    const content = contentRef.current;
+
+    const adjustFontSize = () => {
+      let currentSize = parseFloat(
+        getComputedStyle(content).fontSize || String(baseFontSize),
+      );
+      const maxIterations = 60;
+      let iterations = 0;
+
+      while (
+        iterations < maxIterations &&
+        content.scrollWidth > container.clientWidth &&
+        currentSize > 10
+      ) {
+        currentSize -= 0.5;
+        content.style.fontSize = `${currentSize}px`;
+        iterations++;
+      }
+    };
+
+    adjustFontSize();
+
+    if (typeof ResizeObserver !== 'undefined') {
+      const ro = new ResizeObserver(() => {
+        content.style.fontSize = '';
+        adjustFontSize();
+      });
+      ro.observe(container);
+      return () => ro.disconnect();
+    }
+  }, [fitToContainer, html, baseFontSize]);
 
   const copyTimerRef = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
 
@@ -300,13 +353,19 @@ export function FormulaRenderer({
       )}
 
       <div
+        ref={outerRef}
         className={cn(
           'overflow-x-auto',
           displayMode && 'py-1',
-          isCollapsed && canCollapse
-            ? 'max-h-[120px] overflow-y-hidden'
+          isCollapsed && canCollapse && maxHeight !== undefined
+            ? 'overflow-y-hidden'
             : 'overflow-y-visible',
         )}
+        style={
+          isCollapsed && canCollapse && maxHeight !== undefined
+            ? { maxHeight: `${maxHeight}px` }
+            : undefined
+        }
       >
         <div
           ref={contentRef}
@@ -318,6 +377,7 @@ export function FormulaRenderer({
             transformOrigin: 'top left',
             display: displayMode ? 'inline-block' : 'inline',
             minWidth: displayMode ? '100%' : undefined,
+            width: displayMode ? 'max-content' : undefined,
           }}
         />
       </div>

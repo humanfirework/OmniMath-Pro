@@ -58,6 +58,13 @@ export interface PlotOverlay {
   intersections: IntersectionPoint[];
 }
 
+export interface HoveredPoint {
+  plotId: string;
+  x: number;
+  y: number;
+  slope: number;
+}
+
 export interface Plot2DCanvasProps {
   plots: PlotConfig[];
   theme: 'dark' | 'light';
@@ -78,6 +85,8 @@ export interface Plot2DCanvasProps {
   showAxes?: boolean;
   /** Show extrema (red) and zeros (blue) markers. */
   showMarkers?: boolean;
+  /** Show in-canvas glass legend top-right. */
+  showLegend?: boolean;
   /** Advanced overlays: derivatives, tangent line, intersections. */
   overlays?: PlotOverlay;
   /**
@@ -145,6 +154,7 @@ export function Plot2DCanvas({
   showGrid = true,
   showAxes = true,
   showMarkers = true,
+  showLegend = true,
   overlays,
   curveSpecs,
 }: Plot2DCanvasProps) {
@@ -186,6 +196,22 @@ export function Plot2DCanvas({
   }>({ l1Sig: '', l2Sig: '', l3Sig: '', l2Computed: null, l3Computed: null, l3Overlays: undefined });
   const [canvasSize, setCanvasSize] = useState({ w: 0, h: 0 });
   const [drawError, setDrawError] = useState<string | null>(null);
+  // Task 8.A: multi-curve hovered points (within 6px screen distance).
+  const [hoveredPoints, setHoveredPoints] = useState<HoveredPoint[]>([]);
+  // Task 8.B: DOM tooltip follows mouse — store client-relative CSS pixel pos.
+  const [mousePos, setMousePos] = useState<{ x: number; y: number } | null>(null);
+  // rAF-batched hover update to throttle pointer moves to ≤ ~120fps and
+  // keep per-frame work < 0.8ms for 3 curves × ~1200 samples each.
+  const hoverDirtyRef = useRef(false);
+  const hoverRafRef = useRef<number | null>(null);
+  const hoverPendingRef = useRef<{
+    sx: number;
+    sy: number;
+    wx: number;
+    wy: number;
+    clientX: number;
+    clientY: number;
+  } | null>(null);
 
   /* ----------------------- Schedule redraw -------------------------- */
   // We keep a ref to the latest `drawNow` so the rAF callback always invokes
@@ -775,17 +801,55 @@ export function Plot2DCanvas({
     } // end L3 annotations layer
 
     /* ---------- Composite L1+L2+L3 onto main canvas ---------- */
-    // drawImage copies the raw device-pixel buffer of each layer (its
-    // setTransform does not affect the source). Each layer's backing store
-    // is the CSS size × dpr (a DPI buffer, NOT a 1:1 world-unit mapping):
-    // the main ctx is pre-scaled by dpr, so drawing into a w×h CSS box lands
-    // crisply on the device-pixel backing store. This is purely a DPI buffer
-    // passthrough — it does NOT enforce a square / 1:1 world aspect ratio.
     ctx.clearRect(0, 0, w, h);
     ctx.drawImage(gridLayer, 0, 0, w, h);
     ctx.drawImage(curveLayer, 0, 0, w, h);
     ctx.drawImage(annotLayer, 0, 0, w, h);
     ctx.textRendering = 'geometricPrecision';
+
+    /* ---------- Task 8.F: in-canvas legend (top-right) ---------- */
+    if (showLegend && visiblePlots.length > 0) {
+      ctx.save();
+      ctx.font = `12px ${PLOT_FONT_FAMILY}`;
+      ctx.textBaseline = 'middle';
+      const lineH = 18;
+      const padX = 8;
+      const padY = 6;
+      const boxW0 = 100;
+      let boxW = boxW0;
+      for (const p of visiblePlots) {
+        const label = p.config.expression.length > 16
+          ? p.config.expression.slice(0, 15) + '…'
+          : p.config.expression;
+        boxW = Math.max(boxW, padX * 2 + 18 + ctx.measureText(label).width);
+      }
+      const boxH = padY * 2 + visiblePlots.length * lineH;
+      let bx = w - PADDING.right - boxW - 4;
+      let by = PADDING.top + 4;
+      bx = Math.max(PADDING.left + 4, bx);
+      by = Math.max(PADDING.top + 4, by);
+      ctx.fillStyle = dark ? 'rgba(26,26,26,0.72)' : 'rgba(255,255,255,0.82)';
+      ctx.strokeStyle = tooltipBorder;
+      ctx.lineWidth = 1;
+      drawRoundRect(ctx, bx, by, boxW, boxH, 6);
+      ctx.fill();
+      ctx.stroke();
+      for (let i = 0; i < visiblePlots.length; i++) {
+        const p = visiblePlots[i];
+        const ly = by + padY + i * lineH + lineH / 2;
+        // 6px color square
+        ctx.fillStyle = p.config.color;
+        ctx.fillRect(bx + padX, ly - 3, 6, 6);
+        // Expression label (truncate at 16 chars)
+        const label = p.config.expression.length > 16
+          ? p.config.expression.slice(0, 15) + '…'
+          : p.config.expression;
+        ctx.fillStyle = tooltipFg;
+        ctx.textAlign = 'left';
+        ctx.fillText(label, bx + padX + 12, ly);
+      }
+      ctx.restore();
+    }
 
     /* ---------- L4: crosshair + snap ring + tooltip (every frame) ---------- */
     const hover = hoverRef.current;
@@ -877,13 +941,116 @@ export function Plot2DCanvas({
       // 记录本帧耗时，供 lowQuality 自适应恢复延时参考（见 lastDrawMsRef）。
       lastDrawMsRef.current = performance.now() - t0;
     }
-  }, [computed, theme, dataToScreen, screenToData, showGrid, showAxes, showMarkers, overlays, axisFontSize]);
+  }, [computed, theme, dataToScreen, screenToData, showGrid, showAxes, showMarkers, showLegend, overlays, axisFontSize]);
 
   // Keep the ref in sync so the rAF callback always uses the latest drawNow.
   // We must do this inside an effect (not during render) per React 19 rules.
   useEffect(() => {
     drawNowRef.current = drawNow;
   }, [drawNow]);
+
+  /* ---------------- Task 8.A: multi-curve hit testing (rAF batched) -- */
+  const computeHoveredPoints = useCallback(
+    (wx: number, wy: number, sx: number, sy: number): HoveredPoint[] => {
+      const result: HoveredPoint[] = [];
+      const THRESHOLD_PX = 6;
+      for (const p of computed) {
+        if (!p.visible) continue;
+        const samples = p.samples;
+        if (!samples || samples.length < 2) continue;
+        let bestIdx = -1;
+        let bestDist = Infinity;
+        // For cartesian + sorted-by-x samples use binary search, otherwise linear.
+        const isCartesian = p.config.plotType === 'cartesian' || !p.config.plotType || p.config.plotType === 'surface3d';
+        if (isCartesian && samples.length > 0) {
+          let lo = 0;
+          let hi = samples.length - 1;
+          while (lo <= hi) {
+            const mid = (lo + hi) >> 1;
+            if (samples[mid].x <= wx) lo = mid + 1;
+            else hi = mid - 1;
+          }
+          const start = Math.max(0, hi - 1);
+          const end = Math.min(samples.length - 1, hi + 2);
+          for (let i = start; i <= end; i++) {
+            const s = samples[i];
+            if (!Number.isFinite(s.x) || !Number.isFinite(s.y)) continue;
+            const [psx, psy] = dataToScreen(s.x, s.y);
+            if (!Number.isFinite(psx) || !Number.isFinite(psy)) continue;
+            const d = Math.hypot(psx - sx, psy - sy);
+            if (d < bestDist) {
+              bestDist = d;
+              bestIdx = i;
+            }
+          }
+        } else {
+          for (let i = 0; i < samples.length; i++) {
+            const s = samples[i];
+            if (!Number.isFinite(s.x) || !Number.isFinite(s.y)) continue;
+            const [psx, psy] = dataToScreen(s.x, s.y);
+            if (!Number.isFinite(psx) || !Number.isFinite(psy)) continue;
+            const d = Math.hypot(psx - sx, psy - sy);
+            if (d < bestDist) {
+              bestDist = d;
+              bestIdx = i;
+            }
+          }
+        }
+        if (bestIdx < 0 || bestDist > THRESHOLD_PX) continue;
+        // Slope via central difference (samples[i+1].y - samples[i-1].y)/(x+1]-x[i-1])
+        const iLeft = Math.max(0, bestIdx - 1);
+        const iRight = Math.min(samples.length - 1, bestIdx + 1);
+        const sL = samples[iLeft];
+        const sR = samples[iRight];
+        let slope = NaN;
+        if (
+          Number.isFinite(sL.x) && Number.isFinite(sL.y) &&
+          Number.isFinite(sR.x) && Number.isFinite(sR.y)
+        ) {
+          const dx = sR.x - sL.x;
+          if (Math.abs(dx) > 1e-12) slope = (sR.y - sL.y) / dx;
+        }
+        result.push({
+          plotId: p.config.id,
+          x: samples[bestIdx].x,
+          y: samples[bestIdx].y,
+          slope,
+        });
+      }
+      // TODO(Task 8.D): special-point snap (zeros/extrema/intersections/tangentPoints) ≤ 8px
+      //   - cursor: crosshair
+      //   - Tooltip first line prioritises type: e.g. "零点 X=0.524"
+      return result;
+    },
+    [computed, dataToScreen],
+  );
+
+  const flushHoverUpdate = useCallback(() => {
+    hoverRafRef.current = null;
+    const pen = hoverPendingRef.current;
+    hoverDirtyRef.current = false;
+    if (!pen) return;
+    const pts = computeHoveredPoints(pen.wx, pen.wy, pen.sx, pen.sy);
+    setHoveredPoints(pts);
+    const rect = containerRef.current?.getBoundingClientRect();
+    setMousePos({ x: pen.clientX - (rect?.left ?? 0), y: pen.clientY - (rect?.top ?? 0) });
+  }, [computeHoveredPoints]);
+
+  const scheduleHoverUpdate = useCallback(
+    (sx: number, sy: number, wx: number, wy: number, clientX: number, clientY: number) => {
+      hoverPendingRef.current = { sx, sy, wx, wy, clientX, clientY };
+      if (hoverRafRef.current !== null) return;
+      hoverDirtyRef.current = true;
+      hoverRafRef.current = requestAnimationFrame(flushHoverUpdate);
+    },
+    [flushHoverUpdate],
+  );
+
+  useEffect(() => {
+    return () => {
+      if (hoverRafRef.current !== null) cancelAnimationFrame(hoverRafRef.current);
+    };
+  }, []);
 
   /* ----------------------- Resize handling -------------------------- */
   useEffect(() => {
@@ -1037,6 +1204,9 @@ export function Plot2DCanvas({
           const ny: [number, number] = [dragRef.current.origY[0] + wyShift, dragRef.current.origY[1] + wyShift];
           viewRef.current = { x: nx, y: ny };
           hoverRef.current = null;
+          hoverPendingRef.current = null;
+          setHoveredPoints([]);
+          setMousePos(null);
           onViewChange?.(nx, ny);
           scheduleRedraw();
           return;
@@ -1051,16 +1221,7 @@ export function Plot2DCanvas({
         const snapPixelRadius = 30;
         for (const p of computed) {
           if (!p.visible) continue;
-          // Find the sample whose SCREEN distance to cursor is smallest.
-          // For cartesian, we can shortcut: find the sample whose x is nearest
-          // to wx, then compare screen y. For polar/parametric, fall back to
-          // brute force nearest in screen space (samples are small enough).
           if (p.config.plotType === 'cartesian' && p.samples.length > 0) {
-            // True binary search: samples are sorted by x, so we can find the
-            // sample whose x is nearest to wx in O(log n) instead of O(n).
-            // The previous "Binary-ish" comment was misleading — it was a
-            // linear scan with an incorrect break condition
-            // (`s.x > wx + xSpan` scanned a full viewport past wx). (D6 fix)
             const samples = p.samples;
             let lo = 0;
             let hi = samples.length - 1;
@@ -1069,8 +1230,6 @@ export function Plot2DCanvas({
               if (samples[mid].x <= wx) lo = mid + 1;
               else hi = mid - 1;
             }
-            // hi is the index of the last sample with s.x <= wx.
-            // The nearest sample is either hi or hi+1.
             let candidate: PlotSample | undefined;
             let candidateScreenDist = Infinity;
             for (let i = Math.max(0, hi); i <= Math.min(samples.length - 1, hi + 1); i++) {
@@ -1105,11 +1264,6 @@ export function Plot2DCanvas({
             }
           }
         }
-        // Light snap-to-point: if the cursor is within 12px of an
-        // intersection or tangent point, snap the crosshair to the exact
-        // point so its readout shows the precise coordinate (not the loose
-        // cursor position). This makes clicking/inspecting intersections
-        // and tangents feel precise even without perfect aim.
         let snapSx = sx;
         let snapSy = sy;
         let snapWx = wx;
@@ -1143,13 +1297,15 @@ export function Plot2DCanvas({
           snap: best,
           snapColor: bestColor,
         };
+        // Task 8.A + 8.B: rAF-batched multi-curve hit test + DOM tooltip pos.
+        scheduleHoverUpdate(sx, sy, wx, wy, e.clientX, e.clientY);
         scheduleRedraw();
       } catch (err) {
         console.error('[Plot2DCanvas] pointer move error:', err);
         setDrawError(err instanceof Error ? err.message : '绘制交互失败');
       }
     },
-    [screenToData, dataToScreen, computed, onViewChange, scheduleRedraw, overlays],
+    [screenToData, dataToScreen, computed, onViewChange, scheduleRedraw, overlays, scheduleHoverUpdate],
   );
 
   const handlePointerUp = useCallback((e: ReactPointerEvent<HTMLCanvasElement>) => {
@@ -1162,6 +1318,9 @@ export function Plot2DCanvas({
 
   const handlePointerLeave = useCallback(() => {
     hoverRef.current = null;
+    hoverPendingRef.current = null;
+    setHoveredPoints([]);
+    setMousePos(null);
     scheduleRedraw();
   }, [scheduleRedraw]);
 
@@ -1246,6 +1405,35 @@ export function Plot2DCanvas({
     };
   }, []);
 
+  /* ---------------- Task 8.B: DOM Tooltip lines ------------------- */
+  const tooltipLines = useMemo(() => {
+    if (!mousePos || hoveredPoints.length === 0) return [];
+    const byId = new Map(plots.map((p) => [p.id, p]));
+    return hoveredPoints
+      .map((hp) => {
+        const p = byId.get(hp.plotId);
+        if (!p) return null;
+        const label = p.expression;
+        const slopeStr = Number.isFinite(hp.slope)
+          ? (hp.slope >= 1e5 || Math.abs(hp.slope) < 1e-3
+              ? hp.slope.toExponential(2).replace('e+', 'e')
+              : hp.slope.toFixed(3))
+          : '—';
+        const xStr = Number.isFinite(hp.x)
+          ? (Math.abs(hp.x) >= 1e5 || Math.abs(hp.x) < 1e-3
+              ? hp.x.toExponential(2).replace('e+', 'e')
+              : hp.x.toFixed(3))
+          : '—';
+        const yStr = Number.isFinite(hp.y)
+          ? (Math.abs(hp.y) >= 1e5 || Math.abs(hp.y) < 1e-3
+              ? hp.y.toExponential(2).replace('e+', 'e')
+              : hp.y.toFixed(3))
+          : '—';
+        return { color: p.color, label, xStr, yStr, slopeStr };
+      })
+      .filter(Boolean) as Array<{ color: string; label: string; xStr: string; yStr: string; slopeStr: string }>;
+  }, [hoveredPoints, mousePos, plots]);
+
   /* ----------------------- Empty state ------------------------------ */
   if (plots.length === 0) {
     return (
@@ -1312,6 +1500,29 @@ export function Plot2DCanvas({
         onTouchMove={handleTouchMove}
         onTouchEnd={handleTouchEnd}
       />
+      {/* Task 8.B: Follow-mouse DOM Tooltip */}
+      {mousePos && tooltipLines.length > 0 && (
+        <div
+          className="absolute z-50 pointer-events-none rounded-md border border-border bg-popover/95 px-2 py-1.5 text-xs shadow-lg backdrop-blur-sm"
+          style={{ left: mousePos.x + 14, top: mousePos.y + 14, maxWidth: 320 }}
+        >
+          {tooltipLines.map((line, idx) => (
+            <div key={idx} className="flex items-center gap-2 font-mono whitespace-nowrap leading-5">
+              <span
+                className="inline-block h-2 w-2 shrink-0 rounded-full"
+                style={{ backgroundColor: line.color }}
+              />
+              <span className="text-foreground/90 truncate">{line.label}</span>
+              <span className="text-muted-foreground/80">|</span>
+              <span className="text-muted-foreground">X={line.xStr}</span>
+              <span className="text-muted-foreground/80">|</span>
+              <span className="text-muted-foreground">Y={line.yStr}</span>
+              <span className="text-muted-foreground/80">|</span>
+              <span className="text-muted-foreground">斜率={line.slopeStr}</span>
+            </div>
+          ))}
+        </div>
+      )}
       {/* Tiny range badge bottom-left */}
       <div className="pointer-events-none absolute bottom-1.5 left-2 rounded bg-muted-foreground/20 px-1.5 py-0.5 font-mono text-[10px] text-foreground/80 backdrop-blur-sm">
         x ∈ [{xRange[0].toFixed(2)}, {xRange[1].toFixed(2)}] · y ∈ [{yRange[0].toFixed(2)}, {yRange[1].toFixed(2)}]

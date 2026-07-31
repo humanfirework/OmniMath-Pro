@@ -17,10 +17,11 @@ interface State {
   stringChar: string;
 }
 
-const KEYWORDS = [
+export const KEYWORDS = [
   'plot', 'polarplot', 'polar', 'solve', 'derivative', 'integrate',
   'limit', 'taylor', 'eigenvectors', 'if', 'else', 'for', 'while',
   'function', 'return', 'break', 'continue', 'end',
+  'elseif', 'switch', 'case', 'otherwise', 'try', 'catch', 'global', 'persistent',
 ];
 
 const FUNCTIONS = [

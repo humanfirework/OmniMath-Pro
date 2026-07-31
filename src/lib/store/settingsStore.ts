@@ -48,6 +48,8 @@ interface SettingsState {
 
   /** 2D 参数滑块面板是否折叠（持久化，跨会话保留用户的展开偏好） */
   slidersCollapsed: boolean;
+  /** 符号面板分类显示顺序（category id 数组） */
+  symbolCategoryOrder: string[];
 
   setOpen: (v: boolean) => void;
   toggleOpen: () => void;
@@ -70,6 +72,8 @@ interface SettingsState {
   setAdvancedExportPrefix: (v: string) => void;
   /** 切换 2D 参数滑块面板的折叠状态（持久化） */
   setSlidersCollapsed: (v: boolean) => void;
+  /** 设置符号面板分类显示顺序 */
+  setSymbolCategoryOrder: (order: string[]) => void;
   /** 仅重置高级区设置项（不影响其他分类） */
   resetAdvanced: () => void;
 
@@ -86,6 +90,12 @@ export const DEFAULT_ACTIVITY_BAR_ORDER: string[] = [
   'history', 'variables', 'files', 'formulas', 'stats',
   'solver', 'pipeline', 'whiteboard', 'linalg',
   'toggleEditor', 'togglePreview', 'toggleSidebar', 'layoutMenu', 'settings',
+];
+
+/** 符号面板分类的默认顺序（同时作为合法 id 白名单） */
+export const DEFAULT_SYMBOL_CATEGORY_ORDER: string[] = [
+  'calculus', 'trig', 'inverse-trig', 'log', 'power',
+  'rounding', 'complex', 'constant', 'greek',
 ];
 
 interface PersistedSettings {
@@ -107,6 +117,7 @@ interface PersistedSettings {
   advancedExportPrefix?: string;
   slidersCollapsed?: boolean;
   symbolPaletteOpen?: boolean;
+  symbolCategoryOrder?: string[];
 }
 
 /** 高级区各项默认值（resetAdvanced / resetToDefaults 共用） */
@@ -139,6 +150,7 @@ export const useSettingsStore = create<SettingsState>((set, get) => ({
   plotAxisFontSize: 12,
   ...ADVANCED_DEFAULTS,
   slidersCollapsed: false,
+  symbolCategoryOrder: [...DEFAULT_SYMBOL_CATEGORY_ORDER],
 
   setOpen: (v) => set({ open: v }),
   toggleOpen: () => set((s) => ({ open: !s.open })),
@@ -212,6 +224,10 @@ export const useSettingsStore = create<SettingsState>((set, get) => ({
     set({ slidersCollapsed: v });
     get().saveToStorage();
   },
+  setSymbolCategoryOrder: (order) => {
+    set({ symbolCategoryOrder: order });
+    get().saveToStorage();
+  },
   resetAdvanced: () => {
     set({ ...ADVANCED_DEFAULTS });
     get().saveToStorage();
@@ -241,6 +257,7 @@ export const useSettingsStore = create<SettingsState>((set, get) => ({
           advancedExportPrefix: s.advancedExportPrefix,
           slidersCollapsed: s.slidersCollapsed,
           symbolPaletteOpen: s.symbolPaletteOpen,
+          symbolCategoryOrder: s.symbolCategoryOrder,
         };
         localStorage.setItem(SETTINGS_KEY, JSON.stringify(payload));
       } catch {
@@ -314,6 +331,16 @@ export const useSettingsStore = create<SettingsState>((set, get) => ({
       if (typeof data.symbolPaletteOpen === 'boolean') {
         set({ symbolPaletteOpen: data.symbolPaletteOpen });
       }
+      if (Array.isArray(data.symbolCategoryOrder)) {
+        const valid = data.symbolCategoryOrder.filter(
+          (id): id is string =>
+            typeof id === 'string' && DEFAULT_SYMBOL_CATEGORY_ORDER.includes(id),
+        );
+        for (const id of DEFAULT_SYMBOL_CATEGORY_ORDER) {
+          if (!valid.includes(id)) valid.push(id);
+        }
+        set({ symbolCategoryOrder: valid });
+      }
     } catch {
       // ignore parse errors
     }
@@ -330,6 +357,7 @@ export const useSettingsStore = create<SettingsState>((set, get) => ({
       ...ADVANCED_DEFAULTS,
       slidersCollapsed: false,
       symbolPaletteOpen: false,
+      symbolCategoryOrder: [...DEFAULT_SYMBOL_CATEGORY_ORDER],
     });
     get().saveToStorage();
   },

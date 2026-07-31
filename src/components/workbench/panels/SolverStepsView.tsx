@@ -149,11 +149,20 @@ export function SolverStepsView({
                     {step.label}
                   </div>
                 )}
-                <FormulaRenderer
-                  latex={step.body}
-                  displayMode
-                  className="text-[11px]"
-                />
+                <div
+                  className={cn(
+                    'mt-1.5',
+                    (/\\begin\{cases\}|\\begin\{bmatrix\}|\\begin\{aligned\}|\\begin\{array\}|\\begin\{pmatrix\}|\\begin\{vmatrix\}/.test(step.body)) && 'formula-card-glow'
+                  )}
+                  style={(/'''|\\prime\\prime\\prime|\\prime\\prime[^\\]|\\dddot|\\ddddot/.test(step.body)) ? { minHeight: 80 } : undefined}
+                >
+                  <FormulaRenderer
+                    latex={step.body}
+                    displayMode
+                    fitToContainer={true}
+                    className="text-[11px]"
+                  />
+                </div>
               </div>
             </motion.div>
           ))}

@@ -193,7 +193,7 @@ function EquationSolverSection() {
       {/* 实时公式预览 */}
       {equation.trim() && equationPreviewLatex && (
         <div className="rounded-md border border-border/50 bg-muted/30 px-3 py-2 overflow-x-auto">
-          <FormulaRenderer latex={equationPreviewLatex} displayMode={false} className="text-sm" />
+          <FormulaRenderer latex={equationPreviewLatex} displayMode fitToContainer={true} className="text-sm" />
         </div>
       )}
 
@@ -323,7 +323,7 @@ function EquationSolverSection() {
             <div className="mb-2">
               <div className="text-[10.5px] text-muted-foreground mb-1">符号解:</div>
               <div className="overflow-x-auto">
-                <FormulaRenderer latex={`${varName} \\in ${result.symbolicLatex}`} displayMode />
+                <FormulaRenderer latex={`${varName} \\in ${result.symbolicLatex}`} displayMode fitToContainer={true} />
               </div>
               {result.symbolicExpression && result.symbolicExpression !== result.symbolicLatex && (
                 <div className="mt-1 text-[10.5px] font-mono text-muted-foreground break-all">
@@ -333,8 +333,8 @@ function EquationSolverSection() {
               )}
             </div>
           )}
-          <div className="overflow-x-auto">
-            <FormulaRenderer latex={result.latex} displayMode />
+          <div className="overflow-x-auto min-h-max">
+            <FormulaRenderer latex={result.latex} displayMode fitToContainer={true} />
           </div>
           {result.roots.length > 0 && (
             <div className="mt-2 grid grid-cols-1 sm:grid-cols-2 gap-1">
@@ -466,8 +466,8 @@ function SystemSolverSection() {
         ) : solution ? (
           <>
             {solution.kind === 'unique' && (
-              <div className="overflow-x-auto">
-                <FormulaRenderer latex={solution.latex} displayMode />
+              <div className="overflow-x-auto min-h-max">
+                <FormulaRenderer latex={solution.latex} displayMode fitToContainer={true} />
               </div>
             )}
             {solution.kind === 'none' && (
@@ -478,8 +478,8 @@ function SystemSolverSection() {
             {solution.kind === 'infinite' && (
               <div className="text-[11.5px] text-amber-600 dark:text-amber-300">
                 {t('solverMultipleSolutions')}
-                <div className="mt-1 overflow-x-auto">
-                  <FormulaRenderer latex={solution.latex} displayMode />
+                <div className="mt-1 overflow-x-auto min-h-max">
+                  <FormulaRenderer latex={solution.latex} displayMode fitToContainer={true} />
                 </div>
               </div>
             )}
@@ -708,7 +708,7 @@ function CalculusSection() {
       {/* 实时公式预览 */}
       {expr.trim() && previewLatex && (
         <div className="rounded-md border border-border/50 bg-muted/30 px-3 py-2 overflow-x-auto">
-          <FormulaRenderer latex={previewLatex} displayMode={false} className="text-sm" />
+          <FormulaRenderer latex={previewLatex} displayMode fitToContainer={true} className="text-sm" />
         </div>
       )}
 
@@ -853,8 +853,8 @@ function CalculusSection() {
 
       <ResultBlock error={error} result={result ? (
         <div className="space-y-2">
-          <div className="overflow-x-auto">
-            <FormulaRenderer latex={result.latex} displayMode />
+          <div className="overflow-x-auto min-h-max">
+            <FormulaRenderer latex={result.latex} displayMode fitToContainer={true} />
           </div>
           {result.numerical !== undefined && (
             <div className="text-[11px] font-mono text-muted-foreground">
@@ -1286,7 +1286,7 @@ function NumericRootSection() {
       {/* 实时公式预览 */}
       {expr.trim() && (
         <div className="rounded-md border border-border/50 bg-muted/30 px-3 py-2 overflow-x-auto">
-          <FormulaRenderer latex={`y = ${inputToLatex(expr)}`} displayMode={false} className="text-sm" />
+          <FormulaRenderer latex={`y = ${inputToLatex(expr)}`} displayMode fitToContainer={true} className="text-sm" />
         </div>
       )}
 
@@ -1408,8 +1408,8 @@ function NumericRootSection() {
         error={error}
         result={result ? (
           <div className="space-y-2">
-            <div className="overflow-x-auto">
-              <FormulaRenderer latex={result.latex} displayMode />
+            <div className="overflow-x-auto min-h-max">
+              <FormulaRenderer latex={result.latex} displayMode fitToContainer={true} />
             </div>
             {result.root !== null && (
               <div className="rounded-md border border-emerald-500/30 bg-emerald-500/10 px-2.5 py-1.5 text-[12px] font-mono text-emerald-700 dark:text-emerald-300">
@@ -1429,14 +1429,14 @@ function NumericRootSection() {
                 <summary className="cursor-pointer text-[10.5px] text-muted-foreground hover:text-foreground select-none">
                   {t('solverNumericIter')} ({result.iterations.length})
                 </summary>
-                <div className="mt-1.5 max-h-48 overflow-y-auto space-y-1 pr-1">
+                <div className="mt-1.5 overflow-y-auto space-y-1 pr-1">
                   {result.iterations.map((it, i) => (
                     <div
                       key={i}
                       className="text-[10.5px] font-mono text-foreground/80 rounded border border-border/40 bg-muted/20 px-1.5 py-1"
                     >
                       <span className="text-primary mr-1">#{i + 1}</span>
-                      <FormulaRenderer latex={it.step} displayMode={false} />
+                      <FormulaRenderer latex={it.step} displayMode fitToContainer={true} />
                     </div>
                   ))}
                 </div>

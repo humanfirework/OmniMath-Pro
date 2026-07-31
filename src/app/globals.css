@@ -3444,7 +3444,12 @@
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
   text-rendering: optimizeLegibility;
-  font-size: 1.05em;
+  font-size: 1.18em;
+  color: var(--foreground);
+}
+
+.dark .katex {
+  color: #ececec;
 }
 
 .dark .katex,
@@ -3467,7 +3472,7 @@
 .dark .katex .msupsub,
 .dark .katex .frac-line,
 .dark .katex .sqrt {
-  color: var(--foreground);
+  color: #ececec;
 }
 
 :not(.dark) .katex,
@@ -3508,7 +3513,29 @@
 .katex-display {
   margin: 0.75em 0;
   overflow-x: auto;
+  overflow-y: visible;
   padding: 4px 0;
+  font-size: 1.18em;
+}
+
+.formula-card-glow {
+  overflow-x: auto;
+  border: 1px solid color-mix(in srgb, var(--primary) 30%, transparent);
+  background: color-mix(in srgb, var(--primary) 5%, transparent);
+  border-radius: 8px;
+  padding: 8px 10px;
+  position: relative;
+}
+
+.formula-card-glow::after {
+  content: '';
+  position: absolute;
+  top: 0;
+  right: 0;
+  width: 20px;
+  height: 100%;
+  background: linear-gradient(to left, var(--card, rgba(24,24,27,1)), transparent);
+  pointer-events: none;
 }
 
 /* STIX font mode — let KaTeX fall back to STIX Two Math.
@@ -4354,4 +4381,39 @@ html[data-font-preset="system"] {
 .desmos-range::-moz-range-track {
   height: 8px;
   border-radius: 9999px;
+}
+
+/* AI 面板 — 玻璃质感深色配色（深圳模式 .dark 作用域） */
+.dark .ai-panel {
+  --ai-user-bg: rgba(45, 212, 191, 0.18);
+  --ai-user-fg: #ecfeff;
+  --ai-user-border: rgba(45, 212, 191, 0.32);
+  --ai-assistant-bg: rgba(31, 41, 55, 0.55);
+  --ai-assistant-fg: #f4f4f5;
+  --ai-assistant-border: rgba(255, 255, 255, 0.06);
+  --ai-card-bg: rgba(120, 53, 15, 0.08);
+  --ai-card-border: rgba(245, 158, 11, 0.20);
+  --ai-input-bg: rgba(24, 24, 27, 0.60);
+  --ai-input-border: rgba(255, 255, 255, 0.08);
+  --ai-tool-bg: rgba(139, 92, 246, 0.08);
+  --ai-tool-border: rgba(139, 92, 246, 0.18);
+  --ai-quick-bg: rgba(39, 39, 42, 0.30);
+  --ai-quick-border: rgba(255, 255, 255, 0.06);
+}
+/* 亮色模式下（非 dark）保持原值，但给 ai-panel 根类兜底 */
+.ai-panel {
+  --ai-user-bg: rgba(45, 212, 191, 0.14);
+  --ai-user-fg: #042f2e;
+  --ai-user-border: rgba(45, 212, 191, 0.28);
+  --ai-assistant-bg: rgba(250, 250, 250, 0.60);
+  --ai-assistant-fg: #18181b;
+  --ai-assistant-border: rgba(0, 0, 0, 0.06);
+  --ai-card-bg: rgba(255, 251, 235, 0.60);
+  --ai-card-border: rgba(245, 158, 11, 0.25);
+  --ai-input-bg: rgba(255, 255, 255, 0.60);
+  --ai-input-border: rgba(0, 0, 0, 0.08);
+  --ai-tool-bg: rgba(139, 92, 246, 0.06);
+  --ai-tool-border: rgba(139, 92, 246, 0.15);
+  --ai-quick-bg: rgba(39, 39, 42, 0.04);
+  --ai-quick-border: rgba(0, 0, 0, 0.06);
 }

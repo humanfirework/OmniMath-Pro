@@ -686,6 +686,15 @@ function SceneContents({
         />
       ))}
 
+      {/* 空场景兜底：surfaces=[] 且用户关闭 showAxes 时也显示最小参考线，避免画面纯黑/纯白 */}
+      {surfaces.length === 0 && showAxes === false && (
+        <group>
+          <AxisLine from={[-2, 0, 0]} to={[2, 0, 0]} color="#888" lineWidth={1} />
+          <AxisLine from={[0, -2, 0]} to={[0, 2, 0]} color="#888" lineWidth={1} />
+          <AxisLine from={[0, 0, -2]} to={[0, 0, 2]} color="#888" lineWidth={1} />
+        </group>
+      )}
+
       {/* Axes */}
       {showAxes && <Axes3D sizeX={sizeX} sizeY={sizeY} sizeZ={sizeZ} theme={theme} />}
 
@@ -782,7 +791,7 @@ export function Plot3DScene({
         <div className="space-y-2">
           <div className="text-2xl"> WebGL 不可用</div>
           <p className="max-w-sm text-sm text-muted-foreground">
-            当前环境无法创建 WebGL 上下文，3D 绘图不可用。请检查显卡驱动是否正常、浏览器是否禁用了硬件加速。
+            当前环境无法创建 WebGL 上下文，3D 绘图不可用。请检查显卡驱动是否正常、浏览器是否禁用了硬件加速。作为替代方案，可使用 2D 绘图或查看公式预览。
           </p>
         </div>
       </div>

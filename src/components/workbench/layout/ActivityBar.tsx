@@ -103,16 +103,19 @@ const ACTIVITY_REGISTRY: Record<ActivityItemId, RegistryEntry> = {
   settings: { icon: Settings, labelKey: 'settingsTitle' },
 };
 
-/** Top group: primary navigation and view-mode items (rendered at the top). */
-const TOP_GROUP_IDS: ActivityItemId[] = [
-  'history', 'variables', 'files', 'formulas', 'stats',
-  'solver', 'pipeline', 'whiteboard', 'linalg',
-];
+/** Group 1: data / basic panels */
+const GROUP_1_IDS: ActivityItemId[] = ['files', 'history', 'variables'];
+/** Group 2: theory / core math */
+const GROUP_2_IDS: ActivityItemId[] = ['stats', 'solver', 'linalg', 'formulas'];
+/** Group 3: creative / extensions */
+const GROUP_3_IDS: ActivityItemId[] = ['whiteboard', 'pipeline'];
+/** Bottom utilities */
+const BOTTOM_UTIL_IDS: ActivityItemId[] = ['toggleEditor', 'togglePreview', 'toggleSidebar', 'layoutMenu', 'settings'];
 
-/** Bottom group: utility toggles and settings (rendered at the bottom). */
-const BOTTOM_GROUP_IDS: ActivityItemId[] = [
-  'toggleEditor', 'togglePreview', 'toggleSidebar', 'layoutMenu', 'settings',
-];
+const GROUP_1_SET = new Set(GROUP_1_IDS);
+const GROUP_2_SET = new Set(GROUP_2_IDS);
+const GROUP_3_SET = new Set(GROUP_3_IDS);
+const BOTTOM_UTIL_SET = new Set(BOTTOM_UTIL_IDS);
 
 function SortableWrapper({ id, children }: { id: string; children: React.ReactNode }) {
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id });
@@ -207,15 +210,24 @@ export function ActivityBar() {
     return ids;
   }, [activityBarOrder]);
 
-  // Split the persisted full order into the two visual groups while preserving
-  // per-group ordering. Persistence still stores the full list — these filters
-  // only determine which items render in which DndContext.
-  const topIds = useMemo(
-    () => orderedIds.filter((id) => TOP_GROUP_IDS.includes(id)),
+  // Split the persisted full order into the visual groups while preserving
+  // per-group user-defined ordering. Persistence still stores the full list —
+  // these filters only determine which items render in which DndContext.
+  // Any new icon not in a known group falls through to group3 (creative/extensions).
+  const group1Ids = useMemo(
+    () => orderedIds.filter((id) => GROUP_1_SET.has(id)),
     [orderedIds],
   );
-  const bottomIds = useMemo(
-    () => orderedIds.filter((id) => BOTTOM_GROUP_IDS.includes(id)),
+  const group2Ids = useMemo(
+    () => orderedIds.filter((id) => GROUP_2_SET.has(id)),
+    [orderedIds],
+  );
+  const group3Ids = useMemo(
+    () => orderedIds.filter((id) => GROUP_3_SET.has(id) || (!GROUP_1_SET.has(id) && !GROUP_2_SET.has(id) && !BOTTOM_UTIL_SET.has(id))),
+    [orderedIds],
+  );
+  const bottomUtilIds = useMemo(
+    () => orderedIds.filter((id) => BOTTOM_UTIL_SET.has(id)),
     [orderedIds],
   );
 
@@ -504,12 +516,85 @@ export function ActivityBar() {
     return null;
   };
 
-  // Renders one group of items wrapped in its own DndContext + SortableContext.
-  // Each group is independently sortable — items cannot be dragged across
-  // groups because each DndContext only knows about its own droppables.
-  // The DragOverlay is gated on `ids.includes(activeId)` so only the context
-  // that owns the active drag renders the floating clone.
-  const renderGroup = (ids: ActivityItemId[]) => {
+  const renderGroup1 = (ids: ActivityItemId[]) => {
+    if (!mounted) {
+      return (
+        <>
+          {ids.map((id) => renderItem(id, false))}
+        </>
+      );
+    }
+    return (
+      <DndContext
+        sensors={sensors}
+        collisionDetection={closestCenter}
+        onDragStart={handleDragStart}
+        onDragEnd={handleDragEnd}
+        onDragCancel={handleDragCancel}
+      >
+        <SortableContext items={ids} strategy={verticalListSortingStrategy}>
+          {ids.map((id) => renderItem(id, true))}
+        </SortableContext>
+        <DragOverlay dropAnimation={null}>
+          {activeId && ids.includes(activeId) ? renderOverlayItem(activeId) : null}
+        </DragOverlay>
+      </DndContext>
+    );
+  };
+
+  const renderGroup2 = (ids: ActivityItemId[]) => {
+    if (!mounted) {
+      return (
+        <>
+          {ids.map((id) => renderItem(id, false))}
+        </>
+      );
+    }
+    return (
+      <DndContext
+        sensors={sensors}
+        collisionDetection={closestCenter}
+        onDragStart={handleDragStart}
+        onDragEnd={handleDragEnd}
+        onDragCancel={handleDragCancel}
+      >
+        <SortableContext items={ids} strategy={verticalListSortingStrategy}>
+          {ids.map((id) => renderItem(id, true))}
+        </SortableContext>
+        <DragOverlay dropAnimation={null}>
+          {activeId && ids.includes(activeId) ? renderOverlayItem(activeId) : null}
+        </DragOverlay>
+      </DndContext>
+    );
+  };
+
+  const renderGroup3 = (ids: ActivityItemId[]) => {
+    if (!mounted) {
+      return (
+        <>
+          {ids.map((id) => renderItem(id, false))}
+        </>
+      );
+    }
+    return (
+      <DndContext
+        sensors={sensors}
+        collisionDetection={closestCenter}
+        onDragStart={handleDragStart}
+        onDragEnd={handleDragEnd}
+        onDragCancel={handleDragCancel}
+      >
+        <SortableContext items={ids} strategy={verticalListSortingStrategy}>
+          {ids.map((id) => renderItem(id, true))}
+        </SortableContext>
+        <DragOverlay dropAnimation={null}>
+          {activeId && ids.includes(activeId) ? renderOverlayItem(activeId) : null}
+        </DragOverlay>
+      </DndContext>
+    );
+  };
+
+  const renderBottomGroup = (ids: ActivityItemId[]) => {
     if (!mounted) {
       return (
         <>
@@ -585,12 +670,24 @@ export function ActivityBar() {
       }}
     >
       <div className="flex flex-col items-center gap-1 w-full">
-        {renderGroup(topIds)}
+        {renderGroup1(group1Ids)}
+        <div
+          role="separator"
+          aria-label="基础面板与数学功能分隔线"
+          className="w-6 h-px bg-border/50 my-1 mx-auto rounded-full"
+        />
+        {renderGroup2(group2Ids)}
+        <div
+          role="separator"
+          aria-label="数学功能与创意扩展分隔线"
+          className="w-6 h-px bg-border/50 my-1 mx-auto rounded-full"
+        />
+        {renderGroup3(group3Ids)}
       </div>
-      {/* Visual separator between the top navigation group and the bottom utility group. */}
+      {/* Visual separator between the top navigation groups and the bottom utility group. */}
       <div className="w-6 border-t border-border/40 my-2 mx-auto" />
       <div className="flex flex-col items-center gap-1 w-full mt-auto">
-        {renderGroup(bottomIds)}
+        {renderBottomGroup(bottomUtilIds)}
       </div>
     </aside>
   );

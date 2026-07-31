@@ -27,10 +27,11 @@ import { ChevronDown, ChevronRight, Pause, Play, Settings2, SlidersHorizontal } 
 import { Collapsible, CollapsibleTrigger, CollapsibleContent } from '@/components/ui/collapsible';
 import { Popover, PopoverTrigger, PopoverContent } from '@/components/ui/popover';
 import { Label } from '@/components/ui/label';
+import { Button } from '@/components/ui/button';
 import { useWorkbenchStore, type PlotConfig, type PlotParamConfig } from '@/lib/store/workbench';
 import { useSettingsStore } from '@/lib/store/settingsStore';
 import { extractFreeParameters } from '@/lib/engine/variableScanner';
-import { getScope, setScopeVar } from '@/lib/engine/mathInstance';
+import { getScope, setScopeVar, bumpScopeVersion } from '@/lib/engine/mathInstance';
 import { useScopeVersion } from '@/lib/hooks/useScopeVersion';
 
 /* ------------------------------------------------------------------ */
@@ -59,7 +60,7 @@ const PLAY_CYCLE_SECONDS = 3;
 /*  Component                                                         */
 /* ------------------------------------------------------------------ */
 
-export function ParameterSliders({ plots }: { plots: PlotConfig[] }) {
+export function ParameterSliders({ plots, className }: { plots: PlotConfig[]; className?: string }) {
   const variables = useWorkbenchStore((s) => s.variables);
   const plotParams = useWorkbenchStore((s) => s.plotParams);
   const setPlotParam = useWorkbenchStore((s) => s.setPlotParam);
@@ -79,8 +80,18 @@ export function ParameterSliders({ plots }: { plots: PlotConfig[] }) {
     return extractFreeParameters(exprs, Object.keys(variables));
   }, [plots, variables, scopeVersion]);
 
+  /* Task 9.B: 监听 plotParams 的 keys 变化（「清除参数」或清空回默认值时，
+   * 确保滑块显示值与引擎重新对齐，不出现显示旧值的脱节）。
+   * 无专用 plotParamsVersion 时，用排序后的 keys 串联字符串做浅比较。 */
+  const plotParamsKeys = useMemo(
+    () => Object.keys(plotParams).sort().join(','),
+    [plotParams],
+  );
+
   /* 每个参数的有效配置：优先用 store 中持久化的值；否则以引擎作用域里
-   * 的当前已知值（或 1）为中心生成默认配置。 */
+   * 的当前已知值（或 1）为中心生成默认配置。
+   * 额外依赖 plotParamsKeys：当「清除参数」导致 plotParams 集合变化时
+   * 强制重算，即使 params 列表没变（避免显示值与引擎脱节）。 */
   const configs = useMemo<Record<string, PlotParamConfig>>(() => {
     const scope = getScope();
     const map: Record<string, PlotParamConfig> = {};
@@ -94,19 +105,22 @@ export function ParameterSliders({ plots }: { plots: PlotConfig[] }) {
       }
     }
     return map;
-  }, [params, plotParams, scopeVersion]);
+  }, [params, plotParams, scopeVersion, plotParamsKeys]);
 
   /* 把参数值同步进引擎作用域：首次出现、localStorage 恢复、或变量面板
    * "清空全部"（resetScope 会连参数一起清掉）之后自动补齐。若作用域
-   * 中已是目标值则不再写入，避免循环 bump。 */
+   * 中已是目标值则不再写入，避免循环 bump。
+   * Task 9.B: 额外依赖 plotParamsKeys，确保「清除参数」后即使 configs
+   * 引用相同也能重新对齐显示值与引擎值。 */
   useEffect(() => {
+    void plotParamsKeys; // 保证 lint 不报警；语义上作为重置信号
     const scope = getScope();
     for (const [name, cfg] of Object.entries(configs)) {
       if (scope[name] !== cfg.value) {
         setScopeVar(name, cfg.value);
       }
     }
-  }, [configs]);
+  }, [configs, plotParamsKeys]);
 
   /* ----------------------- 播放动画 ----------------------- */
   // 每个参数是否正在播放；startTimesRef 记录每个参数开始播放的时刻
@@ -207,24 +221,60 @@ export function ParameterSliders({ plots }: { plots: PlotConfig[] }) {
     });
   }, []);
 
+  /* Task 9.C: 「重置全部」按钮：把所有滑块恢复到默认中心、
+   * 清除持久化 patch 覆盖、并触发 scopeVersion 重采样。 */
+  const handleResetAll = useCallback(() => {
+    // 先停掉所有正在播放的动画，避免 rAF 循环继续写旧值
+    setPlayingParams(new Set());
+    startTimesRef.current = {};
+    for (const name of params) {
+      const cfg = configs[name];
+      // 默认中心：若无配置则用引擎当前值（或 1）作为中心生成默认
+      const defaultCenter = cfg
+        ? (cfg.min + cfg.max) / 2
+        : (() => {
+            const cur = getScope()[name];
+            return typeof cur === 'number' ? cur : 1;
+          })();
+      // 1) 把引擎作用域恢复到默认中心
+      setScopeVar(name, defaultCenter);
+      // 3) 清除 plotParams patch 覆盖（下次出现走默认配置）
+      setPlotParam(name, undefined);
+    }
+    // 2) 显式 bump 一次 scopeVersion，确保 Plot2DCanvas 的 useMemo
+    //    失效并重采样（setScopeVar 已经 bump，但多一次无副作用）
+    bumpScopeVersion();
+  }, [params, configs, setPlotParam]);
+
   if (params.length === 0) return null;
 
   return (
-    <Collapsible open={!slidersCollapsed} onOpenChange={(o) => setSlidersCollapsed(!o)} className="border-t border-border/60 bg-background/40">
-      <CollapsibleTrigger asChild>
-        <button
-          type="button"
-          className="flex h-7 w-full items-center gap-1.5 px-2.5 text-[11px] font-medium text-muted-foreground hover:bg-accent/40 hover:text-foreground transition-colors"
-          aria-label={slidersCollapsed ? '展开参数滑块' : '折叠参数滑块'}
+    <Collapsible open={!slidersCollapsed} onOpenChange={(o) => setSlidersCollapsed(!o)} className={`border-t border-border/60 bg-background/40 ${className ?? ''}`}>
+      {/* Task 9.C: 头部一行 — 左侧折叠触发器，右侧「重置全部」按钮 */}
+      <div className="flex items-center justify-between px-1">
+        <CollapsibleTrigger asChild>
+          <button
+            type="button"
+            className="flex h-7 flex-1 items-center gap-1.5 px-1.5 text-[11px] font-medium text-muted-foreground hover:bg-accent/40 hover:text-foreground transition-colors rounded"
+            aria-label={slidersCollapsed ? '展开参数滑块' : '折叠参数滑块'}
+          >
+            {!slidersCollapsed ? <ChevronDown className="size-3" /> : <ChevronRight className="size-3" />}
+            <SlidersHorizontal className="size-3" />
+            <span>参数滑块</span>
+            <span className="rounded-full bg-muted px-1.5 py-0.5 text-[9px]">
+              {params.length}
+            </span>
+          </button>
+        </CollapsibleTrigger>
+        <Button
+          size="sm"
+          variant="ghost"
+          onClick={handleResetAll}
+          className="h-7 px-2 text-[11px]"
         >
-          {!slidersCollapsed ? <ChevronDown className="size-3" /> : <ChevronRight className="size-3" />}
-          <SlidersHorizontal className="size-3" />
-          <span>参数滑块</span>
-          <span className="rounded-full bg-muted px-1.5 py-0.5 text-[9px]">
-            {params.length}
-          </span>
-        </button>
-      </CollapsibleTrigger>
+          ↺ 重置全部
+        </Button>
+      </div>
       <CollapsibleContent>
         <div className="flex flex-col gap-1.5 px-2.5 pb-2 pt-1">
           {params.map((name) => (
@@ -269,7 +319,10 @@ function ParamRow({
 }) {
   const { value, min, max, step } = config;
   return (
-    <div className="flex items-center gap-1.5">
+    <div
+      className="flex items-center gap-1.5"
+      title={isPlaying ? '动画播放中，点击 ⏸ 暂停' : undefined}
+    >
       {/* 参数名：等宽斜体，对齐数学排版习惯 */}
       <code className="w-7 shrink-0 truncate font-mono text-[12px] italic font-semibold text-primary">
         {name}
@@ -298,10 +351,17 @@ function ParamRow({
         onChange={onValueChange}
         ariaLabel={`参数 ${name}`}
       />
+      {/* Task 9.D: 播放时在数值输入框左侧显示绿色播放徽标 */}
+      {isPlaying && (
+        <Play className="h-3 w-3 shrink-0 text-green-400 inline-block mr-1" />
+      )}
       <NumberField
         value={value}
         onCommit={onValueChange}
-        className="h-6 w-16 shrink-0 rounded border border-border/60 bg-muted/40 px-1.5 text-right font-mono text-[12px] tabular-nums focus:border-primary/60 focus:outline-none"
+        className={
+          'h-6 w-16 shrink-0 rounded border border-border/60 bg-muted/40 px-1.5 text-right font-mono text-[12px] tabular-nums focus:border-primary/60 focus:outline-none ' +
+          (isPlaying ? 'text-green-400' : 'text-foreground')
+        }
         ariaLabel={`参数 ${name} 的值`}
       />
       <Popover>
