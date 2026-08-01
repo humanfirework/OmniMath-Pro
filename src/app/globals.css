@@ -3687,25 +3687,27 @@
 
 /* ------------------------------------------------------------
    AI Panel — warm light mode (护眼暖色)
+   注意：必须用 html:not(.dark) 限定根元素，否则 :not(.dark) 会匹配到
+   body/main 等没有 .dark 类的中间祖先，导致深色模式下暖色规则也被应用。
    ------------------------------------------------------------ */
-:not(.dark) .ai-panel {
+html:not(.dark) .ai-panel {
   background: oklch(0.96 0.012 75);
 }
-:not(.dark) .ai-panel .border-border\/60 {
+html:not(.dark) .ai-panel .border-border\/60 {
   border-color: oklch(0.88 0.015 70) !important;
 }
 /* 暖色表面：覆盖 bg-muted/20、/30、/50 在白天模式下的冷灰底 */
-:not(.dark) .ai-panel .bg-muted\/20 {
+html:not(.dark) .ai-panel .bg-muted\/20 {
   background-color: oklch(0.93 0.014 70) !important;
 }
-:not(.dark) .ai-panel .bg-muted\/30 {
+html:not(.dark) .ai-panel .bg-muted\/30 {
   background-color: oklch(0.91 0.016 70) !important;
 }
-:not(.dark) .ai-panel .bg-muted\/50 {
+html:not(.dark) .ai-panel .bg-muted\/50 {
   background-color: oklch(0.94 0.012 75) !important;
 }
 /* 输入框聚焦边框沿用暖色调 */
-:not(.dark) .ai-panel .focus-within\:border-primary\/40:focus-within {
+html:not(.dark) .ai-panel .focus-within\:border-primary\/40:focus-within {
   border-color: oklch(0.7 0.1 75) !important;
 }
 
@@ -4421,6 +4423,7 @@ html[data-font-preset="system"] {
 
 /* AI 面板 — 玻璃质感深色配色（统一使用全局 --primary 色系） */
 .dark .ai-panel {
+  background: var(--background);
   --ai-user-bg: color-mix(in oklab, var(--primary) 22%, transparent);
   --ai-user-fg: var(--foreground);
   --ai-user-border: color-mix(in oklab, var(--primary) 42%, transparent);
@@ -4438,7 +4441,7 @@ html[data-font-preset="system"] {
   --ai-quick-hover-bg: color-mix(in oklab, var(--primary) 14%, transparent);
   --ai-quick-hover-border: color-mix(in oklab, var(--primary) 38%, transparent);
 }
-/* 亮色模式下（非 dark */
+/* 亮色模式（默认）— CSS 变量必须定义在 :root/.ai-panel 上，供未进入 html:not(.dark) 分支时回退 */
 .ai-panel {
   --ai-user-bg: color-mix(in oklab, var(--primary) 18%, transparent);
   --ai-user-fg: var(--foreground);
