@@ -476,3 +476,8 @@ export const useWorkbenchStore = create<WorkbenchState>((set, get) => ({
     }
   },
 }));
+
+// 暴露到 window 以便 Playwright/e2e/截图脚本直接调用 store actions
+if (typeof window !== 'undefined') {
+  (window as unknown as { __WB_STORE__?: typeof useWorkbenchStore }).__WB_STORE__ = useWorkbenchStore;
+}
