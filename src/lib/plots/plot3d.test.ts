@@ -30,7 +30,6 @@ describe('trySampleSurface', () => {
   });
 
   it('测试 4：NaN 范围触发采样范围错误', () => {
-    // @ts-expect-error 测试防御性 NaN 输入
     const result = trySampleSurface('x+y', [NaN, NaN], [0, 1]);
     expect(result.error).not.toBeNull();
     expect(result.error).toContain('采样范围错误');
