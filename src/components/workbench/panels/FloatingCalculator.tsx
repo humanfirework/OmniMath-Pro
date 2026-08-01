@@ -6,9 +6,11 @@ import {
   Calculator, X, Pin, PinOff, Copy, Check, RotateCcw,
   Ruler, ArrowLeftRight, ChevronDown, ChevronUp,
   FlaskConical, Binary, Grid3x3, History, NotebookPen,
+  StickyNote, Plus,
 } from 'lucide-react';
 import { evaluateExpression, math } from '@/lib/engine';
 import { cn } from '@/lib/utils';
+import { useT } from '@/lib/i18n';
 
 type CalcMode = 'basic' | 'scientific' | 'programmer' | 'linalg' | 'converter';
 type ConverterCategory = 'length' | 'weight' | 'temperature' | 'area' | 'volume' | 'time';
@@ -151,6 +153,22 @@ function formatMatrixString(m: unknown[][]): string {
 const DEFAULT_FAB_POS = { x: -1, y: -1 };
 
 export function FloatingCalculator() {
+  const t = useT();
+  const modeLabel: Record<CalcMode, string> = {
+    basic: t('qcModeBasic'),
+    scientific: t('qcModeSci'),
+    programmer: t('qcModeProg'),
+    linalg: t('qcModeLin'),
+    converter: t('qcModeConv'),
+  };
+  const unitCategoryLabel: Record<ConverterCategory, string> = {
+    length: t('unitsLength'),
+    weight: t('unitsMass'),
+    temperature: t('unitsTemperature'),
+    area: t('unitsArea'),
+    volume: t('unitsVolume'),
+    time: t('unitsTime'),
+  };
   const [open, setOpen] = useState(false);
   const [pinned, setPinned] = useState(false);
   const [mode, setMode] = useState<CalcMode>('basic');
@@ -169,7 +187,17 @@ export function FloatingCalculator() {
   // Drag state
   const [position, setPosition] = useState({ x: 20, y: 80 });
   const [dragging, setDragging] = useState(false);
-  const dragRef = useRef({ startX: 0, startY: 0, startPosX: 0, startPosY: 0 });
+  // Refs for transform-based drag: write translate3d directly to the DOM via
+  // rAF instead of setState({left/top}) on every mousemove (avoids reflow +
+  // full re-render). Final position is committed to state once on mouseup.
+  const panelRef = useRef<HTMLDivElement>(null);
+  const fabRef = useRef<HTMLButtonElement>(null);
+  const rafRef = useRef<number | null>(null);
+  const fabRafRef = useRef<number | null>(null);
+  const pendingPosRef = useRef<{ x: number; y: number } | null>(null);
+  const pendingFabPosRef = useRef<{ x: number; y: number } | null>(null);
+  const offsetRef = useRef<{ x: number; y: number }>({ x: 0, y: 0 });
+  const draggingRef = useRef(false);
 
   // FAB drag state — lets the user reposition the floating toggle button
   const [fabPosition, setFabPosition] = useState<{x: number, y: number}>(() => {
@@ -293,6 +321,24 @@ export function FloatingCalculator() {
     });
   }, []);
 
+  // Append a calculation line (HH:MM:SS  expr = result) to the notepad and open it
+  const appendToNotepad = useCallback((expr: string, result: string) => {
+    const now = new Date();
+    const ts = now.toTimeString().slice(0, 8); // HH:MM:SS
+    const line = `${ts}  ${expr} = ${result}\n`;
+    setNotepadText((prev) => {
+      const next = prev + line;
+      try {
+        localStorage.setItem('calc-notepad', next);
+      } catch { /* ignore */ }
+      return next;
+    });
+    setShowNotepad(true);
+    try {
+      localStorage.setItem('calc-notepad-open', JSON.stringify(true));
+    } catch { /* ignore */ }
+  }, []);
+
   // Memory operations
   const memoryClear = useCallback(() => saveMemory(0), [saveMemory]);
   const memoryRecall = useCallback(() => {
@@ -349,27 +395,37 @@ export function FloatingCalculator() {
   const handleDragStart = useCallback((e: React.MouseEvent) => {
     if ((e.target as HTMLElement).closest('button')) return;
     setDragging(true);
-    dragRef.current = {
-      startX: e.clientX,
-      startY: e.clientY,
-      startPosX: position.x,
-      startPosY: position.y,
-    };
+    draggingRef.current = true;
+    // Capture pointer offset within the panel so we can derive the new top-left
+    // from subsequent mouse positions.
+    offsetRef.current = { x: e.clientX - position.x, y: e.clientY - position.y };
   }, [position]);
 
   useEffect(() => {
     if (!dragging) return;
+    // Account for the notepad side panel (200px + 8px gap) when expanded
+    const panelWidth = showNotepad ? 488 : 280;
     const handleMove = (e: MouseEvent) => {
-      const dx = e.clientX - dragRef.current.startX;
-      const dy = e.clientY - dragRef.current.startY;
-      // Account for the notepad side panel (200px + 8px gap) when expanded
-      const panelWidth = showNotepad ? 488 : 280;
-      setPosition({
-        x: Math.max(0, Math.min(window.innerWidth - panelWidth, dragRef.current.startPosX + dx)),
-        y: Math.max(0, Math.min(window.innerHeight - 200, dragRef.current.startPosY + dy)),
+      if (!draggingRef.current || !panelRef.current) return;
+      if (rafRef.current !== null) return; // a frame is already scheduled
+      const x = Math.max(0, Math.min(window.innerWidth - panelWidth, e.clientX - offsetRef.current.x));
+      const y = Math.max(0, Math.min(window.innerHeight - 200, e.clientY - offsetRef.current.y));
+      pendingPosRef.current = { x, y };
+      rafRef.current = requestAnimationFrame(() => {
+        rafRef.current = null;
+        if (panelRef.current && pendingPosRef.current) {
+          const { x: px, y: py } = pendingPosRef.current;
+          panelRef.current.style.transform = `translate3d(${px}px, ${py}px, 0)`;
+        }
       });
     };
-    const handleUp = () => setDragging(false);
+    const handleUp = () => {
+      if (rafRef.current !== null) { cancelAnimationFrame(rafRef.current); rafRef.current = null; }
+      draggingRef.current = false;
+      // Commit the final position to state once, for persistence.
+      if (pendingPosRef.current) setPosition(pendingPosRef.current);
+      setDragging(false);
+    };
     window.addEventListener('mousemove', handleMove);
     window.addEventListener('mouseup', handleUp);
     return () => {
@@ -402,23 +458,47 @@ export function FloatingCalculator() {
     const DRAG_THRESHOLD = 3;
     let lastPosX = fabDragRef.current.startPosX;
     let lastPosY = fabDragRef.current.startPosY;
+    let neutralized = false;
     const handleMove = (e: MouseEvent) => {
+      if (!fabRef.current) return;
       const dx = e.clientX - fabDragRef.current.startX;
       const dy = e.clientY - fabDragRef.current.startY;
       if (Math.abs(dx) > DRAG_THRESHOLD || Math.abs(dy) > DRAG_THRESHOLD) {
         fabDragRef.current.moved = true;
+        // When dragging away from the default bottom/right corner, switch to
+        // top-left anchored transform positioning so translate3d lands on the
+        // actual cursor target instead of offsetting from the corner.
+        if (!neutralized) {
+          if (fabPosition.x === -1 && fabRef.current) {
+            fabRef.current.style.right = 'auto';
+            fabRef.current.style.bottom = 'auto';
+            fabRef.current.style.left = '0px';
+            fabRef.current.style.top = '0px';
+          }
+          neutralized = true;
+        }
       }
       lastPosX = Math.max(0, Math.min(window.innerWidth - FAB_SIZE, fabDragRef.current.startPosX + dx));
       lastPosY = Math.max(0, Math.min(window.innerHeight - FAB_SIZE, fabDragRef.current.startPosY + dy));
-      setFabPosition({ x: lastPosX, y: lastPosY });
+      if (fabRafRef.current !== null) return; // a frame is already scheduled
+      pendingFabPosRef.current = { x: lastPosX, y: lastPosY };
+      fabRafRef.current = requestAnimationFrame(() => {
+        fabRafRef.current = null;
+        if (fabRef.current && pendingFabPosRef.current) {
+          const { x, y } = pendingFabPosRef.current;
+          fabRef.current.style.transform = `translate3d(${x}px, ${y}px, 0)`;
+        }
+      });
     };
     const handleUp = () => {
+      if (fabRafRef.current !== null) { cancelAnimationFrame(fabRafRef.current); fabRafRef.current = null; }
       setFabDragging(false);
       if (!fabDragRef.current.moved) {
         // It was a click, not a drag — toggle the calculator open/closed
         setOpen((v) => !v);
       } else {
-        // Persist the new FAB position
+        // Commit + persist the new FAB position once
+        setFabPosition({ x: lastPosX, y: lastPosY });
         try {
           localStorage.setItem('omnimath-fab-position', JSON.stringify({ x: lastPosX, y: lastPosY }));
         } catch { /* ignore */ }
@@ -430,11 +510,20 @@ export function FloatingCalculator() {
       window.removeEventListener('mousemove', handleMove);
       window.removeEventListener('mouseup', handleUp);
     };
-  }, [fabDragging]);
+  }, [fabDragging, fabPosition.x]);
 
   // Double-click the FAB to reset its position to the default bottom-right corner
   const handleFabDoubleClick = useCallback(() => {
     setFabPosition(DEFAULT_FAB_POS);
+    // Clear transform/anchor styles written imperatively during a drag so the
+    // bottom-4/right-4 corner classes take effect again.
+    if (fabRef.current) {
+      fabRef.current.style.transform = '';
+      fabRef.current.style.left = '';
+      fabRef.current.style.top = '';
+      fabRef.current.style.right = '';
+      fabRef.current.style.bottom = '';
+    }
     try {
       localStorage.removeItem('omnimath-fab-position');
     } catch { /* ignore */ }
@@ -909,6 +998,7 @@ export function FloatingCalculator() {
     <>
       {/* Toggle button (fixed corner, draggable) */}
       <button
+        ref={fabRef}
         type="button"
         onMouseDown={handleFabMouseDown}
         onDoubleClick={handleFabDoubleClick}
@@ -917,28 +1007,30 @@ export function FloatingCalculator() {
           fabPosition.x === -1 ? 'bottom-4 right-4' : '',
           fabDragging ? 'cursor-grabbing' : 'cursor-grab'
         )}
-        style={fabPosition.x === -1 ? undefined : { left: fabPosition.x, top: fabPosition.y }}
-        title="Floating Calculator (Ctrl+Shift+C · drag to move · double-click to reset)"
+        style={fabPosition.x === -1 ? undefined : { left: 0, top: 0, transform: `translate3d(${fabPosition.x}px, ${fabPosition.y}px, 0)` }}
+        title={`${t('qcFloatingCalc')} · Ctrl+Shift+C · ${t('qcDragHint')}`}
       >
         <Calculator className="size-5" />
       </button>
 
       <AnimatePresence>
         {open && (
+          <div
+            ref={panelRef}
+            key="calc-panel"
+            style={{
+              position: 'fixed',
+              transform: `translate3d(${position.x}px, ${position.y}px, 0)`,
+              zIndex: 76,
+            }}
+            className={dragging ? 'cursor-grabbing' : ''}
+          >
           <motion.div
             initial={{ opacity: 0, scale: 0.9, y: 20 }}
             animate={{ opacity: 1, scale: 1, y: 0 }}
             exit={{ opacity: 0, scale: 0.9, y: 20 }}
             transition={{ type: 'spring', stiffness: 300, damping: 26 }}
-            style={{
-              left: position.x,
-              top: position.y,
-              zIndex: 76,
-            }}
-            className={cn(
-              'fixed flex items-stretch',
-              dragging ? 'cursor-grabbing' : ''
-            )}
+            className="flex items-stretch"
           >
             <div className="w-[280px] rounded-xl border border-border bg-card/95 backdrop-blur-xl shadow-2xl overflow-hidden flex flex-col">
             {/* Header / drag handle */}
@@ -950,12 +1042,12 @@ export function FloatingCalculator() {
               )}
             >
               <Calculator className="size-4 text-primary shrink-0" />
-              <span className="text-xs font-medium text-foreground/80 flex-1">Quick Calc</span>
+              <span className="text-xs font-medium text-foreground/80 flex-1">{t('qcTitle')}</span>
               <button
                 type="button"
                 onClick={handleCopy}
                 className="size-6 rounded-md hover:bg-accent text-muted-foreground hover:text-foreground flex items-center justify-center"
-                title="Copy result"
+                title={t('qcCopyResult')}
               >
                 {copied ? <Check className="size-3.5 text-emerald-500" /> : <Copy className="size-3.5" />}
               </button>
@@ -966,7 +1058,7 @@ export function FloatingCalculator() {
                   'size-6 rounded-md flex items-center justify-center',
                   showNotepad ? 'text-primary bg-primary/10' : 'text-muted-foreground hover:bg-accent hover:text-foreground'
                 )}
-                title={showNotepad ? 'Hide notepad' : 'Show notepad'}
+                title={showNotepad ? t('qcHideNotepad') : t('qcShowNotepad')}
               >
                 <NotebookPen className="size-3.5" />
               </button>
@@ -977,7 +1069,7 @@ export function FloatingCalculator() {
                   'size-6 rounded-md flex items-center justify-center',
                   pinned ? 'text-primary bg-primary/10' : 'text-muted-foreground hover:bg-accent hover:text-foreground'
                 )}
-                title={pinned ? 'Unpin (Esc to close)' : 'Pin (always open)'}
+                title={pinned ? t('qcUnpin') : t('qcPin')}
               >
                 {pinned ? <Pin className="size-3.5" /> : <PinOff className="size-3.5" />}
               </button>
@@ -994,7 +1086,7 @@ export function FloatingCalculator() {
 
             {/* Mode tabs */}
             <div className="flex px-2 pt-2 gap-1">
-              {MODE_TABS.map(({ mode: m, icon: Icon, label }) => (
+              {MODE_TABS.map(({ mode: m, icon: Icon }) => (
                 <button
                   key={m}
                   type="button"
@@ -1005,10 +1097,10 @@ export function FloatingCalculator() {
                       ? 'bg-primary/10 text-primary'
                       : 'text-muted-foreground hover:bg-accent/50'
                   )}
-                  title={label}
+                  title={modeLabel[m]}
                 >
                   <Icon className="size-3.5" />
-                  <span>{label}</span>
+                  <span>{modeLabel[m]}</span>
                 </button>
               ))}
             </div>
@@ -1030,14 +1122,14 @@ export function FloatingCalculator() {
                       )}
                     >
                       <Ruler className="size-3" />
-                      {UNIT_CATEGORIES[cat].label.slice(0, 5)}
+                      {unitCategoryLabel[cat]}
                     </button>
                   ))}
                 </div>
 
                 {/* From input */}
                 <div className="space-y-1">
-                  <label className="text-[10px] text-muted-foreground uppercase tracking-wider">From</label>
+                  <label className="text-[10px] text-muted-foreground uppercase tracking-wider">{t('unitsFrom')}</label>
                   <div className="flex gap-1">
                     <input
                       type="text"
@@ -1068,12 +1160,12 @@ export function FloatingCalculator() {
                   }}
                   className="w-full flex items-center justify-center gap-1 py-1 text-[11px] text-muted-foreground hover:text-primary"
                 >
-                  <ArrowLeftRight className="size-3" /> Swap
+                  <ArrowLeftRight className="size-3" /> {t('unitsSwap')}
                 </button>
 
                 {/* To result */}
                 <div className="space-y-1">
-                  <label className="text-[10px] text-muted-foreground uppercase tracking-wider">To</label>
+                  <label className="text-[10px] text-muted-foreground uppercase tracking-wider">{t('unitsTo')}</label>
                   <div className="flex gap-1">
                     <div className="flex-1 h-8 px-2 rounded-md bg-primary/5 border border-primary/20 text-sm font-mono text-primary flex items-center">
                       {convResult || '—'}
@@ -1285,12 +1377,12 @@ export function FloatingCalculator() {
                 {matrixResult && (
                   <div className="space-y-1 p-2 rounded-md bg-primary/5 border border-primary/20">
                     <div className="flex items-center justify-between">
-                      <span className="text-[10px] text-muted-foreground uppercase tracking-wider">Result</span>
+                      <span className="text-[10px] text-muted-foreground uppercase tracking-wider">{t('linalgResult')}</span>
                       <button
                         type="button"
                         onClick={copyMatrixResult}
                         className="size-5 rounded-md hover:bg-accent text-muted-foreground hover:text-foreground flex items-center justify-center"
-                        title="Copy result"
+                        title={t('qcCopyResult')}
                       >
                         {matrixCopied ? <Check className="size-3 text-emerald-500" /> : <Copy className="size-3" />}
                       </button>
@@ -1330,16 +1422,34 @@ export function FloatingCalculator() {
               <>
                 {/* Display */}
                 <div className="px-3 pt-3 pb-2">
-                  <div className="text-right">
+                  <div className="text-right relative">
                     <div className="text-[11px] text-muted-foreground font-mono h-4 truncate">
                       {expression && expression !== display ? expression : ''}
                     </div>
-                    <div className="text-2xl font-mono font-semibold text-foreground truncate">
+                    <div className="text-2xl font-mono font-semibold text-foreground truncate pr-6">
                       {display}
                     </div>
                     {memoryValue !== 0 && (
                       <div className="text-[9px] text-primary/70 font-mono">M = {memoryValue}</div>
                     )}
+                    <button
+                      type="button"
+                      onClick={() => {
+                        if (history[0]) {
+                          const idx = history[0].lastIndexOf(' = ');
+                          if (idx > 0) {
+                            appendToNotepad(history[0].slice(0, idx), history[0].slice(idx + 3));
+                            return;
+                          }
+                        }
+                        appendToNotepad(expression || display, display);
+                      }}
+                      className="absolute top-0 right-0 size-5 rounded-md hover:bg-accent text-muted-foreground hover:text-foreground flex items-center justify-center"
+                      title={t('qcSendToNotepad')}
+                      aria-label={t('qcSendToNotepad')}
+                    >
+                      <StickyNote size={14} />
+                    </button>
                   </div>
                 </div>
 
@@ -1352,33 +1462,48 @@ export function FloatingCalculator() {
                   >
                     <span className="flex items-center gap-1">
                       <History className="size-3" />
-                      History ({history.length})
+                      {t('qcHistTitle')} ({history.length})
                     </span>
                     {showHistory ? <ChevronUp className="size-3" /> : <ChevronDown className="size-3" />}
                   </button>
                   {showHistory && (
                     <div className="max-h-28 overflow-y-auto rounded-md bg-muted/30 border border-border/40 mb-1">
                       {history.length === 0 ? (
-                        <div className="px-2 py-1.5 text-[10px] text-muted-foreground italic">No history yet</div>
+                        <div className="px-2 py-1.5 text-[10px] text-muted-foreground italic">{t('histNoHistory')}</div>
                       ) : (
                         <>
-                          {history.map((entry, i) => (
-                            <button
-                              key={i}
-                              type="button"
-                              onClick={() => reuseHistory(entry)}
-                              className="w-full text-left px-2 py-1 text-[10px] font-mono text-foreground/70 hover:bg-accent/50 hover:text-foreground truncate"
-                              title={entry}
-                            >
-                              {entry}
-                            </button>
-                          ))}
+                          {history.map((entry, i) => {
+                            const idx = entry.lastIndexOf(' = ');
+                            const expr = idx > 0 ? entry.slice(0, idx) : entry;
+                            const result = idx > 0 ? entry.slice(idx + 3) : entry;
+                            return (
+                              <div key={i} className="flex items-center group">
+                                <button
+                                  type="button"
+                                  onClick={() => reuseHistory(entry)}
+                                  className="flex-1 text-left px-2 py-1 text-[10px] font-mono text-foreground/70 hover:bg-accent/50 hover:text-foreground truncate"
+                                  title={entry}
+                                >
+                                  {entry}
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={() => appendToNotepad(expr, result)}
+                                  className="size-5 rounded hover:bg-accent text-muted-foreground hover:text-primary flex items-center justify-center shrink-0 opacity-0 group-hover:opacity-100"
+                                  title={t('qcSendToNotepad')}
+                                  aria-label={t('qcSendToNotepad')}
+                                >
+                                  <Plus size={12} />
+                                </button>
+                              </div>
+                            );
+                          })}
                           <button
                             type="button"
                             onClick={clearHistory}
                             className="w-full text-left px-2 py-1 text-[10px] text-destructive hover:bg-destructive/10"
                           >
-                            Clear history
+                            {t('qcClearHistory')}
                           </button>
                         </>
                       )}
@@ -1468,7 +1593,7 @@ export function FloatingCalculator() {
             {/* Footer hint */}
             <div className="px-3 py-1.5 border-t border-border/60 text-[10px] text-muted-foreground flex items-center justify-between bg-muted/20">
               <span className="font-mono">Ctrl+Shift+C</span>
-              <span>Drag to move</span>
+              <span>{t('qcDragHint')}</span>
             </div>
             </div>
 
@@ -1485,12 +1610,12 @@ export function FloatingCalculator() {
                   <div className="w-[200px] h-full ml-2 rounded-xl border border-border bg-card/95 backdrop-blur-xl shadow-2xl p-2 flex flex-col gap-1.5">
                     <div className="flex items-center gap-1 px-1 text-[10px] text-muted-foreground">
                       <NotebookPen className="size-3" />
-                      <span>Notepad</span>
+                      <span>{t('qcNotepad')}</span>
                     </div>
                     <textarea
                       value={notepadText}
                       onChange={handleNotepadChange}
-                      placeholder="草稿 / 记录数据…"
+                      placeholder={t('qcNotepadPlaceholder')}
                       className="flex-1 min-h-[160px] w-full resize-none rounded-md bg-muted/50 border border-border/50 p-2 text-xs font-mono outline-none focus:border-primary/50 placeholder:text-muted-foreground/60"
                     />
                   </div>
@@ -1498,6 +1623,7 @@ export function FloatingCalculator() {
               )}
             </AnimatePresence>
           </motion.div>
+          </div>
         )}
       </AnimatePresence>
     </>

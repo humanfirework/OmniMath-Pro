@@ -152,7 +152,7 @@ function renderAssistantContent(
                   onClick={() => navigator.clipboard.writeText(s).catch(() => {})}
                 >
                   <Copy className="size-3 mr-1" />
-                  复制
+                  {translateRaw('aiCopy')}
                 </Button>
                 <Button
                   size="sm"
@@ -160,7 +160,7 @@ function renderAssistantContent(
                   onClick={() => onInsert(s)}
                 >
                   <ArrowDownToLine className="size-3 mr-1" />
-                  插入编辑器
+                  {translateRaw('aiInsertEditor')}
                 </Button>
               </div>
             </div>
@@ -175,20 +175,20 @@ function renderAssistantContent(
 function friendlyError(error: string): string {
   switch (error) {
     case 'NO_API_KEY':
-      return '尚未配置 API key，请在下方设置中填写。';
+      return translateRaw('aiErrNoKey');
     case 'NETWORK_ERROR':
-      return '网络连接失败，请检查网络或 API 地址是否可访问。';
+      return translateRaw('aiErrNetwork');
     case 'HTTP_401':
     case 'HTTP_403':
-      return 'API key 无效或没有权限（鉴权失败），请检查配置。';
+      return translateRaw('aiErrAuth');
     case 'HTTP_429':
-      return '请求过于频繁或额度不足（429），请稍后再试。';
+      return translateRaw('aiErrRateLimit');
     case 'PARSE_ERROR':
-      return '无法解析 AI 的响应，可能是 API 地址不正确。';
+      return translateRaw('aiErrParse');
     case 'EMPTY_REPLY':
-      return 'AI 返回了空回复，请重试。';
+      return translateRaw('aiErrEmpty');
     case 'ABORTED':
-      return '请求已取消。';
+      return translateRaw('aiErrCancelled');
     default:
       if (error.startsWith('HTTP_5')) {
         return '服务器内部错误，请稍后再试。';
@@ -269,6 +269,7 @@ function ConfigCard({
   onSave: (cfg: AIConfig) => void;
   onCancel?: () => void;
 }) {
+  const t = useT();
   const [apiKey, setApiKey] = useState(initial.apiKey);
   const [baseURL, setBaseURL] = useState(initial.baseURL);
   const [model, setModel] = useState(initial.model);
@@ -286,7 +287,7 @@ function ConfigCard({
     >
       <div className="flex items-center gap-2 text-amber-600 dark:text-amber-400">
         <KeyRound className="size-3.5" />
-        <span className="text-[12px] font-medium">配置 AI 助手</span>
+        <span className="text-[12px] font-medium">{t('aiConfig')}</span>
       </div>
       <p className="text-[11px] text-muted-foreground leading-relaxed">
         AI 助手需要配置 OpenAI 兼容的 API key 才能使用。所有配置仅保存在本地浏览器，不会上传。
@@ -350,7 +351,7 @@ function ConfigCard({
             className="h-7 px-2.5 text-[11px] text-muted-foreground hover:text-foreground"
             onClick={onCancel}
           >
-            取消
+            {t('aiCancel')}
           </Button>
         )}
         <Button
@@ -365,7 +366,7 @@ function ConfigCard({
             })
           }
         >
-          保存
+          {t('aiSave')}
         </Button>
       </div>
     </motion.div>
@@ -449,7 +450,7 @@ export function AIPanel() {
       if (result.ok) {
         const assistantMsg: ChatMessage = {
           role: 'assistant',
-          content: result.reply || '(空回复)',
+          content: result.reply || t('aiEmptyReply'),
           id: `a-${Date.now()}`,
           toolCalls: result.toolCalls.length > 0 ? result.toolCalls : undefined,
         };
@@ -539,7 +540,7 @@ export function AIPanel() {
           </span>
           {!config.apiKey && (
             <span className="text-[9.5px] px-1.5 py-0.5 rounded-full bg-amber-500/15 text-amber-600 dark:text-amber-400 border border-amber-500/20">
-              未配置
+              {t('aiNotConfigured')}
             </span>
           )}
         </div>
@@ -552,7 +553,7 @@ export function AIPanel() {
               setConfig(loadAIConfig());
               setShowConfig((v) => !v);
             }}
-            title="AI 设置"
+            title={t('aiSettings')}
           >
             <Settings className="size-3.5" />
           </Button>
@@ -567,7 +568,7 @@ export function AIPanel() {
               }}
             >
               <Trash2 className="size-3 mr-1" />
-              清空
+              {t('aiClear')}
             </Button>
           )}
         </div>
@@ -618,9 +619,9 @@ export function AIPanel() {
                     }}
                     onMouseEnter={(e) => {
                       (e.currentTarget as HTMLButtonElement).style.backgroundColor =
-                        'rgba(45,212,191,0.08)';
+                        'var(--ai-quick-hover-bg)';
                       (e.currentTarget as HTMLButtonElement).style.borderColor =
-                        'rgba(45,212,191,0.30)';
+                        'var(--ai-quick-hover-border)';
                     }}
                     onMouseLeave={(e) => {
                       (e.currentTarget as HTMLButtonElement).style.backgroundColor =
@@ -662,9 +663,7 @@ export function AIPanel() {
                   )}
                 </div>
                 <div
-                  className={`max-w-[82%] rounded-xl px-3 py-2 backdrop-blur-sm border ${
-                    m.role === 'user' ? '' : 'bg-slate-800/40'
-                  }`}
+                  className="max-w-[82%] rounded-xl px-3 py-2 backdrop-blur-sm border"
                   style={
                     m.role === 'user'
                       ? {
@@ -728,7 +727,7 @@ export function AIPanel() {
                 <Bot className="size-3.5 text-violet-500" />
               </div>
               <div
-                className="rounded-xl px-3 py-2.5 backdrop-blur-sm border bg-slate-800/40 flex items-center gap-2"
+                className="rounded-xl px-3 py-2.5 backdrop-blur-sm border flex items-center gap-2"
                 style={{
                   backgroundColor: 'var(--ai-assistant-bg)',
                   borderColor: 'var(--ai-assistant-border)',
@@ -736,7 +735,7 @@ export function AIPanel() {
                 }}
               >
                 <Loader2 className="size-3.5 animate-spin text-primary" />
-                <span className="text-[11.5px]">思考中…</span>
+                <span className="text-[11.5px]">{t('aiThinking')}</span>
                 <span className="flex gap-0.5">
                   {[0, 1, 2].map((i) => (
                     <motion.span
@@ -797,7 +796,7 @@ export function AIPanel() {
             value={input}
             onChange={(e) => setInput(e.target.value)}
             onKeyDown={handleKeyDown}
-            placeholder={t('aiInputPlaceholder') || '问任何数学问题…'}
+            placeholder={t('aiAskPlaceholder')}
             rows={2}
             className="flex-1 resize-none text-[12.5px] leading-relaxed px-3 py-2 outline-none placeholder:text-muted-foreground/60 max-h-32 rounded-xl"
             style={{

@@ -58,7 +58,7 @@ import { FormulaRenderer } from '@/components/workbench/FormulaRenderer';
 import { MatrixTransformViz } from '@/components/workbench/linalg/MatrixTransformViz';
 import { useWorkbenchStore, type VariableEntry } from '@/lib/store/workbench';
 import { setScopeVar } from '@/lib/engine';
-import { t, type TranslationDict } from '@/lib/i18n';
+import { t, tf, type TranslationDict } from '@/lib/i18n';
 import { cn } from '@/lib/utils';
 import { toast } from 'sonner';
 import { math } from '@/lib/engine/mathInstance';
@@ -381,7 +381,7 @@ export function LinearAlgebraWorkbench() {
         <div className="shrink-0 h-10 px-3 flex items-center justify-between border-b border-border/60 bg-background/40">
           <div className="flex items-center gap-1.5">
             <Grid3x3 className="size-3.5 text-primary" />
-            <span className="text-[12px] font-semibold tracking-tight">矩阵库</span>
+            <span className="text-[12px] font-semibold tracking-tight">{t('linalgMatrixLib')}</span>
             <Badge variant="outline" className="h-4 px-1.5 text-[9.5px]">
               {matrices.length}
             </Badge>
@@ -397,7 +397,7 @@ export function LinearAlgebraWorkbench() {
                 <Plus className="size-3.5" />
               </Button>
             </TooltipTrigger>
-            <TooltipContent side="bottom">新建矩阵</TooltipContent>
+            <TooltipContent side="bottom">{t('linalgNewMatrix')}</TooltipContent>
           </Tooltip>
         </div>
         <ScrollArea className="flex-1 min-h-0">
@@ -449,7 +449,7 @@ export function LinearAlgebraWorkbench() {
                         }
                       }}
                       className="grid place-items-center size-6 rounded text-muted-foreground hover:text-destructive hover:bg-destructive/10 cursor-pointer"
-                      aria-label="删除矩阵"
+                      aria-label={t('linalgDeleteMatrix')}
                     >
                       <Trash2 className="size-3.5" />
                     </span>
@@ -471,19 +471,19 @@ export function LinearAlgebraWorkbench() {
           <TabsList className="h-9 grid grid-cols-6 w-full max-w-2xl text-[11.5px]">
             <TabsTrigger value="edit" className="text-[11.5px] gap-1.5">
               <Grid3x3 className="size-3.5" />
-              矩阵编辑
+              {t('linalgTabEdit')}
             </TabsTrigger>
             <TabsTrigger value="ops" className="text-[11.5px] gap-1.5">
               <Cog className="size-3.5" />
-              运算
+              {t('linalgTabOps')}
             </TabsTrigger>
             <TabsTrigger value="decomp" className="text-[11.5px] gap-1.5">
               <Split className="size-3.5" />
-              分解
+              {t('linalgTabDecomp')}
             </TabsTrigger>
             <TabsTrigger value="system" className="text-[11.5px] gap-1.5">
               <Equal className="size-3.5" />
-              方程组
+              {t('linalgTabSystem')}
             </TabsTrigger>
             <TabsTrigger value="vector" className="text-[11.5px] gap-1.5">
               <ArrowRight className="size-3.5" />
@@ -491,7 +491,7 @@ export function LinearAlgebraWorkbench() {
             </TabsTrigger>
             <TabsTrigger value="transform" className="text-[11.5px] gap-1.5">
               <Activity className="size-3.5" />
-              变换
+              {t('linalgTabTransform')}
             </TabsTrigger>
           </TabsList>
 
@@ -578,7 +578,7 @@ function MatrixEditorTab({
 
   const fillIdentity = () => {
     if (matrix.length !== matrix[0]?.length) {
-      toast.error('需方阵');
+      toast.error(t('linalgNeedSquare'));
       return;
     }
     onUpdate(name, identity(matrix.length));
@@ -596,7 +596,7 @@ function MatrixEditorTab({
       latex: matrixToLatex(matrix),
     };
     setVariable(name, entry);
-    toast.success('已保存: ' + name);
+    toast.success(tf('linalgSavedVar', { name }));
   };
 
   return (
@@ -688,44 +688,43 @@ function MatrixEditorTab({
           {/* 行/列操作 + 快速填充 */}
           <div className="flex flex-wrap items-center gap-1.5">
             <Button variant="outline" size="sm" className="h-7 px-2.5 text-[11px]" onClick={addRow}>
-              <Plus className="size-3 mr-0.5" /> 加行
+              <Plus className="size-3 mr-0.5" /> {t('linalgAddRowBtn')}
             </Button>
             <Button variant="outline" size="sm" className="h-7 px-2.5 text-[11px]" onClick={delRow}>
-              <Minus className="size-3 mr-0.5" /> 减行
+              <Minus className="size-3 mr-0.5" /> {t('linalgDelRowBtn')}
             </Button>
             <Button variant="outline" size="sm" className="h-7 px-2.5 text-[11px]" onClick={addCol}>
-              <Plus className="size-3 mr-0.5" /> 加列
+              <Plus className="size-3 mr-0.5" /> {t('linalgAddColBtn')}
             </Button>
             <Button variant="outline" size="sm" className="h-7 px-2.5 text-[11px]" onClick={delCol}>
-              <Minus className="size-3 mr-0.5" /> 减列
+              <Minus className="size-3 mr-0.5" /> {t('linalgDelColBtn')}
             </Button>
             <div className="w-px h-5 bg-border/60 mx-1" />
             <Button variant="outline" size="sm" className="h-7 px-2.5 text-[11px]" onClick={fillIdentity}>
-              <Sigma className="size-3 mr-0.5" /> 单位阵
+              <Sigma className="size-3 mr-0.5" /> {t('linalgIdentity')}
             </Button>
             <Button variant="outline" size="sm" className="h-7 px-2.5 text-[11px]" onClick={fillZeros}>
-              零矩阵
+              {t('linalgZeros')}
             </Button>
             <Button variant="outline" size="sm" className="h-7 px-2.5 text-[11px]" onClick={fillTranspose}>
-              <RotateCcw className="size-3 mr-0.5" /> 转置
+              <RotateCcw className="size-3 mr-0.5" /> {t('linalgTranspose')}
             </Button>
           </div>
 
           <Button onClick={handleSave} className="h-9 text-[12px] gap-1.5" size="sm">
             <Save className="size-4" />
-            保存到变量 → <span className="font-mono font-semibold">{name}</span>
+            {t('linalgSaveToVar')} <span className="font-mono font-semibold">{name}</span>
           </Button>
         </div>
 
         {/* 预览区 */}
         <div className="space-y-2">
-          <div className="text-[11px] text-muted-foreground">KaTeX 预览</div>
+          <div className="text-[11px] text-muted-foreground">{t('linalgKatexPreview')}</div>
           <div className="rounded-lg border border-primary/30 bg-primary/5 p-4 glow-card-teal min-h-[140px] grid place-items-center overflow-x-auto">
             <FormulaRenderer latex={name + ' = ' + matrixToLatex(matrix)} displayMode fitToContainer={true} />
           </div>
           <div className="text-[10.5px] text-muted-foreground leading-relaxed">
-            提示：支持粘贴 TSV / CSV / MATLAB 风格 <code className="font-mono">[1,2;3,4]</code>，
-            会自动扩展目标网格。
+            {t('linalgPasteExpandHint')}
           </div>
         </div>
       </div>
@@ -764,14 +763,14 @@ function OperationsTab({ matrices }: { matrices: MatrixEntry[] }) {
     setResult(null);
     try {
       if (!matrixA) {
-        setError('矩阵为空');
+        setError(t('linalgMatrixEmpty'));
         return;
       }
       let res: OpResult;
 
       if (isBinary) {
         if (!matrixB) {
-          setError('矩阵 B 为空');
+          setError(t('linalgMatrixBEmpty'));
           return;
         }
         const aRows = matrixA.length;
@@ -780,12 +779,12 @@ function OperationsTab({ matrices }: { matrices: MatrixEntry[] }) {
         const bCols = matrixB[0]?.length ?? 0;
         if (opKind === 'mul') {
           if (aCols !== bRows) {
-            setError(`维度不匹配: A(${aRows}×${aCols}) × B(${bRows}×${bCols})`);
+            setError(tf('linalgDimMismatchMul', { ar: aRows, ac: aCols, br: bRows, bc: bCols }));
             return;
           }
         } else {
           if (aRows !== bRows || aCols !== bCols) {
-            setError(`维度不匹配: A(${aRows}×${aCols}) vs B(${bRows}×${bCols})`);
+            setError(tf('linalgDimMismatchBin', { ar: aRows, ac: aCols, br: bRows, bc: bCols }));
             return;
           }
         }
@@ -816,7 +815,30 @@ function OperationsTab({ matrices }: { matrices: MatrixEntry[] }) {
             break;
         }
         const mat = toMatrixArray(val);
-        res = { latex: expr + ' = ' + matrixToLatex(mat), text: expr, isMatrix: true, matrix: mat };
+        const binSteps: string[] = [];
+        if (opKind === 'mul') {
+          binSteps.push(`${opA} = ${matrixToLatex(matrixA)}, \\quad ${opB} = ${matrixToLatex(matrixB)}`);
+          binSteps.push(`(AB)_{ij} = \\sum_{k} A_{ik} B_{kj}`);
+          binSteps.push(`${expr} = ${matrixToLatex(mat)}`);
+        } else if (opKind === 'emul' || opKind === 'ediv') {
+          const opSym = opKind === 'emul' ? '\\odot' : '\\oslash';
+          const elSym = opKind === 'emul' ? '\\times' : '\\div';
+          binSteps.push(`${opA} = ${matrixToLatex(matrixA)}, \\quad ${opB} = ${matrixToLatex(matrixB)}`);
+          binSteps.push(`(A ${opSym} B)_{ij} = A_{ij} ${elSym} B_{ij}`);
+          binSteps.push(`${expr} = ${matrixToLatex(mat)}`);
+        } else {
+          const sym = opKind === 'add' ? '+' : '-';
+          binSteps.push(`${opA} = ${matrixToLatex(matrixA)}, \\quad ${opB} = ${matrixToLatex(matrixB)}`);
+          binSteps.push(`(A ${sym} B)_{ij} = A_{ij} ${sym} B_{ij}`);
+          binSteps.push(`${expr} = ${matrixToLatex(mat)}`);
+        }
+        res = {
+          latex: expr + ' = ' + matrixToLatex(mat),
+          text: expr,
+          isMatrix: true,
+          matrix: mat,
+          steps: binSteps,
+        };
       } else if (isScalar) {
         const val = math.multiply(scalar, math.matrix(matrixA));
         const mat = toMatrixArray(val);
@@ -825,10 +847,15 @@ function OperationsTab({ matrices }: { matrices: MatrixEntry[] }) {
           text: `${scalar}*${opA}`,
           isMatrix: true,
           matrix: mat,
+          steps: [
+            `${opA} = ${matrixToLatex(matrixA)}`,
+            `(c \\cdot A)_{ij} = c \\cdot A_{ij}`,
+            `${scalar} \\cdot ${opA} = ${matrixToLatex(mat)}`,
+          ],
         };
       } else if (isPower) {
         if (!isSquare(matrixA)) {
-          setError('需方阵');
+          setError(t('linalgNeedSquare'));
           return;
         }
         const val = math.pow(math.matrix(matrixA), power);
@@ -838,6 +865,10 @@ function OperationsTab({ matrices }: { matrices: MatrixEntry[] }) {
           text: `${opA}^${power}`,
           isMatrix: true,
           matrix: mat,
+          steps: [
+            `${opA} = ${matrixToLatex(matrixA)}`,
+            `${opA}^{${power}} = \\underbrace{${opA} \\cdots ${opA}}_{${power} \\text{${t('linalgTimesOp')}}} = ${matrixToLatex(mat)}`,
+          ],
         };
       } else {
         switch (opKind) {
@@ -848,17 +879,21 @@ function OperationsTab({ matrices }: { matrices: MatrixEntry[] }) {
               text: `${opA}^T`,
               isMatrix: true,
               matrix: mat,
+              steps: [
+                `${opA} = ${matrixToLatex(matrixA)}`,
+                `(A^T)_{ij} = A_{ji} \\implies ${opA}^T = ${matrixToLatex(mat)}`,
+              ],
             };
             break;
           }
           case 'inv': {
             if (!isSquare(matrixA)) {
-              setError('需方阵');
+              setError(t('linalgNeedSquare'));
               return;
             }
             const det = math.det(matrixA);
             if (Math.abs(det) < 1e-12) {
-              setError('奇异矩阵，不可逆');
+              setError(t('linalgSingularNonInv'));
               return;
             }
             const val = math.inv(math.matrix(matrixA));
@@ -870,7 +905,7 @@ function OperationsTab({ matrices }: { matrices: MatrixEntry[] }) {
               matrix: mat,
               steps: [
                 `\\det(${opA}) = ${numToLatex(det)}`,
-                `\\det(${opA}) \\neq 0 \\Rightarrow ${opA} \\text{ 可逆}`,
+                `\\det(${opA}) \\neq 0 \\Rightarrow ${opA} \\text{${t('linalgInvertibleLatex')}}`,
                 `${opA}^{-1} = ${matrixToLatex(mat)}`,
               ],
             };
@@ -878,7 +913,7 @@ function OperationsTab({ matrices }: { matrices: MatrixEntry[] }) {
           }
           case 'det': {
             if (!isSquare(matrixA)) {
-              setError('需方阵');
+              setError(t('linalgNeedSquare'));
               return;
             }
             const det = math.det(matrixA);
@@ -886,6 +921,10 @@ function OperationsTab({ matrices }: { matrices: MatrixEntry[] }) {
               latex: `\\det(${opA}) = ${numToLatex(det)}`,
               text: `det(${opA}) = ${det}`,
               isMatrix: false,
+              steps: [
+                `${opA} = ${matrixToLatex(matrixA)}`,
+                `\\det(${opA}) = ${numToLatex(det)}`,
+              ],
             };
             break;
           }
@@ -895,12 +934,16 @@ function OperationsTab({ matrices }: { matrices: MatrixEntry[] }) {
               latex: `\\operatorname{rank}(${opA}) = ${r}`,
               text: `rank(${opA}) = ${r}`,
               isMatrix: false,
+              steps: [
+                `${opA} = ${matrixToLatex(matrixA)}`,
+                `\\operatorname{rank}(${opA}) = ${r} \\quad (\\text{${t('linalgMaxIndepRows')}})`,
+              ],
             };
             break;
           }
           case 'trace': {
             if (!isSquare(matrixA)) {
-              setError('需方阵');
+              setError(t('linalgNeedSquare'));
               return;
             }
             const tr = matrixA.reduce((sum, row, i) => sum + (row[i] ?? 0), 0);
@@ -908,17 +951,21 @@ function OperationsTab({ matrices }: { matrices: MatrixEntry[] }) {
               latex: `\\operatorname{tr}(${opA}) = ${numToLatex(tr)}`,
               text: `tr(${opA}) = ${tr}`,
               isMatrix: false,
+              steps: [
+                `${opA} = ${matrixToLatex(matrixA)}`,
+                `\\operatorname{tr}(${opA}) = \\sum_{i} A_{ii} = ${numToLatex(tr)}`,
+              ],
             };
             break;
           }
           default:
-            setError('未知操作');
+            setError(t('linalgUnknownOp'));
             return;
         }
       }
       setResult(res);
     } catch (err) {
-      setError((err as Error).message || '计算错误');
+      setError((err as Error).message || t('linalgCalcError'));
     } finally {
       setWorking(false);
     }
@@ -930,7 +977,7 @@ function OperationsTab({ matrices }: { matrices: MatrixEntry[] }) {
         {/* 控件区 */}
         <div className="space-y-3">
           <div>
-            <label className="text-[11px] text-muted-foreground">操作数 A</label>
+            <label className="text-[11px] text-muted-foreground">{t('linalgOperandA')}</label>
             <Select value={opA} onValueChange={setOpA}>
               <SelectTrigger className="h-8 text-[12px] mt-1">
                 <SelectValue />
@@ -950,7 +997,7 @@ function OperationsTab({ matrices }: { matrices: MatrixEntry[] }) {
 
           {isBinary && (
             <div>
-              <label className="text-[11px] text-muted-foreground">操作数 B</label>
+              <label className="text-[11px] text-muted-foreground">{t('linalgOperandB')}</label>
               <Select value={opB} onValueChange={setOpB}>
                 <SelectTrigger className="h-8 text-[12px] mt-1">
                   <SelectValue />
@@ -971,7 +1018,7 @@ function OperationsTab({ matrices }: { matrices: MatrixEntry[] }) {
 
           {isScalar && (
             <div>
-              <label className="text-[11px] text-muted-foreground">标量 k</label>
+              <label className="text-[11px] text-muted-foreground">{t('linalgScalar')}</label>
               <Input
                 type="number"
                 value={scalar}
@@ -984,7 +1031,7 @@ function OperationsTab({ matrices }: { matrices: MatrixEntry[] }) {
 
           {isPower && (
             <div>
-              <label className="text-[11px] text-muted-foreground">幂次 k（整数）</label>
+              <label className="text-[11px] text-muted-foreground">{t('linalgPowerInt')}</label>
               <Input
                 type="number"
                 value={power}
@@ -996,7 +1043,7 @@ function OperationsTab({ matrices }: { matrices: MatrixEntry[] }) {
           )}
 
           <div>
-            <label className="text-[11px] text-muted-foreground">运算</label>
+            <label className="text-[11px] text-muted-foreground">{t('linalgOperation')}</label>
             <Select value={opKind} onValueChange={(v) => setOpKind(v as OpKind)}>
               <SelectTrigger className="h-8 text-[12px] mt-1 font-mono">
                 <SelectValue />
@@ -1025,7 +1072,7 @@ function OperationsTab({ matrices }: { matrices: MatrixEntry[] }) {
             size="sm"
           >
             <Cog className="size-4" />
-            计算
+            {t('linalgCompute')}
           </Button>
         </div>
 
@@ -1055,14 +1102,14 @@ function OperationsTab({ matrices }: { matrices: MatrixEntry[] }) {
                 exit={{ opacity: 0 }}
                 className="rounded-md border border-primary/30 bg-primary/5 p-4 glow-card-teal"
               >
-                <div className="text-[11px] text-muted-foreground mb-2">计算结果</div>
+                <div className="text-[11px] text-muted-foreground mb-2">{t('linalgCalcResult')}</div>
                 <div className="overflow-x-auto">
                   <FormulaRenderer latex={result.latex} displayMode fitToContainer={true} />
                 </div>
                 {result.steps && result.steps.length > 0 && (
                   <details className="mt-3 group">
                     <summary className="cursor-pointer text-[11px] text-muted-foreground hover:text-foreground select-none">
-                      推导步骤 ({result.steps.length})
+                      {t('linalgDerivationSteps')} ({result.steps.length})
                     </summary>
                     <div className="mt-2 space-y-1.5 overflow-x-auto">
                       {result.steps.map((s, i) => (
@@ -1078,7 +1125,7 @@ function OperationsTab({ matrices }: { matrices: MatrixEntry[] }) {
 
             {!result && !error && (
               <div className="h-full min-h-[200px] grid place-items-center text-[11.5px] text-muted-foreground">
-                选择操作数与运算后点击 "计算"
+                {t('linalgOpsInputPrompt')}
               </div>
             )}
           </AnimatePresence>
@@ -1715,7 +1762,7 @@ function gramSchmidt(vectors: number[][]): { orthogonal: number[][]; steps: stri
     if (norm < 1e-12) {
       // Linearly dependent — keep zero vector (won't be normalized)
       unit = q.map(() => 0);
-      steps.push(`\\lVert v_{${i + 1}} \\rVert = 0 \\Rightarrow \\text{线性相关，跳过}`);
+      steps.push(`\\lVert v_{${i + 1}} \\rVert = 0 \\Rightarrow \\text{${t('linalgLinearlyDependent')}}`);
     } else {
       unit = q.map((x) => x / norm);
       steps.push(
@@ -1751,11 +1798,11 @@ function DecompositionTab({
     setResult(null);
     try {
       if (!matrix) {
-        setError('矩阵为空');
+        setError(t('linalgMatrixEmpty'));
         return;
       }
       if (!isSquare(matrix)) {
-        setError('需方阵');
+        setError(t('linalgNeedSquare'));
         return;
       }
       let res: DecompositionResult;
@@ -1800,7 +1847,7 @@ function DecompositionTab({
           }).eigenvectors;
           const parts = [
             {
-              label: '特征值',
+              label: t('linalgEigenvalues'),
               latex: `\\begin{bmatrix} ${values.map((v) => numToLatex(Number(v))).join(' \\\\ ')} \\end{bmatrix}`,
             },
           ];
@@ -1819,25 +1866,25 @@ function DecompositionTab({
           const L = choleskyDecomp(matrix);
           res = {
             parts: [{ label: 'L', latex: matrixToLatex(L) }],
-            note: 'A = L · L^T  (要求对称正定)',
+            note: t('linalgCholeskyNote'),
           };
           break;
         }
         case 'svd': {
-          toast.warning('mathjs 未内置 SVD，请使用 "特征值分解" 替代');
+          toast.warning(t('linalgSvdNotSupported'));
           res = {
             parts: [],
-            note: 'mathjs 未提供 SVD 实现；建议使用 QR 或特征值分解代替',
+            note: t('linalgSvdNotSupportedNote'),
           };
           break;
         }
         default:
-          setError('暂不支持');
+          setError(t('linalgNotSupportedShort'));
           return;
       }
       setResult(res);
     } catch (err) {
-      setError((err as Error).message || '计算错误');
+      setError((err as Error).message || t('linalgCalcError'));
     } finally {
       setWorking(false);
     }
@@ -1848,7 +1895,7 @@ function DecompositionTab({
       <div className="grid grid-cols-[320px_1fr] gap-5 p-2">
         <div className="space-y-3">
           <div>
-            <label className="text-[11px] text-muted-foreground">矩阵</label>
+            <label className="text-[11px] text-muted-foreground">{t('linalgMatrixLabel')}</label>
             <Select value={matrixName} onValueChange={setMatrixName}>
               <SelectTrigger className="h-8 text-[12px] mt-1">
                 <SelectValue />
@@ -1867,17 +1914,17 @@ function DecompositionTab({
           </div>
 
           <div>
-            <label className="text-[11px] text-muted-foreground">分解类型</label>
+            <label className="text-[11px] text-muted-foreground">{t('linalgDecompType')}</label>
             <Select value={decompKind} onValueChange={(v) => setDecompKind(v as DecompKind)}>
               <SelectTrigger className="h-8 text-[12px] mt-1">
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="lu" className="text-[12px]">LU 分解</SelectItem>
-                <SelectItem value="qr" className="text-[12px]">QR 分解</SelectItem>
-                <SelectItem value="eigen" className="text-[12px]">特征值分解</SelectItem>
-                <SelectItem value="cholesky" className="text-[12px]">Cholesky 分解</SelectItem>
-                <SelectItem value="svd" className="text-[12px]">SVD（暂不支持）</SelectItem>
+                <SelectItem value="lu" className="text-[12px]">{t('linalgLu')}</SelectItem>
+                <SelectItem value="qr" className="text-[12px]">{t('linalgQr')}</SelectItem>
+                <SelectItem value="eigen" className="text-[12px]">{t('linalgEigenDecomp')}</SelectItem>
+                <SelectItem value="cholesky" className="text-[12px]">{t('linalgCholesky')}</SelectItem>
+                <SelectItem value="svd" className="text-[12px]">{t('linalgSvdNotSupportedItem')}</SelectItem>
               </SelectContent>
             </Select>
           </div>
@@ -1889,7 +1936,7 @@ function DecompositionTab({
             size="sm"
           >
             <Split className="size-4" />
-            分解
+            {t('linalgDecompose')}
           </Button>
         </div>
 
@@ -1943,7 +1990,7 @@ function DecompositionTab({
                 </div>
                 {result.parts.length === 0 && (
                   <div className="rounded-md border border-amber-500/30 bg-amber-500/10 p-3 text-[12px] text-amber-700 dark:text-amber-300">
-                    {result.note || '暂不支持'}
+                    {result.note || t('linalgNotSupportedShort')}
                   </div>
                 )}
               </motion.div>
@@ -1951,7 +1998,7 @@ function DecompositionTab({
 
             {!result && !error && (
               <div className="h-full min-h-[200px] grid place-items-center text-[11.5px] text-muted-foreground">
-                选择矩阵与分解方法后点击 "分解"
+                {t('linalgDecompInputPrompt')}
               </div>
             )}
           </AnimatePresence>
@@ -1967,7 +2014,7 @@ function choleskyDecomp(m: Matrix): Matrix {
   for (let i = 0; i < n; i++) {
     for (let j = i + 1; j < n; j++) {
       if (Math.abs(m[i][j] - m[j][i]) > 1e-9) {
-        throw new Error('非对称，无法做 Cholesky 分解');
+        throw new Error(t('linalgCholeskyNotSymmetric'));
       }
     }
   }
@@ -1978,7 +2025,7 @@ function choleskyDecomp(m: Matrix): Matrix {
       for (let k = 0; k < j; k++) sum += L[i][k] * L[j][k];
       if (i === j) {
         const v = m[i][i] - sum;
-        if (v <= 0) throw new Error('非正定，无法做 Cholesky 分解');
+        if (v <= 0) throw new Error(t('linalgCholeskyNotPosDef'));
         L[i][j] = Math.sqrt(v);
       } else {
         L[i][j] = (m[i][j] - sum) / L[j][j];
@@ -2058,14 +2105,14 @@ function LinearSystemTab({ defaultMatrix }: { defaultMatrix: Matrix | undefined 
     setSolution(null);
     try {
       if (vector.length !== matrix.length) {
-        setError('常向量长度需等于矩阵行数');
+        setError(t('linalgConstVecSizeMismatch'));
         return;
       }
       const sol = solveLinearSystem(matrix, vector);
       sol.augmentedLatex = augmentedLatex;
       setSolution(sol);
     } catch (err) {
-      setError((err as Error).message || '求解错误');
+      setError((err as Error).message || t('linalgSolveError'));
     } finally {
       setWorking(false);
     }
@@ -2077,7 +2124,7 @@ function LinearSystemTab({ defaultMatrix }: { defaultMatrix: Matrix | undefined 
         {/* 系数矩阵 + b */}
         <div className="space-y-3">
           <div className="flex items-center justify-between">
-            <label className="text-[11px] text-muted-foreground">增广矩阵 [A | b]</label>
+            <label className="text-[11px] text-muted-foreground">{t('linalgAugmented')}</label>
             <div className="flex gap-1">
               <Button variant="outline" size="sm" className="h-6 w-6 p-0" onClick={addRow}>
                 <Plus className="size-3" />
@@ -2135,7 +2182,7 @@ function LinearSystemTab({ defaultMatrix }: { defaultMatrix: Matrix | undefined 
             size="sm"
           >
             <Equal className="size-4" />
-            求解 Ax = b
+            {t('linalgSolveAxb')}
           </Button>
         </div>
 
@@ -2205,14 +2252,14 @@ function LinearSystemTab({ defaultMatrix }: { defaultMatrix: Matrix | undefined 
 
                 {solution.rankA !== undefined && solution.rankAug !== undefined && (
                   <div className="text-[11px] text-muted-foreground bg-muted/30 border border-border/40 rounded px-2.5 py-1.5 font-mono">
-                    rank(A) = {solution.rankA}，rank([A|b]) = {solution.rankAug}
+                    {tf('linalgRankInfo', { rankA: solution.rankA, rankAug: solution.rankAug })}
                     {solution.nUnknowns !== undefined && (
-                      <>，未知数 n = {solution.nUnknowns}</>
+                      <>{tf('linalgUnknownsInfo', { n: solution.nUnknowns })}</>
                     )}
                     {solution.kind === 'infinite' &&
                       solution.nUnknowns !== undefined &&
                       solution.rankA !== undefined &&
-                      `，${t('linalgFreeVars')} = ${solution.nUnknowns - solution.rankA}`}
+                      tf('linalgFreeVarsCount', { n: solution.nUnknowns - solution.rankA })}
                   </div>
                 )}
 
@@ -2221,14 +2268,14 @@ function LinearSystemTab({ defaultMatrix }: { defaultMatrix: Matrix | undefined 
                   solution.freeCols &&
                   solution.freeCols.length > 0 && (
                     <div className="text-[11px] text-amber-700 dark:text-amber-300 bg-amber-500/5 border border-amber-500/30 rounded px-2.5 py-1.5">
-                      <span className="font-medium">{t('linalgFreeVars')}：</span>
+                      <span className="font-medium">{t('linalgFreeVarsColon')}</span>
                       <span className="font-mono">
                         {' '}
                         {solution.freeCols.map((c) => `x_{${c + 1}}`).join(', ')}
                       </span>
                       <span className="text-muted-foreground">
                         {' '}
-                        （{solution.freeCols.length} 个）
+                        {tf('linalgCountItems', { n: solution.freeCols.length })}
                       </span>
                     </div>
                   )}
@@ -2241,6 +2288,21 @@ function LinearSystemTab({ defaultMatrix }: { defaultMatrix: Matrix | undefined 
                   </div>
                   <FormulaRenderer latex={solution.latex} displayMode fitToContainer={true} />
                 </div>
+
+                {solution.steps && solution.steps.length > 0 && (
+                  <details className="group">
+                    <summary className="cursor-pointer text-[11px] text-muted-foreground hover:text-foreground select-none">
+                      {t('linalgDerivationSteps')} ({solution.steps.length})
+                    </summary>
+                    <div className="mt-2 space-y-1.5 overflow-x-auto">
+                      {solution.steps.map((s, i) => (
+                        <div key={i} className="text-[11.5px] text-foreground/80">
+                          <FormulaRenderer latex={s} displayMode fitToContainer={true} />
+                        </div>
+                      ))}
+                    </div>
+                  </details>
+                )}
 
                 {/* Infinite: split into 特解 + 基础解系 */}
                 {solution.kind === 'infinite' &&
@@ -2284,7 +2346,7 @@ function LinearSystemTab({ defaultMatrix }: { defaultMatrix: Matrix | undefined 
 
             {!solution && !error && (
               <div className="h-full min-h-[200px] grid place-items-center text-[11.5px] text-muted-foreground">
-                填写系数矩阵与常向量后点击 "求解"
+                {t('linalgSystemInputPrompt')}
               </div>
             )}
           </AnimatePresence>
@@ -2300,8 +2362,21 @@ function solveLinearSystem(A: Matrix, b: number[]): SystemSolution {
   const cols = A[0]?.length ?? 0;
   const aug: number[][] = A.map((row, i) => [...row, b[i] ?? 0]);
 
+  const steps: string[] = [];
+  const augLatex = (m: number[][]) => {
+    const r = m.map((row) => {
+      const left = row.slice(0, cols).map(numToLatex).join(' & ');
+      const right = numToLatex(row[cols]);
+      return `${left} & \\big| & ${right}`;
+    });
+    return `\\left[\\begin{array}{${'c'.repeat(cols)}|c} ${r.join(' \\\\ ')} \\end{array}\\right]`;
+  };
+
+  steps.push(`[A \\mid b] = ${augLatex(aug)}`);
+
   let pivotRow = 0;
   const eps = 1e-10;
+  const rowOps: string[] = [];
   for (let c = 0; c < cols && pivotRow < rows; c++) {
     let maxIdx = -1;
     let maxAbs = eps;
@@ -2312,7 +2387,10 @@ function solveLinearSystem(A: Matrix, b: number[]): SystemSolution {
       }
     }
     if (maxIdx === -1) continue;
-    if (maxIdx !== pivotRow) [aug[maxIdx], aug[pivotRow]] = [aug[pivotRow], aug[maxIdx]];
+    if (maxIdx !== pivotRow) {
+      [aug[maxIdx], aug[pivotRow]] = [aug[pivotRow], aug[maxIdx]];
+      rowOps.push(`R_{${pivotRow + 1}} \\leftrightarrow R_{${maxIdx + 1}}`);
+    }
     const pv = aug[pivotRow][c];
     if (Math.abs(pv) > eps) {
       for (let k = c; k <= cols; k++) aug[pivotRow][k] /= pv;
@@ -2322,10 +2400,21 @@ function solveLinearSystem(A: Matrix, b: number[]): SystemSolution {
       const factor = aug[r][c];
       if (Math.abs(factor) > eps) {
         for (let k = c; k <= cols; k++) aug[r][k] -= factor * aug[pivotRow][k];
+        rowOps.push(`R_{${r + 1}} \\to R_{${r + 1}} - ${numToLatex(factor)} R_{${pivotRow + 1}}`);
       }
     }
     pivotRow++;
   }
+
+  // Keep the step list concise: at most a few representative row operations.
+  const maxOps = 4;
+  for (let i = 0; i < Math.min(rowOps.length, maxOps); i++) {
+    steps.push(rowOps[i]);
+  }
+  if (rowOps.length > maxOps) {
+    steps.push(`\\ldots \\; (\\text{${tf('linalgOmittedSteps', { n: rowOps.length - maxOps })}})`);
+  }
+  steps.push(`\\text{${t('linalgRowReduced')}} ${augLatex(aug)}`);
 
   const rankA = matrixRank(A);
   const augMat: Matrix = A.map((row, i) => [...row, b[i] ?? 0]);
@@ -2335,14 +2424,16 @@ function solveLinearSystem(A: Matrix, b: number[]): SystemSolution {
   const isHomogeneous = b.every((v) => Math.abs(v) < eps);
 
   if (rankA < rankAug) {
+    steps.push(`\\operatorname{rank}(A) = ${rankA} < \\operatorname{rank}([A \\mid b]) = ${rankAug} \\Rightarrow \\text{${t('linalgSystemNoSolution')}}`);
     return {
       kind: 'none',
-      latex: '\\text{方程组无解}',
+      latex: `\\text{${t('linalgSystemNoSolution')}}`,
       rankA,
       rankAug,
       nUnknowns: cols,
       augmentedLatex: '',
       isHomogeneous,
+      steps,
     };
   }
 
@@ -2373,6 +2464,7 @@ function solveLinearSystem(A: Matrix, b: number[]): SystemSolution {
       }
       if (pc !== -1) x[pc] = aug[r][cols];
     }
+    steps.push(`\\text{${t('linalgBackSubstitution')}} x = ${vectorToLatex(x)}`);
     return {
       kind: 'unique',
       latex: 'x = ' + vectorToLatex(x),
@@ -2384,6 +2476,7 @@ function solveLinearSystem(A: Matrix, b: number[]): SystemSolution {
       pivotCols,
       freeCols,
       isHomogeneous,
+      steps,
     };
   }
 
@@ -2404,6 +2497,8 @@ function solveLinearSystem(A: Matrix, b: number[]): SystemSolution {
   for (let i = 0; i < nullBasis.length; i++) {
     terms.push(`+ t_{${i + 1}} ` + vectorToLatex(nullBasis[i]));
   }
+  steps.push(`\\text{${t('linalgFreeVarsLatex')}} ${freeCols.map((c) => `x_{${c + 1}}`).join(', ')}`);
+  steps.push(`\\text{${t('linalgGeneralSolutionLatex')}} x = ${terms.join(' ')}`);
   return {
     kind: 'infinite',
     latex: 'x = ' + terms.join(' '),
@@ -2416,5 +2511,6 @@ function solveLinearSystem(A: Matrix, b: number[]): SystemSolution {
     nUnknowns: cols,
     augmentedLatex: '',
     isHomogeneous,
+    steps,
   };
 }

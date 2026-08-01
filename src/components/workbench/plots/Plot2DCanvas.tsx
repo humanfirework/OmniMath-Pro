@@ -600,7 +600,7 @@ export function Plot2DCanvas({
         const samples = plot.samples;
         if (samples.length < 2) continue;
         ctx.strokeStyle = plot.config.color;
-        ctx.lineWidth = 2;
+        ctx.lineWidth = plot.config.width ?? 2;
         ctx.lineJoin = 'round';
         ctx.lineCap = 'round';
         // Clean math software style - no glow/shadow

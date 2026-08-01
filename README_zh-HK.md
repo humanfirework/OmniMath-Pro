@@ -33,31 +33,39 @@
 
 ### 工作台主頁
 
-![工作台主頁](./public/screenshots/workbench.png)
+![工作台主頁](./public/screenshots/features/workbench.png)
 
 ### 2D 函數繪圖
 
-![2D 函數繪圖](./public/screenshots/plot2d.png)
+![2D 函數繪圖](./public/screenshots/features/plot2d.png)
 
 ### 3D 曲面繪圖
 
-![3D 曲面繪圖](./public/screenshots/plot3d.png)
+![3D 曲面繪圖](./public/screenshots/features/plot3d.png)
 
 ### 線性代數求解
 
-![線性代數求解](./public/screenshots/linear-algebra.png)
+![線性代數求解](./public/screenshots/features/linear-algebra.png)
+
+### Pipeline 節點工作流
+
+![Pipeline 節點工作流](./public/screenshots/features/pipeline.png)
+
+### 求解器工作台
+
+![求解器工作台](./public/screenshots/features/solver.png)
 
 ### 浮動計算器
 
-![浮動計算器](./public/screenshots/calculator.png)
+![浮動計算器](./public/screenshots/calculator/calculator.png)
 
 ### 設置面板
 
-![設置面板](./public/screenshots/settings.png)
+![設置面板](./public/screenshots/features/settings.png)
 
 ### 淺色模式
 
-![淺色模式](./public/screenshots/light-mode.png)
+![淺色模式](./public/screenshots/features/light-mode.png)
 
 ---
 
@@ -118,7 +126,7 @@
 ### 浮動計算器
 
 - `Ctrl/Cmd + Shift + C` 快速調出便攜式計算器
-- 三種模式：基礎計算、科學計算、單位換算
+- 五種模式：基礎計算、科學計算、程式設計師、線性代數、單位換算
 - 支援長度、重量、溫度、面積、體積、時間單位轉換
 - 可拖拽、可固定、可複製結果
 

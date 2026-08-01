@@ -33,31 +33,39 @@ Built with Tauri 2 + Next.js 16 + React 19
 
 ### Workbench
 
-![Workbench](./public/screenshots/workbench.png)
+![Workbench](./public/screenshots/features/workbench.png)
 
 ### 2D Plotting
 
-![2D Plotting](./public/screenshots/plot2d.png)
+![2D Plotting](./public/screenshots/features/plot2d.png)
 
 ### 3D Surface Plotting
 
-![3D Surface Plotting](./public/screenshots/plot3d.png)
+![3D Surface Plotting](./public/screenshots/features/plot3d.png)
 
 ### Linear Algebra
 
-![Linear Algebra](./public/screenshots/linear-algebra.png)
+![Linear Algebra](./public/screenshots/features/linear-algebra.png)
+
+### Pipeline Node Workflow
+
+![Pipeline Node Workflow](./public/screenshots/features/pipeline.png)
+
+### Solver Workbench
+
+![Solver Workbench](./public/screenshots/features/solver.png)
 
 ### Floating Calculator
 
-![Floating Calculator](./public/screenshots/calculator.png)
+![Floating Calculator](./public/screenshots/calculator/calculator.png)
 
 ### Settings Panel
 
-![Settings Panel](./public/screenshots/settings.png)
+![Settings Panel](./public/screenshots/features/settings.png)
 
 ### Light Mode
 
-![Light Mode](./public/screenshots/light-mode.png)
+![Light Mode](./public/screenshots/features/light-mode.png)
 
 ---
 
@@ -118,7 +126,7 @@ Regular calculators are too simple, and professional math software is often too 
 ### Floating Calculator
 
 - `Ctrl/Cmd + Shift + C` to summon a portable calculator
-- Three modes: Basic, Scientific, Unit Conversion
+- Five modes: Basic, Scientific, Programmer, Linear Algebra, Unit Conversion
 - Supports length, weight, temperature, area, volume, time conversions
 - Draggable, pinnable, copy-to-clipboard
 

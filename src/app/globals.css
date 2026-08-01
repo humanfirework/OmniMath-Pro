@@ -3156,6 +3156,10 @@
   --primary: oklch(0.58 0.13 168);
   --primary-foreground: oklch(0.99 0 0);
 
+  /* Primary soft variations — used by 3D cube faces & soft fills */
+  --primary-bg-soft: rgba(13, 148, 136, 0.08);
+  --primary-shadow: rgba(13, 148, 136, 0.12);
+
   /* Secondary / muted — cool light gray */
   --secondary: oklch(0.955 0.007 185);
   --secondary-foreground: oklch(0.27 0.02 200);
@@ -3203,6 +3207,16 @@
 
   /* Typography */
   --font-size-base: 14px;
+
+  /* Syntax highlighting — light theme palette (used by CodeEditor) */
+  --syntax-comment: #6b7280;
+  --syntax-number: #b45309;
+  --syntax-string: #047857;
+  --syntax-keyword: #6d28d9;
+  --syntax-variable: #0d9488;
+  --syntax-function: #2563eb;
+  --syntax-operator: #e11d48;
+  --syntax-punctuation: #6b7280;
 }
 
 /* ------------------------------------------------------------
@@ -3227,6 +3241,10 @@
   /* Primary — bright teal in dark */
   --primary: oklch(0.78 0.13 170);
   --primary-foreground: oklch(0.12 0.01 200);
+
+  /* Primary soft variations — used by 3D cube faces & soft fills */
+  --primary-bg-soft: rgba(45, 212, 191, 0.05);
+  --primary-shadow: rgba(45, 212, 191, 0.15);
 
   /* Secondary / muted — elevated surfaces */
   --secondary: oklch(0.31 0.014 200);
@@ -3272,6 +3290,16 @@
   --node-bg: oklch(0.275 0.014 200);
   --node-border: oklch(0.78 0.13 170 / 40%);
   --connector: oklch(0.78 0.13 170);
+
+  /* Syntax highlighting — dark theme palette (used by CodeEditor) */
+  --syntax-comment: #6b7280;
+  --syntax-number: #fbbf24;
+  --syntax-string: #34d399;
+  --syntax-keyword: #a78bfa;
+  --syntax-variable: #2dd4bf;
+  --syntax-function: #60a5fa;
+  --syntax-operator: #fb7185;
+  --syntax-punctuation: #9ca3af;
 }
 
 /* ------------------------------------------------------------
@@ -4399,6 +4427,8 @@ html[data-font-preset="system"] {
   --ai-tool-border: rgba(139, 92, 246, 0.18);
   --ai-quick-bg: rgba(39, 39, 42, 0.30);
   --ai-quick-border: rgba(255, 255, 255, 0.06);
+  --ai-quick-hover-bg: rgba(45, 212, 191, 0.08);
+  --ai-quick-hover-border: rgba(45, 212, 191, 0.30);
 }
 /* 亮色模式下（非 dark）保持原值，但给 ai-panel 根类兜底 */
 .ai-panel {
@@ -4416,4 +4446,6 @@ html[data-font-preset="system"] {
   --ai-tool-border: rgba(139, 92, 246, 0.15);
   --ai-quick-bg: rgba(39, 39, 42, 0.04);
   --ai-quick-border: rgba(0, 0, 0, 0.06);
+  --ai-quick-hover-bg: rgba(45, 212, 191, 0.12);
+  --ai-quick-hover-border: rgba(45, 212, 191, 0.40);
 }

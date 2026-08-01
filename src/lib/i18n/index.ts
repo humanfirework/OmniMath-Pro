@@ -73,6 +73,7 @@ export interface TranslationDict {
   previewFormula: string;
   previewPlot: string;
   preview3D: string;
+  preview3DLoading: string;
   previewLog: string;
   previewCopy: string;
   previewInput: string;
@@ -212,6 +213,26 @@ export interface TranslationDict {
 
   /* ---------------- Quick calc ---------------- */
   qcPlaceholder: string;
+  qcTitle: string;
+  qcNotepad: string;
+  qcShowNotepad: string;
+  qcHideNotepad: string;
+  qcPin: string;
+  qcUnpin: string;
+  qcCopyResult: string;
+  qcDragHint: string;
+  qcModeBasic: string;
+  qcModeSci: string;
+  qcModeProg: string;
+  qcModeLin: string;
+  qcModeConv: string;
+  qcSendToNotepad: string;
+  qcHistTitle: string;
+  qcNotepadPlaceholder: string;
+  qcFloatingCalc: string;
+  qcClearHistory: string;
+  qcMemoryClear: string;
+  qcMemoryRecall: string;
 
   /* ---------------- History ---------------- */
   histTitle: string;
@@ -504,6 +525,60 @@ export interface TranslationDict {
   linalgGeneralSolution: string;
   linalgFundamentalSystem: string;
 
+  /* ---------------- Linear algebra workbench — Task 11 ---------------- */
+  linalgMatrixLib: string;
+  linalgDeleteMatrix: string;
+  linalgNeedSquare: string;
+  linalgSavedVar: string;
+  linalgAddRowBtn: string;
+  linalgDelRowBtn: string;
+  linalgAddColBtn: string;
+  linalgDelColBtn: string;
+  linalgSaveToVar: string;
+  linalgKatexPreview: string;
+  linalgPasteExpandHint: string;
+  linalgMatrixEmpty: string;
+  linalgMatrixBEmpty: string;
+  linalgDimMismatchMul: string;
+  linalgDimMismatchBin: string;
+  linalgSingularNonInv: string;
+  linalgUnknownOp: string;
+  linalgCalcError: string;
+  linalgOperandA: string;
+  linalgOperandB: string;
+  linalgPowerInt: string;
+  linalgCalcResult: string;
+  linalgDerivationSteps: string;
+  linalgOpsInputPrompt: string;
+  linalgEigenDecomp: string;
+  linalgSvdNotSupportedItem: string;
+  linalgSvdNotSupported: string;
+  linalgSvdNotSupportedNote: string;
+  linalgNotSupportedShort: string;
+  linalgMatrixLabel: string;
+  linalgDecompInputPrompt: string;
+  linalgCholeskyNotSymmetric: string;
+  linalgCholeskyNotPosDef: string;
+  linalgCholeskyNote: string;
+  linalgConstVecSizeMismatch: string;
+  linalgSolveError: string;
+  linalgSystemInputPrompt: string;
+  linalgRankInfo: string;
+  linalgUnknownsInfo: string;
+  linalgFreeVarsCount: string;
+  linalgFreeVarsColon: string;
+  linalgCountItems: string;
+  linalgOmittedSteps: string;
+  linalgRowReduced: string;
+  linalgSystemNoSolution: string;
+  linalgBackSubstitution: string;
+  linalgFreeVarsLatex: string;
+  linalgGeneralSolutionLatex: string;
+  linalgLinearlyDependent: string;
+  linalgMaxIndepRows: string;
+  linalgInvertibleLatex: string;
+  linalgTimesOp: string;
+
   /* ---------------- Solver panel — extended ---------------- */
   solverTabEquation: string;
   solverTabSystem: string;
@@ -547,8 +622,92 @@ export interface TranslationDict {
   solverNumericNoSignChange: string;
   solverResultLabel: string;
 
+  /* ---------------- Solver workbench — Task 11 ---------------- */
+  solverNavEquation: string;
+  solverNavEquationDesc: string;
+  solverNavSystem: string;
+  solverNavSystemDesc: string;
+  solverNavDerivative: string;
+  solverNavDerivativeDesc: string;
+  solverNavIntegral: string;
+  solverNavIntegralDesc: string;
+  solverNavLimit: string;
+  solverNavLimitDesc: string;
+  solverSendToPlot2D: string;
+  solverSentToPlot2D: string;
+  solverSelectExample: string;
+  solverSolveMode: string;
+  solverNumericSolution: string;
+  solverSymbolicSolution: string;
+  solverSolveResult: string;
+  solverInputPrompt: string;
+  solverSymbolicFallback: string;
+  solverKindPolynomial: string;
+  solverKindTranscendental: string;
+  solverKindSymbolic: string;
+  solverSystemInput: string;
+  solverNonlinearSystem: string;
+  solverNumericMethodNote: string;
+  solverUniqueSolution: string;
+  solverSystemInputPrompt: string;
+  solverDerivativeOrder: string;
+  solverOrder1: string;
+  solverOrder2: string;
+  solverOrder3: string;
+  solverDerivativeResult: string;
+  solverDerivativeInputPrompt: string;
+  solverDefiniteIntegral: string;
+  solverIndefiniteIntegral: string;
+  solverIntegralResult: string;
+  solverIntegralInputPrompt: string;
+  solverNumericResult: string;
+  solverPointMustBeNumber: string;
+  solverPointPlaceholder: string;
+  solverComputeLimit: string;
+  solverLimitResult: string;
+  solverLimitInputPrompt: string;
+  solverWorkbenchTitle: string;
+  solverFooterHint: string;
+  /* Solver example groups */
+  solverExPolynomial: string;
+  solverExTranscendental: string;
+  solverExLinearSystem: string;
+  solverExNonlinear: string;
+  solverDerivExRules: string;
+  solverDerivExPoly: string;
+  solverIntegralExBasic: string;
+  solverIntegralExAdvanced: string;
+  solverLimitExClassic: string;
+  solverLimitExInfinite: string;
+  /* Solver example hints */
+  solverHintFactor: string;
+  solverHintCubic: string;
+  solverHintComplexRoots: string;
+  solverHintNumeric: string;
+  solverHintLog: string;
+  solverHint2VarLinear: string;
+  solverHint3VarLinear: string;
+  solverHintNonlinear: string;
+  solverHintProductRule: string;
+  solverHintQuotientRule: string;
+  solverHintChainRule: string;
+  solverHintPowerRule: string;
+  solverHintPowerFunc: string;
+  solverHintTrigFunc: string;
+  solverHintExpFunc: string;
+  solverHintLogIntegral: string;
+  solverHintByParts: string;
+  solverHintSubstitution: string;
+  solverHintArctan: string;
+  solverHintDefOfE: string;
+  /* Solver example labels */
+  solverLabel2x2Linear: string;
+  solverLabel3x3Linear: string;
+  solverLabelHasQuadratic: string;
+
   /* ---------------- Pipeline / nodes (ComfyUI style) ---------------- */
   pipelineTitle: string;
+  pipelineEnterView: string;
   pipelineAddNode: string;
   pipelineRun: string;
   pipelineClear: string;
@@ -664,6 +823,22 @@ export interface TranslationDict {
   aiSolve: string;
   aiPlot: string;
   aiStep: string;
+  aiCopy: string;
+  aiInsertEditor: string;
+  aiErrNoKey: string;
+  aiErrNetwork: string;
+  aiErrAuth: string;
+  aiErrRateLimit: string;
+  aiErrParse: string;
+  aiErrEmpty: string;
+  aiErrCancelled: string;
+  aiConfig: string;
+  aiCancel: string;
+  aiSave: string;
+  aiEmptyReply: string;
+  aiNotConfigured: string;
+  aiSettings: string;
+  aiAskPlaceholder: string;
 
   /* ---------------- Plot panel ---------------- */
   plotEmpty: string;
@@ -678,12 +853,98 @@ export interface TranslationDict {
   plotTypePolar: string;
   plotTypeParametric: string;
   plotCurveSettings: string;
+  plotColor: string;
+  plotLineWidth: string;
   plotExprY: string;
   plotExprR: string;
   plotExprX: string;
   plotExprYParam: string;
   plotThetaRange: string;
   plotTRange: string;
+
+  /* ---------------- 3D plot panel — example groups ---------------- */
+  plot3dGroupBasic: string;
+  plot3dGroupAdvanced: string;
+  plot3dExWave: string;
+  plot3dExSaddle: string;
+  plot3dExParaboloid: string;
+  plot3dExGaussian: string;
+  plot3dExSombrero: string;
+  plot3dExTiltedWave: string;
+
+  /* ---------------- 3D plot panel — errors & toasts ---------------- */
+  plot3dErrNoGeometry: string;
+  plot3dErrEmpty: string;
+  plot3dErrEval: string;
+  plot3dErrEvalVars: string;
+  plot3dErrExampleEval: string;
+  plot3dErrExampleEvalVars: string;
+  plot3dAdded: string;
+  plot3dExampleAdded: string;
+
+  /* ---------------- 3D plot panel — input bar ---------------- */
+  plot3dInputPlaceholder: string;
+  plot3dExprInputAria: string;
+  plot3dAdd: string;
+  plot3dAddSurface: string;
+  plot3dCollapseControls: string;
+  plot3dExpandControls: string;
+  plot3dToggleControlsAria: string;
+  plot3dResetCameraAria: string;
+  plot3dResetCameraView: string;
+  plot3dExportPngAria: string;
+  plot3dExportScene: string;
+
+  /* ---------------- 3D plot panel — preview ---------------- */
+  plot3dPreview: string;
+  plot3dPreviewHint: string;
+
+  /* ---------------- 3D plot panel — controls ---------------- */
+  plot3dWireframe: string;
+  plot3dAxes: string;
+  plot3dGrid: string;
+  plot3dAutoRotate: string;
+  plot3dResolution: string;
+  plot3dGridResolutionAria: string;
+  plot3dColorScheme: string;
+  plot3dSchemeHeight: string;
+  plot3dSchemeHeightAria: string;
+  plot3dSchemeMono: string;
+  plot3dSchemeMonoAria: string;
+  plot3dUpAxis: string;
+  plot3dYUp: string;
+  plot3dYUpAria: string;
+  plot3dZUp: string;
+  plot3dZUpAria: string;
+
+  /* ---------------- 3D plot panel — examples menu & surface list ---------------- */
+  plot3dExamples: string;
+  plot3dOpenExamplesAria: string;
+  plot3dHide: string;
+  plot3dShow: string;
+  plot3dHideSurface: string;
+  plot3dShowSurface: string;
+  plot3dRemoveSurface: string;
+  plot3dRemoveAria: string;
+
+  /* ---------------- 3D plot panel — canvas overlay & expand dialog ---------------- */
+  plot3dZoomIn: string;
+  plot3dZoomInAria: string;
+  plot3dControlsHint: string;
+  plot3dExpandAria: string;
+  plot3dExpandTitle: string;
+  plot3dExpandSubtitle: string;
+  plot3dExportPng: string;
+  plot3dCloseAria: string;
+
+  /* ---------------- 3D plot panel — error & empty states ---------------- */
+  plot3dSampleFailed: string;
+  plot3dSampleFailedHint: string;
+  plot3dSurfacesFailed: string;
+  plot3dWorkspaceTitle: string;
+  plot3dWorkspaceHintPre: string;
+  plot3dWorkspaceHintPost: string;
+  plot3dWorkspaceSupported: string;
 
   /* ---------------- AI 助手（上下文与工具调用） ---------------- */
   aiContextToggle: string;
@@ -896,6 +1157,7 @@ const zhCN: TranslationDict = {
   previewFormula: "公式",
   previewPlot: "绘图",
   preview3D: "3D",
+  preview3DLoading: "3D 模块加载中…",
   previewLog: "日志",
   previewCopy: "复制",
   previewInput: "输入",
@@ -1035,6 +1297,26 @@ const zhCN: TranslationDict = {
 
   /* Quick calc */
   qcPlaceholder: "快速计算…",
+  qcTitle: "快捷计算",
+  qcNotepad: "便签",
+  qcShowNotepad: "显示便签",
+  qcHideNotepad: "隐藏便签",
+  qcPin: "固定",
+  qcUnpin: "取消固定",
+  qcCopyResult: "复制结果",
+  qcDragHint: "拖动移动",
+  qcModeBasic: "基础",
+  qcModeSci: "科学",
+  qcModeProg: "程序员",
+  qcModeLin: "线性代数",
+  qcModeConv: "单位换算",
+  qcSendToNotepad: "追加到便签",
+  qcHistTitle: "计算历史",
+  qcNotepadPlaceholder: "草稿 / 记录数据…",
+  qcFloatingCalc: "浮动计算器",
+  qcClearHistory: "清除历史",
+  qcMemoryClear: "清除记忆",
+  qcMemoryRecall: "记忆召回",
 
   /* History */
   histTitle: "计算历史",
@@ -1325,6 +1607,60 @@ const zhCN: TranslationDict = {
   linalgGeneralSolution: "通解",
   linalgFundamentalSystem: "基础解系",
 
+  /* Linear algebra workbench — Task 11 */
+  linalgMatrixLib: "矩阵库",
+  linalgDeleteMatrix: "删除矩阵",
+  linalgNeedSquare: "需方阵",
+  linalgSavedVar: "已保存: {name}",
+  linalgAddRowBtn: "加行",
+  linalgDelRowBtn: "减行",
+  linalgAddColBtn: "加列",
+  linalgDelColBtn: "减列",
+  linalgSaveToVar: "保存到变量 →",
+  linalgKatexPreview: "KaTeX 预览",
+  linalgPasteExpandHint: "提示：支持粘贴 TSV / CSV / MATLAB 风格 [1,2;3,4]，会自动扩展目标网格。",
+  linalgMatrixEmpty: "矩阵为空",
+  linalgMatrixBEmpty: "矩阵 B 为空",
+  linalgDimMismatchMul: "维度不匹配: A({ar}×{ac}) × B({br}×{bc})",
+  linalgDimMismatchBin: "维度不匹配: A({ar}×{ac}) vs B({br}×{bc})",
+  linalgSingularNonInv: "奇异矩阵，不可逆",
+  linalgUnknownOp: "未知操作",
+  linalgCalcError: "计算错误",
+  linalgOperandA: "操作数 A",
+  linalgOperandB: "操作数 B",
+  linalgPowerInt: "幂次 k（整数）",
+  linalgCalcResult: "计算结果",
+  linalgDerivationSteps: "推导步骤",
+  linalgOpsInputPrompt: "选择操作数与运算后点击 \"计算\"",
+  linalgEigenDecomp: "特征值分解",
+  linalgSvdNotSupportedItem: "SVD（暂不支持）",
+  linalgSvdNotSupported: "mathjs 未内置 SVD，请使用 \"特征值分解\" 替代",
+  linalgSvdNotSupportedNote: "mathjs 未提供 SVD 实现；建议使用 QR 或特征值分解代替",
+  linalgNotSupportedShort: "暂不支持",
+  linalgMatrixLabel: "矩阵",
+  linalgDecompInputPrompt: "选择矩阵与分解方法后点击 \"分解\"",
+  linalgCholeskyNotSymmetric: "非对称，无法做 Cholesky 分解",
+  linalgCholeskyNotPosDef: "非正定，无法做 Cholesky 分解",
+  linalgCholeskyNote: "A = L · L^T  (要求对称正定)",
+  linalgConstVecSizeMismatch: "常向量长度需等于矩阵行数",
+  linalgSolveError: "求解错误",
+  linalgSystemInputPrompt: "填写系数矩阵与常向量后点击 \"求解\"",
+  linalgRankInfo: "rank(A) = {rankA}，rank([A|b]) = {rankAug}",
+  linalgUnknownsInfo: "，未知数 n = {n}",
+  linalgFreeVarsCount: "，自由变量 = {n}",
+  linalgFreeVarsColon: "自由变量：",
+  linalgCountItems: "（{n} 个）",
+  linalgOmittedSteps: "省略 {n} 步行变换",
+  linalgRowReduced: "行简化后：",
+  linalgSystemNoSolution: "方程组无解",
+  linalgBackSubstitution: "回代得：",
+  linalgFreeVarsLatex: "自由变量：",
+  linalgGeneralSolutionLatex: "通解：",
+  linalgLinearlyDependent: "线性相关，跳过",
+  linalgMaxIndepRows: "线性无关行的最大数目",
+  linalgInvertibleLatex: " 可逆",
+  linalgTimesOp: " 次",
+
   /* Solver panel — extended */
   solverTabEquation: "方程求解",
   solverTabSystem: "方程组",
@@ -1368,8 +1704,92 @@ const zhCN: TranslationDict = {
   solverNumericNoSignChange: "区间端点函数值同号，无法使用二分法",
   solverResultLabel: "结果",
 
+  /* Solver workbench — Task 11 */
+  solverNavEquation: "方程",
+  solverNavEquationDesc: "多项式 / 超越方程求根",
+  solverNavSystem: "方程组",
+  solverNavSystemDesc: "线性方程组逐步消元",
+  solverNavDerivative: "求导",
+  solverNavDerivativeDesc: "分步求导 · 法则标注",
+  solverNavIntegral: "积分",
+  solverNavIntegralDesc: "不定 / 定积分 · 数值回退",
+  solverNavLimit: "极限",
+  solverNavLimitDesc: "符号极限 · 数值回退",
+  solverSendToPlot2D: "发送到 2D 绘图",
+  solverSentToPlot2D: "已发送到 2D 绘图",
+  solverSelectExample: "选择示例…",
+  solverSolveMode: "求解模式",
+  solverNumericSolution: "数值解",
+  solverSymbolicSolution: "符号解",
+  solverSolveResult: "求解结果",
+  solverInputPrompt: "输入方程后点击 \"求解\"",
+  solverSymbolicFallback: "⚠️ 符号解失败，已回退到数值解",
+  solverKindPolynomial: "🧮 多项式方程 · ",
+  solverKindTranscendental: "📈 超越方程 · ",
+  solverKindSymbolic: "🔤 符号解 · ",
+  solverSystemInput: "方程组（每行一个方程）",
+  solverNonlinearSystem: "非线性方程组",
+  solverNumericMethodNote: "数值方法说明",
+  solverUniqueSolution: "唯一解",
+  solverSystemInputPrompt: "输入方程组后点击 \"求解方程组\"",
+  solverDerivativeOrder: "求导阶数",
+  solverOrder1: "1 阶",
+  solverOrder2: "2 阶",
+  solverOrder3: "3 阶",
+  solverDerivativeResult: "求导结果",
+  solverDerivativeInputPrompt: "输入表达式后点击 \"求导\"",
+  solverDefiniteIntegral: "定积分",
+  solverIndefiniteIntegral: "不定",
+  solverIntegralResult: "积分结果",
+  solverIntegralInputPrompt: "输入表达式后点击 \"积分\"",
+  solverNumericResult: "数值结果 ≈",
+  solverPointMustBeNumber: "趋于点需为数字或 inf",
+  solverPointPlaceholder: "0 或 inf",
+  solverComputeLimit: "求极限",
+  solverLimitResult: "极限结果",
+  solverLimitInputPrompt: "输入表达式后点击 \"求极限\"",
+  solverWorkbenchTitle: "求解器",
+  solverFooterHint: "分步求解：法则标注 / 逐步消元 / 积分提示",
+  /* Solver example groups */
+  solverExPolynomial: "多项式方程",
+  solverExTranscendental: "超越方程",
+  solverExLinearSystem: "线性方程组",
+  solverExNonlinear: "非线性（给出数值说明）",
+  solverDerivExRules: "乘积 / 商 / 链式",
+  solverDerivExPoly: "多项式 / 复合",
+  solverIntegralExBasic: "基本积分",
+  solverIntegralExAdvanced: "进阶",
+  solverLimitExClassic: "经典极限",
+  solverLimitExInfinite: "无穷极限",
+  /* Solver example hints */
+  solverHintFactor: "因式分解",
+  solverHintCubic: "三次方程",
+  solverHintComplexRoots: "复数根",
+  solverHintNumeric: "数值求解",
+  solverHintLog: "对数解",
+  solverHint2VarLinear: "二元一次",
+  solverHint3VarLinear: "三元一次",
+  solverHintNonlinear: "非线性",
+  solverHintProductRule: "乘积法则",
+  solverHintQuotientRule: "商法则",
+  solverHintChainRule: "链式法则",
+  solverHintPowerRule: "幂法则",
+  solverHintPowerFunc: "幂函数",
+  solverHintTrigFunc: "三角函数",
+  solverHintExpFunc: "指数函数",
+  solverHintLogIntegral: "对数积分",
+  solverHintByParts: "分部积分",
+  solverHintSubstitution: "换元",
+  solverHintArctan: "反正切",
+  solverHintDefOfE: "e 的定义",
+  /* Solver example labels */
+  solverLabel2x2Linear: "2×2 线性",
+  solverLabel3x3Linear: "3×3 线性",
+  solverLabelHasQuadratic: "含二次项",
+
   /* Pipeline / nodes */
   pipelineTitle: "计算流水线",
+  pipelineEnterView: "进入流水线视图",
   pipelineAddNode: "添加节点",
   pipelineRun: "运行",
   pipelineClear: "清空",
@@ -1473,7 +1893,7 @@ const zhCN: TranslationDict = {
   aiPlaceholder: "向 AI 提问…",
   aiSend: "发送",
   aiStop: "停止",
-  aiClear: "清除对话",
+  aiClear: "清空",
   aiThinking: "思考中…",
   aiWelcome: "你好！我是 OmniMath AI 助手。",
   aiWelcomeHint: "可以让我解释公式、求解方程或绘制图像。",
@@ -1485,6 +1905,22 @@ const zhCN: TranslationDict = {
   aiSolve: "求解",
   aiPlot: "绘图",
   aiStep: "分步",
+  aiCopy: "复制",
+  aiInsertEditor: "插入编辑器",
+  aiErrNoKey: "尚未配置 API key，请在下方设置中填写。",
+  aiErrNetwork: "网络连接失败，请检查网络或 API 地址是否可访问。",
+  aiErrAuth: "API key 无效或没有权限（鉴权失败），请检查配置。",
+  aiErrRateLimit: "请求过于频繁或额度不足（429），请稍后再试。",
+  aiErrParse: "无法解析 AI 的响应，可能是 API 地址不正确。",
+  aiErrEmpty: "AI 返回了空回复，请重试。",
+  aiErrCancelled: "请求已取消。",
+  aiConfig: "配置 AI 助手",
+  aiCancel: "取消",
+  aiSave: "保存",
+  aiEmptyReply: "(空回复)",
+  aiNotConfigured: "未配置",
+  aiSettings: "AI 设置",
+  aiAskPlaceholder: "问任何数学问题…",
 
   /* Plot */
   plotEmpty: "暂无图像",
@@ -1499,12 +1935,98 @@ const zhCN: TranslationDict = {
   plotTypePolar: "极坐标",
   plotTypeParametric: "参数方程",
   plotCurveSettings: "曲线设置",
+  plotColor: "颜色",
+  plotLineWidth: "线宽",
   plotExprY: "y =",
   plotExprR: "r(θ) =",
   plotExprX: "x(t) =",
   plotExprYParam: "y(t) =",
   plotThetaRange: "θ 范围",
   plotTRange: "t 范围",
+
+  /* 3D plot panel — example groups */
+  plot3dGroupBasic: "基础",
+  plot3dGroupAdvanced: "进阶",
+  plot3dExWave: "波纹",
+  plot3dExSaddle: "鞍面",
+  plot3dExParaboloid: "抛物面",
+  plot3dExGaussian: "高斯钟形",
+  plot3dExSombrero: "墨西哥帽",
+  plot3dExTiltedWave: "倾斜波纹",
+
+  /* 3D plot panel — errors & toasts */
+  plot3dErrNoGeometry: "表达式未生成可绘制的几何（请确认变量为 x 和 y）",
+  plot3dErrEmpty: "请输入 z = f(x, y) 表达式",
+  plot3dErrEval: "表达式无法求值：{err}",
+  plot3dErrEvalVars: "表达式无法求值，请检查变量是否为 x 和 y",
+  plot3dErrExampleEval: "示例表达式无法求值：{err}",
+  plot3dErrExampleEvalVars: "示例表达式无法求值",
+  plot3dAdded: "已添加 3D 曲面",
+  plot3dExampleAdded: "已添加示例曲面",
+
+  /* 3D plot panel — input bar */
+  plot3dInputPlaceholder: "输入 f(x, y)，例如 sin(x)*cos(y)",
+  plot3dExprInputAria: "3D 函数表达式输入",
+  plot3dAdd: "添加",
+  plot3dAddSurface: "添加曲面 (Enter)",
+  plot3dCollapseControls: "折叠控制面板",
+  plot3dExpandControls: "展开控制面板",
+  plot3dToggleControlsAria: "折叠/展开控制面板",
+  plot3dResetCameraAria: "重置相机",
+  plot3dResetCameraView: "重置相机视角",
+  plot3dExportPngAria: "导出 PNG",
+  plot3dExportScene: "导出 3D 场景为 PNG",
+
+  /* 3D plot panel — preview */
+  plot3dPreview: "预览",
+  plot3dPreviewHint: "输入表达式后将显示 LaTeX 预览，例如 z = sin(x)·cos(y)",
+
+  /* 3D plot panel — controls */
+  plot3dWireframe: "线框",
+  plot3dAxes: "坐标轴",
+  plot3dGrid: "网格",
+  plot3dAutoRotate: "自动旋转",
+  plot3dResolution: "分辨率",
+  plot3dGridResolutionAria: "网格分辨率",
+  plot3dColorScheme: "配色",
+  plot3dSchemeHeight: "高度",
+  plot3dSchemeHeightAria: "按高度配色",
+  plot3dSchemeMono: "单色",
+  plot3dSchemeMonoAria: "单色",
+  plot3dUpAxis: "上方向",
+  plot3dYUp: "Y 向上",
+  plot3dYUpAria: "Y 轴向上",
+  plot3dZUp: "Z 向上",
+  plot3dZUpAria: "Z 轴向上",
+
+  /* 3D plot panel — examples menu & surface list */
+  plot3dExamples: "示例",
+  plot3dOpenExamplesAria: "打开示例菜单",
+  plot3dHide: "隐藏",
+  plot3dShow: "显示",
+  plot3dHideSurface: "隐藏该曲面",
+  plot3dShowSurface: "显示该曲面",
+  plot3dRemoveSurface: "移除该曲面",
+  plot3dRemoveAria: "移除",
+
+  /* 3D plot panel — canvas overlay & expand dialog */
+  plot3dZoomIn: "放大",
+  plot3dZoomInAria: "放大查看 3D",
+  plot3dControlsHint: "拖拽旋转 · 滚轮缩放 · 右键平移",
+  plot3dExpandAria: "放大查看 3D 绘图",
+  plot3dExpandTitle: "3D 曲面大图查看",
+  plot3dExpandSubtitle: "{n} 个曲面 · 拖拽旋转 · 滚轮缩放 · 右键平移",
+  plot3dExportPng: "导出 PNG",
+  plot3dCloseAria: "关闭",
+
+  /* 3D plot panel — error & empty states */
+  plot3dSampleFailed: "3D 曲面采样失败",
+  plot3dSampleFailedHint: "请修正上方表达式后重新添加，或检查变量 / 范围设置。",
+  plot3dSurfacesFailed: "{n} 个曲面采样失败",
+  plot3dWorkspaceTitle: "3D 曲面工作区",
+  plot3dWorkspaceHintPre: "输入",
+  plot3dWorkspaceHintPost: "表达式或点击下方示例，添加可自由旋转 / 缩放 / 平移的 3D 曲面。",
+  plot3dWorkspaceSupported: "支持 sin / cos / exp / sqrt 等函数，变量必须为 x 和 y。",
   aiContextToggle: "附带工作台上下文",
   aiContextAttached: "已附加上下文",
   aiContextAttachedHint: "发送时会附带当前文件、绘图与变量信息",
@@ -1710,6 +2232,7 @@ const en: TranslationDict = {
   previewFormula: "Formula",
   previewPlot: "Plot",
   preview3D: "3D",
+  preview3DLoading: "Loading 3D module…",
   previewLog: "Log",
   previewCopy: "Copy",
   previewInput: "Input",
@@ -1849,6 +2372,26 @@ const en: TranslationDict = {
 
   /* Quick calc */
   qcPlaceholder: "Quick calc…",
+  qcTitle: "Quick Calc",
+  qcNotepad: "Notepad",
+  qcShowNotepad: "Show notepad",
+  qcHideNotepad: "Hide notepad",
+  qcPin: "Pin",
+  qcUnpin: "Unpin",
+  qcCopyResult: "Copy result",
+  qcDragHint: "Drag to move",
+  qcModeBasic: "Basic",
+  qcModeSci: "Sci",
+  qcModeProg: "Prog",
+  qcModeLin: "Lin",
+  qcModeConv: "Conv",
+  qcSendToNotepad: "Append to notepad",
+  qcHistTitle: "History",
+  qcNotepadPlaceholder: "Drafts / notes…",
+  qcFloatingCalc: "Floating Calculator",
+  qcClearHistory: "Clear history",
+  qcMemoryClear: "Memory clear",
+  qcMemoryRecall: "Memory recall",
 
   /* History */
   histTitle: "Calculation History",
@@ -2140,6 +2683,60 @@ const en: TranslationDict = {
   linalgGeneralSolution: "General solution",
   linalgFundamentalSystem: "Fundamental solution system",
 
+  /* Linear algebra workbench — Task 11 */
+  linalgMatrixLib: "Matrix Library",
+  linalgDeleteMatrix: "Delete matrix",
+  linalgNeedSquare: "Matrix must be square",
+  linalgSavedVar: "Saved: {name}",
+  linalgAddRowBtn: "Add row",
+  linalgDelRowBtn: "Del row",
+  linalgAddColBtn: "Add col",
+  linalgDelColBtn: "Del col",
+  linalgSaveToVar: "Save to variable →",
+  linalgKatexPreview: "KaTeX Preview",
+  linalgPasteExpandHint: "Tip: supports pasting TSV / CSV / MATLAB style [1,2;3,4]; auto-expands the target grid.",
+  linalgMatrixEmpty: "Matrix is empty",
+  linalgMatrixBEmpty: "Matrix B is empty",
+  linalgDimMismatchMul: "Dimension mismatch: A({ar}×{ac}) × B({br}×{bc})",
+  linalgDimMismatchBin: "Dimension mismatch: A({ar}×{ac}) vs B({br}×{bc})",
+  linalgSingularNonInv: "Singular matrix, not invertible",
+  linalgUnknownOp: "Unknown operation",
+  linalgCalcError: "Calculation error",
+  linalgOperandA: "Operand A",
+  linalgOperandB: "Operand B",
+  linalgPowerInt: "Power k (integer)",
+  linalgCalcResult: "Result",
+  linalgDerivationSteps: "Derivation steps",
+  linalgOpsInputPrompt: "Select operands and operation, then click \"Compute\"",
+  linalgEigenDecomp: "Eigen decomposition",
+  linalgSvdNotSupportedItem: "SVD (unsupported)",
+  linalgSvdNotSupported: "mathjs has no built-in SVD; use \"Eigen decomposition\" instead",
+  linalgSvdNotSupportedNote: "mathjs provides no SVD implementation; use QR or eigen decomposition instead",
+  linalgNotSupportedShort: "Not supported",
+  linalgMatrixLabel: "Matrix",
+  linalgDecompInputPrompt: "Select a matrix and decomposition method, then click \"Decompose\"",
+  linalgCholeskyNotSymmetric: "Not symmetric; cannot perform Cholesky decomposition",
+  linalgCholeskyNotPosDef: "Not positive definite; cannot perform Cholesky decomposition",
+  linalgCholeskyNote: "A = L · L^T  (requires symmetric positive-definite)",
+  linalgConstVecSizeMismatch: "Constant vector length must equal the number of matrix rows",
+  linalgSolveError: "Solve error",
+  linalgSystemInputPrompt: "Fill in the coefficient matrix and constant vector, then click \"Solve\"",
+  linalgRankInfo: "rank(A) = {rankA}, rank([A|b]) = {rankAug}",
+  linalgUnknownsInfo: ", unknowns n = {n}",
+  linalgFreeVarsCount: ", free vars = {n}",
+  linalgFreeVarsColon: "Free variables: ",
+  linalgCountItems: " ({n})",
+  linalgOmittedSteps: "omitted {n} row operations",
+  linalgRowReduced: "Row reduced: ",
+  linalgSystemNoSolution: "System has no solution",
+  linalgBackSubstitution: "Back-substitution: ",
+  linalgFreeVarsLatex: "Free variables: ",
+  linalgGeneralSolutionLatex: "General solution: ",
+  linalgLinearlyDependent: "linearly dependent, skipped",
+  linalgMaxIndepRows: "max number of linearly independent rows",
+  linalgInvertibleLatex: " invertible",
+  linalgTimesOp: " times",
+
   /* Solver panel — extended */
   solverTabEquation: "Equation",
   solverTabSystem: "System",
@@ -2183,8 +2780,92 @@ const en: TranslationDict = {
   solverNumericNoSignChange: "Endpoints have the same sign; bisection cannot proceed.",
   solverResultLabel: "Result",
 
+  /* Solver workbench — Task 11 */
+  solverNavEquation: "Equation",
+  solverNavEquationDesc: "Polynomial / transcendental roots",
+  solverNavSystem: "System",
+  solverNavSystemDesc: "Linear system step-by-step elimination",
+  solverNavDerivative: "Derivative",
+  solverNavDerivativeDesc: "Step-by-step derivative · rules",
+  solverNavIntegral: "Integral",
+  solverNavIntegralDesc: "Indefinite / definite · numeric fallback",
+  solverNavLimit: "Limit",
+  solverNavLimitDesc: "Symbolic limit · numeric fallback",
+  solverSendToPlot2D: "Send to 2D Plot",
+  solverSentToPlot2D: "Sent to 2D plot",
+  solverSelectExample: "Select example…",
+  solverSolveMode: "Solve mode",
+  solverNumericSolution: "Numeric",
+  solverSymbolicSolution: "Symbolic",
+  solverSolveResult: "Solution",
+  solverInputPrompt: "Enter an equation and click \"Solve\"",
+  solverSymbolicFallback: "⚠️ Symbolic solve failed, fell back to numeric",
+  solverKindPolynomial: "🧮 Polynomial · ",
+  solverKindTranscendental: "📈 Transcendental · ",
+  solverKindSymbolic: "🔤 Symbolic · ",
+  solverSystemInput: "System (one equation per line)",
+  solverNonlinearSystem: "Nonlinear system",
+  solverNumericMethodNote: "Numerical method notes",
+  solverUniqueSolution: "Unique solution",
+  solverSystemInputPrompt: "Enter a system and click \"Solve System\"",
+  solverDerivativeOrder: "Derivative order",
+  solverOrder1: "1st",
+  solverOrder2: "2nd",
+  solverOrder3: "3rd",
+  solverDerivativeResult: "Derivative",
+  solverDerivativeInputPrompt: "Enter an expression and click \"Derivative\"",
+  solverDefiniteIntegral: "Definite",
+  solverIndefiniteIntegral: "Indefinite",
+  solverIntegralResult: "Integral",
+  solverIntegralInputPrompt: "Enter an expression and click \"Integral\"",
+  solverNumericResult: "Numeric result ≈",
+  solverPointMustBeNumber: "Point must be a number or inf",
+  solverPointPlaceholder: "0 or inf",
+  solverComputeLimit: "Compute Limit",
+  solverLimitResult: "Limit",
+  solverLimitInputPrompt: "Enter an expression and click \"Compute Limit\"",
+  solverWorkbenchTitle: "Solver",
+  solverFooterHint: "Step-by-step: rules / elimination / integral hints",
+  /* Solver example groups */
+  solverExPolynomial: "Polynomial",
+  solverExTranscendental: "Transcendental",
+  solverExLinearSystem: "Linear system",
+  solverExNonlinear: "Nonlinear (numeric notes)",
+  solverDerivExRules: "Product / Quotient / Chain",
+  solverDerivExPoly: "Polynomial / Composite",
+  solverIntegralExBasic: "Basic",
+  solverIntegralExAdvanced: "Advanced",
+  solverLimitExClassic: "Classic limits",
+  solverLimitExInfinite: "Infinite limits",
+  /* Solver example hints */
+  solverHintFactor: "Factoring",
+  solverHintCubic: "Cubic",
+  solverHintComplexRoots: "Complex roots",
+  solverHintNumeric: "Numeric",
+  solverHintLog: "Logarithmic",
+  solverHint2VarLinear: "2-var linear",
+  solverHint3VarLinear: "3-var linear",
+  solverHintNonlinear: "Nonlinear",
+  solverHintProductRule: "Product rule",
+  solverHintQuotientRule: "Quotient rule",
+  solverHintChainRule: "Chain rule",
+  solverHintPowerRule: "Power rule",
+  solverHintPowerFunc: "Power function",
+  solverHintTrigFunc: "Trig function",
+  solverHintExpFunc: "Exponential",
+  solverHintLogIntegral: "Logarithmic integral",
+  solverHintByParts: "Integration by parts",
+  solverHintSubstitution: "Substitution",
+  solverHintArctan: "Arctangent",
+  solverHintDefOfE: "Definition of e",
+  /* Solver example labels */
+  solverLabel2x2Linear: "2×2 linear",
+  solverLabel3x3Linear: "3×3 linear",
+  solverLabelHasQuadratic: "Has quadratic term",
+
   /* Pipeline / nodes */
   pipelineTitle: "Computation Pipeline",
+  pipelineEnterView: "Enter pipeline view",
   pipelineAddNode: "Add Node",
   pipelineRun: "Run",
   pipelineClear: "Clear",
@@ -2288,7 +2969,7 @@ const en: TranslationDict = {
   aiPlaceholder: "Ask the AI…",
   aiSend: "Send",
   aiStop: "Stop",
-  aiClear: "Clear chat",
+  aiClear: "Clear",
   aiThinking: "Thinking…",
   aiWelcome: "Hi! I'm the OmniMath AI assistant.",
   aiWelcomeHint: "Ask me to explain formulas, solve equations, or plot graphs.",
@@ -2300,6 +2981,22 @@ const en: TranslationDict = {
   aiSolve: "Solve",
   aiPlot: "Plot",
   aiStep: "Step-by-step",
+  aiCopy: "Copy",
+  aiInsertEditor: "Insert to editor",
+  aiErrNoKey: "API key not configured. Please fill it in settings below.",
+  aiErrNetwork: "Network connection failed. Check your network or API URL.",
+  aiErrAuth: "Invalid API key or insufficient permissions.",
+  aiErrRateLimit: "Rate limited or quota exceeded (429). Try again later.",
+  aiErrParse: "Cannot parse AI response. The API URL may be incorrect.",
+  aiErrEmpty: "AI returned an empty reply. Please retry.",
+  aiErrCancelled: "Request cancelled.",
+  aiConfig: "Configure AI Assistant",
+  aiCancel: "Cancel",
+  aiSave: "Save",
+  aiEmptyReply: "(empty reply)",
+  aiNotConfigured: "Not configured",
+  aiSettings: "AI Settings",
+  aiAskPlaceholder: "Ask any math question…",
 
   /* Plot */
   plotEmpty: "No plots yet",
@@ -2314,12 +3011,98 @@ const en: TranslationDict = {
   plotTypePolar: "Polar",
   plotTypeParametric: "Parametric",
   plotCurveSettings: "Curve Settings",
+  plotColor: "Color",
+  plotLineWidth: "Line width",
   plotExprY: "y =",
   plotExprR: "r(θ) =",
   plotExprX: "x(t) =",
   plotExprYParam: "y(t) =",
   plotThetaRange: "θ range",
   plotTRange: "t range",
+
+  /* 3D plot panel — example groups */
+  plot3dGroupBasic: "Basic",
+  plot3dGroupAdvanced: "Advanced",
+  plot3dExWave: "Ripple",
+  plot3dExSaddle: "Saddle",
+  plot3dExParaboloid: "Paraboloid",
+  plot3dExGaussian: "Gaussian bell",
+  plot3dExSombrero: "Sombrero",
+  plot3dExTiltedWave: "Tilted ripple",
+
+  /* 3D plot panel — errors & toasts */
+  plot3dErrNoGeometry: "Expression produced no drawable geometry (confirm variables are x and y)",
+  plot3dErrEmpty: "Please enter a z = f(x, y) expression",
+  plot3dErrEval: "Expression could not be evaluated: {err}",
+  plot3dErrEvalVars: "Expression could not be evaluated; check that variables are x and y",
+  plot3dErrExampleEval: "Example expression could not be evaluated: {err}",
+  plot3dErrExampleEvalVars: "Example expression could not be evaluated",
+  plot3dAdded: "3D surface added",
+  plot3dExampleAdded: "Example surface added",
+
+  /* 3D plot panel — input bar */
+  plot3dInputPlaceholder: "Enter f(x, y), e.g. sin(x)*cos(y)",
+  plot3dExprInputAria: "3D function expression input",
+  plot3dAdd: "Add",
+  plot3dAddSurface: "Add surface (Enter)",
+  plot3dCollapseControls: "Collapse controls panel",
+  plot3dExpandControls: "Expand controls panel",
+  plot3dToggleControlsAria: "Toggle controls panel",
+  plot3dResetCameraAria: "Reset camera",
+  plot3dResetCameraView: "Reset camera view",
+  plot3dExportPngAria: "Export PNG",
+  plot3dExportScene: "Export 3D scene as PNG",
+
+  /* 3D plot panel — preview */
+  plot3dPreview: "Preview",
+  plot3dPreviewHint: "LaTeX preview appears after typing, e.g. z = sin(x)·cos(y)",
+
+  /* 3D plot panel — controls */
+  plot3dWireframe: "Wireframe",
+  plot3dAxes: "Axes",
+  plot3dGrid: "Grid",
+  plot3dAutoRotate: "Auto-rotate",
+  plot3dResolution: "Resolution",
+  plot3dGridResolutionAria: "Grid resolution",
+  plot3dColorScheme: "Color scheme",
+  plot3dSchemeHeight: "Height",
+  plot3dSchemeHeightAria: "Color by height",
+  plot3dSchemeMono: "Solid",
+  plot3dSchemeMonoAria: "Solid color",
+  plot3dUpAxis: "Up axis",
+  plot3dYUp: "Y up",
+  plot3dYUpAria: "Y axis up",
+  plot3dZUp: "Z up",
+  plot3dZUpAria: "Z axis up",
+
+  /* 3D plot panel — examples menu & surface list */
+  plot3dExamples: "Examples",
+  plot3dOpenExamplesAria: "Open examples menu",
+  plot3dHide: "Hide",
+  plot3dShow: "Show",
+  plot3dHideSurface: "Hide this surface",
+  plot3dShowSurface: "Show this surface",
+  plot3dRemoveSurface: "Remove this surface",
+  plot3dRemoveAria: "Remove",
+
+  /* 3D plot panel — canvas overlay & expand dialog */
+  plot3dZoomIn: "Zoom",
+  plot3dZoomInAria: "Expand 3D view",
+  plot3dControlsHint: "Drag to rotate · Scroll to zoom · Right-click to pan",
+  plot3dExpandAria: "Expand 3D plot view",
+  plot3dExpandTitle: "3D Surface Expanded View",
+  plot3dExpandSubtitle: "{n} surfaces · Drag to rotate · Scroll to zoom · Right-click to pan",
+  plot3dExportPng: "Export PNG",
+  plot3dCloseAria: "Close",
+
+  /* 3D plot panel — error & empty states */
+  plot3dSampleFailed: "3D surface sampling failed",
+  plot3dSampleFailedHint: "Fix the expression above and re-add it, or check variables / range settings.",
+  plot3dSurfacesFailed: "{n} surfaces failed to sample",
+  plot3dWorkspaceTitle: "3D Surface Workspace",
+  plot3dWorkspaceHintPre: "Enter",
+  plot3dWorkspaceHintPost: "an expression or click an example below to add a freely rotatable / zoomable / pannable 3D surface.",
+  plot3dWorkspaceSupported: "Supports sin / cos / exp / sqrt and more; variables must be x and y.",
   aiContextToggle: "Attach workbench context",
   aiContextAttached: "Context attached",
   aiContextAttachedHint: "The current file, plots and variables are sent with each message",

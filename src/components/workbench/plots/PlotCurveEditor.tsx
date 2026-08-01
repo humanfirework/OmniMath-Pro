@@ -33,7 +33,7 @@ import {
   type Curve2DSpec,
   type Plot2DType,
 } from '@/lib/plots/plot2d';
-import type { PlotConfig } from '@/lib/store/workbench';
+import { useWorkbenchStore, type PlotConfig } from '@/lib/store/workbench';
 
 /* ------------------------------------------------------------------ */
 /*  Pending i18n keys (to be merged into lib/i18n by the maintainer)  */
@@ -132,6 +132,9 @@ interface CurveRowProps {
 
 function CurveRow({ plot, spec, onChange, tp }: CurveRowProps) {
   const t = useT();
+  // Color & width persist via the store (→ localStorage); curve specs
+  // (mode/expressions/range) stay local via `onChange`.
+  const updatePlot = useWorkbenchStore((s) => s.updatePlot);
 
   const handleModeChange = (mode: Plot2DType) => {
     if (mode === spec.mode) return;
@@ -157,10 +160,38 @@ function CurveRow({ plot, spec, onChange, tp }: CurveRowProps) {
 
   return (
     <div className="flex flex-wrap items-center gap-x-1.5 gap-y-1 rounded-md border border-border/40 bg-background/30 px-1.5 py-1">
-      {/* Color swatch matching the curve */}
-      <span
-        className="inline-block h-2.5 w-2.5 shrink-0 rounded-full"
-        style={{ backgroundColor: plot.color, boxShadow: `0 0 6px ${plot.color}80` }}
+      {/* Color picker — click swatch to open native color picker */}
+      <label
+        className="relative inline-flex shrink-0 items-center cursor-pointer"
+        title={t('plotColor')}
+      >
+        <span
+          className="w-4 h-4 rounded-full border border-border"
+          style={{ backgroundColor: plot.color, boxShadow: `0 0 6px ${plot.color}80` }}
+        />
+        <input
+          type="color"
+          value={plot.color}
+          onChange={(e) => updatePlot(plot.id, { color: e.target.value })}
+          className="absolute inset-0 opacity-0 cursor-pointer w-full h-full"
+          aria-label={t('plotColor')}
+        />
+      </label>
+
+      {/* Line width (1–10) */}
+      <input
+        type="number"
+        min={1}
+        max={10}
+        step={1}
+        value={plot.width ?? 2}
+        onChange={(e) => {
+          const w = Math.max(1, Math.min(10, e.target.valueAsNumber || 2));
+          updatePlot(plot.id, { width: w });
+        }}
+        className="w-12 px-1 py-0.5 text-xs bg-background/40 border border-border/60 rounded tabular-nums"
+        aria-label={t('plotLineWidth')}
+        title={t('plotLineWidth')}
       />
 
       {/* Mode toggle */}

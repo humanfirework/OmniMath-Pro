@@ -65,6 +65,7 @@ import { usePlot3DExport } from './Plot3DExport';
 import { FormulaRenderer } from '@/components/workbench/FormulaRenderer';
 import { inputToLatex } from '@/lib/engine/latex';
 import { toast } from 'sonner';
+import { useT, tf } from '@/lib/i18n';
 
 /* ----------------------- Dynamic load (no SSR) ------------------------ */
 /* three.js / WebGL must not run on the server — load the Canvas only in
@@ -89,21 +90,21 @@ const PLOT_COLORS = [
   '#fb923c', // orange
 ];
 
-const EXAMPLE_GROUPS: Array<{ title: string; items: Array<{ expr: string; label: string; hint: string }> }> = [
+const EXAMPLE_GROUPS = [
   {
-    title: '基础',
+    titleKey: 'plot3dGroupBasic' as const,
     items: [
-      { expr: 'sin(x)*cos(y)', label: 'sin(x)·cos(y)', hint: '波纹' },
-      { expr: 'x^2 - y^2', label: 'x² − y²', hint: '鞍面' },
-      { expr: 'x^2 + y^2', label: 'x² + y²', hint: '抛物面' },
+      { expr: 'sin(x)*cos(y)', label: 'sin(x)·cos(y)', hintKey: 'plot3dExWave' as const },
+      { expr: 'x^2 - y^2', label: 'x² − y²', hintKey: 'plot3dExSaddle' as const },
+      { expr: 'x^2 + y^2', label: 'x² + y²', hintKey: 'plot3dExParaboloid' as const },
     ],
   },
   {
-    title: '进阶',
+    titleKey: 'plot3dGroupAdvanced' as const,
     items: [
-      { expr: 'exp(-(x^2+y^2)/4)', label: 'e^(−(x²+y²)/4)', hint: '高斯钟形' },
-      { expr: 'sin(sqrt(x^2+y^2))', label: 'sin(√(x²+y²))', hint: '墨西哥帽' },
-      { expr: 'cos(x)*sin(y) + 0.1*x', label: 'cos(x)·sin(y)+0.1x', hint: '倾斜波纹' },
+      { expr: 'exp(-(x^2+y^2)/4)', label: 'e^(−(x²+y²)/4)', hintKey: 'plot3dExGaussian' as const },
+      { expr: 'sin(sqrt(x^2+y^2))', label: 'sin(√(x²+y²))', hintKey: 'plot3dExSombrero' as const },
+      { expr: 'cos(x)*sin(y) + 0.1*x', label: 'cos(x)·sin(y)+0.1x', hintKey: 'plot3dExTiltedWave' as const },
     ],
   },
 ];
@@ -114,6 +115,7 @@ const DEFAULT_Y: [number, number] = [-5, 5];
 /* ----------------------- Component ----------------------------------- */
 
 export function Plot3DPanel() {
+  const t = useT();
   const plots = useWorkbenchStore((s) => s.plots);
   const theme = useWorkbenchStore((s) => s.theme);
   const addPlot = useWorkbenchStore((s) => s.addPlot);
@@ -211,18 +213,18 @@ export function Plot3DPanel() {
         msgs.push({
           plotId: s.plotId,
           expression: s.expression,
-          message: '表达式未生成可绘制的几何（请确认变量为 x 和 y）',
+          message: t('plot3dErrNoGeometry'),
         });
       }
     }
     return msgs;
-  }, [sampledSurfaces]);
+  }, [sampledSurfaces, t]);
 
   /* --------------------- Add surface ------------------------------- */
   const handleAddSurface = useCallback(() => {
     const expr = exprInput.trim();
     if (!expr) {
-      toast.error('请输入 z = f(x, y) 表达式');
+      toast.error(t('plot3dErrEmpty'));
       return;
     }
     // Quick sanity check before adding — sample at low resolution.
@@ -235,11 +237,11 @@ export function Plot3DPanel() {
     );
     if (probeError) {
       // Surface the concrete error instead of a generic "无法求值".
-      toast.error(`表达式无法求值：${probeError}`);
+      toast.error(tf('plot3dErrEval', { err: probeError }));
       return;
     }
     if (!probe || probe.validTriangleCount === 0) {
-      toast.error('表达式无法求值，请检查变量是否为 x 和 y');
+      toast.error(t('plot3dErrEvalVars'));
       return;
     }
     const colorIdx = surface3dPlots.length % PLOT_COLORS.length;
@@ -252,8 +254,8 @@ export function Plot3DPanel() {
       visible: true,
     });
     setExprInput('');
-    toast.success('已添加 3D 曲面');
-  }, [exprInput, xRange, yRange, surface3dPlots.length, addPlot]);
+    toast.success(t('plot3dAdded'));
+  }, [exprInput, xRange, yRange, surface3dPlots.length, addPlot, t]);
 
   const handleAddExample = useCallback(
     (expr: string) => {
@@ -265,11 +267,11 @@ export function Plot3DPanel() {
         '#2dd4bf',
       );
       if (probeError) {
-        toast.error(`示例表达式无法求值：${probeError}`);
+        toast.error(tf('plot3dErrExampleEval', { err: probeError }));
         return;
       }
       if (!probe || probe.validTriangleCount === 0) {
-        toast.error('示例表达式无法求值');
+        toast.error(t('plot3dErrExampleEvalVars'));
         return;
       }
       const colorIdx = surface3dPlots.length % PLOT_COLORS.length;
@@ -281,9 +283,9 @@ export function Plot3DPanel() {
         plotType: 'surface3d',
         visible: true,
       });
-      toast.success('已添加示例曲面');
+      toast.success(t('plot3dExampleAdded'));
     },
-    [xRange, yRange, surface3dPlots.length, addPlot],
+    [xRange, yRange, surface3dPlots.length, addPlot, t],
   );
 
   /* --------------------- Reset camera ------------------------------ */
@@ -333,9 +335,9 @@ export function Plot3DPanel() {
                   handleAddSurface();
                 }
               }}
-              placeholder="输入 f(x, y)，例如 sin(x)*cos(y)"
+              placeholder={t('plot3dInputPlaceholder')}
               className="h-8 min-w-0 flex-1 rounded border-border/60 bg-background/40 px-2 font-mono text-xs"
-              aria-label="3D 函数表达式输入"
+              aria-label={t('plot3dExprInputAria')}
             />
             <Tooltip>
               <TooltipTrigger asChild>
@@ -345,10 +347,10 @@ export function Plot3DPanel() {
                   onClick={handleAddSurface}
                 >
                   <Plus className="h-3.5 w-3.5" />
-                  <span className="text-xs">添加</span>
+                  <span className="text-xs">{t('plot3dAdd')}</span>
                 </Button>
               </TooltipTrigger>
-              <TooltipContent side="bottom">添加曲面 (Enter)</TooltipContent>
+              <TooltipContent side="bottom">{t('plot3dAddSurface')}</TooltipContent>
             </Tooltip>
             <Tooltip>
               <TooltipTrigger asChild>
@@ -357,7 +359,7 @@ export function Plot3DPanel() {
                   size="icon"
                   className="h-8 w-8 text-muted-foreground hover:text-foreground"
                   onClick={() => setShowControls((v) => !v)}
-                  aria-label="折叠/展开控制面板"
+                  aria-label={t('plot3dToggleControlsAria')}
                 >
                   {showControls ? (
                     <ChevronDown className="h-4 w-4" />
@@ -367,7 +369,7 @@ export function Plot3DPanel() {
                 </Button>
               </TooltipTrigger>
               <TooltipContent side="bottom">
-                {showControls ? '折叠' : '展开'}控制面板
+                {showControls ? t('plot3dCollapseControls') : t('plot3dExpandControls')}
               </TooltipContent>
             </Tooltip>
             <Tooltip>
@@ -377,12 +379,12 @@ export function Plot3DPanel() {
                   size="icon"
                   className="h-8 w-8 text-muted-foreground hover:text-foreground"
                   onClick={handleResetCamera}
-                  aria-label="重置相机"
+                  aria-label={t('plot3dResetCameraAria')}
                 >
                   <RotateCcw className="h-4 w-4" />
                 </Button>
               </TooltipTrigger>
-              <TooltipContent side="bottom">重置相机视角</TooltipContent>
+              <TooltipContent side="bottom">{t('plot3dResetCameraView')}</TooltipContent>
             </Tooltip>
             <Tooltip>
               <TooltipTrigger asChild>
@@ -391,12 +393,12 @@ export function Plot3DPanel() {
                   size="icon"
                   className="h-8 w-8 text-muted-foreground hover:text-foreground"
                   onClick={exportPNG}
-                  aria-label="导出 PNG"
+                  aria-label={t('plot3dExportPngAria')}
                 >
                   <Box className="h-4 w-4" />
                 </Button>
               </TooltipTrigger>
-              <TooltipContent side="bottom">导出 3D 场景为 PNG</TooltipContent>
+              <TooltipContent side="bottom">{t('plot3dExportScene')}</TooltipContent>
             </Tooltip>
           </div>
 
@@ -407,7 +409,7 @@ export function Plot3DPanel() {
               for long expressions and shows a placeholder when empty. */}
           <div className="flex min-h-6 items-center gap-1.5 overflow-x-auto rounded-md border border-border/40 bg-background/40 px-2 py-0.5">
             <span className="shrink-0 font-mono text-[10px] text-muted-foreground">
-              预览
+              {t('plot3dPreview')}
             </span>
             {exprLatex ? (
               <FormulaRenderer
@@ -417,7 +419,7 @@ export function Plot3DPanel() {
               />
             ) : (
               <span className="shrink-0 text-[11px] italic text-muted-foreground/60">
-                输入表达式后将显示 LaTeX 预览，例如 z = sin(x)·cos(y)
+                {t('plot3dPreviewHint')}
               </span>
             )}
           </div>
@@ -427,22 +429,22 @@ export function Plot3DPanel() {
             <div className="glass mt-0.5 grid grid-cols-2 gap-x-3 gap-y-2 rounded-md border border-border/50 p-2 text-xs sm:grid-cols-3 lg:grid-cols-4">
               {/* Wireframe toggle */}
               <ToggleRow
-                label="线框"
+                label={t('plot3dWireframe')}
                 checked={wireframe}
                 onCheckedChange={setWireframe}
               />
               <ToggleRow
-                label="坐标轴"
+                label={t('plot3dAxes')}
                 checked={showAxes}
                 onCheckedChange={setShowAxes}
               />
               <ToggleRow
-                label="网格"
+                label={t('plot3dGrid')}
                 checked={showGrid}
                 onCheckedChange={setShowGrid}
               />
               <ToggleRow
-                label="自动旋转"
+                label={t('plot3dAutoRotate')}
                 checked={autoRotate}
                 onCheckedChange={setAutoRotate}
               />
@@ -451,7 +453,7 @@ export function Plot3DPanel() {
               <div className="col-span-2 flex flex-col gap-1 sm:col-span-1">
                 <div className="flex items-center justify-between">
                   <Label className="text-[11px] text-muted-foreground">
-                    分辨率
+                    {t('plot3dResolution')}
                   </Label>
                   <span className="font-mono text-[11px] tabular-nums text-foreground/80">
                     {resolution}
@@ -464,7 +466,7 @@ export function Plot3DPanel() {
                   step={5}
                   onValueChange={(v) => setResolution(v[0])}
                   className="h-1.5"
-                  aria-label="网格分辨率"
+                  aria-label={t('plot3dGridResolutionAria')}
                 />
               </div>
 
@@ -503,7 +505,7 @@ export function Plot3DPanel() {
               {/* Color mode */}
               <div className="col-span-2 flex flex-col gap-1 sm:col-span-1">
                 <Label className="text-[11px] text-muted-foreground">
-                  配色
+                  {t('plot3dColorScheme')}
                 </Label>
                 <ToggleGroup
                   type="single"
@@ -517,16 +519,16 @@ export function Plot3DPanel() {
                   <ToggleGroupItem
                     value="height"
                     className="h-6 px-2 text-[11px]"
-                    aria-label="按高度配色"
+                    aria-label={t('plot3dSchemeHeightAria')}
                   >
-                    高度
+                    {t('plot3dSchemeHeight')}
                   </ToggleGroupItem>
                   <ToggleGroupItem
                     value="solid"
                     className="h-6 px-2 text-[11px]"
-                    aria-label="单色"
+                    aria-label={t('plot3dSchemeMonoAria')}
                   >
-                    单色
+                    {t('plot3dSchemeMono')}
                   </ToggleGroupItem>
                 </ToggleGroup>
               </div>
@@ -534,7 +536,7 @@ export function Plot3DPanel() {
               {/* Up-axis mode */}
               <div className="col-span-2 flex flex-col gap-1 sm:col-span-1">
                 <Label className="text-[11px] text-muted-foreground">
-                  上方向
+                  {t('plot3dUpAxis')}
                 </Label>
                 <ToggleGroup
                   type="single"
@@ -548,16 +550,16 @@ export function Plot3DPanel() {
                   <ToggleGroupItem
                     value="y"
                     className="h-6 px-2 text-[11px]"
-                    aria-label="Y 轴向上"
+                    aria-label={t('plot3dYUpAria')}
                   >
-                    Y 向上
+                    {t('plot3dYUp')}
                   </ToggleGroupItem>
                   <ToggleGroupItem
                     value="z"
                     className="h-6 px-2 text-[11px]"
-                    aria-label="Z 轴向上"
+                    aria-label={t('plot3dZUpAria')}
                   >
-                    Z 向上
+                    {t('plot3dZUp')}
                   </ToggleGroupItem>
                 </ToggleGroup>
               </div>
@@ -573,18 +575,18 @@ export function Plot3DPanel() {
                 <button
                   type="button"
                   className="flex items-center gap-1 rounded-md border border-border/60 bg-background/40 px-2 py-0.5 text-[10px] text-foreground/80 transition-theme hover:border-primary/60 hover:text-primary"
-                  aria-label="打开示例菜单"
+                  aria-label={t('plot3dOpenExamplesAria')}
                 >
                   <Sparkles className="h-3 w-3" />
-                  示例
+                  {t('plot3dExamples')}
                 </button>
               </DropdownMenuTrigger>
               <DropdownMenuContent align="start" className="w-56">
                 {EXAMPLE_GROUPS.map((group, gi) => (
-                  <div key={group.title}>
+                  <div key={group.titleKey}>
                     {gi > 0 && <DropdownMenuSeparator />}
                     <DropdownMenuLabel className="text-[10px] uppercase tracking-wide text-muted-foreground">
-                      {group.title}
+                      {t(group.titleKey)}
                     </DropdownMenuLabel>
                     {group.items.map((ex) => (
                       <DropdownMenuItem
@@ -594,7 +596,7 @@ export function Plot3DPanel() {
                       >
                         <div className="flex flex-col gap-0.5">
                           <span>{ex.label}</span>
-                          <span className="text-[9px] text-muted-foreground">{ex.hint}</span>
+                          <span className="text-[9px] text-muted-foreground">{t(ex.hintKey)}</span>
                         </div>
                       </DropdownMenuItem>
                     ))}
@@ -628,7 +630,7 @@ export function Plot3DPanel() {
                         type="button"
                         onClick={() => togglePlotVisibility(p.id)}
                         className="text-muted-foreground transition-theme hover:text-foreground"
-                        aria-label={p.visible ? '隐藏' : '显示'}
+                        aria-label={p.visible ? t('plot3dHide') : t('plot3dShow')}
                       >
                         {p.visible ? (
                           <Eye className="h-3 w-3" />
@@ -638,7 +640,7 @@ export function Plot3DPanel() {
                       </button>
                     </TooltipTrigger>
                     <TooltipContent side="bottom">
-                      {p.visible ? '隐藏该曲面' : '显示该曲面'}
+                      {p.visible ? t('plot3dHideSurface') : t('plot3dShowSurface')}
                     </TooltipContent>
                   </Tooltip>
                   <Tooltip>
@@ -647,12 +649,12 @@ export function Plot3DPanel() {
                         type="button"
                         onClick={() => removePlot(p.id)}
                         className="text-muted-foreground transition-theme hover:text-rose-400"
-                        aria-label="移除"
+                        aria-label={t('plot3dRemoveAria')}
                       >
                         <X className="h-3 w-3" />
                       </button>
                     </TooltipTrigger>
-                    <TooltipContent side="bottom">移除该曲面</TooltipContent>
+                    <TooltipContent side="bottom">{t('plot3dRemoveSurface')}</TooltipContent>
                   </Tooltip>
                 </div>
               ))}
@@ -706,10 +708,10 @@ export function Plot3DPanel() {
             <button
               onClick={() => setExpandOpen(true)}
               className="absolute right-2 top-2 z-20 flex items-center gap-1.5 rounded-md border border-border/60 bg-background/80 px-2.5 py-1.5 text-xs text-primary backdrop-blur-sm transition-colors hover:bg-primary/10 hover:border-primary/40"
-              aria-label="放大查看 3D"
+              aria-label={t('plot3dZoomInAria')}
             >
               <Maximize2 className="h-3.5 w-3.5" />
-              <span className="hidden sm:inline">放大</span>
+              <span className="hidden sm:inline">{t('plot3dZoomIn')}</span>
             </button>
           )}
 
@@ -727,7 +729,7 @@ export function Plot3DPanel() {
             <div className="pointer-events-none absolute bottom-2 left-2 z-10 select-none rounded-md border border-border/40 bg-background/70 px-2 py-1 text-[10px] text-foreground/70 backdrop-blur-sm">
               <span className="flex items-center gap-1">
                 <Settings2 className="h-2.5 w-2.5" />
-                拖拽旋转 · 滚轮缩放 · 右键平移
+                {t('plot3dControlsHint')}
               </span>
             </div>
           )}
@@ -744,20 +746,20 @@ export function Plot3DPanel() {
             className="fixed inset-0 z-[200] flex flex-col bg-background/95 backdrop-blur-md"
             role="dialog"
             aria-modal="true"
-            aria-label="放大查看 3D 绘图"
+            aria-label={t('plot3dExpandAria')}
           >
             <div className="flex items-center justify-between border-b border-border/60 bg-background/80 px-4 py-2.5 backdrop-blur">
               <div className="flex items-center gap-3">
-                <h2 className="text-sm font-semibold text-foreground">3D 曲面大图查看</h2>
+                <h2 className="text-sm font-semibold text-foreground">{t('plot3dExpandTitle')}</h2>
                 <span className="text-xs text-muted-foreground">
-                  {surfaces.length} 个曲面 · 拖拽旋转 · 滚轮缩放 · 右键平移
+                  {tf('plot3dExpandSubtitle', { n: surfaces.length })}
                 </span>
               </div>
               <div className="flex items-center gap-1">
                 <button
                   onClick={handleResetCamera}
                   className="grid place-items-center size-8 rounded-md text-muted-foreground hover:bg-muted hover:text-foreground transition-colors"
-                  aria-label="重置相机"
+                  aria-label={t('plot3dResetCameraAria')}
                 >
                   <RotateCcw className="size-4" />
                 </button>
@@ -766,13 +768,13 @@ export function Plot3DPanel() {
                   className="flex items-center gap-1.5 h-8 px-2.5 rounded-md text-xs text-muted-foreground hover:bg-muted hover:text-foreground transition-colors"
                 >
                   <Box className="size-3.5" />
-                  <span className="hidden sm:inline">导出 PNG</span>
+                  <span className="hidden sm:inline">{t('plot3dExportPng')}</span>
                 </button>
                 <div className="mx-1 h-5 w-px bg-border/60" />
                 <button
                   onClick={() => setExpandOpen(false)}
                   className="grid place-items-center size-8 rounded-md text-muted-foreground hover:bg-destructive/10 hover:text-destructive transition-colors"
-                  aria-label="关闭"
+                  aria-label={t('plot3dCloseAria')}
                 >
                   <X className="size-4" />
                 </button>
@@ -880,11 +882,12 @@ interface SurfaceError {
  * with its concrete error message instead of a blank canvas.
  */
 function SurfaceErrorState({ errors }: { errors: SurfaceError[] }) {
+  const t = useT();
   return (
     <div className="absolute inset-0 flex flex-col items-center justify-center gap-3 p-6 text-center">
       <div className="flex items-center gap-2 text-rose-500">
         <AlertTriangle className="h-5 w-5" />
-        <span className="text-sm font-medium">3D 曲面采样失败</span>
+        <span className="text-sm font-medium">{t('plot3dSampleFailed')}</span>
       </div>
       <div className="flex w-full max-w-md flex-col gap-1.5">
         {errors.map((e) => (
@@ -902,7 +905,7 @@ function SurfaceErrorState({ errors }: { errors: SurfaceError[] }) {
         ))}
       </div>
       <p className="max-w-xs text-[11px] text-muted-foreground">
-        请修正上方表达式后重新添加，或检查变量 / 范围设置。
+        {t('plot3dSampleFailedHint')}
       </p>
     </div>
   );
@@ -914,11 +917,12 @@ function SurfaceErrorState({ errors }: { errors: SurfaceError[] }) {
  * expand button (top-right).
  */
 function SurfaceErrorOverlay({ errors }: { errors: SurfaceError[] }) {
+  const t = useT();
   return (
     <div className="absolute left-2 top-2 z-20 flex max-w-xs flex-col gap-1 rounded-md border border-rose-500/50 bg-background/90 p-1.5 text-left shadow-lg backdrop-blur-sm">
       <div className="flex items-center gap-1.5 text-[11px] font-medium text-rose-500">
         <AlertTriangle className="h-3 w-3" />
-        <span>{errors.length} 个曲面采样失败</span>
+        <span>{tf('plot3dSurfacesFailed', { n: errors.length })}</span>
       </div>
       {errors.map((e) => (
         <div key={e.plotId} className="min-w-0">
@@ -939,6 +943,7 @@ function SurfaceErrorOverlay({ errors }: { errors: SurfaceError[] }) {
 /* ------------------------------------------------------------------ */
 
 function EmptyState3D() {
+  const t = useT();
   return (
     <div className="grid-bg absolute inset-0 flex flex-col items-center justify-center gap-4 p-6 text-center">
       {/* Animated wireframe cube (pure CSS / SVG) */}
@@ -967,14 +972,15 @@ function EmptyState3D() {
 
       <div className="flex flex-col items-center gap-1.5">
         <p className="text-sm font-medium text-foreground/90">
-          3D 曲面工作区
+          {t('plot3dWorkspaceTitle')}
         </p>
         <p className="max-w-xs text-xs text-muted-foreground">
-          输入 <code className="rounded bg-muted px-1 py-0.5 font-mono text-[10px]">z = f(x, y)</code>{' '}
-          表达式或点击下方示例，添加可自由旋转 / 缩放 / 平移的 3D 曲面。
+          {t('plot3dWorkspaceHintPre')}{' '}
+          <code className="rounded bg-muted px-1 py-0.5 font-mono text-[10px]">z = f(x, y)</code>{' '}
+          {t('plot3dWorkspaceHintPost')}
         </p>
         <p className="mt-1 max-w-xs text-[11px] text-muted-foreground/80">
-          支持 sin / cos / exp / sqrt 等函数，变量必须为 x 和 y。
+          {t('plot3dWorkspaceSupported')}
         </p>
       </div>
 
@@ -1008,9 +1014,9 @@ function CubeFace({ position }: CubeFaceProps) {
       className="absolute inset-0 rounded-sm border"
       style={{
         transform: transform[position],
-        borderColor: '#2dd4bf80',
-        backgroundColor: 'rgba(45, 212, 191, 0.05)',
-        boxShadow: '0 0 12px rgba(45, 212, 191, 0.15) inset',
+        borderColor: 'var(--primary, #2dd4bf80)',
+        backgroundColor: 'var(--primary-bg-soft, rgba(45, 212, 191, 0.05))',
+        boxShadow: '0 0 12px var(--primary-shadow, rgba(45, 212, 191, 0.15)) inset',
       }}
     />
   );

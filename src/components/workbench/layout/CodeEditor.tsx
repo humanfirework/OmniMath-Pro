@@ -14,7 +14,7 @@
  *   • Custom keymap: Enter=run, Shift+Enter=newline, Tab=indent, Ctrl+/=comment
  */
 
-import { useEffect, useRef } from 'react';
+import { useEffect, useMemo, useRef } from 'react';
 import { EditorState, EditorSelection, Compartment } from '@codemirror/state';
 import { EditorView, keymap, lineNumbers, highlightActiveLine, highlightActiveLineGutter } from '@codemirror/view';
 import { defaultKeymap, historyKeymap, history } from '@codemirror/commands';
@@ -54,6 +54,7 @@ export function CodeEditor({
   const onChangeRef = useRef(onChange);
   const onRunRef = useRef(onRun);
   const onCursorChangeRef = useRef(onCursorChange);
+  const wheelRafRef = useRef<number | null>(null);
 
   const storeFontSize = useSettingsStore((s) => s.editorFontSize);
   const fontSize = fontSizeProp ?? storeFontSize;
@@ -70,16 +71,16 @@ export function CodeEditor({
   }, [onCursorChange]);
 
   /* ─── Math syntax highlighting style ─────────────────────────── */
-  const mathHighlightStyle = HighlightStyle.define([
-    { tag: t.comment, color: '#6b7280', fontStyle: 'italic' },
-    { tag: t.number, color: '#fbbf24' },
-    { tag: t.string, color: '#34d399' },
-    { tag: t.keyword, color: '#a78bfa', fontWeight: 'bold' },
-    { tag: t.variableName, color: '#2dd4bf' },
-    { tag: t.function(t.variableName), color: '#60a5fa' },
-    { tag: t.operator, color: '#fb7185' },
-    { tag: t.punctuation, color: '#9ca3af' },
-  ]);
+  const mathHighlightStyle = useMemo(() => HighlightStyle.define([
+    { tag: t.comment, color: 'var(--syntax-comment)', fontStyle: 'italic' },
+    { tag: t.number, color: 'var(--syntax-number)' },
+    { tag: t.string, color: 'var(--syntax-string)' },
+    { tag: t.keyword, color: 'var(--syntax-keyword)', fontWeight: 'bold' },
+    { tag: t.variableName, color: 'var(--syntax-variable)' },
+    { tag: t.function(t.variableName), color: 'var(--syntax-function)' },
+    { tag: t.operator, color: 'var(--syntax-operator)' },
+    { tag: t.punctuation, color: 'var(--syntax-punctuation)' },
+  ]), []);
 
   /* ─── Theme (depends on fontSize for zoom) ─────────────────────── */
   // NOTE: The buggy `backgroundImage` + `backgroundSize: '2ch 100%'` that
@@ -88,7 +89,7 @@ export function CodeEditor({
   // into vertical lines". CodeMirror 6 has no first-party indent-guide
   // extension; `indentUnit.of('  ')` + `indentOnInput()` handle indentation
   // behavior without visual artifacts.
-  const editorTheme = EditorView.theme({
+  const editorTheme = useMemo(() => EditorView.theme({
     '&': {
       fontSize: `${fontSize}px`,
       height: '100%',
@@ -145,7 +146,7 @@ export function CodeEditor({
       borderRadius: '6px',
       color: 'var(--popover-foreground, #fafafa)',
     },
-  });
+  }), [fontSize]);
 
   /* ─── Create editor on mount ─────────────────────────────────── */
   useEffect(() => {
@@ -231,12 +232,16 @@ export function CodeEditor({
     const handleWheel = (e: WheelEvent) => {
       if (e.ctrlKey || e.metaKey) {
         e.preventDefault();
-        const current = useSettingsStore.getState().editorFontSize;
-        const delta = e.deltaY < 0 ? 1 : -1;
-        const next = current + delta;
-        if (next >= 10 && next <= 24) {
-          useSettingsStore.getState().setEditorFontSize(next);
-        }
+        if (wheelRafRef.current !== null) return; // already scheduled
+        wheelRafRef.current = requestAnimationFrame(() => {
+          wheelRafRef.current = null;
+          const current = useSettingsStore.getState().editorFontSize;
+          const delta = e.deltaY < 0 ? 1 : -1;
+          const next = current + delta;
+          if (next >= 10 && next <= 24) {
+            useSettingsStore.getState().setEditorFontSize(next);
+          }
+        });
       }
     };
     containerRef.current.addEventListener('wheel', handleWheel, { passive: false });
@@ -324,11 +329,7 @@ function toggleComment(view: EditorView) {
     const newText = newLines.join('\n');
     return {
       changes: { from: lineStart, to: lineEnd, insert: newText },
-      // `rangeFor` 不在当前安装的 @codemirror/state 的类型定义中，
-      // 用断言保留原有调用，不改变运行行为。
-      range: (EditorSelection as unknown as {
-        rangeFor(text: string, from: number, to: number): EditorSelection['ranges'][number];
-      }).rangeFor(newText, range.from - lineStart, range.to - lineStart),
+      range: EditorSelection.range(range.from, range.to),
     };
   });
   view.dispatch(changes);

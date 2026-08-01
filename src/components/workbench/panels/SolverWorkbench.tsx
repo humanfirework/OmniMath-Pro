@@ -84,7 +84,7 @@ import {
   type SymbolicResult,
 } from '@/lib/engine/symbolic';
 import { inputToLatex } from '@/lib/engine/latex';
-import { t } from '@/lib/i18n';
+import { t, type TranslationDict } from '@/lib/i18n';
 import { cn } from '@/lib/utils';
 import { toast } from 'sonner';
 
@@ -97,16 +97,16 @@ type SolverKind = 'equation' | 'system' | 'derivative' | 'integral' | 'limit';
 interface SolverNavItem {
   id: SolverKind;
   icon: LucideIcon;
-  label: string;
-  desc: string;
+  labelKey: keyof TranslationDict;
+  descKey: keyof TranslationDict;
 }
 
 const NAV_ITEMS: SolverNavItem[] = [
-  { id: 'equation', icon: Sigma, label: '方程', desc: '多项式 / 超越方程求根' },
-  { id: 'system', icon: Equal, label: '方程组', desc: '线性方程组逐步消元' },
-  { id: 'derivative', icon: FunctionSquare, label: '求导', desc: '分步求导 · 法则标注' },
-  { id: 'integral', icon: LineChart, label: '积分', desc: '不定 / 定积分 · 数值回退' },
-  { id: 'limit', icon: Target, label: '极限', desc: '符号极限 · 数值回退' },
+  { id: 'equation', icon: Sigma, labelKey: 'solverNavEquation', descKey: 'solverNavEquationDesc' },
+  { id: 'system', icon: Equal, labelKey: 'solverNavSystem', descKey: 'solverNavSystemDesc' },
+  { id: 'derivative', icon: FunctionSquare, labelKey: 'solverNavDerivative', descKey: 'solverNavDerivativeDesc' },
+  { id: 'integral', icon: LineChart, labelKey: 'solverNavIntegral', descKey: 'solverNavIntegralDesc' },
+  { id: 'limit', icon: Target, labelKey: 'solverNavLimit', descKey: 'solverNavLimitDesc' },
 ];
 
 interface ExampleGroup {
@@ -139,7 +139,7 @@ function useSendToPlot() {
       added++;
     });
     if (added === 0) return;
-    toast.success('已发送到 2D 绘图');
+    toast.success(t('solverSentToPlot2D'));
     // 联动：切回 workbench 并聚焦 2D 绘图预览
     setViewMode('workbench');
     setActivePreviewTab('plot2d');
@@ -215,7 +215,7 @@ function ResultHeader({
           onClick={onSendToPlot}
         >
           <LineChart className="size-3" />
-          发送到 2D 绘图
+          {t('solverSendToPlot2D')}
         </Button>
       )}
     </div>
@@ -240,7 +240,7 @@ function ExamplesDropdown({
           size="sm"
           className="h-7 px-2.5 text-[11px] gap-1 justify-between w-full max-w-xs"
         >
-          <span className="truncate">{displayValue || '选择示例…'}</span>
+          <span className="truncate">{displayValue || t('solverSelectExample')}</span>
           <ChevronDown className="size-3 opacity-60 shrink-0" />
         </Button>
       </DropdownMenuTrigger>
@@ -274,27 +274,26 @@ function ExamplesDropdown({
  * Section 1 — 方程求解（复用 engine/equationSolver）
  * ================================================================== */
 
-const EQUATION_EXAMPLES: ExampleGroup[] = [
-  {
-    title: '多项式方程',
-    items: [
-      { expr: 'x^2 - 5*x + 6 = 0', label: 'x² − 5x + 6 = 0', hint: '因式分解' },
-      { expr: 'x^3 - 6*x^2 + 11*x - 6 = 0', label: 'x³ − 6x² + 11x − 6 = 0', hint: '三次方程' },
-      { expr: 'x^2 + 1 = 0', label: 'x² + 1 = 0', hint: '复数根' },
-    ],
-  },
-  {
-    title: '超越方程',
-    items: [
-      { expr: 'sin(x) = 0.5', label: 'sin(x) = 0.5', hint: '数值求解' },
-      { expr: 'exp(x) = 2', label: 'eˣ = 2', hint: '对数解' },
-      { expr: 'cos(x) = x', label: 'cos(x) = x', hint: '数值求解' },
-    ],
-  },
-];
-
 function EquationSection() {
   const sendToPlot = useSendToPlot();
+  const equationExamples: ExampleGroup[] = [
+    {
+      title: t('solverExPolynomial'),
+      items: [
+        { expr: 'x^2 - 5*x + 6 = 0', label: 'x² − 5x + 6 = 0', hint: t('solverHintFactor') },
+        { expr: 'x^3 - 6*x^2 + 11*x - 6 = 0', label: 'x³ − 6x² + 11x − 6 = 0', hint: t('solverHintCubic') },
+        { expr: 'x^2 + 1 = 0', label: 'x² + 1 = 0', hint: t('solverHintComplexRoots') },
+      ],
+    },
+    {
+      title: t('solverExTranscendental'),
+      items: [
+        { expr: 'sin(x) = 0.5', label: 'sin(x) = 0.5', hint: t('solverHintNumeric') },
+        { expr: 'exp(x) = 2', label: 'eˣ = 2', hint: t('solverHintLog') },
+        { expr: 'cos(x) = x', label: 'cos(x) = x', hint: t('solverHintNumeric') },
+      ],
+    },
+  ];
   const [equation, setEquation] = useState('x^2 - 5*x + 6 = 0');
   const [varName, setVarName] = useState('x');
   const [rangeA, setRangeA] = useState(-10);
@@ -389,7 +388,7 @@ function EquationSection() {
           </div>
         </div>
         <div className="flex items-center justify-between gap-2">
-          <span className="text-[11px] text-muted-foreground">求解模式</span>
+          <span className="text-[11px] text-muted-foreground">{t('solverSolveMode')}</span>
           <ToggleGroup
             type="single"
             value={solveMode}
@@ -400,8 +399,8 @@ function EquationSection() {
             size="sm"
             className="h-7"
           >
-            <ToggleGroupItem value="numeric" className="h-7 px-2.5 text-[11px]">数值解</ToggleGroupItem>
-            <ToggleGroupItem value="symbolic" className="h-7 px-2.5 text-[11px]">符号解</ToggleGroupItem>
+            <ToggleGroupItem value="numeric" className="h-7 px-2.5 text-[11px]">{t('solverNumericSolution')}</ToggleGroupItem>
+            <ToggleGroupItem value="symbolic" className="h-7 px-2.5 text-[11px]">{t('solverSymbolicSolution')}</ToggleGroupItem>
           </ToggleGroup>
         </div>
         <Button onClick={handleSolve} disabled={working} className="w-full h-9 text-[12.5px] gap-1.5" size="sm">
@@ -410,7 +409,7 @@ function EquationSection() {
         </Button>
         <div>
           <div className="text-[11px] text-muted-foreground mb-1">{t('solverExamples')}</div>
-          <ExamplesDropdown groups={EQUATION_EXAMPLES} displayValue={equation} onPick={setEquation} />
+          <ExamplesDropdown groups={equationExamples} displayValue={equation} onPick={setEquation} />
         </div>
       </div>
 
@@ -421,19 +420,19 @@ function EquationSection() {
           result={result ? (
             <>
               <ResultHeader
-                label="求解结果"
+                label={t('solverSolveResult')}
                 onSendToPlot={() => sendToPlot([equationToPlotExpr(equation)])}
               />
               {result.symbolicFallback && (
                 <div className="text-[11px] text-amber-600 dark:text-amber-300 bg-amber-500/10 border border-amber-500/30 rounded px-2 py-1 mb-2">
-                  ⚠️ 符号解失败，已回退到数值解
+                  {t('solverSymbolicFallback')}
                 </div>
               )}
               {result.info && (
                 <div className="text-[11px] text-primary/80 bg-primary/5 border border-primary/20 rounded px-2 py-1 mb-2">
-                  {result.kind === 'polynomial' && '🧮 多项式方程 · '}
-                  {result.kind === 'transcendental' && '📈 超越方程 · '}
-                  {result.kind === 'symbolic' && '🔤 符号解 · '}
+                  {result.kind === 'polynomial' && t('solverKindPolynomial')}
+                  {result.kind === 'transcendental' && t('solverKindTranscendental')}
+                  {result.kind === 'symbolic' && t('solverKindSymbolic')}
                   {result.info}
                 </div>
               )}
@@ -468,7 +467,7 @@ function EquationSection() {
             </>
           ) : (
             <div className="min-h-[220px] grid place-items-center text-[12px] text-muted-foreground">
-              输入方程后点击 "求解"
+              {t('solverInputPrompt')}
             </div>
           )}
         />
@@ -481,36 +480,37 @@ function EquationSection() {
  * Section 2 — 方程组（复用 engine/linearSystem + GaussianEliminationView）
  * ================================================================== */
 
-const SYSTEM_EXAMPLES: ExampleGroup[] = [
-  {
-    title: '线性方程组',
-    items: [
-      { expr: 'x + y = 5\nx - y = 1', label: '2×2 线性', hint: '二元一次' },
-      { expr: 'x + y + z = 6\n2y + 5z = -4\n2x + 5y - z = 27', label: '3×3 线性', hint: '三元一次' },
-    ],
-  },
-  {
-    title: '非线性（给出数值说明）',
-    items: [
-      { expr: 'x^2 + y = 5\nx - y = 1', label: '含二次项', hint: '非线性' },
-    ],
-  },
-];
-
 function SystemSection() {
   const [text, setText] = useState('x + y = 5\nx - y = 1');
+  const systemExamples: ExampleGroup[] = [
+    {
+      title: t('solverExLinearSystem'),
+      items: [
+        { expr: 'x + y = 5\nx - y = 1', label: t('solverLabel2x2Linear'), hint: t('solverHint2VarLinear') },
+        { expr: 'x + y + z = 6\n2y + 5z = -4\n2x + 5y - z = 27', label: t('solverLabel3x3Linear'), hint: t('solverHint3VarLinear') },
+      ],
+    },
+    {
+      title: t('solverExNonlinear'),
+      items: [
+        { expr: 'x^2 + y = 5\nx - y = 1', label: t('solverLabelHasQuadratic'), hint: t('solverHintNonlinear') },
+      ],
+    },
+  ];
   const [solution, setSolution] = useState<LinearSystemSolution | null>(null);
   const [varList, setVarList] = useState<string[]>([]);
   const [nonlinearSteps, setNonlinearSteps] = useState<string[] | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [working, setWorking] = useState(false);
 
-  const handleSolve = () => {
+  const handleSolve = async () => {
     setWorking(true);
     setError(null);
     setSolution(null);
     setNonlinearSteps(null);
     try {
+      // 让 React 先渲染 loading 态（按钮 disabled）再执行同步重计算
+      await new Promise((r) => setTimeout(r, 0));
       const parsed = parseLinearSystem(text);
       if ('error' in parsed) {
         setError(parsed.error);
@@ -534,7 +534,7 @@ function SystemSection() {
     <div className="grid grid-cols-[minmax(300px,380px)_1fr] gap-5">
       <div className="space-y-3">
         <div>
-          <label className="text-[11px] text-muted-foreground">方程组（每行一个方程）</label>
+          <label className="text-[11px] text-muted-foreground">{t('solverSystemInput')}</label>
           <Textarea
             value={text}
             onChange={(e) => setText(e.target.value)}
@@ -544,12 +544,12 @@ function SystemSection() {
         </div>
         <Button onClick={handleSolve} disabled={working} className="w-full h-9 text-[12.5px] gap-1.5" size="sm">
           <Play className="size-4" />
-          求解方程组
+          {t('solverSystemSolve')}
         </Button>
         <div>
           <div className="text-[11px] text-muted-foreground mb-1">{t('solverExamples')}</div>
           <ExamplesDropdown
-            groups={SYSTEM_EXAMPLES}
+            groups={systemExamples}
             displayValue={text.split('\n')[0]}
             onPick={setText}
           />
@@ -562,12 +562,12 @@ function SystemSection() {
           result={
             nonlinearSteps ? (
               <>
-                <ResultHeader label="非线性方程组" />
-                <SolverStepsView steps={nonlinearSteps} title="数值方法说明" />
+                <ResultHeader label={t('solverNonlinearSystem')} />
+                <SolverStepsView steps={nonlinearSteps} title={t('solverNumericMethodNote')} />
               </>
             ) : solution ? (
               <>
-                <ResultHeader label="求解结果" />
+                <ResultHeader label={t('solverSolveResult')} />
                 <div
                   className={cn(
                     'rounded-md border px-3 py-2 text-[12.5px] font-medium mb-2',
@@ -579,7 +579,7 @@ function SystemSection() {
                       'border-amber-500/40 bg-amber-500/10 text-amber-700 dark:text-amber-300',
                   )}
                 >
-                  {solution.kind === 'unique' && '唯一解'}
+                  {solution.kind === 'unique' && t('solverUniqueSolution')}
                   {solution.kind === 'none' && t('solverNoSolution')}
                   {solution.kind === 'infinite' && t('solverMultipleSolutions')}
                   <span className="ml-2 text-[10.5px] font-mono opacity-75">
@@ -611,7 +611,7 @@ function SystemSection() {
               </>
             ) : (
               <div className="min-h-[220px] grid place-items-center text-[12px] text-muted-foreground">
-                输入方程组后点击 "求解方程组"
+                {t('solverSystemInputPrompt')}
               </div>
             )
           }
@@ -625,27 +625,26 @@ function SystemSection() {
  * Section 3 — 求导（复用 engine/derivativeSteps，法则标注）
  * ================================================================== */
 
-const DERIV_EXAMPLES: ExampleGroup[] = [
-  {
-    title: '乘积 / 商 / 链式',
-    items: [
-      { expr: 'x^2 * sin(x)', label: 'x²·sin(x)', hint: '乘积法则' },
-      { expr: 'sin(x) / x', label: 'sin(x)/x', hint: '商法则' },
-      { expr: 'sin(x^2)', label: 'sin(x²)', hint: '链式法则' },
-    ],
-  },
-  {
-    title: '多项式 / 复合',
-    items: [
-      { expr: 'x^3 + 2*x^2', label: 'x³ + 2x²', hint: '幂法则' },
-      { expr: 'e^x * ln(x)', label: 'eˣ·ln(x)', hint: '乘积法则' },
-      { expr: '1 / (1 + x^2)', label: '1/(1+x²)', hint: '链式法则' },
-    ],
-  },
-];
-
 function DerivativeSection() {
   const sendToPlot = useSendToPlot();
+  const derivExamples: ExampleGroup[] = [
+    {
+      title: t('solverDerivExRules'),
+      items: [
+        { expr: 'x^2 * sin(x)', label: 'x²·sin(x)', hint: t('solverHintProductRule') },
+        { expr: 'sin(x) / x', label: 'sin(x)/x', hint: t('solverHintQuotientRule') },
+        { expr: 'sin(x^2)', label: 'sin(x²)', hint: t('solverHintChainRule') },
+      ],
+    },
+    {
+      title: t('solverDerivExPoly'),
+      items: [
+        { expr: 'x^3 + 2*x^2', label: 'x³ + 2x²', hint: t('solverHintPowerRule') },
+        { expr: 'e^x * ln(x)', label: 'eˣ·ln(x)', hint: t('solverHintProductRule') },
+        { expr: '1 / (1 + x^2)', label: '1/(1+x²)', hint: t('solverHintChainRule') },
+      ],
+    },
+  ];
   const [expr, setExpr] = useState('x^2 * sin(x)');
   const [varName, setVarName] = useState('x');
   const [order, setOrder] = useState<1 | 2 | 3>(1);
@@ -727,7 +726,7 @@ function DerivativeSection() {
             </Select>
           </div>
           <div className="flex items-end justify-between gap-2 pb-0.5">
-            <span className="text-[11px] text-muted-foreground">求导阶数</span>
+            <span className="text-[11px] text-muted-foreground">{t('solverDerivativeOrder')}</span>
             <ToggleGroup
               type="single"
               value={String(order)}
@@ -739,19 +738,19 @@ function DerivativeSection() {
               size="sm"
               className="h-8"
             >
-              <ToggleGroupItem value="1" className="h-8 px-2.5 text-[11px]">1 阶</ToggleGroupItem>
-              <ToggleGroupItem value="2" className="h-8 px-2.5 text-[11px]">2 阶</ToggleGroupItem>
-              <ToggleGroupItem value="3" className="h-8 px-2.5 text-[11px]">3 阶</ToggleGroupItem>
+              <ToggleGroupItem value="1" className="h-8 px-2.5 text-[11px]">{t('solverOrder1')}</ToggleGroupItem>
+              <ToggleGroupItem value="2" className="h-8 px-2.5 text-[11px]">{t('solverOrder2')}</ToggleGroupItem>
+              <ToggleGroupItem value="3" className="h-8 px-2.5 text-[11px]">{t('solverOrder3')}</ToggleGroupItem>
             </ToggleGroup>
           </div>
         </div>
         <Button onClick={handleSolve} disabled={working} className="w-full h-9 text-[12.5px] gap-1.5" size="sm">
           <FunctionSquare className="size-4" />
-          求导
+          {t('solverCalcDerivative')}
         </Button>
         <div>
           <div className="text-[11px] text-muted-foreground mb-1">{t('solverExamples')}</div>
-          <ExamplesDropdown groups={DERIV_EXAMPLES} displayValue={expr} onPick={setExpr} />
+          <ExamplesDropdown groups={derivExamples} displayValue={expr} onPick={setExpr} />
         </div>
       </div>
 
@@ -761,7 +760,7 @@ function DerivativeSection() {
           result={result ? (
             <>
               <ResultHeader
-                label="求导结果"
+                label={t('solverDerivativeResult')}
                 onSendToPlot={() => sendToPlot([expr, result.resultString])}
               />
               <div className="overflow-x-auto min-h-max">
@@ -777,7 +776,7 @@ function DerivativeSection() {
             </>
           ) : (
             <div className="min-h-[220px] grid place-items-center text-[12px] text-muted-foreground">
-              输入表达式后点击 "求导"
+              {t('solverDerivativeInputPrompt')}
             </div>
           )}
         />
@@ -790,28 +789,27 @@ function DerivativeSection() {
  * Section 4 — 积分（复用 engine/symbolic，含数值回退）
  * ================================================================== */
 
-const INTEGRAL_EXAMPLES: ExampleGroup[] = [
-  {
-    title: '基本积分',
-    items: [
-      { expr: 'x^2', label: 'x²', hint: '幂函数' },
-      { expr: 'sin(x)', label: 'sin(x)', hint: '三角函数' },
-      { expr: 'e^x', label: 'eˣ', hint: '指数函数' },
-      { expr: '1 / x', label: '1/x', hint: '对数积分' },
-    ],
-  },
-  {
-    title: '进阶',
-    items: [
-      { expr: 'x * e^x', label: 'x·eˣ', hint: '分部积分' },
-      { expr: 'sin(x) * cos(x)', label: 'sin(x)·cos(x)', hint: '换元' },
-      { expr: '1 / (1 + x^2)', label: '1/(1+x²)', hint: '反正切' },
-    ],
-  },
-];
-
 function IntegralSection() {
   const sendToPlot = useSendToPlot();
+  const integralExamples: ExampleGroup[] = [
+    {
+      title: t('solverIntegralExBasic'),
+      items: [
+        { expr: 'x^2', label: 'x²', hint: t('solverHintPowerFunc') },
+        { expr: 'sin(x)', label: 'sin(x)', hint: t('solverHintTrigFunc') },
+        { expr: 'e^x', label: 'eˣ', hint: t('solverHintExpFunc') },
+        { expr: '1 / x', label: '1/x', hint: t('solverHintLogIntegral') },
+      ],
+    },
+    {
+      title: t('solverIntegralExAdvanced'),
+      items: [
+        { expr: 'x * e^x', label: 'x·eˣ', hint: t('solverHintByParts') },
+        { expr: 'sin(x) * cos(x)', label: 'sin(x)·cos(x)', hint: t('solverHintSubstitution') },
+        { expr: '1 / (1 + x^2)', label: '1/(1+x²)', hint: t('solverHintArctan') },
+      ],
+    },
+  ];
   const [expr, setExpr] = useState('x^2');
   const [varName, setVarName] = useState('x');
   const [definite, setDefinite] = useState(false);
@@ -888,7 +886,7 @@ function IntegralSection() {
             </Select>
           </div>
           <div className="flex items-end justify-between pb-0.5">
-            <span className="text-[11px] text-muted-foreground">定积分</span>
+            <span className="text-[11px] text-muted-foreground">{t('solverDefiniteIntegral')}</span>
             <ToggleGroup
               type="single"
               value={definite ? 'def' : 'indef'}
@@ -897,8 +895,8 @@ function IntegralSection() {
               size="sm"
               className="h-7"
             >
-              <ToggleGroupItem value="indef" className="h-7 px-2 text-[11px]">不定</ToggleGroupItem>
-              <ToggleGroupItem value="def" className="h-7 px-2 text-[11px]">定积分</ToggleGroupItem>
+              <ToggleGroupItem value="indef" className="h-7 px-2 text-[11px]">{t('solverIndefiniteIntegral')}</ToggleGroupItem>
+              <ToggleGroupItem value="def" className="h-7 px-2 text-[11px]">{t('solverDefiniteIntegral')}</ToggleGroupItem>
             </ToggleGroup>
           </div>
         </div>
@@ -928,11 +926,11 @@ function IntegralSection() {
         )}
         <Button onClick={handleSolve} disabled={working} className="w-full h-9 text-[12.5px] gap-1.5" size="sm">
           <LineChart className="size-4" />
-          积分
+          {t('solverCalcIntegral')}
         </Button>
         <div>
           <div className="text-[11px] text-muted-foreground mb-1">{t('solverExamples')}</div>
-          <ExamplesDropdown groups={INTEGRAL_EXAMPLES} displayValue={expr} onPick={setExpr} />
+          <ExamplesDropdown groups={integralExamples} displayValue={expr} onPick={setExpr} />
         </div>
       </div>
 
@@ -942,23 +940,24 @@ function IntegralSection() {
           result={result ? (
             <>
               <ResultHeader
-                label="积分结果"
+                label={t('solverIntegralResult')}
                 onSendToPlot={() => sendToPlot([expr])}
               />
               <div className="overflow-x-auto min-h-max">
                 <FormulaRenderer
-                  latex={
-                    definite
-                      ? `\\int_{${lower}}^{${upper}} ${expr} \\, d${varName} = ${result.latex}`
-                      : `\\int ${expr} \\, d${varName} = ${result.latex}`
-                  }
+                  latex={(() => {
+                    const exprLatex = inputToLatex(expr);
+                    return definite
+                      ? `\\int_{${lower}}^{${upper}} ${exprLatex} \\, d${varName} = ${result.latex}`
+                      : `\\int ${exprLatex} \\, d${varName} = ${result.latex}`;
+                  })()}
                   displayMode
                   fitToContainer={true}
                 />
               </div>
               {result.numerical !== undefined && (
                 <div className="mt-1.5 text-[11.5px] font-mono text-muted-foreground">
-                  数值结果 ≈ {parseFloat(result.numerical.toPrecision(8))}
+                  {t('solverNumericResult')} {parseFloat(result.numerical.toPrecision(8))}
                 </div>
               )}
               {result.steps.length > 0 && (
@@ -967,7 +966,7 @@ function IntegralSection() {
             </>
           ) : (
             <div className="min-h-[220px] grid place-items-center text-[12px] text-muted-foreground">
-              输入表达式后点击 "积分"
+              {t('solverIntegralInputPrompt')}
             </div>
           )}
         />
@@ -980,26 +979,25 @@ function IntegralSection() {
  * Section 5 — 极限（复用 engine/symbolic.symbolicLimit）
  * ================================================================== */
 
-const LIMIT_EXAMPLES: ExampleGroup[] = [
-  {
-    title: '经典极限',
-    items: [
-      { expr: 'sin(x)/x', label: 'sin(x)/x', hint: 'x→0' },
-      { expr: '(1 + x)^(1/x)', label: '(1+x)^(1/x)', hint: 'e 的定义' },
-      { expr: '(e^x - 1) / x', label: '(eˣ−1)/x', hint: 'x→0' },
-    ],
-  },
-  {
-    title: '无穷极限',
-    items: [
-      { expr: '1/x', label: '1/x', hint: 'x→∞' },
-      { expr: 'ln(x) / x', label: 'ln(x)/x', hint: 'x→∞' },
-    ],
-  },
-];
-
 function LimitSection() {
   const sendToPlot = useSendToPlot();
+  const limitExamples: ExampleGroup[] = [
+    {
+      title: t('solverLimitExClassic'),
+      items: [
+        { expr: 'sin(x)/x', label: 'sin(x)/x', hint: 'x→0' },
+        { expr: '(1 + x)^(1/x)', label: '(1+x)^(1/x)', hint: t('solverHintDefOfE') },
+        { expr: '(e^x - 1) / x', label: '(eˣ−1)/x', hint: 'x→0' },
+      ],
+    },
+    {
+      title: t('solverLimitExInfinite'),
+      items: [
+        { expr: '1/x', label: '1/x', hint: 'x→∞' },
+        { expr: 'ln(x) / x', label: 'ln(x)/x', hint: 'x→∞' },
+      ],
+    },
+  ];
   const [expr, setExpr] = useState('sin(x)/x');
   const [varName, setVarName] = useState('x');
   const [pointText, setPointText] = useState('0');
@@ -1024,7 +1022,7 @@ function LimitSection() {
             ? '-inf'
             : parseFloat(trimmed);
       if (typeof point === 'number' && Number.isNaN(point)) {
-        setError('趋于点需为数字或 inf');
+        setError(t('solverPointMustBeNumber'));
         return;
       }
       const res = await symbolicLimit(expr, varName, point);
@@ -1092,18 +1090,18 @@ function LimitSection() {
             <Input
               value={pointText}
               onChange={(e) => setPointText(e.target.value)}
-              placeholder="0 或 inf"
+              placeholder={t('solverPointPlaceholder')}
               className="h-8 text-[12px] mt-1 font-mono"
             />
           </div>
         </div>
         <Button onClick={handleSolve} disabled={working} className="w-full h-9 text-[12.5px] gap-1.5" size="sm">
           <Target className="size-4" />
-          求极限
+          {t('solverComputeLimit')}
         </Button>
         <div>
           <div className="text-[11px] text-muted-foreground mb-1">{t('solverExamples')}</div>
-          <ExamplesDropdown groups={LIMIT_EXAMPLES} displayValue={expr} onPick={setExpr} />
+          <ExamplesDropdown groups={limitExamples} displayValue={expr} onPick={setExpr} />
         </div>
       </div>
 
@@ -1113,19 +1111,22 @@ function LimitSection() {
           result={result ? (
             <>
               <ResultHeader
-                label="极限结果"
+                label={t('solverLimitResult')}
                 onSendToPlot={() => sendToPlot([expr])}
               />
               <div className="overflow-x-auto min-h-max">
                 <FormulaRenderer
-                  latex={`\\lim_{${varName} \\to ${pointDisplay}} ${expr} = ${result.latex}`}
+                  latex={(() => {
+                    const exprLatex = inputToLatex(expr);
+                    return `\\lim_{${varName} \\to ${pointDisplay}} ${exprLatex} = ${result.latex}`;
+                  })()}
                   displayMode
                   fitToContainer={true}
                 />
               </div>
               {result.numerical !== undefined && (
                 <div className="mt-1.5 text-[11.5px] font-mono text-muted-foreground">
-                  数值结果 ≈ {parseFloat(result.numerical.toPrecision(8))}
+                  {t('solverNumericResult')} {parseFloat(result.numerical.toPrecision(8))}
                 </div>
               )}
               {result.steps.length > 0 && (
@@ -1134,7 +1135,7 @@ function LimitSection() {
             </>
           ) : (
             <div className="min-h-[220px] grid place-items-center text-[12px] text-muted-foreground">
-              输入表达式后点击 "求极限"
+              {t('solverLimitInputPrompt')}
             </div>
           )}
         />
@@ -1156,7 +1157,7 @@ export function SolverWorkbench() {
       <aside className="w-64 shrink-0 flex flex-col border-r border-border/60 bg-card/30 backdrop-blur-sm">
         <div className="shrink-0 h-10 px-3 flex items-center gap-1.5 border-b border-border/60 bg-background/40">
           <FunctionSquare className="size-3.5 text-primary" />
-          <span className="text-[12px] font-semibold tracking-tight">求解器</span>
+          <span className="text-[12px] font-semibold tracking-tight">{t('solverWorkbenchTitle')}</span>
         </div>
         <ScrollArea className="flex-1 min-h-0">
           <ul className="p-2 space-y-1">
@@ -1186,8 +1187,8 @@ export function SolverWorkbench() {
                       <Icon className="size-3.5" />
                     </span>
                     <div className="flex-1 min-w-0">
-                      <div className="text-[12px] font-semibold truncate">{item.label}</div>
-                      <div className="text-[10px] text-muted-foreground truncate">{item.desc}</div>
+                      <div className="text-[12px] font-semibold truncate">{t(item.labelKey)}</div>
+                      <div className="text-[10px] text-muted-foreground truncate">{t(item.descKey)}</div>
                     </div>
                   </button>
                 </li>
@@ -1196,7 +1197,7 @@ export function SolverWorkbench() {
           </ul>
         </ScrollArea>
         <div className="shrink-0 px-3 py-2 border-t border-border/60 text-[10px] text-muted-foreground leading-relaxed">
-          分步求解：法则标注 / 逐步消元 / 积分提示
+          {t('solverFooterHint')}
         </div>
       </aside>
 
@@ -1205,8 +1206,8 @@ export function SolverWorkbench() {
         {/* 标题条 */}
         <div className="shrink-0 h-11 px-4 flex items-center gap-2 border-b border-border/60 bg-background/30">
           <active.icon className="size-4 text-primary" />
-          <span className="text-[13px] font-semibold tracking-tight">{active.label}</span>
-          <span className="text-[11px] text-muted-foreground">{active.desc}</span>
+          <span className="text-[13px] font-semibold tracking-tight">{t(active.labelKey)}</span>
+          <span className="text-[11px] text-muted-foreground">{t(active.descKey)}</span>
         </div>
 
         <ScrollArea className="flex-1 min-h-0">

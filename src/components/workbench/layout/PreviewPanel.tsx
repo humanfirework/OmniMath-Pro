@@ -20,7 +20,7 @@
  */
 
 import dynamic from 'next/dynamic';
-import { Fragment, useCallback, useRef } from 'react';
+import { Fragment, memo, useCallback, useRef } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
   FileText,
@@ -74,7 +74,7 @@ const Plot3DPanel = dynamic(
     loading: () => (
       <div className="h-full w-full grid place-items-center bg-background/40">
         <div className="text-[12px] text-muted-foreground animate-pulse">
-          3D 模块加载中…
+          {t('preview3DLoading')}
         </div>
       </div>
     ),
@@ -329,7 +329,7 @@ export function PreviewPanel() {
 }
 
 /* ─── Formula view ────────────────────────────────────────────── */
-function FormulaView({
+const FormulaView = memo(function FormulaView({
   result,
   previewSize,
 }: {
@@ -422,10 +422,10 @@ function FormulaView({
       </div>
     </ScrollArea>
   );
-}
+});
 
 /* ─── Log view ────────────────────────────────────────────────── */
-function LogView({
+const LogView = memo(function LogView({
   results,
   onPick,
 }: {
@@ -478,7 +478,7 @@ function LogView({
       </div>
     </ScrollArea>
   );
-}
+});
 
 /* ─── Pipeline placeholder ─────────────────────────────────────── */
 function PipelinePlaceholder() {
@@ -501,40 +501,8 @@ function PipelinePlaceholder() {
         onClick={() => setViewMode('pipeline')}
       >
         <Workflow className="size-3.5" />
-        进入流水线视图
+        {t('pipelineEnterView')}
       </Button>
-    </div>
-  );
-}
-
-/* ─── AI placeholder ──────────────────────────────────────────── */
-function AIPlaceholder() {
-  return (
-    <div className="h-full flex flex-col items-center justify-center text-center px-8 py-12">
-      <motion.div
-        animate={{ y: [0, -6, 0], rotate: [0, 8, -8, 0] }}
-        transition={{ duration: 4, repeat: Infinity, ease: 'easeInOut' }}
-        className="grid place-items-center size-14 rounded-2xl bg-violet-500/8 border border-violet-500/20 mb-3"
-      >
-        <Sparkles className="size-6 text-violet-500/80" />
-      </motion.div>
-      <p className="text-[13px] font-medium text-foreground/80 mb-1">
-        {t('aiTitle')}
-      </p>
-      <p className="text-[11.5px] text-muted-foreground max-w-xs mb-3">
-        {t('aiWelcomeHint')}
-      </p>
-      <div className="grid gap-1.5 text-[11px] text-muted-foreground/80">
-        <div className="rounded-md border border-border/60 bg-muted/30 px-2 py-1 cursor-default">
-          ✦ {t('aiSuggest1')}
-        </div>
-        <div className="rounded-md border border-border/60 bg-muted/30 px-2 py-1 cursor-default">
-          ✦ {t('aiSuggest2')}
-        </div>
-        <div className="rounded-md border border-border/60 bg-muted/30 px-2 py-1 cursor-default">
-          ✦ {t('aiSuggest3')}
-        </div>
-      </div>
     </div>
   );
 }
