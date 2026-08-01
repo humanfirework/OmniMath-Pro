@@ -169,6 +169,35 @@
 
 ---
 
+## 截图展示
+
+### 主工作台
+
+| 深色主题 | 浅色主题 |
+| :---: | :---: |
+| ![工作台-深色](screenshots/workbench/workbench-dark.png) | ![工作台-浅色](screenshots/workbench/workbench-light.png) |
+
+便签与笔记工作流：
+![工作台-便签](screenshots/workbench/workbench-sticky-note.png)
+
+### 功能面板
+
+| 模块 | 截图 |
+| :--- | :---: |
+| 浮动计算器（深色） | ![](screenshots/panels/floating-calc-dark.png) |
+| 浮动计算器（浅色） | ![](screenshots/panels/floating-calc-light.png) |
+| 方程求解器 | ![](screenshots/panels/solver-equation.png) |
+| 线性代数（矩阵编辑器） | ![](screenshots/panels/linalg-matrix.png) |
+| AI 助手 | ![](screenshots/panels/ai-assistant.png) |
+
+### 可视化绘图
+
+| 2D 绘图（自定义颜色/线宽） | 3D 曲面绘图 |
+| :---: | :---: |
+| ![](screenshots/plots/plot2d-customize.png) | ![](screenshots/plots/plot3d-surface.png) |
+
+---
+
 ## 下载安装
 
 前往 [Releases](https://github.com/humanfirework/OmniMath-Pro/releases) 页面，选择对应平台安装包：
