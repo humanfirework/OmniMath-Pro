@@ -1989,7 +1989,14 @@ function DecompositionTab({
                   ))}
                 </div>
                 {result.parts.length === 0 && (
-                  <div className="rounded-md border border-amber-500/30 bg-amber-500/10 p-3 text-[12px] text-amber-700 dark:text-amber-300">
+                  <div
+                    className="rounded-md border p-3 text-[12px]"
+                    style={{
+                      borderColor: 'color-mix(in oklab, var(--primary) 30%, transparent)',
+                      backgroundColor: 'color-mix(in oklab, var(--primary) 10%, transparent)',
+                      color: 'var(--primary)',
+                    }}
+                  >
                     {result.note || t('linalgNotSupportedShort')}
                   </div>
                 )}
@@ -2222,27 +2229,46 @@ function LinearSystemTab({ defaultMatrix }: { defaultMatrix: Matrix | undefined 
                 {/* System type badge: 齐次 / 非齐次 + solution kind */}
                 <div className="flex flex-wrap items-center gap-2">
                   <div
-                    className={cn(
-                      'rounded-md border px-2.5 py-1.5 text-[11.5px] font-medium',
+                    className="rounded-md border px-2.5 py-1.5 text-[11.5px] font-medium"
+                    style={
                       solution.isHomogeneous
-                        ? 'border-sky-500/40 bg-sky-500/10 text-sky-700 dark:text-sky-300'
-                        : 'border-indigo-500/40 bg-indigo-500/10 text-indigo-700 dark:text-indigo-300',
-                    )}
+                        ? {
+                            borderColor: 'color-mix(in oklab, var(--primary) 40%, transparent)',
+                            backgroundColor: 'color-mix(in oklab, var(--primary) 10%, transparent)',
+                            color: 'var(--primary)',
+                          }
+                        : {
+                            borderColor: 'color-mix(in oklab, var(--accent, var(--primary)) 40%, transparent)',
+                            backgroundColor: 'color-mix(in oklab, var(--accent, var(--primary)) 10%, transparent)',
+                            color: 'var(--accent-foreground, var(--primary))',
+                          }
+                    }
                   >
                     {solution.isHomogeneous
                       ? t('linalgHomogeneousSystem')
                       : t('linalgNonHomogeneousSystem')}
                   </div>
                   <div
-                    className={cn(
-                      'rounded-md border px-2.5 py-1.5 text-[11.5px] font-medium',
-                      solution.kind === 'unique' &&
-                        'border-emerald-500/30 bg-emerald-500/10 text-emerald-700 dark:text-emerald-300',
-                      solution.kind === 'none' &&
-                        'border-rose-500/40 bg-rose-500/10 text-rose-700 dark:text-rose-300',
-                      solution.kind === 'infinite' &&
-                        'border-amber-500/40 bg-amber-500/10 text-amber-700 dark:text-amber-300',
-                    )}
+                    className="rounded-md border px-2.5 py-1.5 text-[11.5px] font-medium"
+                    style={
+                      solution.kind === 'unique'
+                        ? {
+                            borderColor: 'color-mix(in oklab, var(--success, #10b981) 30%, transparent)',
+                            backgroundColor: 'color-mix(in oklab, var(--success, #10b981) 10%, transparent)',
+                            color: 'var(--success, #10b981)',
+                          }
+                        : solution.kind === 'none'
+                          ? {
+                              borderColor: 'color-mix(in oklab, var(--destructive, #ef4444) 40%, transparent)',
+                              backgroundColor: 'color-mix(in oklab, var(--destructive, #ef4444) 10%, transparent)',
+                              color: 'var(--destructive, #ef4444)',
+                            }
+                          : {
+                              borderColor: 'color-mix(in oklab, var(--primary) 40%, transparent)',
+                              backgroundColor: 'color-mix(in oklab, var(--primary) 10%, transparent)',
+                              color: 'var(--primary)',
+                            }
+                    }
                   >
                     {solution.kind === 'unique' && t('linalgUniqueSolution')}
                     {solution.kind === 'none' && t('linalgNoSolution')}

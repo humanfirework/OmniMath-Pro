@@ -39,6 +39,7 @@ import type { PlotSample } from '@/lib/plots/plot2d';
 import type { PlotConfig } from '@/lib/store/workbench';
 import { FormulaRenderer } from '@/components/workbench/FormulaRenderer';
 import { useScopeVersion } from '@/lib/hooks/useScopeVersion';
+import { useT, tf } from '@/lib/i18n';
 
 /* ------------------------------------------------------------------ */
 /*  Types                                                             */
@@ -94,6 +95,7 @@ export function Plot2DAdvancedPanel({
   onOverlaysChange,
 }: Plot2DAdvancedPanelProps) {
   const [open, setOpen] = useState(false);
+  const t = useT();
   const showCompareToggle = plots.length > 1;
 
   return (
@@ -102,14 +104,14 @@ export function Plot2DAdvancedPanel({
         <button
           type="button"
           className="flex h-7 w-full items-center gap-1.5 px-2.5 text-[11px] font-medium text-muted-foreground hover:bg-accent/40 hover:text-foreground transition-colors"
-          aria-label={open ? '折叠高级功能' : '展开高级功能'}
+          aria-label={open ? t('plotAdvCollapse') : t('plotAdvExpand')}
         >
           {open ? <ChevronDown className="size-3" /> : <ChevronRight className="size-3" />}
-          <span>高级功能</span>
+          <span>{t('plotAdvTitle')}</span>
           {showCompareToggle && (
             <span className="ml-auto flex items-center gap-1 text-[9px] text-muted-foreground">
               {compareMode === 'facet' ? <Grid3x3 className="size-2.5" /> : <Layers className="size-2.5" />}
-              {compareMode === 'facet' ? '分面' : '叠加'}
+              {compareMode === 'facet' ? t('plotAdvCompareFacet') : t('plotAdvCompareOverlay')}
             </span>
           )}
         </button>
@@ -119,16 +121,16 @@ export function Plot2DAdvancedPanel({
           <Tabs defaultValue="range" className="gap-1.5">
             <TabsList className="h-7 text-[10px]">
               <TabsTrigger value="range" className="gap-1 px-2 py-0.5 text-[10px]">
-                <Ruler className="size-3" /> 范围
+                <Ruler className="size-3" /> {t('plotAdvRange')}
               </TabsTrigger>
               <TabsTrigger value="intersect" className="gap-1 px-2 py-0.5 text-[10px]">
-                <GitCompare className="size-3" /> 交点
+                <GitCompare className="size-3" /> {t('plotAdvIntersections')}
               </TabsTrigger>
               <TabsTrigger value="tangent" className="gap-1 px-2 py-0.5 text-[10px]">
-                <Spline className="size-3" /> 切线
+                <Spline className="size-3" /> {t('plotAdvTangent')}
               </TabsTrigger>
               <TabsTrigger value="deriv" className="gap-1 px-2 py-0.5 text-[10px]">
-                <Sigma className="size-3" /> 求导
+                <Sigma className="size-3" /> {t('plotAdvDerivative')}
               </TabsTrigger>
             </TabsList>
 
@@ -177,11 +179,12 @@ function RangeTab({
   onCompareModeChange: (m: CompareMode) => void;
   showCompareToggle: boolean;
 }) {
+  const t = useT();
   return (
     <div className="flex flex-col gap-2 py-1">
       {showCompareToggle && (
         <>
-          <Label className="text-[10px] text-muted-foreground">对比模式</Label>
+          <Label className="text-[10px] text-muted-foreground">{t('plotAdvCompareMode')}</Label>
           <ToggleGroup
             type="single"
             value={compareMode}
@@ -191,21 +194,24 @@ function RangeTab({
             className="h-7"
             size="sm"
           >
-            <ToggleGroupItem value="facet" className="h-7 px-2 text-[10px] gap-1" aria-label="分面对比">
-              <Grid3x3 className="size-3" /> 分面
+            <ToggleGroupItem value="facet" className="h-7 px-2 text-[10px] gap-1" aria-label={t('plotAdvCompareFacet')}>
+              <Grid3x3 className="size-3" /> {t('plotAdvCompareFacet')}
             </ToggleGroupItem>
-            <ToggleGroupItem value="overlay" className="h-7 px-2 text-[10px] gap-1" aria-label="叠加对比">
-              <Layers className="size-3" /> 叠加
+            <ToggleGroupItem value="overlay" className="h-7 px-2 text-[10px] gap-1" aria-label={t('plotAdvCompareOverlay')}>
+              <Layers className="size-3" /> {t('plotAdvCompareOverlay')}
             </ToggleGroupItem>
           </ToggleGroup>
           <p className="text-[10px] text-muted-foreground">
             {compareMode === 'facet'
-              ? '分面模式：每个函数独立 Y 轴，适合对比不同量级的函数形状。'
-              : '叠加模式：所有函数共享 Y 轴，适合对比相同量级的函数。'}
+              ? t('plotAdvCompareFacetHint')
+              : t('plotAdvCompareOverlayHint')}
           </p>
         </>
       )}
-      <Label className="text-[10px] text-muted-foreground">Y 轴范围模式{showCompareToggle && compareMode === 'facet' ? '（仅叠加模式生效）' : ''}</Label>
+      <Label className="text-[10px] text-muted-foreground">
+        {t('plotAdvYRangeMode')}
+        {showCompareToggle && compareMode === 'facet' ? t('plotAdvYRangeFacetNote') : ''}
+      </Label>
       <ToggleGroup
         type="single"
         value={rangeMode}
@@ -216,21 +222,28 @@ function RangeTab({
         size="sm"
         disabled={showCompareToggle && compareMode === 'facet'}
       >
-        <ToggleGroupItem value="free" className="h-7 px-2 text-[10px]" aria-label="自由范围">
-          自由
+        <ToggleGroupItem value="free" className="h-7 px-2 text-[10px]" aria-label={t('plotAdvFree')}>
+          {t('plotAdvFree')}
         </ToggleGroupItem>
-        <ToggleGroupItem value="manual" className="h-7 px-2 text-[10px]" aria-label="手动范围">
-          手动
+        <ToggleGroupItem value="manual" className="h-7 px-2 text-[10px]" aria-label={t('plotAdvManual')}>
+          {t('plotAdvManual')}
         </ToggleGroupItem>
       </ToggleGroup>
       {outliers.length > 0 && (
-        <p className="rounded border border-amber-500/30 bg-amber-500/5 px-2 py-1 text-[10px] text-amber-600 dark:text-amber-400">
-          检测到 <span className="font-mono">{outliers.join(', ')}</span> 数值跨度极大，已用自由范围裁切。
+        <p
+          className="rounded border px-2 py-1 text-[10px]"
+          style={{
+            borderColor: 'color-mix(in oklab, var(--primary) 30%, transparent)',
+            backgroundColor: 'color-mix(in oklab, var(--primary) 5%, transparent)',
+            color: 'var(--primary)',
+          }}
+        >
+          {tf('plotOutlierClipped', { values: outliers.join(', ') })}
         </p>
       )}
       {outliers.length === 0 && rangeMode === 'free' && !(showCompareToggle && compareMode === 'facet') && (
         <p className="text-[10px] text-muted-foreground">
-          自由模式使用 P5/P95 分位数自动适配所有曲线，保持多曲线比例协调。
+          {t('plotAdvFreeHint')}
         </p>
       )}
     </div>
@@ -250,6 +263,7 @@ function IntersectTab({
   xRange: [number, number];
   onOverlaysChange: (o: AdvancedOverlays) => void;
 }) {
+  const t = useT();
   const visiblePlots = useMemo(() => plots.filter((p) => p.visible && p.plotType !== 'surface3d'), [plots]);
   const [idx1, setIdx1] = useState(0);
   const [idx2, setIdx2] = useState(1);
@@ -299,7 +313,7 @@ function IntersectTab({
   }, [results, onOverlaysChange]);
 
   if (visiblePlots.length < 2) {
-    return <p className="py-2 text-[10px] text-muted-foreground">需要至少 2 条可见曲线才能计算交点。</p>;
+    return <p className="py-2 text-[10px] text-muted-foreground">{t('plotAdvNeed2Curves')}</p>;
   }
 
   return (
@@ -311,7 +325,7 @@ function IntersectTab({
           className="h-6 px-2 text-[10px]"
           onClick={() => setEnabled((v) => !v)}
         >
-          {enabled ? '关闭交点' : '显示交点'}
+          {enabled ? t('plotAdvIntersectionsOff') : t('plotAdvIntersectionsOn')}
         </Button>
         {enabled && (
           <ToggleGroup
@@ -323,24 +337,24 @@ function IntersectTab({
             className="h-6"
             size="sm"
           >
-            <ToggleGroupItem value="auto" className="h-6 px-2 text-[10px]" aria-label="自动全部交点">
-              全部
+            <ToggleGroupItem value="auto" className="h-6 px-2 text-[10px]" aria-label={t('plotAdvAutoAll')}>
+              {t('plotAdvAutoAll')}
             </ToggleGroupItem>
-            <ToggleGroupItem value="manual" className="h-6 px-2 text-[10px]" aria-label="手动选择曲线对">
-              手动
+            <ToggleGroupItem value="manual" className="h-6 px-2 text-[10px]" aria-label={t('plotAdvManualPair')}>
+              {t('plotAdvManualPair')}
             </ToggleGroupItem>
           </ToggleGroup>
         )}
         {enabled && (
           <span className="ml-auto text-[10px] text-muted-foreground">
-            找到 {results.length} 个交点
+            {tf('plotAdvIntersectionsFound', { n: results.length })}
           </span>
         )}
       </div>
       {enabled && mode === 'manual' && (
         <div className="grid grid-cols-2 gap-1.5">
-          <CurveSelect label="曲线 A" plots={visiblePlots} value={idx1} onChange={setIdx1} />
-          <CurveSelect label="曲线 B" plots={visiblePlots} value={idx2} onChange={setIdx2} />
+          <CurveSelect label={t('plotAdvCurveA')} plots={visiblePlots} value={idx1} onChange={setIdx1} />
+          <CurveSelect label={t('plotAdvCurveB')} plots={visiblePlots} value={idx2} onChange={setIdx2} />
         </div>
       )}
       {enabled && results.length > 0 && (
@@ -381,6 +395,7 @@ function TangentTab({
   xRange: [number, number];
   onOverlaysChange: (o: AdvancedOverlays) => void;
 }) {
+  const t = useT();
   const visiblePlots = useMemo(() => plots.filter((p) => p.visible && p.plotType !== 'surface3d'), [plots]);
   const [idx, setIdx] = useState(0);
   const [x0, setX0] = useState(0);
@@ -409,7 +424,7 @@ function TangentTab({
   }, [tangent, onOverlaysChange]);
 
   if (visiblePlots.length === 0) {
-    return <p className="py-2 text-[10px] text-muted-foreground">无可见曲线。</p>;
+    return <p className="py-2 text-[10px] text-muted-foreground">{t('plotAdvNoCurves')}</p>;
   }
 
   return (
@@ -421,12 +436,12 @@ function TangentTab({
           className="h-6 px-2 text-[10px]"
           onClick={() => setEnabled((v) => !v)}
         >
-          {enabled ? '关闭切线' : '显示切线'}
+          {enabled ? t('plotAdvTangentOff') : t('plotAdvTangentOn')}
         </Button>
       </div>
       {enabled && (
         <>
-          <CurveSelect label="曲线" plots={visiblePlots} value={idx} onChange={setIdx} />
+          <CurveSelect label={t('plotAdvDerivativeCurve')} plots={visiblePlots} value={idx} onChange={setIdx} />
           <div className="flex items-center gap-1.5">
             <Label className="text-[10px] text-muted-foreground">x₀ =</Label>
             <Input
@@ -442,8 +457,8 @@ function TangentTab({
           </div>
           {tangent && (
             <div className="rounded border border-border/40 bg-muted/20 p-1.5 font-mono text-[10px]">
-              <div className="text-muted-foreground">斜率 k = <span className="text-primary">{tangent.slope.toFixed(4)}</span></div>
-              <div className="text-muted-foreground">切点 ({tangent.at.x.toFixed(2)}, {tangent.at.y.toFixed(2)})</div>
+              <div className="text-muted-foreground">{t('plotAdvTangentSlopeK')} <span className="text-primary">{tangent.slope.toFixed(4)}</span></div>
+              <div className="text-muted-foreground">{t('plotAdvTangentAtXY')} ({tangent.at.x.toFixed(2)}, {tangent.at.y.toFixed(2)})</div>
               <div className="text-foreground/80">y = {tangent.slope.toFixed(3)}·x {tangent.intercept >= 0 ? '+' : '−'} {Math.abs(tangent.intercept).toFixed(3)}</div>
             </div>
           )}
@@ -466,6 +481,7 @@ function DerivativeTab({
   xRange: [number, number];
   onOverlaysChange: (o: AdvancedOverlays) => void;
 }) {
+  const t = useT();
   const visiblePlots = useMemo(() => plots.filter((p) => p.visible && p.plotType !== 'surface3d'), [plots]);
   const [idx, setIdx] = useState(0);
   const [order, setOrder] = useState<1 | 2 | 3>(1);
@@ -513,7 +529,7 @@ function DerivativeTab({
   }, [derivSamples, order, onOverlaysChange]);
 
   if (visiblePlots.length === 0) {
-    return <p className="py-2 text-[10px] text-muted-foreground">无可见曲线。</p>;
+    return <p className="py-2 text-[10px] text-muted-foreground">{t('plotAdvNoCurves')}</p>;
   }
 
   return (
@@ -525,14 +541,14 @@ function DerivativeTab({
           className="h-6 px-2 text-[10px]"
           onClick={() => setEnabled((v) => !v)}
         >
-          {enabled ? '关闭求导' : '显示导数曲线'}
+          {enabled ? t('plotAdvDerivativeOff') : t('plotAdvDerivativeOn')}
         </Button>
       </div>
       {enabled && (
         <>
-          <CurveSelect label="曲线" plots={visiblePlots} value={idx} onChange={setIdx} />
+          <CurveSelect label={t('plotAdvDerivativeCurve')} plots={visiblePlots} value={idx} onChange={setIdx} />
           <div className="flex items-center gap-1.5">
-            <Label className="text-[10px] text-muted-foreground">阶数</Label>
+            <Label className="text-[10px] text-muted-foreground">{t('plotAdvDerivativeOrder')}</Label>
             <ToggleGroup
               type="single"
               value={String(order)}
@@ -543,21 +559,21 @@ function DerivativeTab({
               className="h-6"
               size="sm"
             >
-              <ToggleGroupItem value="1" className="h-6 px-2 text-[10px]">1 阶</ToggleGroupItem>
-              <ToggleGroupItem value="2" className="h-6 px-2 text-[10px]">2 阶</ToggleGroupItem>
-              <ToggleGroupItem value="3" className="h-6 px-2 text-[10px]">3 阶</ToggleGroupItem>
+              <ToggleGroupItem value="1" className="h-6 px-2 text-[10px]">{t('plotAdvDerivative1st')}</ToggleGroupItem>
+              <ToggleGroupItem value="2" className="h-6 px-2 text-[10px]">{t('plotAdvDerivative2nd')}</ToggleGroupItem>
+              <ToggleGroupItem value="3" className="h-6 px-2 text-[10px]">{t('plotAdvDerivative3rd')}</ToggleGroupItem>
             </ToggleGroup>
           </div>
           {symbolic?.success && symbolic.latex && (
             <div className="rounded border border-primary/30 bg-primary/5 p-1.5">
               <div className="mb-1 text-[9px] uppercase tracking-wider text-muted-foreground">
-                符号求导 d<sup>{order}</sup>/dx<sup>{order}</sup>
+                {t('plotAdvDerivativeSymbolic')} d<sup>{order}</sup>/dx<sup>{order}</sup>
               </div>
               <FormulaRenderer latex={symbolic.latex} displayMode className="text-[11px]" />
             </div>
           )}
           {symbolic && !symbolic.success && (
-            <p className="text-[10px] text-muted-foreground">符号求导不可用，仅显示数值导数曲线。</p>
+            <p className="text-[10px] text-muted-foreground">{t('plotAdvDerivativeSymbolicUnavailable')}</p>
           )}
         </>
       )}

@@ -3174,6 +3174,10 @@
   --destructive: oklch(0.6 0.22 25);
   --destructive-foreground: oklch(0.99 0 0);
 
+  /* Success — vivid emerald */
+  --success: oklch(0.64 0.20 150);
+  --success-foreground: oklch(0.99 0 0);
+
   /* Borders / inputs / rings — subtly tinted */
   --border: oklch(0.9 0.006 190);
   --input: oklch(0.9 0.006 190);
@@ -3259,6 +3263,10 @@
   /* Destructive — bright rose */
   --destructive: oklch(0.7 0.2 22);
   --destructive-foreground: oklch(0.99 0 0);
+
+  /* Success — vivid emerald */
+  --success: oklch(0.72 0.19 150);
+  --success-foreground: oklch(0.12 0.02 180);
 
   /* Borders / inputs / rings — MORE visible */
   --border: oklch(1 0 0 / 20%);
@@ -4411,41 +4419,41 @@ html[data-font-preset="system"] {
   border-radius: 9999px;
 }
 
-/* AI 面板 — 玻璃质感深色配色（深圳模式 .dark 作用域） */
+/* AI 面板 — 玻璃质感深色配色（统一使用全局 --primary 色系） */
 .dark .ai-panel {
-  --ai-user-bg: rgba(45, 212, 191, 0.18);
-  --ai-user-fg: #ecfeff;
-  --ai-user-border: rgba(45, 212, 191, 0.32);
-  --ai-assistant-bg: rgba(31, 41, 55, 0.55);
-  --ai-assistant-fg: #f4f4f5;
-  --ai-assistant-border: rgba(255, 255, 255, 0.06);
-  --ai-card-bg: rgba(120, 53, 15, 0.08);
-  --ai-card-border: rgba(245, 158, 11, 0.20);
-  --ai-input-bg: rgba(24, 24, 27, 0.60);
-  --ai-input-border: rgba(255, 255, 255, 0.08);
-  --ai-tool-bg: rgba(139, 92, 246, 0.08);
-  --ai-tool-border: rgba(139, 92, 246, 0.18);
-  --ai-quick-bg: rgba(39, 39, 42, 0.30);
-  --ai-quick-border: rgba(255, 255, 255, 0.06);
-  --ai-quick-hover-bg: rgba(45, 212, 191, 0.08);
-  --ai-quick-hover-border: rgba(45, 212, 191, 0.30);
+  --ai-user-bg: color-mix(in oklab, var(--primary) 22%, transparent);
+  --ai-user-fg: var(--foreground);
+  --ai-user-border: color-mix(in oklab, var(--primary) 42%, transparent);
+  --ai-assistant-bg: color-mix(in oklab, var(--muted) 70%, transparent);
+  --ai-assistant-fg: var(--foreground);
+  --ai-assistant-border: var(--border);
+  --ai-card-bg: color-mix(in oklab, var(--primary) 10%, transparent);
+  --ai-card-border: color-mix(in oklab, var(--primary) 25%, transparent);
+  --ai-input-bg: color-mix(in oklab, var(--muted) 80%, transparent);
+  --ai-input-border: var(--border);
+  --ai-tool-bg: color-mix(in oklab, var(--primary) 10%, transparent);
+  --ai-tool-border: color-mix(in oklab, var(--primary) 22%, transparent);
+  --ai-quick-bg: color-mix(in oklab, var(--muted) 55%, transparent);
+  --ai-quick-border: var(--border);
+  --ai-quick-hover-bg: color-mix(in oklab, var(--primary) 14%, transparent);
+  --ai-quick-hover-border: color-mix(in oklab, var(--primary) 38%, transparent);
 }
-/* 亮色模式下（非 dark）保持原值，但给 ai-panel 根类兜底 */
+/* 亮色模式下（非 dark */
 .ai-panel {
-  --ai-user-bg: rgba(45, 212, 191, 0.14);
-  --ai-user-fg: #042f2e;
-  --ai-user-border: rgba(45, 212, 191, 0.28);
-  --ai-assistant-bg: rgba(250, 250, 250, 0.60);
-  --ai-assistant-fg: #18181b;
-  --ai-assistant-border: rgba(0, 0, 0, 0.06);
-  --ai-card-bg: rgba(255, 251, 235, 0.60);
-  --ai-card-border: rgba(245, 158, 11, 0.25);
-  --ai-input-bg: rgba(255, 255, 255, 0.60);
-  --ai-input-border: rgba(0, 0, 0, 0.08);
-  --ai-tool-bg: rgba(139, 92, 246, 0.06);
-  --ai-tool-border: rgba(139, 92, 246, 0.15);
-  --ai-quick-bg: rgba(39, 39, 42, 0.04);
-  --ai-quick-border: rgba(0, 0, 0, 0.06);
-  --ai-quick-hover-bg: rgba(45, 212, 191, 0.12);
-  --ai-quick-hover-border: rgba(45, 212, 191, 0.40);
+  --ai-user-bg: color-mix(in oklab, var(--primary) 18%, transparent);
+  --ai-user-fg: var(--foreground);
+  --ai-user-border: color-mix(in oklab, var(--primary) 35%, transparent);
+  --ai-assistant-bg: color-mix(in oklab, var(--muted) 75%, transparent);
+  --ai-assistant-fg: var(--foreground);
+  --ai-assistant-border: var(--border);
+  --ai-card-bg: color-mix(in oklab, var(--primary) 8%, transparent);
+  --ai-card-border: color-mix(in oklab, var(--primary) 22%, transparent);
+  --ai-input-bg: color-mix(in oklab, var(--card) 85%, transparent);
+  --ai-input-border: var(--border);
+  --ai-tool-bg: color-mix(in oklab, var(--primary) 8%, transparent);
+  --ai-tool-border: color-mix(in oklab, var(--primary) 20%, transparent);
+  --ai-quick-bg: color-mix(in oklab, var(--muted) 45%, transparent);
+  --ai-quick-border: var(--border);
+  --ai-quick-hover-bg: color-mix(in oklab, var(--primary) 16%, transparent);
+  --ai-quick-hover-border: color-mix(in oklab, var(--primary) 42%, transparent);
 }

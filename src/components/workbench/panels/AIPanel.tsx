@@ -223,13 +223,30 @@ function ToolCallStrip({ record }: { record: AIToolCallRecord }) {
         borderColor: 'var(--ai-tool-border)',
       }}
     >
-      <CollapsibleTrigger className="flex w-full items-center gap-1.5 px-2 py-1.5 text-left text-[11px] text-violet-600 dark:text-violet-300 hover:bg-violet-500/10 rounded-lg transition-colors">
+      <CollapsibleTrigger
+        className="flex w-full items-center gap-1.5 px-2 py-1.5 text-left text-[11px] rounded-lg transition-colors"
+        style={{ color: 'var(--primary)' }}
+        onMouseEnter={(e) => {
+          e.currentTarget.style.backgroundColor =
+            'color-mix(in oklab, var(--primary) 10%, transparent)';
+        }}
+        onMouseLeave={(e) => {
+          e.currentTarget.style.backgroundColor = '';
+        }}
+      >
         <Wrench className="size-3 shrink-0" />
         <span className="flex-1 min-w-0 truncate font-mono">
           {tAI('aiToolCallLabel', '调用')} {record.name}({formatArgsPreview(record.args)})
         </span>
         {!record.ok && (
-          <span className="shrink-0 text-[9px] px-1 py-px rounded bg-rose-500/15 text-rose-500 border border-rose-500/20">
+          <span
+            className="shrink-0 text-[9px] px-1 py-px rounded border"
+            style={{
+              backgroundColor: 'color-mix(in oklab, var(--destructive, #ef4444) 15%, transparent)',
+              borderColor: 'color-mix(in oklab, var(--destructive, #ef4444) 20%, transparent)',
+              color: 'var(--destructive, #ef4444)',
+            }}
+          >
             {tAI('aiToolFailedLabel', '失败')}
           </span>
         )}
@@ -285,12 +302,12 @@ function ConfigCard({
         borderColor: 'var(--ai-card-border)',
       }}
     >
-      <div className="flex items-center gap-2 text-amber-600 dark:text-amber-400">
+      <div className="flex items-center gap-2" style={{ color: 'var(--primary)' }}>
         <KeyRound className="size-3.5" />
         <span className="text-[12px] font-medium">{t('aiConfig')}</span>
       </div>
       <p className="text-[11px] text-muted-foreground leading-relaxed">
-        AI 助手需要配置 OpenAI 兼容的 API key 才能使用。所有配置仅保存在本地浏览器，不会上传。
+        {t('aiConfigHint')}
       </p>
 
       <label className="block">
@@ -531,15 +548,26 @@ export function AIPanel() {
           <motion.div
             animate={{ rotate: [0, 8, -8, 0] }}
             transition={{ duration: 5, repeat: Infinity, ease: 'easeInOut' }}
-            className="grid place-items-center size-6 rounded-lg bg-violet-500/10 border border-violet-500/25"
+            className="grid place-items-center size-6 rounded-lg border"
+            style={{
+              backgroundColor: 'color-mix(in oklab, var(--primary) 10%, transparent)',
+              borderColor: 'color-mix(in oklab, var(--primary) 25%, transparent)',
+            }}
           >
-            <Sparkles className="size-3.5 text-violet-500" />
+            <Sparkles className="size-3.5" style={{ color: 'var(--primary)' }} />
           </motion.div>
           <span className="text-[12px] font-medium text-foreground">
             {t('aiTitle')}
           </span>
           {!config.apiKey && (
-            <span className="text-[9.5px] px-1.5 py-0.5 rounded-full bg-amber-500/15 text-amber-600 dark:text-amber-400 border border-amber-500/20">
+            <span
+              className="text-[9.5px] px-1.5 py-0.5 rounded-full border"
+              style={{
+                backgroundColor: 'color-mix(in oklab, var(--primary) 12%, transparent)',
+                borderColor: 'color-mix(in oklab, var(--primary) 22%, transparent)',
+                color: 'var(--primary)',
+              }}
+            >
               {t('aiNotConfigured')}
             </span>
           )}
@@ -597,9 +625,16 @@ export function AIPanel() {
               <motion.div
                 animate={{ y: [0, -6, 0] }}
                 transition={{ duration: 3, repeat: Infinity, ease: 'easeInOut' }}
-                className="grid place-items-center size-12 rounded-2xl bg-violet-500/8 border border-violet-500/20 mb-3"
+                className="grid place-items-center size-12 rounded-2xl border mb-3"
+                style={{
+                  backgroundColor: 'color-mix(in oklab, var(--primary) 8%, transparent)',
+                  borderColor: 'color-mix(in oklab, var(--primary) 20%, transparent)',
+                }}
               >
-                <Sparkles className="size-5 text-violet-500/80" />
+                <Sparkles
+                  className="size-5"
+                  style={{ color: 'color-mix(in oklab, var(--primary) 80%, transparent)' }}
+                />
               </motion.div>
               <p className="text-[12.5px] font-medium text-foreground/85 mb-1">
                 {t('aiTitle')}
@@ -650,16 +685,16 @@ export function AIPanel() {
                 }`}
               >
                 <div
-                  className={`flex-shrink-0 grid place-items-center size-6 rounded-lg ${
-                    m.role === 'user'
-                      ? 'bg-primary/10 border border-primary/25'
-                      : 'bg-violet-500/10 border border-violet-500/25'
-                  }`}
+                  className="flex-shrink-0 grid place-items-center size-6 rounded-lg border"
+                  style={{
+                    backgroundColor: 'color-mix(in oklab, var(--primary) 10%, transparent)',
+                    borderColor: 'color-mix(in oklab, var(--primary) 25%, transparent)',
+                  }}
                 >
                   {m.role === 'user' ? (
-                    <User className="size-3.5 text-primary" />
+                    <User className="size-3.5" style={{ color: 'var(--primary)' }} />
                   ) : (
-                    <Bot className="size-3.5 text-violet-500" />
+                    <Bot className="size-3.5" style={{ color: 'var(--primary)' }} />
                   )}
                 </div>
                 <div
@@ -706,8 +741,14 @@ export function AIPanel() {
               animate={{ opacity: 1, y: 0 }}
               className="flex gap-2"
             >
-              <div className="flex-shrink-0 grid place-items-center size-6 rounded-lg bg-violet-500/10 border border-violet-500/25">
-                <Wrench className="size-3.5 text-violet-500" />
+              <div
+                className="flex-shrink-0 grid place-items-center size-6 rounded-lg border"
+                style={{
+                  backgroundColor: 'color-mix(in oklab, var(--primary) 10%, transparent)',
+                  borderColor: 'color-mix(in oklab, var(--primary) 25%, transparent)',
+                }}
+              >
+                <Wrench className="size-3.5" style={{ color: 'var(--primary)' }} />
               </div>
               <div className="max-w-[82%] flex-1 space-y-1">
                 {activeToolCalls.map((tc) => (
@@ -723,8 +764,14 @@ export function AIPanel() {
               animate={{ opacity: 1 }}
               className="flex gap-2 items-center text-muted-foreground"
             >
-              <div className="flex-shrink-0 grid place-items-center size-6 rounded-lg bg-violet-500/10 border border-violet-500/25">
-                <Bot className="size-3.5 text-violet-500" />
+              <div
+                className="flex-shrink-0 grid place-items-center size-6 rounded-lg border"
+                style={{
+                  backgroundColor: 'color-mix(in oklab, var(--primary) 10%, transparent)',
+                  borderColor: 'color-mix(in oklab, var(--primary) 25%, transparent)',
+                }}
+              >
+                <Bot className="size-3.5" style={{ color: 'var(--primary)' }} />
               </div>
               <div
                 className="rounded-xl px-3 py-2.5 backdrop-blur-sm border flex items-center gap-2"
@@ -755,7 +802,12 @@ export function AIPanel() {
           )}
 
           {error && (
-            <p className="text-[10.5px] text-rose-500/80 text-center">{error}</p>
+            <p
+              className="text-[10.5px] text-center"
+              style={{ color: 'color-mix(in oklab, var(--destructive, #ef4444) 80%, transparent)' }}
+            >
+              {error}
+            </p>
           )}
         </div>
       </ScrollArea>
@@ -775,7 +827,12 @@ export function AIPanel() {
           </span>
           {attachContext && (
             <span
-              className="ml-auto inline-flex items-center gap-1 text-[9.5px] px-1.5 py-0.5 rounded-full bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20 max-w-[65%] truncate"
+              className="ml-auto inline-flex items-center gap-1 text-[9.5px] px-1.5 py-0.5 rounded-full border max-w-[65%] truncate"
+              style={{
+                backgroundColor: 'color-mix(in oklab, var(--primary) 12%, transparent)',
+                borderColor: 'color-mix(in oklab, var(--primary) 28%, transparent)',
+                color: 'var(--primary)',
+              }}
               title={tAI('aiContextAttachedHint', '发送时会附带当前文件、绘图与变量信息')}
             >
               <Paperclip className="size-2.5 shrink-0" />

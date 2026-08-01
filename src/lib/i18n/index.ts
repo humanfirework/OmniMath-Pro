@@ -833,6 +833,7 @@ export interface TranslationDict {
   aiErrEmpty: string;
   aiErrCancelled: string;
   aiConfig: string;
+  aiConfigHint: string;
   aiCancel: string;
   aiSave: string;
   aiEmptyReply: string;
@@ -861,6 +862,48 @@ export interface TranslationDict {
   plotExprYParam: string;
   plotThetaRange: string;
   plotTRange: string;
+
+  /* ---------------- 2D plot advanced panel ---------------- */
+  plotAdvCollapse: string;
+  plotAdvExpand: string;
+  plotAdvTitle: string;
+  plotAdvCompareFacet: string;
+  plotAdvCompareOverlay: string;
+  plotAdvRange: string;
+  plotAdvIntersections: string;
+  plotAdvTangent: string;
+  plotAdvDerivative: string;
+  plotAdvCompareMode: string;
+  plotAdvCompareFacetHint: string;
+  plotAdvCompareOverlayHint: string;
+  plotAdvYRangeMode: string;
+  plotAdvYRangeFacetNote: string;
+  plotAdvFree: string;
+  plotAdvManual: string;
+  plotAdvFreeHint: string;
+  plotOutlierClipped: string;
+  plotAdvNeed2Curves: string;
+  plotAdvIntersectionsOff: string;
+  plotAdvIntersectionsOn: string;
+  plotAdvAutoAll: string;
+  plotAdvManualPair: string;
+  plotAdvIntersectionsFound: string;
+  plotAdvCurveA: string;
+  plotAdvCurveB: string;
+  plotAdvNoCurves: string;
+  plotAdvTangentOff: string;
+  plotAdvTangentOn: string;
+  plotAdvTangentSlopeK: string;
+  plotAdvTangentAtXY: string;
+  plotAdvDerivativeOff: string;
+  plotAdvDerivativeOn: string;
+  plotAdvDerivativeCurve: string;
+  plotAdvDerivativeOrder: string;
+  plotAdvDerivative1st: string;
+  plotAdvDerivative2nd: string;
+  plotAdvDerivative3rd: string;
+  plotAdvDerivativeSymbolic: string;
+  plotAdvDerivativeSymbolicUnavailable: string;
 
   /* ---------------- 3D plot panel — example groups ---------------- */
   plot3dGroupBasic: string;
@@ -1915,6 +1958,7 @@ const zhCN: TranslationDict = {
   aiErrEmpty: "AI 返回了空回复，请重试。",
   aiErrCancelled: "请求已取消。",
   aiConfig: "配置 AI 助手",
+  aiConfigHint: "AI 助手需要配置 OpenAI 兼容的 API key 才能使用。所有配置仅保存在本地浏览器，不会上传。",
   aiCancel: "取消",
   aiSave: "保存",
   aiEmptyReply: "(空回复)",
@@ -1943,6 +1987,48 @@ const zhCN: TranslationDict = {
   plotExprYParam: "y(t) =",
   plotThetaRange: "θ 范围",
   plotTRange: "t 范围",
+
+  /* 2D plot advanced panel */
+  plotAdvCollapse: "折叠高级功能",
+  plotAdvExpand: "展开高级功能",
+  plotAdvTitle: "高级功能",
+  plotAdvCompareFacet: "分面",
+  plotAdvCompareOverlay: "叠加",
+  plotAdvRange: "范围",
+  plotAdvIntersections: "交点",
+  plotAdvTangent: "切线",
+  plotAdvDerivative: "求导",
+  plotAdvCompareMode: "对比模式",
+  plotAdvCompareFacetHint: "分面模式：每个函数独立 Y 轴，适合对比不同量级的函数形状。",
+  plotAdvCompareOverlayHint: "叠加模式：所有函数共享 Y 轴，适合对比相同量级的函数。",
+  plotAdvYRangeMode: "Y 轴范围模式",
+  plotAdvYRangeFacetNote: "（仅叠加模式生效）",
+  plotAdvFree: "自由",
+  plotAdvManual: "手动",
+  plotAdvFreeHint: "自由模式使用 P5/P95 分位数自动适配所有曲线，保持多曲线比例协调。",
+  plotOutlierClipped: "离群曲线 {values} 已在自动范围中裁剪，可切换手动范围查看全量数据。",
+  plotAdvNeed2Curves: "需要至少 2 条可见曲线才能计算交点。",
+  plotAdvIntersectionsOff: "关闭交点",
+  plotAdvIntersectionsOn: "显示交点",
+  plotAdvAutoAll: "全部",
+  plotAdvManualPair: "手动",
+  plotAdvIntersectionsFound: "找到 {n} 个交点",
+  plotAdvCurveA: "曲线 A",
+  plotAdvCurveB: "曲线 B",
+  plotAdvNoCurves: "无可见曲线。",
+  plotAdvTangentOff: "关闭切线",
+  plotAdvTangentOn: "显示切线",
+  plotAdvTangentSlopeK: "斜率 k =",
+  plotAdvTangentAtXY: "切点",
+  plotAdvDerivativeOff: "关闭求导",
+  plotAdvDerivativeOn: "显示导数曲线",
+  plotAdvDerivativeCurve: "曲线",
+  plotAdvDerivativeOrder: "阶数",
+  plotAdvDerivative1st: "1 阶",
+  plotAdvDerivative2nd: "2 阶",
+  plotAdvDerivative3rd: "3 阶",
+  plotAdvDerivativeSymbolic: "符号求导",
+  plotAdvDerivativeSymbolicUnavailable: "符号求导不可用，仅显示数值导数曲线。",
 
   /* 3D plot panel — example groups */
   plot3dGroupBasic: "基础",
@@ -2991,6 +3077,7 @@ const en: TranslationDict = {
   aiErrEmpty: "AI returned an empty reply. Please retry.",
   aiErrCancelled: "Request cancelled.",
   aiConfig: "Configure AI Assistant",
+  aiConfigHint: "AI Assistant requires an OpenAI-compatible API key. All settings are stored locally in your browser.",
   aiCancel: "Cancel",
   aiSave: "Save",
   aiEmptyReply: "(empty reply)",
@@ -3019,6 +3106,48 @@ const en: TranslationDict = {
   plotExprYParam: "y(t) =",
   plotThetaRange: "θ range",
   plotTRange: "t range",
+
+  /* 2D plot advanced panel */
+  plotAdvCollapse: "Collapse advanced features",
+  plotAdvExpand: "Expand advanced features",
+  plotAdvTitle: "Advanced",
+  plotAdvCompareFacet: "Facet",
+  plotAdvCompareOverlay: "Overlay",
+  plotAdvRange: "Range",
+  plotAdvIntersections: "Intersect",
+  plotAdvTangent: "Tangent",
+  plotAdvDerivative: "Derivative",
+  plotAdvCompareMode: "Compare mode",
+  plotAdvCompareFacetHint: "Facet mode: each function has an independent Y axis, ideal for comparing functions of different magnitudes.",
+  plotAdvCompareOverlayHint: "Overlay mode: all functions share a Y axis, ideal for comparing functions of similar magnitude.",
+  plotAdvYRangeMode: "Y range mode",
+  plotAdvYRangeFacetNote: " (overlay mode only)",
+  plotAdvFree: "Free",
+  plotAdvManual: "Manual",
+  plotAdvFreeHint: "Free mode uses P5/P95 quantiles to auto-adapt to all curves, keeping multi-curve proportions balanced.",
+  plotOutlierClipped: "Outlier curves {values} clipped in auto-range; switch to manual range to see full data.",
+  plotAdvNeed2Curves: "At least 2 visible curves are required to compute intersections.",
+  plotAdvIntersectionsOff: "Hide intersections",
+  plotAdvIntersectionsOn: "Show intersections",
+  plotAdvAutoAll: "All",
+  plotAdvManualPair: "Manual",
+  plotAdvIntersectionsFound: "{n} intersections found",
+  plotAdvCurveA: "Curve A",
+  plotAdvCurveB: "Curve B",
+  plotAdvNoCurves: "No visible curves.",
+  plotAdvTangentOff: "Hide tangent",
+  plotAdvTangentOn: "Show tangent",
+  plotAdvTangentSlopeK: "Slope k =",
+  plotAdvTangentAtXY: "Tangent at",
+  plotAdvDerivativeOff: "Hide derivative",
+  plotAdvDerivativeOn: "Show derivative curve",
+  plotAdvDerivativeCurve: "Curve",
+  plotAdvDerivativeOrder: "Order",
+  plotAdvDerivative1st: "1st",
+  plotAdvDerivative2nd: "2nd",
+  plotAdvDerivative3rd: "3rd",
+  plotAdvDerivativeSymbolic: "Symbolic derivative",
+  plotAdvDerivativeSymbolicUnavailable: "Symbolic derivative unavailable; showing only numeric derivative curve.",
 
   /* 3D plot panel — example groups */
   plot3dGroupBasic: "Basic",
