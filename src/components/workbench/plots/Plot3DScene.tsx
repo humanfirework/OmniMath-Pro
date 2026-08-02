@@ -799,7 +799,7 @@ export function Plot3DScene({
   }
 
   return (
-    <div ref={hostRef} className="h-full w-full">
+    <div ref={hostRef} className="plot-3d-scene-root h-full w-full">
       {hostReady ? (
         <Canvas
           camera={{

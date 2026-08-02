@@ -104,6 +104,71 @@ export function FormulaRenderer({
   const defaultFormulaFontSize = useSettingsStore((s) => s.defaultFormulaFontSize);
   const baseFontSize = fontSize ?? defaultFormulaFontSize ?? 28;
 
+  /* ---------------------------------------------------------------
+     KaTeX font availability probe — explains "why localhost fine /
+     desktop garbled":
+
+     `katex/dist/katex.min.css` defines ~18 @font-face blocks for
+     KaTeX_Main, KaTeX_Math, KaTeX_Size{1..4}, KaTeX_AMS, … which on
+     http://localhost dev server resolve to:
+         node_modules/katex/dist/fonts/KaTeX_Main-Regular.woff2
+
+     But after `next build` (static output → `out/`) Next.js rewrites
+     these URLs to `/_next/static/media/<hash>.woff2`. When Tauri's
+     webview loads the shell through `file://…/out/index.html` with
+     our earlier (too-tight) CSP `font-src 'self' data:`, these
+     rewritten requests fail to resolve and `document.fonts` never
+     marks the KaTeX families as "loaded". KaTeX's layout engine has
+     already measured glyph widths against *loaded* font metrics, so
+     when the browser falls back to Cambria Math / Times every
+     vertical row in a matrix, every vlist-nested fraction, every
+     stretchy `\Big(` bracket walks by 1–2 px per nesting level ⇒
+     the "total garbled mess" you captured in the screenshot.
+
+     We therefore:
+       1. Explicitly wait for `document.fonts.ready` (safe in SSR it's
+          guarded by typeof check) to make sure STIX Two Math + the
+          KaTeX stacks are fully loaded BEFORE the first paint of a
+          formula on this page.
+       2. Keep a module-level flag so we don't re-check per component.
+       3. If the fonts aren't ready by the time we render, we
+          *re-render* once `fonts.ready` resolves (forces a correct
+          measurement pass).
+     This is the same pattern Monaco Editor uses for its token fonts.
+     --------------------------------------------------------------- */
+  const [fontsReady, setFontsReady] = useState<boolean>(() => {
+    if (typeof document === 'undefined' || !('fonts' in document)) return true;
+    return (document.fonts as FontFaceSet).status === 'loaded';
+  });
+
+  useLayoutEffect(() => {
+    if (fontsReady) return;
+    let cancelled = false;
+    (async () => {
+      try {
+        // Wait for the browser's FontFaceSet to finish *all* loads
+        // (covers @font-face blocks from katex.min.css + globals.css).
+        await (document.fonts as FontFaceSet).ready;
+
+        // Extra sanity check — try to load the STIX Two Math glyph
+        // explicitly (works even if the @font-face was late-loaded).
+        // 'Ax' is the canonical measurement string for font probing.
+        if ('load' in (document.fonts as FontFaceSet)) {
+          try {
+            await Promise.all([
+              (document.fonts as FontFaceSet).load('1em "STIX Two Math"', 'Ax'),
+              (document.fonts as FontFaceSet).load('1em "KaTeX_Main"', 'Ax'),
+              (document.fonts as FontFaceSet).load('1em "KaTeX_Math"', 'Ax'),
+            ]).catch(() => { /* individual probe failures are fine */ });
+          } catch { /* ignore */ }
+        }
+      } finally {
+        if (!cancelled) setFontsReady(true);
+      }
+    })();
+    return () => { cancelled = true; };
+  }, [fontsReady]);
+
   const hasComplexEnv = useMemo(() => {
     const envRegex = /\\begin\{(matrix|bmatrix|pmatrix|vmatrix|Vmatrix|smallmatrix|cases|aligned|gathered|multline)\}/;
     return envRegex.test(latex);
@@ -128,13 +193,25 @@ export function FormulaRenderer({
         },
       });
       if (hasComplexEnv) {
-        return `<span style="padding: 0.25em 0.4em; display: inline-block;">${rendered}</span>`;
+        // Wrap matrices / cases in an inline-block container so the
+        // parent flex row doesn't try to shrink/squeeze the table
+        // below its intrinsic size. IMPORTANT: use a dedicated
+        // className (`katex-complex-inline`) that does NOT match our
+        // outer scroll-wrapper rule `.katex-complex-wrap` in
+        // globals.css — otherwise overflow-x:auto on this inner span
+        // clips the right/bottom glyphs of bmatrix/pmatrix/cases and
+        // you see "missing numbers" in the matrix.
+        return `<span class="katex-complex-inline" style="display:inline-block; padding:0.2em 0.3em;">${rendered}</span>`;
       }
       return rendered;
     } catch {
       return `<span class="katex-error">${escapeHtml(latex)}</span>`;
     }
-  }, [latex, displayMode, hasComplexEnv]);
+    // Re-run render *after* fonts.ready fires so KaTeX measures with
+    // the *actual* math-font glyph widths instead of a Times fallback.
+    // The first render (fontsReady=false) will still show content but
+    // with slight width drift; the second pass snaps it into place.
+  }, [latex, displayMode, hasComplexEnv, fontsReady]);
 
   useLayoutEffect(() => {
     if (collapsible && contentRef.current) {
@@ -376,7 +453,20 @@ export function FormulaRenderer({
             transform: `scale(${scale})`,
             transformOrigin: 'top left',
             display: displayMode ? 'inline-block' : 'inline',
-            minWidth: displayMode ? '100%' : undefined,
+            /*
+              DO NOT set `minWidth: '100%'` here. If the rendered formula
+              is narrower than the outer scroll container (e.g. 2×2
+              bmatrix in a wide card), the min-width:100% would stretch
+              the inline-block wrapper to 100% width of its scroll host
+              → the scroll wrapper sees width:100% → weird spacing around
+              small matrices, plus potential 1px x-scroll that shouldn't
+              be there.
+
+              Use `width: max-content` (already set below for display
+              mode) so the wrapper is exactly as wide as the formula it
+              contains. The outer <div class="overflow-x-auto"> handles
+              scrolling for formulas that exceed the card width.
+            */
             width: displayMode ? 'max-content' : undefined,
           }}
         />

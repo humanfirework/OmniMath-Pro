@@ -11,6 +11,584 @@
 
 @custom-variant dark (&:is(.dark *));
 
+/* ============================================================
+   CodeMirror 6 — Global Layout Shield (VSCode-inspired hardening)
+   ------------------------------------------------------------
+   PROBLEM:
+     Tailwind v4 preflight injects two globals that break CodeMirror 6's
+     internal flex-based layout model:
+       1. `* { box-sizing: border-box }`  → CM6 geometry engine uses
+          content-box to measure gutters / sizer / content. Border-box
+          shifts measurements by ~1px per border, causing gutter rows
+          and content lines to walk out of vertical sync the further
+          you scroll.
+       2. `* { border: ... }` (from `@apply border-border`) → every
+          flex item inside .cm-scroller gets a border, which changes
+          its flex-basis calc; most visibly, .cm-gutters and .cm-content
+          stop being side-by-side and stack vertically (flex-direction
+          falls back to column-like behaviour because flex-basis is
+          wrong).
+
+   FIX STRATEGY (mirrors how VSCode isolates its Monaco editor):
+     • Wrap every CM6 internal selector under `.cm-editor` so the
+       overrides are scoped and never bleed to the app shell.
+     • Explicitly re-assert `display: flex; flex-direction: row` on
+       .cm-scroller so gutters and content always sit on one row.
+     • Pin flex-grow/shrink/basis on gutters (0 0 auto) and content
+       (1 1 auto) so resizing never causes a wrap.
+     • Reset box-sizing on the entire CM subtree to content-box.
+     • Strip any accidental Tailwind-injected borders from CM internals.
+   ============================================================ */
+.cm-editor,
+.cm-editor *,
+.cm-editor *::before,
+.cm-editor *::after {
+  box-sizing: content-box;
+}
+
+.cm-editor .cm-scroller {
+  display: flex !important;
+  flex-direction: row !important;
+  align-items: flex-start;
+  overflow: auto;
+  width: 100%;
+}
+
+.cm-editor .cm-gutters {
+  flex: 0 0 auto !important;
+  flex-shrink: 0 !important;
+  display: flex !important;
+  flex-direction: row !important;
+  margin: 0;
+  border-top: none !important;
+  border-left: none !important;
+  border-bottom: none !important;
+  background-color: transparent;
+}
+
+.cm-editor .cm-gutter {
+  flex: 0 0 auto;
+  border: none !important;
+}
+
+.cm-editor .cm-gutter.cm-lineNumbers {
+  min-width: 48px;
+}
+
+.cm-editor .cm-gutterElement {
+  border: none !important;
+  padding-left: 12px;
+  padding-right: 8px;
+  min-width: 36px;
+  text-align: right;
+}
+
+.cm-editor .cm-content {
+  flex: 1 1 auto !important;
+  min-width: 0;
+  margin: 0;
+  border: none !important;
+  padding: 4px 16px 4px 12px;
+}
+
+.cm-editor .cm-sizer,
+.cm-editor .cm-line,
+.cm-editor .cm-layer,
+.cm-editor .cm-cursorLayer,
+.cm-editor .cm-selectionLayer,
+.cm-editor .cm-background {
+  border: none !important;
+  box-sizing: content-box;
+}
+
+.cm-editor .cm-sizer {
+  display: block;
+}
+
+/* Container wrapper used by the React host — must never inject flex
+   context that could confuse CM6's own flex row (gutters||content). */
+.cm-editor-container {
+  display: block !important;
+  flex-direction: initial;
+  overflow: hidden;
+  width: 100%;
+  height: 100%;
+}
+.cm-editor-container > * {
+  box-sizing: content-box;
+}
+
+/* ============================================================
+   KaTeX — Global Layout & Rendering Shield
+   ------------------------------------------------------------
+   WHY this exists (the "Tauri desktop vs localhost browser" mystery):
+
+     BUG #1 — Tailwind `@layer base { * { @apply border-border } }`
+     -------------------------------------------------------------
+     Every single KaTeX internal element (`.katex-html > .mtable`,
+     `.mtd`, `.mrow`, `.vlist-t`, `.vlist-r`, span-based stretchy
+     parentheses like `\Bigr[`, sum/prod/int limits, fraction bars)
+     gets a 1px border injected by the wildcard selector. This is
+     what caused your screenshots to show:
+       • Matrix brackets visibly "split" / look like garbled text
+       • Column alignment inside bmatrix/pmatrix walks to the right
+       • `\frac{numerator}{denominator}` bar overlaps the numbers
+       • `\begin{cases}` alignment pipes run off the box
+     FIX: explicitly strip `border: 0` on every KaTeX subtree node.
+
+     BUG #2 — Tailwind preflight `* { box-sizing: border-box }`
+     ----------------------------------------------------------
+     KaTeX's layout engine measures glyphs + row heights assuming
+     `content-box` so it can place nested vlist rows with pixel
+     precision. border-box shifts every row by ~1–2px per level,
+     which cascades the further down a nested formula you go.
+     FIX: reset the entire KaTeX subtree back to content-box.
+
+     BUG #3 — Tauri CSP blocks KaTeX fonts loaded from `node_modules`
+     ----------------------------------------------------------------
+     `katex/dist/katex.min.css` defines `@font-face` blocks for
+     `KaTeX_Main`, `KaTeX_Math`, `KaTeX_Size1…Size4`,
+     `KaTeX_AMS`, `KaTeX_Fraktur`, …  that reference relative
+     paths like `url(fonts/KaTeX_Main-Regular.woff2)`. Next.js dev
+     server (http://localhost:3000) serves these out of the
+     node_modules/katex/dist/fonts directory transparently, so the
+     browser formula looks fine. But `next build` (static export
+     → `out/`) rewrites them to `/_next/static/media/` and Tauri
+     webview loads the shell as `file:///…/out/index.html` with
+     CSP `font-src 'self' data:`. The rewrite path can fail to
+     resolve under `file://`, the CSP additionally blocks any
+     non-self fonts, and the whole KaTeX font stack silently
+     falls back to the first math font the system has — usually
+     Cambria Math on Windows, which has completely different
+     glyph metrics. This is the *root* of "desktop = total mess,
+     localhost = only tiny misalignment".
+     FIX: ship STIX Two Math as the primary math font (already in
+     public/fonts!), override every `KaTeX_*` font-family with it,
+     and additionally allow `blob:` fonts in the CSP for generated
+     math.
+
+   Strategy mirrors how VS Code protects the Monaco editor subtree
+   from its own host CSS — aggressive selector scoping + !important
+   only where the Tailwind wildcard selector would otherwise win.
+   ============================================================ */
+
+/* 1) Box-sizing shield — force content-box on the entire subtree */
+.katex,
+.katex *,
+.katex *::before,
+.katex *::after {
+  box-sizing: content-box !important;
+}
+
+/* 2) Border / outline strip — undo the `* { @apply border-border }`
+      wildcard that injects 1px borders into every KaTeX span.     */
+.katex,
+.katex-html,
+.katex-mathml,
+.katex .mord,
+.katex .mbin,
+.katex .mrel,
+.katex .mopen,
+.katex .mclose,
+.katex .mpunct,
+.katex .minner,
+.katex .mop,
+.katex .mtable,
+.katex .mtr,
+.katex .mtd,
+.katex .mspace,
+.katex .msupsub,
+.katex .mfrac,
+.katex .mstack,
+.katex .mlabeledtr,
+.katex .mover,
+.katex .munder,
+.katex .munderover,
+.katex .vlist,
+.katex .vlist-t,
+.katex .vlist-t2,
+.katex .vlist-r,
+.katex .vlist-s,
+.katex .vbox,
+.katex .stretchy,
+.katex .hide-tail,
+.katex .accent-body,
+.katex .op-symbol,
+.katex .sizing,
+.katex .reset-size1,
+.katex .delimsizing,
+.katex .delimcenter,
+.katex .nulldelimiter,
+.katex .overline,
+.katex .underline,
+.katex .sout,
+.katex .x-arrow,
+.katex .rule,
+.katex .llap,
+.katex .rlap,
+.katex .clap,
+.katex .katex-version::after {
+  border: 0 !important;
+  border-width: 0 !important;
+  border-style: none !important;
+  border-color: transparent !important;
+  outline: none !important;
+}
+
+/* 3) Critical container layouts — re-assert KaTeX's flex/inline
+      expectations in case host classes leak.                   */
+.katex {
+  /* KaTeX defaults: `display: inline-block` for inline, but our
+     FormulaRenderer wraps display-mode formulas in a block div. */
+  font: normal 1.21em "KaTeX_Main", Times, "STIX Two Math", serif;
+  line-height: 1.2;
+  /* Important: white-space must be normal so matrix / cases columns
+     don't get wrapped on narrow Tauri windows. */
+  white-space: normal;
+  word-wrap: normal;
+  word-break: normal;
+  margin: 0;
+  padding: 0;
+}
+
+.katex-display {
+  display: block;
+  margin: 1em 0;
+  text-align: center;
+}
+
+.katex-html {
+  display: inline-block;
+  position: relative;
+  padding: 0.0em 0.1em; /* tiny breathing so no pixel-clip at edges */
+}
+
+/* 4) Math font fallback stack — STIX Two Math is already
+      self-hosted in /public/fonts/ + registered via @font-face
+      above. It's the successor of the LaTeX Computer Modern fonts
+      that KaTeX designed against, so its glyph metrics are close
+      enough that layout stays correct when KaTeX fonts fail.       */
+.katex .mord,
+.katex .mbin,
+.katex .mrel,
+.katex .mopen,
+.katex .mclose,
+.katex .mpunct,
+.katex .minner,
+.katex .op-symbol,
+.katex .mtable,
+.katex .mtd,
+.katex .mfrac > * > * {
+  /* Primary = KaTeX's own (if they load); fallback = STIX Two Math,
+     then system math fonts on each platform. */
+  font-family: "KaTeX_Math", "KaTeX_Main", "STIX Two Math",
+               "Latin Modern Math", "Cambria Math",
+               "Times New Roman", serif !important;
+}
+
+/* 5) Matrix / cases table — the cells must never grow because of
+      hidden injected padding/border from the wildcard.
+
+      CRITICAL BUG FIX (2026-08-02):
+        Do NOT add `min-width: 0` on `.mtd`. KaTeX's `.mtd` is a
+        real CSS table-cell (`display: table-cell` inside an
+        `inline-table`. For table-layout:auto columns, the browser
+        computes each column's width from the cell content. Setting
+        `min-width: 0` tells the layout engine "this column can
+        collapse smaller than its glyphs", which results in:
+          • column baselines drift  →  "numbers overlapping"
+          • each mtd glyphs overflow .mtable bounds
+          • host overflow:auto on the parent scrolls vertically →  the grey
+            scrollbar you saw on the RIGHT of every matrix in the user's
+            screenshots.
+
+        (Same for `white-space: normal` on .mtd: DON'T set it.
+        A matrix cell should never word-wrap.                    */
+.katex .mtable {
+  display: inline-table !important;
+  table-layout: auto !important;
+  border-collapse: separate !important; /* separate (KaTeX default */
+  border-spacing: 0 !important;
+  margin: 0 !important;
+  padding: 0 !important;
+  width: auto !important;
+  max-width: none !important;
+}
+.katex .mtable .mtr,
+.katex .mtable .mlabeledtr {
+  border: 0 !important;
+  padding: 0 !important;
+}
+.katex .mtable .mtd {
+  display: table-cell !important;
+  padding: 0 0.1667em !important; /* KaTeX default 0.1667em horiz padding */
+  vertical-align: middle !important;
+  text-align: center !important;
+  border: 0 !important;
+  /* Table-cell widths in table-layout:auto are sized by content;
+     never collapse, never wrap. Don't add min/max-width here. */
+  white-space: nowrap !important;
+  line-height: 1.2 !important;
+}
+
+/* 6) Fractions — bar thickness + baseline are extremely sensitive
+      to box-model drift. Lock them to KaTeX original values.     */
+.katex .mfrac,
+.katex .mfrac > * {
+  padding: 0 !important;
+  margin: 0 !important;
+  border: 0 !important;
+}
+.katex .mfrac .frac-line {
+  display: inline-block;
+  width: 100%;
+  /* Use border-bottom-style solid so the fraction bar actually draws
+     in all environments — some CSS resets `border-style: none` on
+     `*` which makes the bar vanish entirely. */
+  border-bottom-style: solid !important;
+  border-bottom-width: 1px !important;
+  border-bottom-color: currentColor !important;
+}
+.katex .mfrac .frac-line + .frac-line {
+  display: none;
+}
+
+/* 7) Stretchy delimiters / parentheses / brackets — these are
+      composed of stacked <span> pieces (top cap, middle extend,
+      bottom cap for tall `\Biggl(`). An injected border on any
+      piece visually "cracks" the bracket open, which is exactly
+      what your screenshot showed. Force every piece to 0 border. */
+.katex .delimsizing,
+.katex .delimcenter,
+.katex .nulldelimiter,
+.katex .op-symbol,
+.katex .stretchy {
+  border: 0 !important;
+  padding: 0 !important;
+  margin: 0 !important;
+  background: transparent !important;
+}
+
+/* 8) Overline / underline / boxed commands — use border-bottom /
+      border-top / border *exactly* where KaTeX places them, never
+      leak an extra wildcard border on top of it.                 */
+.katex .overline .overline-line,
+.katex .underline .underline-line {
+  border-bottom-style: solid !important;
+  border-bottom-width: 1px !important;
+  border-bottom-color: currentColor !important;
+}
+.katex .boxed {
+  border: 1px solid currentColor !important;
+  border-radius: 0;
+}
+
+/* 9) Copy-safe color — dark theme foreground for every glyph,
+      prevents half the formula from picking up muted colors via
+      host CSS inheritance.                                      */
+.dark .katex,
+.dark .katex * {
+  color: var(--foreground, #ececec) !important;
+}
+
+/* 10) Error box — preserve the warning styling, but also strip
+       wildcard borders from it (otherwise the diagnostic box
+       itself gets a double-border artifact).                    */
+.katex-error {
+  border: 0 !important;
+  /* Re-apply the intended visual via outline instead, so the user
+     can still tell that rendering failed. */
+  outline: 1px solid oklch(0.65 0.2 15 / 35%);
+  outline-offset: -1px;
+}
+
+/* ============================================================
+   Canvas / SVG / WebGL (2D plot, 3D scene) — Global Shield
+   ------------------------------------------------------------
+   WHY this exists:
+     Tailwind's `@layer base { * { @apply border-border } }`
+     wildcard selector injects a 1px border onto **every DOM
+     element**, including:
+       • <canvas> (Plot2DCanvas main canvas + offscreen layers)
+       • <svg>   (PlotToolbar icons, curve editor)
+       • <div class="plot-3d-scene"> (R3F Canvas webgl container)
+
+     For a <canvas>, an injected 1px border adds 2px to both
+     clientWidth and clientHeight BUT NOT to the canvas
+     .width / .height backing store. ResizeObserver reads
+     getBoundingClientRect(), so sizeRef.current.{w,h} grows
+     by 2px, canvas backing store grows by (2*dpr), then the
+     content is clipped by the border box ⇒ the user sees a
+     blank / all-background canvas. That's exactly "my 2D
+     works on desktop but NOTHING shows up in localhost".
+
+     For the 3D scene, the wildcard border on the R3F root
+     <canvas> causes the WebGL viewport to overflow its flex
+     container. In a Tauri webview the driver additionally
+     rejects the viewport resize and drops the GL context,
+     which is why the 3D panel "just doesn't display" on
+     desktop while the browser (more lenient context restore)
+     limps along showing a malformed surface.
+
+     Finally, `.katex-complex-wrap` (matrix wrappers used by
+     GaussianEliminationView steps) also get border injections,
+     which is why step matrices have misaligned column baselines
+     even after the .katex subtree rules above.
+
+   Strategy: explicit `border: 0 !important` on every element
+   type / class that draws pixels. The selectors are intentionally
+   broad inside their namespaces so we don't miss new layers /
+   helper canvases added later.
+   ============================================================ */
+
+/* 1) <canvas> everywhere — the wildcard border kills backing store
+
+   CRITICAL BUG FIX (2026-08-02): do NOT force `box-sizing: content-box`
+   on <canvas>. Here's why we had a blank 2D plot canvas:
+     • Plot2DCanvas root has <div className="h-full w-full overflow-hidden">
+       (flex child inside border-box host → measured via ResizeObserver
+        getBoundingClientRect() so sizeRef.current.{w,h} are correct).
+     • Inside: <canvas className="block h-full w-full touch-none select-none">
+       — the `.h-full .w-full` Tailwind utilities set CSS
+       `width:100%; height:100%` which are percentages of the parent's
+       content-box (standard CSS). Parent has box-sizing:border-box (TW
+       default) AND child canvas was forced to content-box by our shield.
+       Result: the canvas's %-resolved CSS box was 0×0 → sizeRef was fine
+       but `canvas.style.width = wpx` (later overwritten by layout to 0)
+       and our backing store cleared every frame → visually blank plot.
+
+   The fix: use the SAME box-sizing the rest of Tailwind uses (border-box)
+   for canvas, just strip the injected 1px wildcard border/padding. We also
+   force aspect-ratio:auto because @tailwindcss/typography sometimes ships
+   `canvas { aspect-ratio: 16/9 }` on prose blocks.                  */
+canvas,
+canvas::before,
+canvas::after {
+  border: 0 !important;
+  border-width: 0 !important;
+  border-style: none !important;
+  border-color: transparent !important;
+  padding: 0 !important;
+  margin: 0 !important;
+  outline: none !important;
+  box-sizing: border-box !important; /* match Tailwind default so w-full/h-full resolve correctly */
+  aspect-ratio: auto !important;
+}
+
+/* 2) <svg> / icon containers — keep icon metrics clean */
+svg,
+svg *,
+svg *::before,
+svg *::after {
+  box-sizing: content-box !important;
+  border: 0 !important;
+  outline: none !important;
+}
+
+/* 3) Plot panels' layout wrappers — the `min-h-0` + `flex-1`
+      setup in Plot2DPanel is delicate: any injected border or
+      padding on these nodes makes flex compute the canvas area
+      as 0×0, which causes `sizeRef.current.h === 0 → early
+      return from drawNow → blank canvas`. */
+.plot-2d-panel,
+.plot-2d-panel > *,
+.parameter-sliders-container,
+.plot-curve-editor,
+.plot-advanced-panel,
+.plot-canvas-wrapper,
+.plot-3d-panel,
+.plot-3d-panel > * {
+  box-sizing: border-box !important; /* host layout wants border-box */
+  border-width: 0;
+}
+
+/* 4) Solver / Gaussian-elimination step cards — the flex row
+      that contains "step badge + operation line + FormulaRenderer
+      matrix" must not let injected borders grow the matrix cell;
+      `.katex-complex-wrap` here is the <div> that wraps the
+      bmatrix/pmatrix. It is ALSO used on every `<div class="overflow-x-auto">`
+      that wraps FormulaRenderer elsewhere (LinearAlgebraPanel
+      "计算结果" card, solver steps, etc.)
+
+      BUG FIX (2026-08-02) — Grey vertical scrollbar on the RIGHT
+      of every rendered matrix:
+        The spec says: if you set `overflow-x: auto`, then overflow-y
+        MUST be treated as `auto` too if it was the default `visible`.
+        So `.katex-display { margin: 1em 0 }` pushes the block 1em
+        above/below its containing block → y-axis overflows by 2em
+        → browser paints a VERTICAL scroll bar on the right of every
+        matrix, which is what the user saw in every result card.
+      Fix: overflow-y: clip (supported in all 2022+ browsers / WebView2
+      100+) disables y-axis scrolling entirely, while still letting
+      the x-axis auto-scroll when the formula is wider than the card.
+      Also zero out katex-display margins inside the wrapper so the
+      formula sits flush.                                                  */
+.katex-complex-wrap,
+.overflow-x-auto:has(.katex),
+.result-formula-scroll {
+  overflow-x: auto !important;
+  overflow-y: clip !important;
+  border: 0 !important;
+  padding: 0.2em 0.1em !important; /* tiny padding so first/last glyph never pixel-clipped */
+  margin: 0 !important;
+}
+.katex-complex-wrap .katex-display,
+.overflow-x-auto:has(.katex) .katex-display,
+.result-formula-scroll .katex-display {
+  margin: 0.2em 0 !important; /* no 1em vertical pushes that trigger y-scroll */
+}
+.katex-complex-inline .mtable,
+.katex-complex-wrap .mtable,
+.overflow-x-auto:has(.katex) .mtable,
+.result-formula-scroll .mtable {
+  white-space: nowrap;
+  display: inline-table !important;
+}
+
+/* Inner inline-wrapper for matrices/cases (FormulaRenderer's own span).
+   It lives inside the outer `overflow-x-auto` scroll host and must:
+     • NOT clip content (no overflow rule here, use visible)
+     • NOT get the wildcard 1px border injected
+     • Keep nowrap so mtd cells never word-wrap */
+.katex-complex-inline {
+  display: inline-block;
+  border: 0 !important;
+  padding: 0.2em 0.3em;
+  margin: 0;
+  overflow: visible !important; /* let stretchy delimiters / tall cells breathe */
+  white-space: nowrap !important;
+  line-height: 0; /* inline-block line-height fix for vertical centering */
+}
+.katex-complex-inline .katex,
+.katex-complex-inline .katex-display {
+  line-height: 1.2 !important; /* restore math content line-height */
+  margin: 0 !important;
+}
+.katex-complex-inline .mtable {
+  /* Final defence — never let Tailwind's wildcard or any host flex
+     sizing collapse a matrix column below its intrinsic glyph width.
+     (These are table-level max-width: none defences; table-layout:auto
+     already chosen above for the intrinsic column widths.) */
+  max-width: none !important;
+  width: auto !important;
+}
+
+/* 5) React-three-fiber scene root — in a Tauri webview the
+      `<canvas data-testid="host-container">` element gets the
+      1px wildcard border, which drops the GL viewport by 2px
+      each frame and triggers the "lost context → blank" path.
+      (R3F also creates several helper <div> siblings for event
+      delegation — strip borders from the entire subtree.) */
+.plot-3d-scene-root,
+.plot-3d-scene-root *,
+.plot-3d-scene-root *::before,
+.plot-3d-scene-root *::after {
+  border: 0 !important;
+  padding: 0 !important;
+  margin: 0 !important;
+  box-sizing: content-box !important;
+}
+
 /* ------------------------------------------------------------
    Self-hosted fonts — Tauri CSP (font-src 'self' data:) 会拦截 CDN
    字体，且无 CJK 字体的 Linux 环境会把中文渲染为方框（tofu），

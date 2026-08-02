@@ -320,7 +320,7 @@ export function Plot3DPanel() {
   /* --------------------- Render ------------------------------------ */
   return (
     <TooltipProvider delayDuration={250}>
-      <div className="flex h-full min-h-0 flex-col bg-background">
+      <div className="plot-3d-panel flex h-full min-h-0 flex-col bg-background">
         {/* ---------- Top bar: function input + add ---------- */}
         <div className="flex flex-col gap-1.5 border-b border-border/60 bg-background/60 px-2 py-1.5">
           <div className="flex flex-wrap items-center gap-1.5">
@@ -668,7 +668,7 @@ export function Plot3DPanel() {
             column — a 0-size container prevents renderer init. */}
         <div
           ref={canvasWrapperRef}
-          className="relative min-h-[200px] flex-1"
+          className="plot-canvas-wrapper relative min-h-[200px] flex-1"
           style={{
             background:
               theme === 'dark'

@@ -155,35 +155,35 @@ export function GaussianEliminationView({
                 animate={{ opacity: 1, x: 0 }}
                 transition={{ delay: Math.min(i * 0.03, 0.3), duration: 0.2 }}
                 className={cn(
-                  'grid grid-cols-[auto,1fr] gap-3 max-[480px]:grid-cols-1 rounded-md border px-2 py-1.5',
+                  'flex flex-col gap-2 rounded-md border px-3 py-2',
                   cfg.bg,
                   cfg.border,
                 )}
               >
-                {/* 步骤编号 */}
-                <div className="shrink-0 mt-0.5 grid place-items-center size-5 rounded-full bg-background/80 border border-border/60">
-                  <span className="text-[9.5px] font-mono font-semibold text-muted-foreground">
-                    {i + 1}
-                  </span>
-                </div>
-
-                {/* 操作标签 */}
-                {step.operation && (
-                  <div className="shrink-0 flex items-center gap-1 mt-0.5">
-                    <Icon className={cn('size-3', cfg.color)} />
-                    <span className={cn('text-[10px] font-mono', cfg.color)}>
-                      {step.operation.replace(/\\leftrightarrow/g, '↔').replace(/\\div/g, '÷').replace(/\\text\{([^}]*)\}/g, '$1')}
+                <div className="flex items-center gap-2 shrink-0">
+                  {/* 步骤编号 */}
+                  <div className="grid place-items-center size-5 rounded-full bg-background/80 border border-border/60 shrink-0">
+                    <span className="text-[9.5px] font-mono font-semibold text-muted-foreground">
+                      {i + 1}
                     </span>
                   </div>
-                )}
+
+                  {/* 操作标签 */}
+                  {step.operation && (
+                    <div className="flex items-center gap-1">
+                      <Icon className={cn('size-3', cfg.color)} />
+                      <span className={cn('text-[10px] font-mono', cfg.color)}>
+                        {step.operation.replace(/\\leftrightarrow/g, '↔').replace(/\\div/g, '÷').replace(/\\text\{([^}]*)\}/g, '$1')}
+                      </span>
+                    </div>
+                  )}
+                </div>
 
                 {/* 矩阵渲染 */}
-                <div className="min-w-0 overflow-x-auto">
+                <div className="katex-complex-wrap block overflow-x-auto">
                   <FormulaRenderer
                     latex={step.matrix}
                     displayMode
-                    fitToContainer={true}
-                    className="text-[11px]"
                   />
                 </div>
               </motion.div>

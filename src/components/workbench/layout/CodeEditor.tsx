@@ -89,20 +89,49 @@ export function CodeEditor({
   // into vertical lines". CodeMirror 6 has no first-party indent-guide
   // extension; `indentUnit.of('  ')` + `indentOnInput()` handle indentation
   // behavior without visual artifacts.
+  //
+  // IMPORTANT LAYOUT FIXES (VSCode-style robust layout):
+  //  Tailwind v4 preflight sets `* { box-sizing: border-box }` globally, but
+  //  CodeMirror 6's internal flex layout (gutters || content) relies on
+  //  content-box calculations. Additionally, Tailwind's global border applied
+  //  via `* { @apply border-border }` can disturb flex item measurements.
+  //  We therefore:
+  //    (1) Force `.cm-scroller { display: flex; flex-direction: row }` so that
+  //        gutters and content always sit side-by-side rather than stacking.
+  //    (2) Reset `box-sizing` on every CodeMirror-internal element back to
+  //        content-box, matching what CodeMirror's geometry engine expects.
+  //    (3) Remove any borders that Tailwind injected onto gutters/content.
+  //    (4) Pin gutter shrink-0 + content flex: 1 1 auto so the layout never
+  //        wraps or collapses when the viewport is resized.
   const editorTheme = useMemo(() => EditorView.theme({
     '&': {
       fontSize: `${fontSize}px`,
       height: '100%',
       backgroundColor: 'transparent',
+      // Contain box-sizing reset to CodeMirror subtree only (see above).
+      boxSizing: 'content-box',
+    },
+    '& *, & *::before, & *::after': {
+      boxSizing: 'content-box',
     },
     '&.cm-focused': { outline: 'none' },
     '.cm-scroller': {
+      display: 'flex !important',
+      flexDirection: 'row !important',
+      alignItems: 'flex-start',
+      overflow: 'auto',
       fontFamily: 'ui-monospace, "Geist Mono", "JetBrains Mono", monospace',
       lineHeight: '1.5',
+      width: '100%',
     },
     '.cm-gutters': {
+      flex: '0 0 auto',
+      shrink: '0',
       backgroundColor: 'transparent',
       borderRight: '1px solid var(--border, rgba(255,255,255,0.1))',
+      borderLeft: 'none',
+      borderTop: 'none',
+      borderBottom: 'none',
       color: 'var(--muted-foreground, #888)',
       opacity: '0.8',
       fontFamily: 'ui-monospace, "Geist Mono", "JetBrains Mono", monospace',
@@ -111,6 +140,19 @@ export function CodeEditor({
       fontSize: `${fontSize}px`,
       lineHeight: '1.5',
       padding: '4px 0',
+      margin: '0',
+      boxSizing: 'content-box',
+    },
+    '.cm-gutter': {
+      boxSizing: 'content-box',
+      border: 'none',
+    },
+    '.cm-lineNumbers .cm-gutterElement': {
+      padding: '0 8px 0 12px',
+      minWidth: '36px',
+      textAlign: 'right',
+      boxSizing: 'content-box',
+      border: 'none',
     },
     // VSCode-style active line highlight: subtle teal background on both
     // the line content and the gutter. 0.08 is visible but not distracting.
@@ -128,14 +170,25 @@ export function CodeEditor({
       borderRadius: '3px',
       padding: '0 4px',
       color: '#2dd4bf',
+      boxSizing: 'border-box',
     },
     '.cm-content': {
+      flex: '1 1 auto',
       caretColor: 'var(--primary, #2dd4bf)',
       lineHeight: '1.5',
       // 恢复 CodeMirror 默认顶部 padding（4px 0）。之前设为 '0' 去掉了
       // 顶部 4px padding，导致行号槽与内容首行竖向基线错位。与 gutter
       // 的默认 padding 对齐，避免第 1 行行号与内容竖向错位累积。
-      padding: '4px 0',
+      padding: '4px 16px 4px 12px',
+      margin: '0',
+      border: 'none',
+      boxSizing: 'content-box',
+      minWidth: '0',
+    },
+    '.cm-line': {
+      boxSizing: 'content-box',
+      border: 'none',
+      padding: '0 2px',
     },
     '.cm-cursor': { borderLeftColor: 'var(--primary, #2dd4bf)' },
     '.cm-selectionBackground, ::selection': { backgroundColor: 'rgba(45, 212, 191, 0.2)' },
@@ -145,6 +198,16 @@ export function CodeEditor({
       border: '1px solid var(--border, rgba(255,255,255,0.15))',
       borderRadius: '6px',
       color: 'var(--popover-foreground, #fafafa)',
+      boxSizing: 'border-box',
+    },
+    '.cm-layer': {
+      boxSizing: 'content-box',
+      border: 'none',
+    },
+    '.cm-sizer': {
+      boxSizing: 'content-box',
+      border: 'none',
+      display: 'block',
     },
   }), [fontSize]);
 

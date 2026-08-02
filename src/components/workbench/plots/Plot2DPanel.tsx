@@ -403,7 +403,7 @@ export function Plot2DPanel() {
 
   /* ----------------------- Render ----------------------------------- */
   return (
-    <div className="flex h-full min-h-0 flex-col bg-background">
+    <div className="plot-2d-panel flex h-full min-h-0 flex-col bg-background">
       <PlotToolbar
         plots={plots}
         xRange={effectiveX}
@@ -439,7 +439,7 @@ export function Plot2DPanel() {
         onCompareModeChange={setUserCompareMode}
         onOverlaysChange={setOverlays}
       />
-      <div ref={canvasWrapperRef} className="relative min-h-0 flex-1">
+      <div ref={canvasWrapperRef} className="plot-canvas-wrapper relative min-h-0 flex-1">
         {compareMode === 'facet' && plots.length > 1 ? (
           <FacetGrid
             plots={plots}
