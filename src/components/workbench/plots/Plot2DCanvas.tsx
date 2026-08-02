@@ -58,6 +58,32 @@ export interface PlotOverlay {
   intersections: IntersectionPoint[];
 }
 
+/** 贝塞尔段 — 兼容 vision/types 的序列化结构。 */
+export type BezierSegmentData =
+  | { cmd: 'moveTo'; pts: Array<[number, number]> }
+  | { cmd: 'lineTo'; pts: Array<[number, number]> }
+  | { cmd: 'quadTo'; pts: Array<[number, number]> }   // [c, end]
+  | { cmd: 'cubicTo'; pts: Array<[number, number]> }; // [c1, c2, end]
+
+/** 一条贝塞尔路径 = 多段组成（通常是一条闭合或开放的轮廓）。 */
+export interface BezierPathData {
+  segments: BezierSegmentData[];
+  closed?: boolean;
+}
+
+/** 蓝图 plot-curves 节点输出的曲线集。 */
+export interface CurveSetData {
+  id?: string;
+  curves: BezierPathData[];
+  /** 原始图像的像素宽高（用于像素 → 数学坐标映射）。 */
+  width: number;
+  height: number;
+  color?: string;
+  strokeWidth?: number;
+  flipY?: boolean;
+  flipX?: boolean;
+}
+
 export interface HoveredPoint {
   plotId: string;
   x: number;
@@ -97,6 +123,8 @@ export interface Plot2DCanvasProps {
    * stay stable under pan & zoom.
    */
   curveSpecs?: Record<string, Curve2DSpec>;
+  /** 来自 vision/蓝图节点的贝塞尔曲线集叠加层。 */
+  curveSets?: CurveSetData[];
 }
 
 /* --------------------------- Constants --------------------------- */
@@ -139,6 +167,87 @@ interface HoverState {
   snapColor?: string;
 }
 
+/* ---------------- Curve helpers (Task 5) ---------------- */
+
+/**
+ * 对贝塞尔段做固定采样段数的折线化。返回折线点列（含起点）。
+ * @param seg 贝塞尔段
+ * @param start 当前起点（上一段的结束点），moveTo/lineTo 不需要
+ * @param _tol 容差（当前实现未使用，保留接口兼容）
+ */
+function bezierFlatten(
+  seg: BezierSegmentData,
+  start: [number, number] | null = null,
+  _tol = 0.5,
+): Array<[number, number]> {
+  if (!seg.pts || seg.pts.length === 0) return [];
+  const SAMPLES = 16;
+  switch (seg.cmd) {
+    case 'moveTo':
+    case 'lineTo':
+      return seg.pts.map((p) => [p[0], p[1]] as [number, number]);
+    case 'quadTo': {
+      if (!start) return [];
+      const [cp, end] = seg.pts as [[number, number], [number, number]];
+      const result: Array<[number, number]> = [];
+      for (let i = 0; i <= SAMPLES; i++) {
+        const t = i / SAMPLES;
+        const mt = 1 - t;
+        const x = mt * mt * start[0] + 2 * mt * t * cp[0] + t * t * end[0];
+        const y = mt * mt * start[1] + 2 * mt * t * cp[1] + t * t * end[1];
+        result.push([x, y] as [number, number]);
+      }
+      return result;
+    }
+    case 'cubicTo': {
+      if (!start) return [];
+      const [c1, c2, end] = seg.pts as [
+        [number, number],
+        [number, number],
+        [number, number],
+      ];
+      const result: Array<[number, number]> = [];
+      for (let i = 0; i <= SAMPLES; i++) {
+        const t = i / SAMPLES;
+        const mt = 1 - t;
+        const x =
+          mt * mt * mt * start[0] +
+          3 * mt * mt * t * c1[0] +
+          3 * mt * t * t * c2[0] +
+          t * t * t * end[0];
+        const y =
+          mt * mt * mt * start[1] +
+          3 * mt * mt * t * c1[1] +
+          3 * mt * t * t * c2[1] +
+          t * t * t * end[1];
+        result.push([x, y] as [number, number]);
+      }
+      return result;
+    }
+    default:
+      return [];
+  }
+}
+
+function plotPolyline(
+  ctx: CanvasRenderingContext2D,
+  pts: Array<[number, number]>,
+  color: string,
+  width: number,
+) {
+  if (pts.length < 2) return;
+  ctx.save();
+  ctx.strokeStyle = color;
+  ctx.lineWidth = width;
+  ctx.lineJoin = 'round';
+  ctx.lineCap = 'round';
+  ctx.beginPath();
+  ctx.moveTo(pts[0][0], pts[0][1]);
+  for (let i = 1; i < pts.length; i++) ctx.lineTo(pts[i][0], pts[i][1]);
+  ctx.stroke();
+  ctx.restore();
+}
+
 /* =================================================================== */
 /*  Component                                                          */
 /* =================================================================== */
@@ -157,6 +266,7 @@ export function Plot2DCanvas({
   showLegend = true,
   overlays,
   curveSpecs,
+  curveSets = [],
 }: Plot2DCanvasProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
@@ -193,7 +303,16 @@ export function Plot2DCanvas({
     l2Computed: ComputedPlot[] | null;
     l3Computed: ComputedPlot[] | null;
     l3Overlays: PlotOverlay | undefined;
-  }>({ l1Sig: '', l2Sig: '', l3Sig: '', l2Computed: null, l3Computed: null, l3Overlays: undefined });
+    l2CurveSets: CurveSetData[] | undefined;
+  }>({
+    l1Sig: '',
+    l2Sig: '',
+    l3Sig: '',
+    l2Computed: null,
+    l3Computed: null,
+    l3Overlays: undefined,
+    l2CurveSets: undefined,
+  });
   const [canvasSize, setCanvasSize] = useState({ w: 0, h: 0 });
   const [drawError, setDrawError] = useState<string | null>(null);
   // Task 8.A: multi-curve hovered points (within 6px screen distance).
@@ -444,11 +563,16 @@ export function Plot2DCanvas({
       const viewStr = `${vx[0]}|${vx[1]}|${vy[0]}|${vy[1]}`;
       const sizeStr = `${targetW}|${targetH}`;
       const l1Sig = `${theme}|${showGrid}|${showAxes}|${viewStr}|${sizeStr}|${axisFontSize}`;
-      const l2Sig = `${theme}|${viewStr}|${sizeStr}`;
+      // 在签名里加入 curveSets 的引用与长度，使新增/替换 curveSets 时重绘 L2
+      const curveSetsSig = curveSets
+        .map((cs) => `${cs.id ?? ''}:${cs.curves.length}:${cs.width}x${cs.height}`)
+        .join('|');
+      const l2Sig = `${theme}|${viewStr}|${sizeStr}|${curveSetsSig}`;
       const l3Sig = `${theme}|${showMarkers}|${viewStr}|${sizeStr}`;
       const sig = layerSigRef.current;
       const l1Dirty = sig.l1Sig !== l1Sig;
-      const l2Dirty = sig.l2Sig !== l2Sig || sig.l2Computed !== computed;
+      const l2Dirty =
+        sig.l2Sig !== l2Sig || sig.l2Computed !== computed || sig.l2CurveSets !== curveSets;
       const l3Dirty =
         sig.l3Sig !== l3Sig || sig.l3Computed !== computed || sig.l3Overlays !== overlays;
 
@@ -621,8 +745,49 @@ export function Plot2DCanvas({
         }
         ctx.stroke();
       }
+
+      /* ---------- L2 extra: overlay curveSets (Task 5) ---------- */
+      if (curveSets && curveSets.length > 0) {
+        const [xMin, xMax] = viewRef.current.x;
+        const [yMin, yMax] = viewRef.current.y;
+        const plotW = Math.max(1, w - PADDING.left - PADDING.right);
+        const plotH = Math.max(1, h - PADDING.top - PADDING.bottom);
+        for (const cs of curveSets) {
+          const csW = Math.max(1, cs.width);
+          const csH = Math.max(1, cs.height);
+          const color = cs.color ?? '#a78bfa';
+          const sw = cs.strokeWidth ?? 2;
+          for (const path of cs.curves) {
+            // 对每条路径：每段 flatten → 转屏幕坐标 → 用 plotPolyline 绘制
+            let current: [number, number] | null = null;
+            for (const seg of path.segments) {
+              const flatPx = bezierFlatten(seg, current, 0.5);
+              if (flatPx.length === 0) continue;
+              // 将曲线的像素坐标 → 数学坐标 → 屏幕坐标
+              const screenPts: Array<[number, number]> = flatPx.map(([px, py]) => {
+                // 1) 先在像素空间做 flipX/flipY（如果 curveSet 带局部开关）
+                let lx = cs.flipX ? csW - 1 - px : px;
+                let ly = cs.flipY ? csH - 1 - py : py;
+                // 2) 像素 → 数学坐标（线性映射，数学 y 翻转）
+                const mx = xMin + (lx / (csW - 1 || 1)) * (xMax - xMin);
+                const my = yMin + (1 - ly / (csH - 1 || 1)) * (yMax - yMin);
+                // 3) 数学 → 屏幕像素（带 PADDING 修正）
+                const sx = PADDING.left + ((mx - xMin) / (xMax - xMin || 1)) * plotW;
+                const sy = PADDING.top + (1 - (my - yMin) / (yMax - yMin || 1)) * plotH;
+                return [sx, sy] as [number, number];
+              });
+              if (screenPts.length >= 2) {
+                plotPolyline(ctx, screenPts, color, sw);
+                current = screenPts[screenPts.length - 1];
+              }
+            }
+          }
+        }
+      }
+
       sig.l2Sig = l2Sig;
       sig.l2Computed = computed;
+      sig.l2CurveSets = curveSets;
       } // end L2 curves layer
 
     /* ---------- L3: advanced overlays + markers ---------- */

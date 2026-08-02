@@ -23,6 +23,26 @@ import {
 } from './pipelineEngine';
 import { math } from '@/lib/engine/mathInstance';
 
+// Helper: execute 签名已扩展为支持异步（Task 2 type change only）。
+// 由于这些测试覆盖的都是同步节点，这里把结果断言为同步类型。
+// Task 3 将把 executePipeline 升级为真正的异步执行器，处理 Promise。
+const execSync = (
+  r: Record<string, unknown> | Promise<Record<string, unknown>>,
+): Record<string, unknown> => r as Record<string, unknown>;
+// Task 2: execute 签名改为支持异步，但当前测试全部针对同步节点
+// 在这里声明一个仅用于测试的 SYNC 视图，避免在每处调用写 as 断言
+// Task 3 将把 executePipeline 升级为真正的异步执行器
+type _SyncNodeDef = Omit<import('./pipelineEngine').NodeTypeDef, 'execute'> & {
+  execute: (
+    inputs: Record<string, unknown>,
+    config: Record<string, unknown>,
+    ctx: import('./pipelineEngine').PipelineContext,
+  ) => Record<string, unknown>;
+};
+const NODE_TYPES_SYNC = NODE_TYPES as Record<string, _SyncNodeDef>;
+
+
+
 const ctx: PipelineContext = { variables: { a: 5 } };
 const emptyCtx: PipelineContext = { variables: {} };
 
@@ -125,39 +145,39 @@ describe('pipelineEngine', () => {
 
   describe('输入类节点 execute', () => {
     it('number-input 输出数值', () => {
-      expect(NODE_TYPES['number-input'].execute({}, { value: 3.5 }, ctx)).toEqual({ value: 3.5 });
+      expect(NODE_TYPES_SYNC['number-input'].execute({}, { value: 3.5 }, ctx)).toEqual({ value: 3.5 });
     });
 
     it('number-input 非数值输入回退为 0', () => {
-      expect(NODE_TYPES['number-input'].execute({}, { value: 'abc' }, ctx)).toEqual({ value: 0 });
+      expect(NODE_TYPES_SYNC['number-input'].execute({}, { value: 'abc' }, ctx)).toEqual({ value: 0 });
     });
 
     it('expression-input 原样输出表达式字符串', () => {
-      expect(NODE_TYPES['expression-input'].execute({}, { expr: 'sin(x)' }, ctx)).toEqual({ value: 'sin(x)' });
+      expect(NODE_TYPES_SYNC['expression-input'].execute({}, { expr: 'sin(x)' }, ctx)).toEqual({ value: 'sin(x)' });
     });
 
     it('variable 从 ctx.variables 读取', () => {
-      expect(NODE_TYPES.variable.execute({}, { name: 'a' }, ctx)).toEqual({ value: 5 });
+      expect(execSync(NODE_TYPES_SYNC.variable.execute({}, { name: 'a' }, ctx))).toEqual({ value: 5 });
     });
 
     it('variable 变量缺失或名为空时回退为 0', () => {
-      expect(NODE_TYPES.variable.execute({}, { name: 'missing' }, ctx)).toEqual({ value: 0 });
-      expect(NODE_TYPES.variable.execute({}, { name: '' }, ctx)).toEqual({ value: 0 });
+      expect(execSync(NODE_TYPES_SYNC.variable.execute({}, { name: 'missing' }, ctx))).toEqual({ value: 0 });
+      expect(execSync(NODE_TYPES_SYNC.variable.execute({}, { name: '' }, ctx))).toEqual({ value: 0 });
     });
 
     it('constant 输出数学常数', () => {
-      expect(NODE_TYPES.constant.execute({}, { name: 'pi' }, ctx).value).toBeCloseTo(Math.PI);
-      expect(NODE_TYPES.constant.execute({}, { name: 'e' }, ctx).value).toBeCloseTo(Math.E);
+      expect(execSync(NODE_TYPES_SYNC.constant.execute({}, { name: 'pi' }, ctx)).value).toBeCloseTo(Math.PI);
+      expect(execSync(NODE_TYPES_SYNC.constant.execute({}, { name: 'e' }, ctx)).value).toBeCloseTo(Math.E);
     });
 
     it('constant 未知名称回退为 0', () => {
-      expect(NODE_TYPES.constant.execute({}, { name: 'nope' }, ctx)).toEqual({ value: 0 });
+      expect(execSync(NODE_TYPES_SYNC.constant.execute({}, { name: 'nope' }, ctx))).toEqual({ value: 0 });
     });
   });
 
   describe('运算与函数节点 execute', () => {
     const arith = (a: unknown, b: unknown, op: string) =>
-      NODE_TYPES.arithmetic.execute({ a, b }, { op }, ctx).result;
+      execSync(NODE_TYPES_SYNC.arithmetic.execute({ a, b }, { op }, ctx)).result;
 
     it('arithmetic 四则运算与幂、取模', () => {
       expect(arith(2, 3, '+')).toBe(5);
@@ -181,14 +201,14 @@ describe('pipelineEngine', () => {
     });
 
     it('function-apply 预设函数', () => {
-      expect(NODE_TYPES['function-apply'].execute({ x: 0 }, { fn: 'sin' }, ctx).result).toBe(0);
+      expect(NODE_TYPES_SYNC['function-apply'].execute({ x: 0 }, { fn: 'sin' }, ctx).result).toBe(0);
       // 蓝图内 log 按 10 底（与工作台语义一致）
-      expect(NODE_TYPES['function-apply'].execute({ x: 100 }, { fn: 'log' }, ctx).result).toBe(2);
+      expect(NODE_TYPES_SYNC['function-apply'].execute({ x: 100 }, { fn: 'log' }, ctx).result).toBe(2);
     });
 
     it('function-apply 自定义表达式', () => {
       expect(
-        NODE_TYPES['function-apply'].execute({ x: 2 }, { fn: 'custom', customExpr: 'x^2' }, ctx).result,
+        NODE_TYPES_SYNC['function-apply'].execute({ x: 2 }, { fn: 'custom', customExpr: 'x^2' }, ctx).result,
       ).toBe(4);
     });
 
@@ -197,7 +217,7 @@ describe('pipelineEngine', () => {
       // 只供 variable 节点使用，因此引用蓝图变量名会抛
       // "Undefined symbol"。实际应用中两侧作用域由 store 同步。
       expect(() =>
-        NODE_TYPES['function-apply'].execute({ x: 2 }, { fn: 'custom', customExpr: 'x^2 + a' }, ctx),
+        NODE_TYPES_SYNC['function-apply'].execute({ x: 2 }, { fn: 'custom', customExpr: 'x^2 + a' }, ctx),
       ).toThrow(/Undefined symbol/);
     });
   });
@@ -206,29 +226,29 @@ describe('pipelineEngine', () => {
     const m = math.matrix([[1, 2], [3, 4]]);
 
     it('matrix-op det / rank / transpose', () => {
-      expect(NODE_TYPES['matrix-op'].execute({ matrix: m }, { op: 'det' }, ctx).result).toBe(-2);
+      expect(NODE_TYPES_SYNC['matrix-op'].execute({ matrix: m }, { op: 'det' }, ctx).result).toBe(-2);
       expect(
-        NODE_TYPES['matrix-op'].execute({ matrix: math.matrix([[1, 2], [2, 4]]) }, { op: 'rank' }, ctx).result,
+        NODE_TYPES_SYNC['matrix-op'].execute({ matrix: math.matrix([[1, 2], [2, 4]]) }, { op: 'rank' }, ctx).result,
       ).toBe(1);
-      const tr = NODE_TYPES['matrix-op'].execute({ matrix: m }, { op: 'transpose' }, ctx).result;
+      const tr = NODE_TYPES_SYNC['matrix-op'].execute({ matrix: m }, { op: 'transpose' }, ctx).result;
       expect((tr as ReturnType<typeof math.matrix>).toArray()).toEqual([[1, 3], [2, 4]]);
     });
 
     it('matrix-op eigen 失败时回退为 eigs failed', () => {
       // 非方阵触发 math.eigs 异常，节点内部捕获
       expect(
-        NODE_TYPES['matrix-op'].execute({ matrix: math.matrix([[1, 2, 3], [4, 5, 6]]) }, { op: 'eigen' }, ctx)
+        NODE_TYPES_SYNC['matrix-op'].execute({ matrix: math.matrix([[1, 2, 3], [4, 5, 6]]) }, { op: 'eigen' }, ctx)
           .result,
       ).toBe('eigs failed');
     });
 
     it('matrix-multiply 正常相乘', () => {
-      const r = NODE_TYPES['matrix-multiply'].execute({ a: m, b: m }, {}, ctx).result;
+      const r = NODE_TYPES_SYNC['matrix-multiply'].execute({ a: m, b: m }, {}, ctx).result;
       expect((r as ReturnType<typeof math.matrix>).toArray()).toEqual([[7, 10], [15, 22]]);
     });
 
     it('matrix-decompose LU 分解', () => {
-      const r = NODE_TYPES['matrix-decompose'].execute({ matrix: m }, { method: 'lu' }, ctx);
+      const r = NODE_TYPES_SYNC['matrix-decompose'].execute({ matrix: m }, { method: 'lu' }, ctx);
       expect(r.latex).toBe('A = L \\cdot U');
       const res = r.result as { L: unknown; U: unknown; P: unknown };
       expect(res.L).toBeDefined();
@@ -236,7 +256,7 @@ describe('pipelineEngine', () => {
     });
 
     it('matrix-decompose cholesky 正确分解对称正定矩阵 [[4,2],[2,3]]', () => {
-      const r = NODE_TYPES['matrix-decompose'].execute(
+      const r = NODE_TYPES_SYNC['matrix-decompose'].execute(
         { matrix: math.matrix([[4, 2], [2, 3]]) },
         { method: 'cholesky' },
         ctx,
@@ -264,7 +284,7 @@ describe('pipelineEngine', () => {
 
     it('matrix-decompose cholesky 对非正定矩阵返回明确错误', () => {
       // [[1,2],[2,1]] 对称但特征值为 -1 与 3 —— 非正定
-      const r = NODE_TYPES['matrix-decompose'].execute(
+      const r = NODE_TYPES_SYNC['matrix-decompose'].execute(
         { matrix: math.matrix([[1, 2], [2, 1]]) },
         { method: 'cholesky' },
         ctx,
@@ -274,7 +294,7 @@ describe('pipelineEngine', () => {
     });
 
     it('matrix-decompose 未知 method 返回占位结果', () => {
-      const r = NODE_TYPES['matrix-decompose'].execute({ matrix: m }, { method: 'svd' }, ctx);
+      const r = NODE_TYPES_SYNC['matrix-decompose'].execute({ matrix: m }, { method: 'svd' }, ctx);
       expect(r.result).toBe('unknown method');
       expect(r.latex).toBe('');
     });
@@ -282,37 +302,37 @@ describe('pipelineEngine', () => {
 
   describe('微积分节点 execute', () => {
     it('derivative 输出导数节点与 LaTeX', () => {
-      const r = NODE_TYPES.derivative.execute({ expr: 'x^2' }, { variable: 'x' }, ctx);
+      const r = NODE_TYPES_SYNC.derivative.execute({ expr: 'x^2' }, { variable: 'x' }, ctx);
       expect(String(r.result)).toBe('2 * x');
       expect(r.latex).toContain('\\frac{d}{dx}');
     });
 
     it('derivative showSteps 附加原表达式', () => {
-      const r = NODE_TYPES.derivative.execute({ expr: 'x^2' }, { variable: 'x', showSteps: true }, ctx);
+      const r = NODE_TYPES_SYNC.derivative.execute({ expr: 'x^2' }, { variable: 'x', showSteps: true }, ctx);
       expect(r.original).toBe('x^2');
     });
 
     it('integrate Simpson 数值积分 ∫₀¹ x² dx ≈ 1/3', () => {
-      const r = NODE_TYPES.integrate.execute({ expr: 'x^2' }, { a: 0, b: 1 }, ctx);
+      const r = NODE_TYPES_SYNC.integrate.execute({ expr: 'x^2' }, { a: 0, b: 1 }, ctx);
       expect(r.result as number).toBeCloseTo(1 / 3, 8);
       expect(r.latex).toContain('\\int_{0}^{1}');
     });
 
     it('symbolic-integrate ∫x² dx = x³/3', () => {
-      const r = NODE_TYPES['symbolic-integrate'].execute({ expr: 'x^2' }, { variable: 'x' }, ctx);
+      const r = NODE_TYPES_SYNC['symbolic-integrate'].execute({ expr: 'x^2' }, { variable: 'x' }, ctx);
       expect(r.result).toBe('1/3*x^3');
       expect(r.latex).toContain('+ C');
     });
 
     it('simplify 合并同类项', () => {
-      const r = NODE_TYPES.simplify.execute({ expr: '2x + 3x' }, {}, ctx);
+      const r = NODE_TYPES_SYNC.simplify.execute({ expr: '2x + 3x' }, {}, ctx);
       expect(String(r.result)).toBe('5 * x');
     });
 
     it('solve-equation 解出 x^2 - 4 = 0 的两实根 ±2', () => {
       // 实现把等式移项为单边表达式 (lhs) - (rhs) 再解析，
       // 然后符号扫描 + 二分逼近求实根。
-      const r1 = NODE_TYPES['solve-equation'].execute({ expr: 'x^2 - 4' }, { variable: 'x' }, ctx) as {
+      const r1 = NODE_TYPES_SYNC['solve-equation'].execute({ expr: 'x^2 - 4' }, { variable: 'x' }, ctx) as {
         result: string;
         roots: number[];
       };
@@ -320,7 +340,7 @@ describe('pipelineEngine', () => {
       expect(r1.roots).toHaveLength(2);
       expect(r1.roots[0]).toBeCloseTo(-2, 6);
       expect(r1.roots[1]).toBeCloseTo(2, 6);
-      const r2 = NODE_TYPES['solve-equation'].execute({ expr: 'x^2 - 4 = 0' }, { variable: 'x' }, ctx) as {
+      const r2 = NODE_TYPES_SYNC['solve-equation'].execute({ expr: 'x^2 - 4 = 0' }, { variable: 'x' }, ctx) as {
         result: string;
         roots: number[];
       };
@@ -329,21 +349,21 @@ describe('pipelineEngine', () => {
     });
 
     it('solve-equation 无实根时返回提示', () => {
-      const r = NODE_TYPES['solve-equation'].execute({ expr: 'x^2 + 1' }, { variable: 'x' }, ctx);
+      const r = NODE_TYPES_SYNC['solve-equation'].execute({ expr: 'x^2 + 1' }, { variable: 'x' }, ctx);
       expect(r.result).toBe('no real roots');
     });
 
     it('evaluate 在给定点求值', () => {
-      expect(NODE_TYPES.evaluate.execute({ expr: 'x^2 + 1', x: 3 }, {}, ctx).result).toBe(10);
+      expect(execSync(NODE_TYPES_SYNC.evaluate.execute({ expr: 'x^2 + 1', x: 3 }, {}, ctx)).result).toBe(10);
     });
 
     it('evaluate 非法表达式返回 NaN', () => {
-      expect(NODE_TYPES.evaluate.execute({ expr: 'bad(*', x: 3 }, {}, ctx).result).toBeNaN();
+      expect(NODE_TYPES_SYNC.evaluate.execute({ expr: 'bad(*', x: 3 }, {}, ctx).result as number).toBeNaN();
     });
   });
 
   describe('executePipeline 图执行', () => {
-    it('数据沿边传递：number → arithmetic → display', () => {
+    it('数据沿边传递：number → arithmetic → display', async () => {
       const nodes = [
         makeNode('n1', 'number-input', { value: 2 }),
         makeNode('n2', 'number-input', { value: 3 }),
@@ -355,22 +375,22 @@ describe('pipelineEngine', () => {
         makeEdge('n2', 'value', 'sum', 'b'),
         makeEdge('sum', 'result', 'disp', 'value'),
       ];
-      const out = executePipeline(nodes, edges, emptyCtx);
+      const out = await executePipeline(nodes, edges, emptyCtx);
       const byId = new Map(out.map((n) => [n.id, n]));
       expect(byId.get('sum')!.result).toBe(5);
       expect(byId.get('disp')!.result).toBe(5);
       expect(out.every((n) => n.error === undefined)).toBe(true);
     });
 
-    it('返回新节点数组，不修改入参节点', () => {
+    it('返回新节点数组，不修改入参节点', async () => {
       const nodes = [makeNode('n1', 'number-input', { value: 2 })];
-      const out = executePipeline(nodes, [], emptyCtx);
+      const out = await executePipeline(nodes, [], emptyCtx);
       expect(nodes[0].result).toBeUndefined();
       expect(out[0].result).toBe(2);
       expect(out[0]).not.toBe(nodes[0]);
     });
 
-    it('拓扑排序：节点数组顺序颠倒仍按依赖顺序执行', () => {
+    it('拓扑排序：节点数组顺序颠倒仍按依赖顺序执行', async () => {
       const nodes = [
         makeNode('disp', 'display'),
         makeNode('sum', 'arithmetic', { op: '*' }),
@@ -382,18 +402,18 @@ describe('pipelineEngine', () => {
         makeEdge('n2', 'value', 'sum', 'b'),
         makeEdge('sum', 'result', 'disp', 'value'),
       ];
-      const out = executePipeline(nodes, edges, emptyCtx);
+      const out = await executePipeline(nodes, edges, emptyCtx);
       expect(out.find((n) => n.id === 'disp')!.result).toBe(8);
     });
 
-    it('环中的节点标记 Cycle detected，环外节点不受影响', () => {
+    it('环中的节点标记 Cycle detected，环外节点不受影响', async () => {
       const nodes = [
         makeNode('x', 'arithmetic', { op: '+' }),
         makeNode('y', 'arithmetic', { op: '+' }),
         makeNode('ok', 'number-input', { value: 7 }),
       ];
       const edges = [makeEdge('x', 'result', 'y', 'a'), makeEdge('y', 'result', 'x', 'a')];
-      const out = executePipeline(nodes, edges, emptyCtx);
+      const out = await executePipeline(nodes, edges, emptyCtx);
       const byId = new Map(out.map((n) => [n.id, n]));
       expect(byId.get('x')!.error).toBe('Cycle detected');
       expect(byId.get('y')!.error).toBe('Cycle detected');
@@ -402,28 +422,28 @@ describe('pipelineEngine', () => {
       expect(byId.get('ok')!.error).toBeUndefined();
     });
 
-    it('未知节点类型标记 Unknown node type', () => {
+    it('未知节点类型标记 Unknown node type', async () => {
       const nodes = [{ id: 'u', type: 'no-such' as NodeType, position: { x: 0, y: 0 }, config: {} }];
-      const out = executePipeline(nodes, [], emptyCtx);
+      const out = await executePipeline(nodes, [], emptyCtx);
       expect(out[0].error).toBe('Unknown node type');
     });
 
-    it('有输入端口但未连线的节点静默跳过（无错误）', () => {
-      const out = executePipeline([makeNode('sum', 'arithmetic', { op: '+' })], [], emptyCtx);
+    it('有输入端口但未连线的节点静默跳过（无错误）', async () => {
+      const out = await executePipeline([makeNode('sum', 'arithmetic', { op: '+' })], [], emptyCtx);
       expect(out[0].result).toBeNull();
       expect(out[0].error).toBeUndefined();
     });
 
-    it('部分输入未连接的节点静默跳过', () => {
+    it('部分输入未连接的节点静默跳过', async () => {
       const nodes = [makeNode('n1', 'number-input', { value: 2 }), makeNode('sum', 'arithmetic', { op: '+' })];
       const edges = [makeEdge('n1', 'value', 'sum', 'a')];
-      const out = executePipeline(nodes, edges, emptyCtx);
+      const out = await executePipeline(nodes, edges, emptyCtx);
       const sum = out.find((n) => n.id === 'sum')!;
       expect(sum.result).toBeNull();
       expect(sum.error).toBeUndefined();
     });
 
-    it('执行抛错的节点记录 error，下游节点静默跳过', () => {
+    it('执行抛错的节点记录 error，下游节点静默跳过', async () => {
       // 1x2 与 1x2 矩阵相乘 → 维度不匹配，matrix-multiply 抛错
       const nodes = [
         makeNode('m1', 'matrix-input', { cells: [[{ value: '1' }, { value: '2' }]] }),
@@ -436,7 +456,7 @@ describe('pipelineEngine', () => {
         makeEdge('m2', 'matrix', 'mul', 'b'),
         makeEdge('mul', 'result', 'disp', 'value'),
       ];
-      const out = executePipeline(nodes, edges, emptyCtx);
+      const out = await executePipeline(nodes, edges, emptyCtx);
       const byId = new Map(out.map((n) => [n.id, n]));
       expect(byId.get('mul')!.error).toContain('Dimension mismatch');
       expect(byId.get('mul')!.result).toBeNull();
@@ -445,23 +465,23 @@ describe('pipelineEngine', () => {
       expect(byId.get('disp')!.error).toBeUndefined();
     });
 
-    it('除零产生 NaN 而非错误', () => {
+    it('除零产生 NaN 而非错误', async () => {
       const nodes = [
         makeNode('n1', 'number-input', { value: 1 }),
         makeNode('n2', 'number-input', { value: 0 }),
         makeNode('div', 'arithmetic', { op: '/' }),
       ];
       const edges = [makeEdge('n1', 'value', 'div', 'a'), makeEdge('n2', 'value', 'div', 'b')];
-      const out = executePipeline(nodes, edges, emptyCtx);
+      const out = await executePipeline(nodes, edges, emptyCtx);
       const div = out.find((n) => n.id === 'div')!;
       expect(div.result).toBeNaN();
       expect(div.error).toBeUndefined();
     });
 
-    it('指向/来自缺失节点的边被忽略', () => {
+    it('指向/来自缺失节点的边被忽略', async () => {
       const nodes = [makeNode('n1', 'number-input', { value: 2 })];
       const edges = [makeEdge('n1', 'value', 'ghost', 'a'), makeEdge('ghost', 'x', 'n1', 'y')];
-      const out = executePipeline(nodes, edges, emptyCtx);
+      const out = await executePipeline(nodes, edges, emptyCtx);
       expect(out[0].result).toBe(2);
       expect(out[0].error).toBeUndefined();
     });

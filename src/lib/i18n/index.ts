@@ -1131,6 +1131,89 @@ export interface TranslationDict {
   errAIUnavailable: string;
   errMatrixDimMismatch: string;
   errSingularMatrix: string;
+  npCategoryMapping: string;
+  npCategoryVector: string;
+  npCategoryCurve: string;
+  npCategoryStatistics: string;
+  npCategoryLogic: string;
+  npCategoryVision: string;
+  npTaylorSeries: string;
+  npOdeSolve: string;
+  npPortX0: string;
+  npPortY0: string;
+  npPortXEnd: string;
+  npPortCurve: string;
+  npLimit: string;
+  npParametricCurve: string;
+  npPortXExpr: string;
+  npPortYExpr: string;
+  npPortTMin: string;
+  npPortTMax: string;
+  npCurveResample: string;
+  npCurveTransform: string;
+  npCurveMerge: string;
+  npCurveLength: string;
+  npNegate: string;
+  npReciprocal: string;
+  npClamp: string;
+  npMapRange: string;
+  npLerp: string;
+  npMinMax: string;
+  npCompare: string;
+  npVec2Compose: string;
+  npVec2Decompose: string;
+  npDotProduct: string;
+  npCrossProduct: string;
+  npVecMagnitude: string;
+  npVecNormalize: string;
+  npVecRotate: string;
+  npRandomSample: string;
+  npMeanVariance: string;
+  npHistogram: string;
+  npDataInput: string;
+  npSwitch: string;
+  npThresholdGate: string;
+  npPortCondition: string;
+  npLogBase: string;
+  npHypotenuse: string;
+  npSign: string;
+  npDegreesRadians: string;
+  npPortBase: string;
+  npPortT: string;
+  npPortVec: string;
+  npPortData: string;
+  npPortMean: string;
+  npPortVariance: string;
+  npPortBinary: string;
+  npImageInput: string;
+  npGrayscaleThreshold: string;
+  npEdgeDetect: string;
+  npContourTrace: string;
+  npCurveFit: string;
+  npPortContours: string;
+  npPortCurves: string;
+  npPlotCurves: string;
+  npFineOutline: string;
+  npPortImage: string;
+  npPortOverlay: string;
+  npPortEdges: string;
+  npVideoInput: string;
+  npPortVideo: string;
+  npFrameExtract: string;
+  npPortFrames: string;
+  npPoseTrack: string;
+  npPortAnimation: string;
+  npCurveAnimate: string;
+  npSvgExport: string;
+  npPortY: string;
+  npPortAngle: string;
+
+  templates: {
+    imageVectorization: {
+      name: string;
+      description: string;
+    };
+  };
 }
 
 /* ============================================================
@@ -2252,6 +2335,89 @@ const zhCN: TranslationDict = {
   errAIUnavailable: "AI 服务不可用",
   errMatrixDimMismatch: "矩阵维度不匹配",
   errSingularMatrix: "矩阵为奇异矩阵",
+  npCategoryMapping: "映射",
+  npCategoryVector: "向量",
+  npCategoryCurve: "曲线",
+  npCategoryStatistics: "统计",
+  npCategoryLogic: "逻辑",
+  npCategoryVision: "视觉",
+  npTaylorSeries: "泰勒级数",
+  npOdeSolve: "常微分方程",
+  npPortX0: "X₀",
+  npPortY0: "Y₀",
+  npPortXEnd: "X 终点",
+  npPortCurve: "曲线",
+  npLimit: "极限",
+  npParametricCurve: "参数曲线",
+  npPortXExpr: "X 表达式",
+  npPortYExpr: "Y 表达式",
+  npPortTMin: "T 最小",
+  npPortTMax: "T 最大",
+  npCurveResample: "曲线重采样",
+  npCurveTransform: "曲线变换",
+  npCurveMerge: "曲线合并",
+  npCurveLength: "曲线长度",
+  npNegate: "取反",
+  npReciprocal: "倒数",
+  npClamp: "区间截断",
+  npMapRange: "值域映射",
+  npLerp: "线性插值",
+  npMinMax: "最小/最大",
+  npCompare: "比较",
+  npVec2Compose: "二维向量组合",
+  npVec2Decompose: "二维向量分解",
+  npDotProduct: "点积",
+  npCrossProduct: "叉积",
+  npVecMagnitude: "向量模长",
+  npVecNormalize: "向量归一化",
+  npVecRotate: "向量旋转",
+  npRandomSample: "随机采样",
+  npMeanVariance: "均值与方差",
+  npHistogram: "直方图",
+  npDataInput: "数据输入",
+  npSwitch: "条件开关",
+  npThresholdGate: "阈值门",
+  npPortCondition: "条件",
+  npLogBase: "指定底数对数",
+  npHypotenuse: "斜边/模长",
+  npSign: "符号函数",
+  npDegreesRadians: "角度/弧度转换",
+  npPortBase: "底数",
+  npPortT: "参数 t",
+  npPortVec: "向量",
+  npPortData: "数据",
+  npPortMean: "均值",
+  npPortVariance: "方差",
+  npPortBinary: "二值图",
+  npImageInput: "图像输入",
+  npGrayscaleThreshold: "灰度阈值",
+  npEdgeDetect: "边缘检测",
+  npContourTrace: "轮廓追踪",
+  npCurveFit: "曲线拟合",
+  npPortContours: "轮廓",
+  npPortCurves: "曲线集合",
+  npPlotCurves: "绘制曲线",
+  npFineOutline: "精细轮廓",
+  npPortImage: "图像",
+  npPortOverlay: "叠加图",
+  npPortEdges: "边缘",
+  npVideoInput: "视频输入",
+  npPortVideo: "视频",
+  npFrameExtract: "帧提取",
+  npPortFrames: "帧序列",
+  npPoseTrack: "姿态追踪",
+  npPortAnimation: "动画",
+  npCurveAnimate: "曲线动画",
+  npSvgExport: "SVG 导出",
+  npPortY: "Y",
+  npPortAngle: "角度",
+
+  templates: {
+    imageVectorization: {
+      name: "图像矢量化快速入门",
+      description: "从图片识别边缘 → 拟合贝塞尔曲线 → 叠加到 2D 画布。上传图片、点击运行，一键生成矢量轮廓。",
+    },
+  },
 };
 
 const en: TranslationDict = {
@@ -3371,6 +3537,89 @@ const en: TranslationDict = {
   errAIUnavailable: "AI service unavailable",
   errMatrixDimMismatch: "Matrix dimension mismatch",
   errSingularMatrix: "Matrix is singular",
+  npCategoryMapping: "Mapping",
+  npCategoryVector: "Vector",
+  npCategoryCurve: "Curve",
+  npCategoryStatistics: "Statistics",
+  npCategoryLogic: "Logic",
+  npCategoryVision: "Vision",
+  npTaylorSeries: "Taylor Series",
+  npOdeSolve: "ODE Solver",
+  npPortX0: "X₀",
+  npPortY0: "Y₀",
+  npPortXEnd: "X End",
+  npPortCurve: "Curve",
+  npLimit: "Limit",
+  npParametricCurve: "Parametric Curve",
+  npPortXExpr: "X Expr",
+  npPortYExpr: "Y Expr",
+  npPortTMin: "T Min",
+  npPortTMax: "T Max",
+  npCurveResample: "Curve Resample",
+  npCurveTransform: "Curve Transform",
+  npCurveMerge: "Curve Merge",
+  npCurveLength: "Curve Length",
+  npNegate: "Negate",
+  npReciprocal: "Reciprocal",
+  npClamp: "Clamp",
+  npMapRange: "Map Range",
+  npLerp: "Lerp",
+  npMinMax: "Min/Max",
+  npCompare: "Compare",
+  npVec2Compose: "Vec2 Compose",
+  npVec2Decompose: "Vec2 Decompose",
+  npDotProduct: "Dot Product",
+  npCrossProduct: "Cross Product",
+  npVecMagnitude: "Magnitude",
+  npVecNormalize: "Normalize",
+  npVecRotate: "Rotate",
+  npRandomSample: "Random Sample",
+  npMeanVariance: "Mean & Variance",
+  npHistogram: "Histogram",
+  npDataInput: "Data Input",
+  npSwitch: "Switch",
+  npThresholdGate: "Threshold Gate",
+  npPortCondition: "Condition",
+  npLogBase: "Log (Custom Base)",
+  npHypotenuse: "Hypotenuse",
+  npSign: "Sign",
+  npDegreesRadians: "Deg/Rad Convert",
+  npPortBase: "Base",
+  npPortT: "Param t",
+  npPortVec: "Vector",
+  npPortData: "Data",
+  npPortMean: "Mean",
+  npPortVariance: "Variance",
+  npPortBinary: "Binary Mask",
+  npImageInput: "Image Input",
+  npGrayscaleThreshold: "Grayscale Threshold",
+  npEdgeDetect: "Edge Detect",
+  npContourTrace: "Contour Trace",
+  npCurveFit: "Curve Fit",
+  npPortContours: "Contours",
+  npPortCurves: "Curves",
+  npPlotCurves: "Plot Curves",
+  npFineOutline: "Fine Outline",
+  npPortImage: "Image",
+  npPortOverlay: "Overlay",
+  npPortEdges: "Edges",
+  npVideoInput: "Video Input",
+  npPortVideo: "Video",
+  npFrameExtract: "Frame Extract",
+  npPortFrames: "Frames",
+  npPoseTrack: "Pose Track",
+  npPortAnimation: "Animation",
+  npCurveAnimate: "Curve Animate",
+  npSvgExport: "SVG Export",
+  npPortY: "Y",
+  npPortAngle: "Angle",
+
+  templates: {
+    imageVectorization: {
+      name: "Image Vectorization Quickstart",
+      description: "Detect edges from image → fit Bezier curves → overlay on 2D canvas. Upload an image and click Run to generate vector outlines in one click.",
+    },
+  },
 };
 
 /* ============================================================
@@ -3404,21 +3653,49 @@ export function setLocale(locale: Locale): void {
   notifySubscribers();
 }
 
-/** Translate a key in the current locale. Falls back to zh-CN, then to the key itself. */
-export function t<K extends keyof TranslationDict>(key: K): string {
+/** Resolve a dot-separated path on a dict (e.g. 'a.b.c' → dict['a']['b']['c']). */
+function resolvePath(obj: unknown, path: string): unknown {
+  if (obj === null || obj === undefined) return undefined;
+  if (typeof obj !== "object") return undefined;
+  const parts = path.split(".");
+  let cur: unknown = obj;
+  for (const p of parts) {
+    if (cur === null || cur === undefined) return undefined;
+    if (typeof cur !== "object") return undefined;
+    cur = (cur as Record<string, unknown>)[p];
+  }
+  return cur;
+}
+
+/** Translate a key in the current locale. Falls back to zh-CN, then to the key itself.
+ *  Supports dot-separated nested paths (e.g. 'templates.imageVectorization.name').
+ */
+export function t(key: keyof TranslationDict | (string & {})): string {
   const dict = dictionaries[currentLocale] ?? zhCN;
-  const value = dict[key];
-  if (value !== undefined && value !== "") return value;
-  // Fallback to default locale
-  const fallback = zhCN[key];
-  if (fallback !== undefined) return fallback;
+  const dictRec = dict as unknown as Record<string, unknown>;
+  const zhRec = zhCN as unknown as Record<string, unknown>;
+  // Try direct key lookup first (fast path for legacy flat keys)
+  const direct = dictRec[key as string];
+  if (direct !== undefined && direct !== "") {
+    if (typeof direct === "string") return direct;
+  }
+  // If the key contains a dot, treat it as a nested path
+  if (typeof key === "string" && key.includes(".")) {
+    const nested = resolvePath(dict as object, key);
+    if (typeof nested === "string" && nested !== "") return nested;
+    const nestedFb = resolvePath(zhCN as object, key);
+    if (typeof nestedFb === "string" && nestedFb !== "") return nestedFb;
+  }
+  // Fallback: default locale direct lookup
+  const fallback = zhRec[key as string];
+  if (typeof fallback === "string" && fallback !== "") return fallback;
   // Last resort — return the key itself so missing keys are visible
   return String(key);
 }
 
 /** Translate with parameter interpolation: t("statusLines", { n: 42 }) → "42 行" */
-export function tf<K extends keyof TranslationDict>(
-  key: K,
+export function tf(
+  key: keyof TranslationDict | (string & {}),
   params: Record<string, string | number>,
 ): string {
   let value = t(key);
@@ -3468,7 +3745,10 @@ export function useLocale(): Locale {
 }
 
 /** Hook that returns a bound t() function that updates on locale change. */
-export function useT(): <K extends keyof TranslationDict>(key: K) => string {
+export function useT(): (key: keyof TranslationDict | (string & {})) => string {
   useLocale(); // subscribe to locale changes
   return t;
 }
+
+
+export { zhCN, en };

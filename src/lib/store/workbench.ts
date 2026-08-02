@@ -1,6 +1,7 @@
 import { create } from 'zustand';
 import type { InputMode } from '@/lib/engine/types';
 import type { Locale } from '@/lib/i18n';
+import type { CurveSetData } from '@/components/workbench/plots/Plot2DCanvas';
 import { deleteScopeVar, resetScope, syncScope, math } from '@/lib/engine/mathInstance';
 import { useSettingsStore } from './settingsStore';
 
@@ -70,6 +71,8 @@ interface WorkbenchState {
   // Variables & plots
   variables: Record<string, VariableEntry>;
   plots: PlotConfig[];
+  /** 来自蓝图视觉节点的曲线集（叠加到 2D 画布）。 */
+  curveSets: CurveSetData[];
   /** 2D 绘图自由参数的滑块状态（按参数名持久化；参数从表达式中消失后
    *  仍保留其值，重新出现时直接恢复）。 */
   plotParams: Record<string, PlotParamConfig>;
@@ -109,6 +112,10 @@ interface WorkbenchState {
   togglePlotVisibility: (id: string) => void;
   clearPlots: () => void;
   updatePlot: (id: string, patch: Partial<PlotConfig>) => void;
+  addCurveSet: (cs: Omit<CurveSetData, 'id'>) => void;
+  updateCurveSet: (id: string, patch: Partial<CurveSetData>) => void;
+  removeCurveSet: (id: string) => void;
+  clearCurveSets: () => void;
   /** 合并写入某个 2D 自由参数的滑块配置（value/min/max/step 可部分更新）。
    *  传入 patch === undefined 时清除该参数的持久化记录（下次出现时用默认）。 */
   setPlotParam: (name: string, patch: Partial<PlotParamConfig> | undefined) => void;
@@ -199,6 +206,21 @@ function sanitizePlotParams(raw: unknown): Record<string, PlotParamConfig> {
   return out;
 }
 
+function sanitizeCurveSet(raw: unknown): CurveSetData | null {
+  if (!raw || typeof raw !== 'object') return null;
+  const o = raw as Record<string, unknown>;
+  const curves = Array.isArray(o.curves) ? o.curves : null;
+  const width = typeof o.width === 'number' ? o.width : 0;
+  const height = typeof o.height === 'number' ? o.height : 0;
+  const id = typeof o.id === 'string' ? o.id : undefined;
+  const color = typeof o.color === 'string' ? o.color : undefined;
+  const strokeWidth = typeof o.strokeWidth === 'number' ? o.strokeWidth : undefined;
+  const flipX = typeof o.flipX === 'boolean' ? o.flipX : undefined;
+  const flipY = typeof o.flipY === 'boolean' ? o.flipY : undefined;
+  if (!curves || width <= 0 || height <= 0) return null;
+  return { id, curves, width, height, color, strokeWidth, flipX, flipY } as CurveSetData;
+}
+
 function loadInitial(): Partial<WorkbenchState> {
   if (typeof window === 'undefined') return {};
   try {
@@ -221,6 +243,9 @@ function loadInitial(): Partial<WorkbenchState> {
       variables: data.variables && typeof data.variables === 'object' ? data.variables : {},
       plots: Array.isArray(data.plots)
         ? data.plots.map(sanitizePlot).filter((p: PlotConfig | null): p is PlotConfig => p !== null)
+        : [],
+      curveSets: Array.isArray(data.curveSets)
+        ? data.curveSets.map(sanitizeCurveSet).filter((x: CurveSetData | null): x is CurveSetData => x !== null)
         : [],
       plotParams: sanitizePlotParams(data.plotParams),
       theme: VALID_THEMES.includes(data.theme) ? data.theme : 'dark',
@@ -274,6 +299,7 @@ export const useWorkbenchStore = create<WorkbenchState>((set, get) => ({
 
   variables: {},
   plots: [],
+  curveSets: [],
   plotParams: {},
 
   theme: 'dark',
@@ -355,6 +381,25 @@ export const useWorkbenchStore = create<WorkbenchState>((set, get) => ({
     }));
     get().saveToStorage();
   },
+  addCurveSet: (cs) => {
+    const id = 'cs_' + Math.random().toString(36).slice(2, 10);
+    set((s) => ({ curveSets: [...s.curveSets, { ...(cs as CurveSetData), id }] }));
+    get().saveToStorage();
+  },
+  updateCurveSet: (id, patch) => {
+    set((s) => ({
+      curveSets: s.curveSets.map((c) => (c.id === id ? { ...c, ...patch } : c)),
+    }));
+    get().saveToStorage();
+  },
+  removeCurveSet: (id) => {
+    set((s) => ({ curveSets: s.curveSets.filter((c) => c.id !== id) }));
+    get().saveToStorage();
+  },
+  clearCurveSets: () => {
+    set({ curveSets: [] });
+    get().saveToStorage();
+  },
   setPlotParam: (name, patch) => {
     set((s) => {
       if (patch === undefined) {
@@ -418,6 +463,7 @@ export const useWorkbenchStore = create<WorkbenchState>((set, get) => ({
             results: s.results,
             variables: s.variables,
             plots: s.plots,
+            curveSets: s.curveSets,
             plotParams: s.plotParams,
             theme: s.theme,
             locale: s.locale,

@@ -41,6 +41,7 @@ import {
   ZoomOut,
   Maximize2,
   Scan,
+  ScanLine,
   LayoutTemplate,
   Workflow,
   X,
@@ -59,6 +60,41 @@ import {
   AlertCircle,
   Split,
   Wand2,
+  ArrowRightLeft,
+  BarChart2,
+  BarChart3,
+  Blend,
+  Brackets,
+  ChevronsUpDown,
+  Combine,
+  Contrast,
+  Dices,
+  Divide,
+  Dot,
+  FileImage,
+  Film,
+  Filter,
+  GitCompare,
+  Image,
+  Infinity as InfinityIcon,
+  LogIn,
+  Merge,
+  Minus,
+  Move,
+  PenLine,
+  PenTool,
+  PersonStanding,
+  RefreshCw,
+  RotateCw,
+  Ruler,
+  Scale,
+  Shrink,
+  Spline,
+  ToggleLeft,
+  TrendingUp,
+  Triangle,
+  Video,
+  Waves,
   type LucideIcon,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
@@ -124,30 +160,51 @@ import { MathRender } from './MathRender';
 const ICONS: Record<string, LucideIcon> = {
   Hash, Type, Variable, Plus, FunctionSquare, LineChart,
   Grid3x3, Calculator, Sigma, Activity, Equal, Monitor,
-  Split, Wand2,
+  Split, Wand2, X, Play,
+  ArrowRightLeft, BarChart2, BarChart3, Blend, Brackets,
+  ChevronsUpDown, Combine, Contrast, Dices, Divide, Dot,
+  FileImage, Film, Filter, GitCompare, Image,
+  Infinity: InfinityIcon,
+  LogIn, Merge, Minus, Move, PenLine, PenTool,
+  PersonStanding, PlusMinus: Scale,
+  RefreshCw, RotateCw, Ruler,
+  Scale, ScanLine, Shrink, Spline, ToggleLeft, TrendingUp,
+  Triangle, Video, Waves,
 };
 
 /* ------------------------------------------------------------------ *
  * Category colors — drives the left stripe + icon tint
  * ------------------------------------------------------------------ */
 const CATEGORY_COLOR: Record<NodeCategory, { stripe: string; text: string; bg: string }> = {
-  input:     { stripe: 'bg-teal-500',    text: 'text-teal-500',    bg: 'bg-teal-500/10' },
-  operation: { stripe: 'bg-amber-500',   text: 'text-amber-500',   bg: 'bg-amber-500/10' },
-  function:  { stripe: 'bg-rose-500',    text: 'text-rose-500',    bg: 'bg-rose-500/10' },
-  plot:      { stripe: 'bg-violet-500',  text: 'text-violet-500',  bg: 'bg-violet-500/10' },
-  matrix:    { stripe: 'bg-emerald-500', text: 'text-emerald-500', bg: 'bg-emerald-500/10' },
-  calculus:  { stripe: 'bg-orange-500',  text: 'text-orange-500',  bg: 'bg-orange-500/10' },
-  output:    { stripe: 'bg-cyan-500',    text: 'text-cyan-500',    bg: 'bg-cyan-500/10' },
+  input:      { stripe: 'bg-teal-500',     text: 'text-teal-500',     bg: 'bg-teal-500/10' },
+  operation:  { stripe: 'bg-amber-500',    text: 'text-amber-500',    bg: 'bg-amber-500/10' },
+  function:   { stripe: 'bg-rose-500',     text: 'text-rose-500',     bg: 'bg-rose-500/10' },
+  plot:       { stripe: 'bg-violet-500',   text: 'text-violet-500',   bg: 'bg-violet-500/10' },
+  matrix:     { stripe: 'bg-emerald-500',  text: 'text-emerald-500',  bg: 'bg-emerald-500/10' },
+  calculus:   { stripe: 'bg-orange-500',   text: 'text-orange-500',   bg: 'bg-orange-500/10' },
+  output:     { stripe: 'bg-cyan-500',     text: 'text-cyan-500',     bg: 'bg-cyan-500/10' },
+  mapping:    { stripe: 'bg-sky-500',      text: 'text-sky-500',      bg: 'bg-sky-500/10' },
+  vector:     { stripe: 'bg-indigo-500',   text: 'text-indigo-500',   bg: 'bg-indigo-500/10' },
+  curve:      { stripe: 'bg-pink-500',     text: 'text-pink-500',     bg: 'bg-pink-500/10' },
+  statistics: { stripe: 'bg-lime-600',     text: 'text-lime-600',     bg: 'bg-lime-600/10' },
+  logic:      { stripe: 'bg-slate-500',    text: 'text-slate-500',    bg: 'bg-slate-500/10' },
+  vision:     { stripe: 'bg-fuchsia-600',  text: 'text-fuchsia-600',  bg: 'bg-fuchsia-600/10' },
 };
 
 const CATEGORY_LABEL_KEY: Record<NodeCategory, keyof TranslationDict> = {
-  input: 'npCategoryInput',
-  operation: 'npCategoryOp',
-  function: 'npCategoryFunction',
-  plot: 'npCategoryPlot',
-  matrix: 'npCategoryMatrix',
-  calculus: 'npCategoryCalculus',
-  output: 'npCategoryOutput',
+  input:      'npCategoryInput',
+  operation:  'npCategoryOp',
+  function:   'npCategoryFunction',
+  plot:       'npCategoryPlot',
+  matrix:     'npCategoryMatrix',
+  calculus:   'npCategoryCalculus',
+  output:     'npCategoryOutput',
+  mapping:    'npCategoryMapping',
+  vector:     'npCategoryVector',
+  curve:      'npCategoryCurve',
+  statistics: 'npCategoryStatistics',
+  logic:      'npCategoryLogic',
+  vision:     'npCategoryVision',
 };
 
 /* ------------------------------------------------------------------ *
@@ -576,20 +633,48 @@ function NodePipelineInner() {
     [addPlot, computeYRange],
   );
 
-  const runPipeline = useCallback(() => {
+  const pushCurvesToWorkbench = useCallback((nodes: PipelineNode[]) => {
+    const store = useWorkbenchStore.getState ? useWorkbenchStore.getState() : null;
+    if (!store?.clearCurveSets) return;
+    store.clearCurveSets();
+    for (const node of nodes) {
+      if (node.type !== 'plot-curves') continue;
+      const out = node.outputs?.curves;
+      if (!out || typeof out !== 'object') continue;
+      const o = out as Record<string, unknown>;
+      const curves = Array.isArray((o as any).curves) ? (o as any).curves : [];
+      const width = typeof (o as any).width === 'number' ? (o as any).width : 0;
+      const height = typeof (o as any).height === 'number' ? (o as any).height : 0;
+      if (curves.length <= 0 || width <= 0 || height <= 0) continue;
+      const color = typeof node.config.color === 'string' ? node.config.color : '#a78bfa';
+      const strokeWidth = typeof node.config.width === 'number' ? node.config.width : 2;
+      store.addCurveSet({
+        curves,
+        width,
+        height,
+        color,
+        strokeWidth,
+        flipX: !!node.config.flipX,
+        flipY: !!node.config.flipY,
+      } as any);
+    }
+  }, []);
+
+  const runPipeline = useCallback(async () => {
     try {
       const ctx = {
         variables: Object.fromEntries(
           Object.entries(variables).map(([k, v]) => [k, v.value]),
         ),
       };
-      const executed = executePipeline(nodes, edges, ctx);
+      const executed = await executePipeline(nodes, edges, ctx);
       setNodes(executed);
       setComputeTick((n) => n + 1);
 
       // Side-effects: plot-output nodes push plots to the workbench store;
       // display nodes push results to history.
       const plotsPushed = pushPlotsToWorkbench(executed);
+      pushCurvesToWorkbench(executed);
       for (const n of executed) {
         if (n.type === 'display' && n.result !== undefined && n.result !== null) {
           const r = n.result;
@@ -635,49 +720,54 @@ function NodePipelineInner() {
         duration: 4000,
       });
     }
-  }, [nodes, edges, variables, pushPlotsToWorkbench, addResult, setViewMode, setActivePreviewTab]);
+  }, [nodes, edges, variables, pushPlotsToWorkbench, pushCurvesToWorkbench, addResult, setViewMode, setActivePreviewTab]);
 
   /* ── Auto-execute on graph / config change (debounced) ───────── */
   useEffect(() => {
     const id = setTimeout(() => {
-      try {
-        const ctx = {
-          variables: Object.fromEntries(
-            Object.entries(variables).map(([k, v]) => [k, v.value]),
-          ),
-        };
-        const executed = executePipeline(nodes, edges, ctx);
-        // Only update if results actually changed — otherwise the
-        // feedback loop (setNodes → effect → setNodes …) prevents the
-        // debounced localStorage save from ever firing.
-        setNodes((prev) => {
-          let changed = false;
-          const next = prev.map((n) => {
-            const updated = executed.find((e) => e.id === n.id);
-            if (!updated) return n;
-            const oldKey = resultKey(n.result) + '|' + (n.error ?? '');
-            const newKey = resultKey(updated.result) + '|' + (updated.error ?? '');
-            if (oldKey !== newKey) {
-              changed = true;
-              return {
-                ...n,
-                result: updated.result,
-                outputs: updated.outputs,
-                error: updated.error,
-              };
-            }
-            return n;
+      (async () => {
+        try {
+          const ctx = {
+            variables: Object.fromEntries(
+              Object.entries(variables).map(([k, v]) => [k, v.value]),
+            ),
+          };
+          const executed = await executePipeline(nodes, edges, ctx);
+          // Only update if results actually changed — otherwise the
+          // feedback loop (setNodes → effect → setNodes …) prevents the
+          // debounced localStorage save from ever firing.
+          setNodes((prev) => {
+            let changed = false;
+            const next = prev.map((n) => {
+              const updated = executed.find((e) => e.id === n.id);
+              if (!updated) return n;
+              const oldKey = resultKey(n.result) + '|' + (n.error ?? '');
+              const newKey = resultKey(updated.result) + '|' + (updated.error ?? '');
+              if (oldKey !== newKey) {
+                changed = true;
+                return {
+                  ...n,
+                  result: updated.result,
+                  outputs: updated.outputs,
+                  error: updated.error,
+                };
+              }
+              return n;
+            });
+            return changed ? next : prev;
           });
-          return changed ? next : prev;
-        });
-      } catch (err) {
-        // Auto-execute failures should be silent — the user didn't trigger
-        // them, and frequent toasts would be annoying. Log for debugging.
-        console.warn('[NodePipeline] auto-execute error:', err);
-      }
+          pushCurvesToWorkbench(executed);
+        } catch (err) {
+          // Auto-execute failures should be silent — the user didn't trigger
+          // them, and frequent toasts would be annoying. Log for debugging.
+          console.warn('[NodePipeline] auto-execute error:', err);
+        }
+      })().catch((err) => {
+        console.warn('[NodePipeline] auto-execute unhandled promise error:', err);
+      });
     }, 180);
     return () => clearTimeout(id);
-  }, [nodes, edges, variables]);
+  }, [nodes, edges, variables, pushCurvesToWorkbench]);
 
   /* ── Helper: pan viewport so a node becomes visible ─────────── */
   const ensureNodeVisible = useCallback(

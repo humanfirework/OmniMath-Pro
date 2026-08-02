@@ -12,6 +12,11 @@
 
 import type { PipelineNode, PipelineEdge } from './pipelineEngine';
 
+export interface TemplateOnLoad {
+  viewMode?: string;
+  activePreviewTab?: string;
+}
+
 export interface PipelineTemplate {
   /** Stable identifier (used as a React key in the dropdown). */
   id: string;
@@ -19,8 +24,18 @@ export interface PipelineTemplate {
   name: string;
   /** Short Chinese description shown under the name. */
   description: string;
+  /** i18n key for name (preferred over raw name when available). */
+  nameKey?: string;
+  /** i18n key for description (preferred over raw description when available). */
+  descriptionKey?: string;
+  /** Template category tag (e.g. 'vision', 'matrix'). */
+  category?: string;
+  /** Thumbnail accent color (hex). */
+  thumbnailColor?: string;
   nodes: PipelineNode[];
   edges: PipelineEdge[];
+  /** Optional auto-actions to trigger after template is loaded. */
+  onLoad?: TemplateOnLoad;
 }
 
 /* ------------------------------------------------------------------ *
@@ -161,12 +176,38 @@ const templateCompositeFunction: PipelineTemplate = {
   ],
 };
 
+const templateImageVectorizationQuickstart: PipelineTemplate = {
+  id: 'image-vectorization-quickstart',
+  name: '图像矢量化快速入门',
+  description: '从图片识别边缘 → 拟合贝塞尔曲线 → 叠加到 2D 画布。上传图片、点击运行，一键生成矢量轮廓。',
+  nameKey: 'templates.imageVectorization.name',
+  category: 'vision',
+  descriptionKey: 'templates.imageVectorization.description',
+  thumbnailColor: '#6366f1',
+  nodes: [
+    { id: 'img-in-1', type: 'image-input', position: { x: 80, y: 220 }, config: {} },
+    { id: 'fine-1', type: 'fine-outline', position: { x: 420, y: 220 }, config: { lowThreshold: 40, highThreshold: 120, mode: 'character', minArea: 20, smooth: 0.5 } },
+    { id: 'cf-1', type: 'curve-fit', position: { x: 760, y: 220 }, config: { maxError: 1.5, maxSegments: 8, smooth: 0.3, flipY: true, flipX: false, scale: 1 } },
+    { id: 'pc-1', type: 'plot-curves', position: { x: 1100, y: 220 }, config: { color: '#a78bfa', width: 2, flipX: false, flipY: true } },
+  ],
+  edges: [
+    edge('e1', 'img-in-1', 'image', 'fine-1', 'image'),
+    edge('e2', 'fine-1', 'contours', 'cf-1', 'contours'),
+    edge('e3', 'cf-1', 'curves', 'pc-1', 'curves'),
+  ],
+  onLoad: {
+    viewMode: 'pipeline',
+    activePreviewTab: 'plot2d',
+  },
+};
+
 export const PIPELINE_TEMPLATES: PipelineTemplate[] = [
   templateBasicArithmetic,
   templateTrigPlot,
   templateMatrixInverse,
   templateDerivative,
   templateCompositeFunction,
+  templateImageVectorizationQuickstart,
 ];
 
 /**

@@ -121,6 +121,7 @@ function deriveSmartY(
 
 export function Plot2DPanel() {
   const allPlots = useWorkbenchStore((s) => s.plots);
+  const curveSets = useWorkbenchStore((s) => s.curveSets);
   // ── 过滤掉 3D 曲面图 ──────────────────────────────────────────
   // surface3d 类型的图应在 Plot3DPanel 中渲染。之前没有过滤，导致
   // plot3d(sin(x)*cos(y)) 被当作 2D cartesian 图采样，而 sin(x)*cos(y)
@@ -397,8 +398,9 @@ export function Plot2DPanel() {
       showLegend,
       overlays,
       curveSpecs,
+      curveSets,
     }),
-    [plots, theme, effectiveX, effectiveY, handleViewChange, handleResetView, handleInsertExample, showLegend, overlays, curveSpecs],
+    [plots, theme, effectiveX, effectiveY, handleViewChange, handleResetView, handleInsertExample, showLegend, overlays, curveSpecs, curveSets],
   );
 
   /* ----------------------- Render ----------------------------------- */

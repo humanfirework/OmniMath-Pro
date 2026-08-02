@@ -18,6 +18,13 @@ import { math, symbolicMath, getEvalScope } from '@/lib/engine/mathInstance';
 import { scanVariables } from '@/lib/engine/variableScanner';
 import type { TranslationDict } from '@/lib/i18n';
 
+// 循环引用防护：pipelineEngine <-> registry/index.ts（registry import NodeTypeDef from here）
+// NodeType 在此文件内部放宽为 string，实际强约束由 registry/index.ts 的联合类型提供。
+export type NodeType = string;
+// 运行时 NODE_TYPES 注册表：从 registry 导入本地后再导出，保证文件内部可用
+import { NODE_TYPES as REGISTRY_NODE_TYPES } from './registry';
+export const NODE_TYPES: Record<string, NodeTypeDef> = REGISTRY_NODE_TYPES;
+
 // 打包器（webpack/Turbopack）在客户端 bundle 中支持 CommonJS require；
 // 这里仅补充类型声明，不改变运行时行为。
 declare const require: (id: string) => unknown;
@@ -26,7 +33,7 @@ declare const require: (id: string) => unknown;
  * Types
  * ------------------------------------------------------------------ */
 
-export type PortDataType = 'number' | 'expression' | 'matrix' | 'any' | 'plot';
+export type PortDataType = 'number' | 'expression' | 'matrix' | 'any' | 'plot' | 'curve' | 'curves' | 'image' | 'animation';
 
 export type NodeCategory =
   | 'input'
@@ -35,32 +42,18 @@ export type NodeCategory =
   | 'plot'
   | 'matrix'
   | 'calculus'
-  | 'output';
-
-export type NodeType =
-  | 'number-input'
-  | 'expression-input'
-  | 'variable'
-  | 'constant'
-  | 'arithmetic'
-  | 'function-apply'
-  | 'plot-output'
-  | 'matrix-input'
-  | 'matrix-op'
-  | 'matrix-multiply'
-  | 'matrix-decompose'
-  | 'derivative'
-  | 'integrate'
-  | 'symbolic-integrate'
-  | 'simplify'
-  | 'solve-equation'
-  | 'evaluate'
-  | 'display';
+  | 'output'
+  | 'mapping'
+  | 'vector'
+  | 'curve'
+  | 'statistics'
+  | 'logic'
+  | 'vision';
 
 export interface PortDef {
   id: string;
-  /** i18n key — resolved by the UI. */
-  labelKey: keyof TranslationDict;
+  /** i18n key — resolved by the UI (supports dot-separated nested paths). */
+  labelKey: string;
   type: PortDataType;
 }
 
@@ -92,8 +85,8 @@ export interface PipelineContext {
 export interface NodeTypeDef {
   type: NodeType;
   category: NodeCategory;
-  /** i18n key for the node title. */
-  labelKey: keyof TranslationDict;
+  /** i18n key for the node title (supports dot-separated nested paths). */
+  labelKey: string;
   /** Lucide icon name (string — UI maps to component). */
   icon: string;
   color: 'teal' | 'amber' | 'rose' | 'violet' | 'emerald' | 'orange' | 'cyan';
@@ -104,7 +97,7 @@ export interface NodeTypeDef {
     inputs: Record<string, unknown>,
     config: Record<string, unknown>,
     ctx: PipelineContext,
-  ) => Record<string, unknown>;
+  ) => Record<string, unknown> | Promise<Record<string, unknown>>;
 }
 
 /* ------------------------------------------------------------------ *
@@ -234,549 +227,12 @@ export function parseMatrixGrid(cells: { value: string }[][]): any {
 }
 
 /* ------------------------------------------------------------------ *
- * Node type registry
+ * Node type registry — LEGACY MONOLITHIC REMOVED
+ * Original inline NODE_TYPES object (approx. lines 231-770) removed
+ * and replaced by registry-based import at the top of this file:
+ *   export type { NodeType } from "./registry";
+ *   export { NODE_TYPES } from "./registry";
  * ------------------------------------------------------------------ */
-
-export const NODE_TYPES: Record<NodeType, NodeTypeDef> = {
-  /* ── Input category ─────────────────────────────────────────── */
-  'number-input': {
-    type: 'number-input',
-    category: 'input',
-    labelKey: 'npNumberInput',
-    icon: 'Hash',
-    color: 'teal',
-    inputs: [],
-    outputs: [{ id: 'value', labelKey: 'npPortValue', type: 'number' }],
-    defaultConfig: { value: 1, min: -10, max: 10, step: 0.1 },
-    execute: (_inputs, config) => {
-      const v = Number(config.value);
-      return { value: Number.isNaN(v) ? 0 : v };
-    },
-  },
-
-  'expression-input': {
-    type: 'expression-input',
-    category: 'input',
-    labelKey: 'npExpressionInput',
-    icon: 'Type',
-    color: 'teal',
-    inputs: [],
-    outputs: [{ id: 'value', labelKey: 'npPortExpr', type: 'expression' }],
-    defaultConfig: { expr: 'sin(x)' },
-    execute: (_inputs, config) => ({ value: String(config.expr ?? 'x') }),
-  },
-
-  variable: {
-    type: 'variable',
-    category: 'input',
-    labelKey: 'npVariable',
-    icon: 'Variable',
-    color: 'teal',
-    inputs: [],
-    outputs: [{ id: 'value', labelKey: 'npPortValue', type: 'any' }],
-    defaultConfig: { name: '' },
-    execute: (_inputs, config, ctx) => {
-      const name = String(config.name ?? '');
-      if (!name) return { value: 0 };
-      const v = ctx.variables[name];
-      return { value: v ?? 0 };
-    },
-  },
-
-  constant: {
-    type: 'constant',
-    category: 'input',
-    labelKey: 'npConstant',
-    icon: 'Hash',
-    color: 'teal',
-    inputs: [],
-    outputs: [{ id: 'value', labelKey: 'npPortValue', type: 'number' }],
-    defaultConfig: { name: 'pi' },
-    execute: (_inputs, config) => {
-      const name = String(config.name ?? 'pi');
-      const constants: Record<string, number> = {
-        pi: Math.PI,
-        e: Math.E,
-        tau: 2 * Math.PI,
-        phi: (1 + Math.sqrt(5)) / 2,
-        sqrt2: Math.SQRT2,
-      };
-      return { value: constants[name] ?? 0 };
-    },
-  },
-
-  /* ── Operation category ─────────────────────────────────────── */
-  arithmetic: {
-    type: 'arithmetic',
-    category: 'operation',
-    labelKey: 'npArithmetic',
-    icon: 'Plus',
-    color: 'amber',
-    inputs: [
-      { id: 'a', labelKey: 'npPortA', type: 'number' },
-      { id: 'b', labelKey: 'npPortB', type: 'number' },
-    ],
-    outputs: [{ id: 'result', labelKey: 'npPortResult', type: 'number' }],
-    defaultConfig: { op: '+' },
-    execute: (inputs, config) => {
-      const a = toNumber(inputs.a);
-      const b = toNumber(inputs.b);
-      const op = String(config.op ?? '+');
-      let r: number;
-      switch (op) {
-        case '+': r = a + b; break;
-        case '-': r = a - b; break;
-        case '*': r = a * b; break;
-        case '/': r = b === 0 ? NaN : a / b; break;
-        case '^': r = Math.pow(a, b); break;
-        case '%': r = a % b; break;
-        default: r = a + b;
-      }
-      return { result: r };
-    },
-  },
-
-  /* ── Function category ──────────────────────────────────────── */
-  'function-apply': {
-    type: 'function-apply',
-    category: 'function',
-    labelKey: 'npFunctionApply',
-    icon: 'FunctionSquare',
-    color: 'rose',
-    inputs: [{ id: 'x', labelKey: 'npPortX', type: 'number' }],
-    outputs: [{ id: 'result', labelKey: 'npPortResult', type: 'number' }],
-    defaultConfig: { fn: 'sin', customExpr: '' },
-    execute: (inputs, config) => {
-      const x = toNumber(inputs.x);
-      const fn = String(config.fn ?? 'sin');
-      let r: number;
-      if (fn === 'custom') {
-        const expr = String(config.customExpr ?? 'x');
-        r = Number(math.evaluate(expr, getEvalScope({ x })));
-      } else {
-        const fnMap: Record<string, (v: number) => number> = {
-          sin: Math.sin, cos: Math.cos, tan: Math.tan,
-          asin: Math.asin, acos: Math.acos, atan: Math.atan,
-          exp: Math.exp, log: (v) => Math.log10(v),
-          ln: (v) => Math.log(v), sqrt: Math.sqrt,
-          abs: Math.abs, cbrt: Math.cbrt, sinh: Math.sinh,
-          cosh: Math.cosh, tanh: Math.tanh, floor: Math.floor,
-          ceil: Math.ceil, round: Math.round,
-        };
-        const f = fnMap[fn] ?? Math.sin;
-        r = f(x);
-      }
-      return { result: r };
-    },
-  },
-
-  /* ── Plot category ──────────────────────────────────────────── */
-  'plot-output': {
-    type: 'plot-output',
-    category: 'plot',
-    labelKey: 'npPlotOutput',
-    icon: 'LineChart',
-    color: 'violet',
-    inputs: [{ id: 'expr', labelKey: 'npPortExpr', type: 'expression' }],
-    outputs: [{ id: 'plot', labelKey: 'npPortPlot', type: 'plot' }],
-    defaultConfig: { xMin: -10, xMax: 10 },
-    execute: (inputs, config) => {
-      const expr = toExprString(inputs.expr) || 'x';
-      const xMin = Number(config.xMin ?? -10);
-      const xMax = Number(config.xMax ?? 10);
-      // Sample the curve so the node footer can show a sparkline.
-      const samples: Array<[number, number]> = [];
-      const N = 60;
-      for (let i = 0; i <= N; i++) {
-        const xv = xMin + ((xMax - xMin) * i) / N;
-        try {
-          const yv = Number(math.evaluate(expr, getEvalScope({ x: xv })));
-          samples.push([xv, Number.isFinite(yv) ? yv : NaN]);
-        } catch {
-          samples.push([xv, NaN]);
-        }
-      }
-      return { plot: { expr, xMin, xMax, samples } };
-    },
-  },
-
-  /* ── Matrix category ────────────────────────────────────────── */
-  'matrix-input': {
-    type: 'matrix-input',
-    category: 'matrix',
-    labelKey: 'npMatrixInput',
-    icon: 'Grid3x3',
-    color: 'emerald',
-    inputs: [],
-    outputs: [{ id: 'matrix', labelKey: 'npPortMatrix', type: 'matrix' }],
-    defaultConfig: {
-      cells: [
-        [{ value: '1' }, { value: '2' }],
-        [{ value: '3' }, { value: '4' }],
-      ],
-      rows: 2,
-      cols: 2,
-    },
-    execute: (_inputs, config) => {
-      const cells = (config.cells as { value: string }[][]) ?? [[{ value: '0' }]];
-      return { matrix: parseMatrixGrid(cells) };
-    },
-  },
-
-  'matrix-op': {
-    type: 'matrix-op',
-    category: 'matrix',
-    labelKey: 'npMatrixOp',
-    icon: 'Calculator',
-    color: 'emerald',
-    inputs: [{ id: 'matrix', labelKey: 'npPortMatrix', type: 'matrix' }],
-    outputs: [{ id: 'result', labelKey: 'npPortResult', type: 'any' }],
-    defaultConfig: { op: 'inv' },
-    execute: (inputs, config) => {
-      const m = toMatrix(inputs.matrix);
-      const op = String(config.op ?? 'inv');
-      switch (op) {
-        case 'inv': return { result: math.inv(m) };
-        case 'transpose': return { result: math.transpose(m) };
-        case 'det': return { result: math.det(m) };
-        case 'trace': return { result: math.trace(m) };
-        case 'rank': return { result: matrixRank(m) };
-        case 'eigen': {
-          try {
-            const eigs = math.eigs(m);
-            return { result: { values: eigs.values, vectors: eigs.eigenvectors } };
-          } catch {
-            return { result: 'eigs failed' };
-          }
-        }
-        default: return { result: m };
-      }
-    },
-  },
-
-  'matrix-multiply': {
-    type: 'matrix-multiply',
-    category: 'matrix',
-    labelKey: 'npMatrixMultiply',
-    icon: 'Calculator',
-    color: 'emerald',
-    inputs: [
-      { id: 'a', labelKey: 'npPortA', type: 'matrix' },
-      { id: 'b', labelKey: 'npPortB', type: 'matrix' },
-    ],
-    outputs: [{ id: 'result', labelKey: 'npPortResult', type: 'matrix' }],
-    defaultConfig: {},
-    execute: (inputs) => {
-      const a = toMatrix(inputs.a);
-      const b = toMatrix(inputs.b);
-      return { result: math.multiply(a, b) };
-    },
-  },
-
-  'matrix-decompose': {
-    type: 'matrix-decompose',
-    category: 'matrix',
-    labelKey: 'npMatrixDecompose',
-    icon: 'Split',
-    color: 'emerald',
-    inputs: [{ id: 'matrix', labelKey: 'npPortMatrix', type: 'matrix' }],
-    outputs: [{ id: 'result', labelKey: 'npPortResult', type: 'any' }],
-    defaultConfig: { method: 'lu' },
-    execute: (inputs, config) => {
-      const m = toMatrix(inputs.matrix);
-      const method = String(config.method ?? 'lu');
-      try {
-        if (method === 'lu') {
-          // mathjs lu returns { L, U, P }.
-          const lu = math.lup(m) as unknown as { L: unknown; U: unknown; P: unknown };
-          return {
-            result: { L: lu.L, U: lu.U, P: lu.P },
-            latex: 'A = L \\cdot U',
-          };
-        }
-        if (method === 'qr') {
-          const qr = math.qr(m) as { Q: unknown; R: unknown };
-          return {
-            result: { Q: qr.Q, R: qr.R },
-            latex: 'A = Q \\cdot R',
-          };
-        }
-        if (method === 'eigen') {
-          const eigs = math.eigs(m) as { values: unknown; eigenvectors: unknown };
-          return {
-            result: { values: eigs.values, vectors: eigs.eigenvectors },
-            latex: 'A v = \\lambda v',
-          };
-        }
-        if (method === 'cholesky') {
-          // mathjs v15 没有内置 cholesky —— 使用本地实现（要求对称正定）。
-          const L = choleskyDecompose(m);
-          return { result: { L }, latex: 'A = L L^{T}' };
-        }
-        return { result: 'unknown method', latex: '' };
-      } catch (err) {
-        return { result: 'decompose failed', latex: '', error: (err as Error).message };
-      }
-    },
-  },
-
-  /* ── Calculus category ──────────────────────────────────────── */
-  derivative: {
-    type: 'derivative',
-    category: 'calculus',
-    labelKey: 'npDerivative',
-    icon: 'Sigma',
-    color: 'orange',
-    inputs: [{ id: 'expr', labelKey: 'npPortExpr', type: 'expression' }],
-    outputs: [{ id: 'result', labelKey: 'npPortResult', type: 'expression' }],
-    defaultConfig: { variable: 'x', showSteps: false },
-    execute: (inputs, config) => {
-      const expr = toExprString(inputs.expr) || 'x';
-      const variable = String(config.variable ?? 'x');
-      // 用无覆盖的 symbolicMath 求导：共享实例把 log 覆盖成 log10，
-      // 会让 derivative 产生的 ln 系数被误算（如 d/dx 2^x 系数 0.301 → 正确 0.693）。
-      const d = symbolicMath.derivative(expr, variable) as MathNode;
-      // Build a LaTeX representation so the node footer can render the
-      // result as a proper formula instead of a raw mathjs node string.
-      let latex = '';
-      try {
-        const exprTex = math.parse(expr).toTex({ implicit: 'hide' });
-        const derivTex = d.toTex({ implicit: 'hide' });
-        latex = `\\frac{d}{d${variable}}\\left[${exprTex}\\right] = ${derivTex}`;
-      } catch {
-        latex = '';
-      }
-      // When showSteps is true, also attach the original expression so
-      // downstream display nodes can show "f(x) → f'(x)".
-      return config.showSteps
-        ? { result: d, latex, original: expr }
-        : { result: d, latex };
-    },
-  },
-
-  integrate: {
-    type: 'integrate',
-    category: 'calculus',
-    labelKey: 'npIntegrate',
-    icon: 'Activity',
-    color: 'orange',
-    inputs: [{ id: 'expr', labelKey: 'npPortExpr', type: 'expression' }],
-    outputs: [{ id: 'result', labelKey: 'npPortResult', type: 'number' }],
-    defaultConfig: { a: -1, b: 1 },
-    execute: (inputs, config) => {
-      const expr = toExprString(inputs.expr) || 'x';
-      const a = Number(config.a ?? -1);
-      const b = Number(config.b ?? 1);
-      // Simpson's 1/3 rule with N=200 intervals.
-      const N = 200;
-      const h = (b - a) / N;
-      let sum = 0;
-      let numerical = NaN;
-      try {
-        const fa = Number(math.evaluate(expr, getEvalScope({ x: a })));
-        const fb = Number(math.evaluate(expr, getEvalScope({ x: b })));
-        sum = fa + fb;
-        for (let i = 1; i < N; i++) {
-          const xv = a + i * h;
-          const yv = Number(math.evaluate(expr, getEvalScope({ x: xv })));
-          sum += (i % 2 === 0 ? 2 : 4) * yv;
-        }
-        numerical = (sum * h) / 3;
-      } catch {
-        numerical = NaN;
-      }
-      // Build LaTeX: ∫_a^b expr dx ≈ numerical
-      let latex = '';
-      try {
-        const exprTex = math.parse(expr).toTex({ implicit: 'hide' });
-        const aTex = formatNumTex(a);
-        const bTex = formatNumTex(b);
-        const valTex = formatNumTex(numerical);
-        latex = `\\int_{${aTex}}^{${bTex}} ${exprTex} \\, d${String(config.variable ?? 'x')} \\approx ${valTex}`;
-      } catch {
-        latex = '';
-      }
-      return { result: numerical, latex };
-    },
-  },
-
-  'symbolic-integrate': {
-    type: 'symbolic-integrate',
-    category: 'calculus',
-    labelKey: 'npSymbolicIntegrate',
-    icon: 'Activity',
-    color: 'orange',
-    inputs: [{ id: 'expr', labelKey: 'npPortExpr', type: 'expression' }],
-    outputs: [{ id: 'result', labelKey: 'npPortResult', type: 'expression' }],
-    defaultConfig: { variable: 'x' },
-    execute: (inputs, config) => {
-      const expr = toExprString(inputs.expr) || 'x';
-      const variable = String(config.variable ?? 'x');
-      // Use algebrite for symbolic integration (already a dependency).
-      // algebrite.integral returns the antiderivative as a string.
-      let integralStr = '';
-      let latex = '';
-      try {
-        // Lazy import to avoid loading algebrite until first use.
-         
-        // algebrite 运行时通过动态循环导出 integral，allowJs 推断不出该属性，断言补充。
-        const algebrite = require('algebrite') as typeof import('algebrite') & {
-          integral: (expr: string, variable: string) => unknown;
-        };
-        integralStr = String(algebrite.integral(expr, variable));
-        // Convert to LaTeX via mathjs parse (algebrite's toLatex can be flaky).
-        try {
-          const tex = math.parse(integralStr).toTex({ implicit: 'hide' });
-          const exprTex = math.parse(expr).toTex({ implicit: 'hide' });
-          latex = `\\int ${exprTex} \\, d${variable} = ${tex} + C`;
-        } catch {
-          latex = `\\int ${expr} \\, d${variable} = ${integralStr} + C`;
-        }
-      } catch (err) {
-        return { result: 'integral failed', latex: '' , error: (err as Error).message };
-      }
-      return { result: integralStr, latex };
-    },
-  },
-
-  simplify: {
-    type: 'simplify',
-    category: 'calculus',
-    labelKey: 'npSimplify',
-    icon: 'Sigma',
-    color: 'orange',
-    inputs: [{ id: 'expr', labelKey: 'npPortExpr', type: 'expression' }],
-    outputs: [{ id: 'result', labelKey: 'npPortResult', type: 'expression' }],
-    defaultConfig: {},
-    execute: (inputs) => {
-      const expr = toExprString(inputs.expr) || 'x';
-      try {
-        const node = math.simplify(expr);
-        const latex = node.toTex({ implicit: 'hide' });
-        return { result: node, latex };
-      } catch (err) {
-        return { result: expr, latex: '', error: (err as Error).message };
-      }
-    },
-  },
-
-  'solve-equation': {
-    type: 'solve-equation',
-    category: 'calculus',
-    labelKey: 'npSolveEquation',
-    icon: 'Equal',
-    color: 'orange',
-    inputs: [
-      { id: 'expr', labelKey: 'npPortExpr', type: 'expression' },
-    ],
-    outputs: [{ id: 'result', labelKey: 'npPortResult', type: 'any' }],
-    defaultConfig: { variable: 'x' },
-    execute: (inputs, config) => {
-      // Expects an equation like "x^2 - 4 = 0" or expression "x^2 - 4"
-      // (assumed = 0). Roots are found numerically: sign-change scan
-      // over [-20, 20] + bisection refinement.
-      const expr = toExprString(inputs.expr) || 'x';
-      const variable = String(config.variable ?? 'x');
-      try {
-        // 先把等式移项成单边表达式 (lhs) - (rhs)：math.parse 把 '='
-        // 视为赋值运算符，直接解析 "x^2 - 4 = 0" 会抛
-        // "Invalid left hand side of assignment operator"。
-        const eqIdx = expr.indexOf('=');
-        const body =
-          eqIdx >= 0
-            ? `(${expr.slice(0, eqIdx).trim()}) - (${expr.slice(eqIdx + 1).trim()})`
-            : expr;
-        const node = math.parse(body);
-        // mathjs v15 的 math.evaluate 只接受字符串，MathNode 必须先
-        // compile 再以 scope 求值。
-        const code = node.compile();
-        const f = (xv: number) =>
-          Number(code.evaluate(getEvalScope({ [variable]: xv })));
-        const roots: number[] = [];
-        // Sample 200 points in [-20, 20], look for sign changes.
-        const N = 200;
-        const lo = -20;
-        const hi = 20;
-        const step = (hi - lo) / N;
-        let prev = f(lo);
-        // 区间起点恰好是根时直接记录（严格符号变化检测不到 0 乘积）
-        if (Number.isFinite(prev) && Math.abs(prev) < 1e-9) {
-          roots.push(parseFloat(lo.toPrecision(8)));
-        }
-        for (let i = 1; i <= N; i++) {
-          const xv = lo + i * step;
-          const cur = f(xv);
-          if (Number.isFinite(cur) && Math.abs(cur) < 1e-9) {
-            // 采样点恰好落在根上：prev * cur === 0，走不到下方的
-            // 严格符号变化分支，这里直接记录。
-            if (!roots.some((r) => Math.abs(r - xv) < 1e-6)) {
-              roots.push(parseFloat(xv.toPrecision(8)));
-            }
-          } else if (Number.isFinite(prev) && Number.isFinite(cur) && prev * cur < 0) {
-            // Bisection refinement between xv - step and xv.
-            let a2 = xv - step;
-            let b2 = xv;
-            for (let k = 0; k < 50; k++) {
-              const m = (a2 + b2) / 2;
-              const fm = f(m);
-              if (Math.abs(fm) < 1e-9) { a2 = m; b2 = m; break; }
-              if (f(a2) * fm < 0) b2 = m; else a2 = m;
-            }
-            const root = (a2 + b2) / 2;
-            if (!roots.some((r) => Math.abs(r - root) < 1e-6)) {
-              roots.push(parseFloat(root.toPrecision(8)));
-            }
-          }
-          prev = cur;
-        }
-        const rootLatex = roots.map((r) => math.format(r)).join(', ');
-        const latex = `${variable} \\in \\{ ${roots
-          .map((r) => formatNumTex(r))
-          .join(', ')} \\}`;
-        return { result: roots.length > 0 ? rootLatex : 'no real roots', latex, roots };
-      } catch (err) {
-        return { result: 'solve failed', latex: '', error: (err as Error).message };
-      }
-    },
-  },
-
-  evaluate: {
-    type: 'evaluate',
-    category: 'calculus',
-    labelKey: 'npEvaluate',
-    icon: 'Equal',
-    color: 'orange',
-    inputs: [
-      { id: 'expr', labelKey: 'npPortExpr', type: 'expression' },
-      { id: 'x', labelKey: 'npPortX', type: 'number' },
-    ],
-    outputs: [{ id: 'result', labelKey: 'npPortResult', type: 'number' }],
-    defaultConfig: {},
-    execute: (inputs) => {
-      const expr = toExprString(inputs.expr) || 'x';
-      const x = toNumber(inputs.x);
-      try {
-        const r = Number(math.evaluate(expr, getEvalScope({ x })));
-        return { result: r };
-      } catch {
-        return { result: NaN };
-      }
-    },
-  },
-
-  /* ── Output category ────────────────────────────────────────── */
-  display: {
-    type: 'display',
-    category: 'output',
-    labelKey: 'npDisplay',
-    icon: 'Monitor',
-    color: 'cyan',
-    inputs: [{ id: 'value', labelKey: 'npPortValue', type: 'any' }],
-    outputs: [],
-    defaultConfig: {},
-    execute: (inputs) => ({ value: inputs.value }),
-  },
-};
 
 /* ------------------------------------------------------------------ *
  * Compatibility check — can `from` port connect to `to` port?
@@ -966,11 +422,11 @@ function matrixRank(m: any): number {
  * populated. Nodes involved in cycles are marked with an error and
  * skipped.
  */
-export function executePipeline(
+export async function executePipeline(
   nodes: PipelineNode[],
   edges: PipelineEdge[],
   ctx: PipelineContext,
-): PipelineNode[] {
+): Promise<PipelineNode[]> {
   const byId = new Map<string, PipelineNode>();
   for (const n of nodes) byId.set(n.id, { ...n });
 
@@ -1045,13 +501,13 @@ export function executePipeline(
       }
     }
     try {
-      const out = def.execute(ins, node.config, ctx);
+      const out = await def.execute(ins, node.config, ctx);
       outputs.set(id, out);
       node.outputs = out;
       node.error = undefined;
       // Primary result = first output value (or for display, the input).
       const firstOutId = def.outputs[0]?.id;
-      node.result = firstOutId ? out[firstOutId] : out.value ?? ins.value;
+      node.result = firstOutId ? out[firstOutId] : (out as any).value ?? ins.value;
     } catch (err) {
       node.result = null;
       node.outputs = {};
@@ -1203,4 +659,14 @@ export function exportPipelineToScript(
     }
   }
   return lines.join('\n');
+}
+
+
+/* ------------------------------------------------------------------ *
+ * Legacy / unknown node compatibility — discard unknown types
+ * ------------------------------------------------------------------ */
+export function sanitizeNodeType(type: string): string | null {
+  if (type in NODE_TYPES) return type;
+  console.warn(`[pipelineEngine] Discarding unknown node type: "${type}"`);
+  return null;
 }
