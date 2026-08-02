@@ -15,22 +15,20 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Setup Node.js
-        uses: actions/setup-node@v4
-        with:
-          node-version: 22
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@v2
 
       - name: Install dependencies
-        run: npm ci --no-audit --no-fund
+        run: bun install --frozen-lockfile
 
       - name: Type check
-        run: npx tsc --noEmit
+        run: bunx tsc --noEmit
 
       - name: Lint
-        run: npx eslint . --max-warnings=0
+        run: bunx eslint . --max-warnings=0
 
       - name: Run tests
-        run: npx vitest run
+        run: bunx vitest run
 
   publish-tauri:
     needs: test
@@ -66,7 +64,7 @@ jobs:
 
       - name: Install frontend dependencies
         # 锁定依赖保证可复现性（package-lock.json 已在仓库中）
-        run: npm ci --no-audit --no-fund
+        run: npm install --no-audit --no-fund
 
       - name: Install Rust stable
         uses: dtolnay/rust-toolchain@stable
