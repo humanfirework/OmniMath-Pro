@@ -12,44 +12,51 @@ fn compute_advanced(expr: String) -> String {
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
-    let mut webview_builder = tauri::WebviewBuilder::new();
-
     // On Windows, some WebView2 / GPU driver combinations ship with
     // WebGL2 (and sometimes even WebGL1) disabled at the ANGLE layer by
-    // default, which is the #1 reason users report "my local 3D doesn't
+    // default — this is the #1 reason users report "my local 3D doesn't
     // display but localhost works fine" (the browser ships with its own
     // ANGLE build; WebView2 defers to whatever the OS ships).
     //
-    // `additional_browser_args` is accepted by every WebView builder
-    // variant on every platform; on non-Windows WebKitGTK / WKWebView
-    // they are safely ignored.
+    // We configure the GPU flags via the official WebView2 environment
+    // variable `WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS` instead of the
+    // `tauri::WebviewBuilder` unstable API.  This env var is read by
+    // WebView2 itself on process start; setting it before `Builder::run`
+    // guarantees every webview picks it up.  On non-Windows platforms it
+    // is a harmless no-op.
     //
     // Keys:
-    //   --enable-webgl2-compute-context   : unblocks WebGL2 compute (R3F uses this)
-    //   --enable-unsafe-webgpu            : forward-proof for a future WebGPU backend
-    //   --use-gl=angle                    : forces ANGLE instead of the native D3D
-    //                                        frontend, which is what Chrome uses and
-    //                                        therefore has the widest Three.js support
-    //   --use-angle=default               : allow ANGLE to pick D3D11/GL backend
-    //   --enable-gpu-rasterization        : 2D Plot2DCanvas rasterizes ~3× faster
-    //   --enable-features=VaapiVideoDecode : not used here, but harmless
+    //   --enable-webgl2-compute-context : unblocks WebGL2 compute (R3F uses this)
+    //   --enable-unsafe-webgpu          : forward-proof for a future WebGPU backend
+    //   --use-gl=angle                  : forces ANGLE (Chrome's default, widest
+    //                                      Three.js compatibility)
+    //   --use-angle=default             : let ANGLE pick D3D11/GL backend
+    //   --enable-gpu-rasterization      : 2D Plot2DCanvas rasterizes ~3× faster
+    //   --enable-zero-copy              : avoid CPU upload copies when possible
+    //   --ignore-gpu-blocklist          : bypass driver-deny-lists that ship with
+    //                                      WebView2 and can silently drop WebGL2
     #[cfg(target_os = "windows")]
     {
-        webview_builder = webview_builder.additional_browser_args(
-            "--enable-webgl2-compute-context \
-             --enable-unsafe-webgpu \
-             --use-gl=angle \
-             --use-angle=default \
-             --enable-gpu-rasterization \
-             --enable-zero-copy \
-             --ignore-gpu-blocklist",
-        );
+        const ARGS: &str = "\
+            --enable-webgl2-compute-context \
+            --enable-unsafe-webgpu \
+            --use-gl=angle \
+            --use-angle=default \
+            --enable-gpu-rasterization \
+            --enable-zero-copy \
+            --ignore-gpu-blocklist";
+        // Append to any user-provided flags rather than clobbering them.
+        let existing = std::env::var("WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS").unwrap_or_default();
+        if existing.trim().is_empty() {
+            std::env::set_var("WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS", ARGS);
+        } else {
+            std::env::set_var("WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS", format!("{} {}", existing, ARGS));
+        }
     }
 
     tauri::Builder::default()
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_fs::init())
-        .webview(webview_builder)
         .setup(|app| {
             if cfg!(debug_assertions) {
                 app.handle().plugin(
