@@ -41,6 +41,8 @@
   "exclude": [
     "node_modules",
     "screenshots",
-    "scripts"
+    "scripts",
+    "out",
+    ".next"
   ]
 }
