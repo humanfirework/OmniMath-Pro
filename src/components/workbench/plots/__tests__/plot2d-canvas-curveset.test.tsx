@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach, vi } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import React from 'react';
 import { render, act, waitFor } from '@testing-library/react';
 import '@testing-library/jest-dom';
@@ -143,7 +143,7 @@ describe('Plot2DPanel curveSets render (Task 5 + 9)', () => {
       s.clearPlots();
       s.addCurveSet({ curves, width: W, height: H, color: '#f472b6', strokeWidth: 3, flipY: true, flipX: false });
       s.addCurveSet({ curves: [curves[1]], width: W, height: H, color: '#22d3ee', strokeWidth: 2, flipY: false, flipX: false });
-      s.addPlot({ type: 'function' as any, expr: 'sin(pi*x)' as any, expression: 'sin(pi*x)', domain: [-1, 1] as any, plotType: 'cartesian', xRange: [-1, 1], yRange: [-1, 1], color: '#94a3b8', visible: true });
+      s.addPlot({ expression: 'sin(pi*x)', plotType: 'cartesian', xRange: [-1, 1], yRange: [-1, 1], color: '#94a3b8', visible: true });
     });
 
     let container: HTMLElement;

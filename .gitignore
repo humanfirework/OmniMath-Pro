@@ -10,6 +10,8 @@ node_modules
 !.yarn/releases
 !.yarn/versions
 .pnpm-store/
+pnpm-lock.yaml
+bun.lock
 
 # testing
 /coverage
@@ -92,3 +94,12 @@ worklog.md
 
 # 参考文档与截图（不入库）
 /docs/
+
+# 可视化报告（本地审查用，不入库）
+/_可视化报告/
+
+# e2e 测试输出
+/.e2e-out/
+
+# 临时脚本
+/_tmp_*
