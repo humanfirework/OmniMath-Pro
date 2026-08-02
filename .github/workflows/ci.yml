@@ -10,17 +10,19 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Setup Bun
-        uses: oven-sh/setup-bun@v2
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
 
       - name: Install dependencies
-        run: bun install --frozen-lockfile
+        run: npm install --no-audit --no-fund
 
       - name: Type check
-        run: bunx tsc --noEmit
+        run: npx tsc --noEmit
 
       - name: Lint
-        run: bunx eslint . --max-warnings=0
+        run: npx eslint . --max-warnings=0
 
       - name: Run tests
-        run: bunx vitest run
+        run: npx vitest run
