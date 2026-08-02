@@ -1,0 +1,124 @@
+{
+  "black_count": 0,
+  "ok_count": 13,
+  "black_list": [],
+  "ok_list": [
+    {
+      "file": "e2e-shot-01-workbench.png",
+      "w": 1280,
+      "h": 633,
+      "mean": 26.0,
+      "std": 0.0,
+      "size_kb": 3.7,
+      "is_black": false
+    },
+    {
+      "file": "e2e-shot-02-pipeline-empty.png",
+      "w": 1280,
+      "h": 633,
+      "mean": 26.0,
+      "std": 0.0,
+      "size_kb": 3.7,
+      "is_black": false
+    },
+    {
+      "file": "e2e-shot-03-pipeline-view.png",
+      "w": 1280,
+      "h": 633,
+      "mean": 26.0,
+      "std": 0.0,
+      "size_kb": 3.7,
+      "is_black": false
+    },
+    {
+      "file": "e2e-shot-04-after-plot.png",
+      "w": 1280,
+      "h": 633,
+      "mean": 26.0,
+      "std": 0.0,
+      "size_kb": 3.7,
+      "is_black": false
+    },
+    {
+      "file": "e2e-shot-05-plot-tab-clicked.png",
+      "w": 1280,
+      "h": 633,
+      "mean": 26.0,
+      "std": 0.0,
+      "size_kb": 3.7,
+      "is_black": false
+    },
+    {
+      "file": "e2e-shot-06-pipeline-activitybar.png",
+      "w": 1280,
+      "h": 633,
+      "mean": 26.0,
+      "std": 0.0,
+      "size_kb": 3.7,
+      "is_black": false
+    },
+    {
+      "file": "e2e-shot-07-curves-synthetic.png",
+      "w": 541,
+      "h": 702,
+      "mean": 26.0,
+      "std": 0.0,
+      "size_kb": 2.5,
+      "is_black": false
+    },
+    {
+      "file": "e2e-shot-08-plot2d-curves.png",
+      "w": 541,
+      "h": 702,
+      "mean": 26.0,
+      "std": 0.0,
+      "size_kb": 2.5,
+      "is_black": false
+    },
+    {
+      "file": "e2e-shot-10-final.png",
+      "w": 541,
+      "h": 702,
+      "mean": 26.0,
+      "std": 0.0,
+      "size_kb": 2.5,
+      "is_black": false
+    },
+    {
+      "file": "e2e-shot-11-plot2d-tab-click-css-selector.png",
+      "w": 541,
+      "h": 702,
+      "mean": 26.0,
+      "std": 0.0,
+      "size_kb": 2.5,
+      "is_black": false
+    },
+    {
+      "file": "e2e-shot-12-plot2d-after-store-action.png",
+      "w": 541,
+      "h": 702,
+      "mean": 26.0,
+      "std": 0.0,
+      "size_kb": 2.5,
+      "is_black": false
+    },
+    {
+      "file": "e2e-shot-13-plot2d-after-native-click.png",
+      "w": 541,
+      "h": 702,
+      "mean": 26.0,
+      "std": 0.0,
+      "size_kb": 2.5,
+      "is_black": false
+    },
+    {
+      "file": "e2e-shot-14-viewmode-cycle.png",
+      "w": 541,
+      "h": 702,
+      "mean": 26.0,
+      "std": 0.0,
+      "size_kb": 2.5,
+      "is_black": false
+    }
+  ]
+}
