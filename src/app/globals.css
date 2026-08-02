@@ -50,70 +50,27 @@
      • Reset box-sizing on the entire CM subtree to content-box.
      • Strip any accidental Tailwind-injected borders from CM internals.
    ============================================================ */
+/* ============================================================
+   CodeMirror 6 — Box-model reset scoped to editor subtree
+   ------------------------------------------------------------
+   Tailwind v4 preflight sets `* { box-sizing: border-box }`
+   globally, but CodeMirror 6's internal geometry engine assumes
+   content-box.  We reset the editor subtree to content-box here,
+   then let EditorView.theme() (in CodeEditor.tsx) handle all
+   layout/flex/typography via the theme compartment — that is the
+   SINGLE source of truth for CodeMirror styling.
+
+   IMPORTANT: Do NOT add `.cm-scroller`, `.cm-gutters`, `.cm-content`,
+   `.cm-line`, `.cm-gutterElement` overrides here.  They are already
+   defined in the EditorView.theme() and adding copies with !important
+   creates CSS conflicts that cause line-number misalignment in
+   Tauri WebView2 (the "行号对不上" bug).
+   ============================================================ */
 .cm-editor,
 .cm-editor *,
 .cm-editor *::before,
 .cm-editor *::after {
   box-sizing: content-box;
-}
-
-.cm-editor .cm-scroller {
-  display: flex !important;
-  flex-direction: row !important;
-  align-items: flex-start;
-  overflow: auto;
-  width: 100%;
-}
-
-.cm-editor .cm-gutters {
-  flex: 0 0 auto !important;
-  flex-shrink: 0 !important;
-  display: flex !important;
-  flex-direction: row !important;
-  margin: 0;
-  border-top: none !important;
-  border-left: none !important;
-  border-bottom: none !important;
-  background-color: transparent;
-}
-
-.cm-editor .cm-gutter {
-  flex: 0 0 auto;
-  border: none !important;
-}
-
-.cm-editor .cm-gutter.cm-lineNumbers {
-  min-width: 48px;
-}
-
-.cm-editor .cm-gutterElement {
-  border: none !important;
-  padding-left: 12px;
-  padding-right: 8px;
-  min-width: 36px;
-  text-align: right;
-}
-
-.cm-editor .cm-content {
-  flex: 1 1 auto !important;
-  min-width: 0;
-  margin: 0;
-  border: none !important;
-  padding: 4px 16px 4px 12px;
-}
-
-.cm-editor .cm-sizer,
-.cm-editor .cm-line,
-.cm-editor .cm-layer,
-.cm-editor .cm-cursorLayer,
-.cm-editor .cm-selectionLayer,
-.cm-editor .cm-background {
-  border: none !important;
-  box-sizing: content-box;
-}
-
-.cm-editor .cm-sizer {
-  display: block;
 }
 
 /* Container wrapper used by the React host — must never inject flex

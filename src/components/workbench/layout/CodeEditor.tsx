@@ -189,6 +189,10 @@ export function CodeEditor({
       boxSizing: 'content-box',
       border: 'none',
       padding: '0 2px',
+      // 关键修复：显式 line-height 与 font-size，防止 Tauri WebView2 环境
+      // 下 globals.css 的 !important 规则干扰继承链，导致行号与代码行竖向错位。
+      lineHeight: '1.5',
+      fontSize: `${fontSize}px`,
     },
     '.cm-cursor': { borderLeftColor: 'var(--primary, #2dd4bf)' },
     '.cm-selectionBackground, ::selection': { backgroundColor: 'rgba(45, 212, 191, 0.2)' },
