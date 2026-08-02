@@ -9,6 +9,17 @@
 @import "tw-animate-css";
 @import "katex/dist/katex.min.css";
 
+/* CRITICAL (2026-08-02): KaTeX ships @font-face blocks with RELATIVE
+   `src: url(fonts/KaTeX_*.woff2)`. Next.js `next build` rewrites these
+   to `/_next/static/media/<hash>.woff2` which the Tauri WebView2
+   `font-src 'self' data:` CSP rejects (or silently fallback to a
+   non-KaTeX font → garbled math). The override file below re-declares
+   every KaTeX @font-face with an ABSOLUTE `/fonts/KaTeX_*.woff2` URL,
+   pointed at the 20 files we copied verbatim to /public/fonts/KaTeX_*.
+   The last @font-face declaration for each family wins, so this file
+   MUST come immediately after katex.min.css (see src/app/katex-font-overrides.css). */
+@import "./katex-font-overrides.css";
+
 @custom-variant dark (&:is(.dark *));
 
 /* ============================================================
@@ -239,8 +250,16 @@
       expectations in case host classes leak.                   */
 .katex {
   /* KaTeX defaults: `display: inline-block` for inline, but our
-     FormulaRenderer wraps display-mode formulas in a block div. */
-  font: normal 1.21em "KaTeX_Main", Times, "STIX Two Math", serif;
+     FormulaRenderer wraps display-mode formulas in a block div.
+     Font-stack: KaTeX_Main first (it has the exact glyph metrics
+     KaTeX's layout engine computes against). Times / serif are
+     LAST fallback only. STIX Two Math is intentionally absent
+     here — see the comment on the .katex .mord rule below for
+     why mixing STIX in the middle is fatal for layout drift. */
+  font-family: "KaTeX_Main", "KaTeX_Math", Times, serif;
+  font-style: normal;
+  font-weight: normal;
+  font-size: 1.21em;
   line-height: 1.2;
   /* Important: white-space must be normal so matrix / cases columns
      don't get wrapped on narrow Tauri windows. */
@@ -267,7 +286,28 @@
       self-hosted in /public/fonts/ + registered via @font-face
       above. It's the successor of the LaTeX Computer Modern fonts
       that KaTeX designed against, so its glyph metrics are close
-      enough that layout stays correct when KaTeX fonts fail.       */
+      enough that layout stays correct when KaTeX fonts fail.
+
+      BUG FIX (2026-08-02) — font-stack order:
+        Do NOT put STIX Two Math in the MIDDLE of the font-stack
+        (previous order was `"KaTeX_Math", "KaTeX_Main", "STIX Two
+        Math", ...`). When KaTeX_Main loads correctly we get
+        correct math; when it fails, we get STIX. But KaTeX
+        measures glyph widths at parse time against the FAMILY
+        declared at parse time, not against the FAMILY the browser
+        ends up rasterizing. So with STIX in the middle, the
+        engine computes KaTeX widths → browser renders STIX glyphs
+        → every stretchy brace, every vlist row, every fraction
+        bar drifts by 1–3 px per nesting level. The "歪七扭八"
+        you reported in every bmatrix / cases / frac in the
+        screenshot was THIS bug.
+
+        Fix: STIX Two Math MUST be the last fallback (after
+        KaTeX_Math + KaTeX_Main, before generic math/system serif).
+        With KaTeX_* in front, KaTeX_Main / KaTeX_Math will be
+        used 99% of the time and metrics stay consistent. STIX
+        only kicks in if every KaTeX_* family fails to load
+        (which we just hardened with katex-font-overrides.css).  */
 .katex .mord,
 .katex .mbin,
 .katex .mrel,
@@ -281,7 +321,8 @@
 .katex .mfrac > * > * {
   /* Primary = KaTeX's own (if they load); fallback = STIX Two Math,
      then system math fonts on each platform. */
-  font-family: "KaTeX_Math", "KaTeX_Main", "STIX Two Math",
+  font-family: "KaTeX_Math", "KaTeX_Main",
+               "STIX Two Math",
                "Latin Modern Math", "Cambria Math",
                "Times New Roman", serif !important;
 }

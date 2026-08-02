@@ -1,0 +1,217 @@
+/* ============================================================
+   KaTeX Font URL Override — fix the "desktop = garbled math" bug
+
+   ROOT CAUSE (2026-08-02):
+     `katex/dist/katex.min.css` declares `@font-face` blocks with
+     RELATIVE `src: url(fonts/KaTeX_*.woff2)`. On `next dev`
+     (http://localhost:3000) Next serves them out of
+     `node_modules/katex/dist/fonts/`, so the fonts load — the
+     localhost preview looks (mostly) fine.
+
+     But `next build` rewrites these relative URLs to
+     `/_next/static/media/<hash>.woff2`. When Tauri's WebView2
+     loads the shell as `file:///…/out/index.html` with CSP
+     `font-src 'self' data:` the rewrites can fail to resolve,
+     and even when they do resolve the browser computes glyph
+     metrics against the system fallback (Cambria Math on
+     Windows, DejaVu Math on Linux, …) which has completely
+     different advance widths. The result is exactly the
+     "歪七扭八" the user reported:
+       • matrix columns walking right
+       • fraction bar mis-aligned with numerator/denominator
+       • \Biggl( brackets visibly split
+       • \sum limits drift from baseline
+
+   FIX (Layer 1 — file-system):
+     `node_modules/katex/dist/fonts/` was copied verbatim to
+     `/public/fonts/KaTeX_*.woff2` (commit message documents the
+     20 woff2 files). This file is reachable at
+     `/fonts/KaTeX_*.woff2` in BOTH the Next dev server and the
+     static `out/` build.
+
+   FIX (Layer 2 — CSS, this file):
+     Re-declare every KaTeX @font-face block with an absolute
+     URL pointing to /fonts/KaTeX_*.woff2. By the time
+     `@import "katex/dist/katex.min.css"` is parsed, these
+     rules will follow it and *replace* the original
+     declarations via the standard CSS @font-face cascade (the
+     last-declared @font-face for the same `font-family` +
+     `font-weight` + `font-style` tuple wins).
+
+   FIX (Layer 3 — globals.css .katex font-stack):
+     Ensure STIX Two Math is the LAST resort fallback, not the
+     primary. The KaTeX rendering engine measures glyph widths
+     at parse time against the ACTUAL font that ends up being
+     drawn; mixing KaTeX glyph metrics with non-KaTeX glyphs
+     causes width drift. We therefore keep KaTeX_* families
+     first and only use STIX Two Math as the last fallback.
+
+   This file MUST be imported AFTER `katex/dist/katex.min.css`
+   in `src/app/globals.css` (see comment block there). It is
+   safe to load in both Next dev and the Tauri production shell
+   because `/fonts/KaTeX_*` is a relative path that resolves
+   identically in both environments.
+
+   Note: KaTeX 0.17+ only ships woff2 in /public/fonts/KaTeX_*
+   (woff/ttf removed for size). The previous katex.min.css
+   fallback chain url(...woff) url(...ttf) is now a no-op
+   since those files don't exist in our static export.
+   ============================================================ */
+
+/* ---------- KaTeX_Main ---------- */
+@font-face {
+  font-family: "KaTeX_Main";
+  font-style: normal;
+  font-weight: 400;
+  font-display: block;
+  src: url("/fonts/KaTeX_Main-Regular.woff2") format("woff2");
+}
+@font-face {
+  font-family: "KaTeX_Main";
+  font-style: italic;
+  font-weight: 400;
+  font-display: block;
+  src: url("/fonts/KaTeX_Main-Italic.woff2") format("woff2");
+}
+@font-face {
+  font-family: "KaTeX_Main";
+  font-style: normal;
+  font-weight: 700;
+  font-display: block;
+  src: url("/fonts/KaTeX_Main-Bold.woff2") format("woff2");
+}
+@font-face {
+  font-family: "KaTeX_Main";
+  font-style: italic;
+  font-weight: 700;
+  font-display: block;
+  src: url("/fonts/KaTeX_Main-BoldItalic.woff2") format("woff2");
+}
+
+/* ---------- KaTeX_Math ---------- */
+@font-face {
+  font-family: "KaTeX_Math";
+  font-style: italic;
+  font-weight: 400;
+  font-display: block;
+  src: url("/fonts/KaTeX_Math-Italic.woff2") format("woff2");
+}
+@font-face {
+  font-family: "KaTeX_Math";
+  font-style: italic;
+  font-weight: 700;
+  font-display: block;
+  src: url("/fonts/KaTeX_Math-BoldItalic.woff2") format("woff2");
+}
+
+/* ---------- KaTeX_AMS ---------- */
+@font-face {
+  font-family: "KaTeX_AMS";
+  font-style: normal;
+  font-weight: 400;
+  font-display: block;
+  src: url("/fonts/KaTeX_AMS-Regular.woff2") format("woff2");
+}
+
+/* ---------- KaTeX_Caligraphic ---------- */
+@font-face {
+  font-family: "KaTeX_Caligraphic";
+  font-style: normal;
+  font-weight: 400;
+  font-display: block;
+  src: url("/fonts/KaTeX_Caligraphic-Regular.woff2") format("woff2");
+}
+@font-face {
+  font-family: "KaTeX_Caligraphic";
+  font-style: normal;
+  font-weight: 700;
+  font-display: block;
+  src: url("/fonts/KaTeX_Caligraphic-Bold.woff2") format("woff2");
+}
+
+/* ---------- KaTeX_Fraktur ---------- */
+@font-face {
+  font-family: "KaTeX_Fraktur";
+  font-style: normal;
+  font-weight: 400;
+  font-display: block;
+  src: url("/fonts/KaTeX_Fraktur-Regular.woff2") format("woff2");
+}
+@font-face {
+  font-family: "KaTeX_Fraktur";
+  font-style: normal;
+  font-weight: 700;
+  font-display: block;
+  src: url("/fonts/KaTeX_Fraktur-Bold.woff2") format("woff2");
+}
+
+/* ---------- KaTeX_SansSerif ---------- */
+@font-face {
+  font-family: "KaTeX_SansSerif";
+  font-style: normal;
+  font-weight: 400;
+  font-display: block;
+  src: url("/fonts/KaTeX_SansSerif-Regular.woff2") format("woff2");
+}
+@font-face {
+  font-family: "KaTeX_SansSerif";
+  font-style: italic;
+  font-weight: 400;
+  font-display: block;
+  src: url("/fonts/KaTeX_SansSerif-Italic.woff2") format("woff2");
+}
+@font-face {
+  font-family: "KaTeX_SansSerif";
+  font-style: normal;
+  font-weight: 700;
+  font-display: block;
+  src: url("/fonts/KaTeX_SansSerif-Bold.woff2") format("woff2");
+}
+
+/* ---------- KaTeX_Script ---------- */
+@font-face {
+  font-family: "KaTeX_Script";
+  font-style: normal;
+  font-weight: 400;
+  font-display: block;
+  src: url("/fonts/KaTeX_Script-Regular.woff2") format("woff2");
+}
+
+/* ---------- KaTeX_Size1..4 (used by stretchy delimiters) ---------- */
+@font-face {
+  font-family: "KaTeX_Size1";
+  font-style: normal;
+  font-weight: 400;
+  font-display: block;
+  src: url("/fonts/KaTeX_Size1-Regular.woff2") format("woff2");
+}
+@font-face {
+  font-family: "KaTeX_Size2";
+  font-style: normal;
+  font-weight: 400;
+  font-display: block;
+  src: url("/fonts/KaTeX_Size2-Regular.woff2") format("woff2");
+}
+@font-face {
+  font-family: "KaTeX_Size3";
+  font-style: normal;
+  font-weight: 400;
+  font-display: block;
+  src: url("/fonts/KaTeX_Size3-Regular.woff2") format("woff2");
+}
+@font-face {
+  font-family: "KaTeX_Size4";
+  font-style: normal;
+  font-weight: 400;
+  font-display: block;
+  src: url("/fonts/KaTeX_Size4-Regular.woff2") format("woff2");
+}
+
+/* ---------- KaTeX_Typewriter ---------- */
+@font-face {
+  font-family: "KaTeX_Typewriter";
+  font-style: normal;
+  font-weight: 400;
+  font-display: block;
+  src: url("/fonts/KaTeX_Typewriter-Regular.woff2") format("woff2");
+}
