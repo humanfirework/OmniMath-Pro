@@ -1,6 +1,6 @@
 [package]
 name = "app"
-version = "0.0.9"
+version = "0.1.0"
 description = "OmniMath Pro — Immersive Math Workbench (Tauri 2 desktop shell)"
 authors = ["OmniMath Team"]
 license = "MIT"
