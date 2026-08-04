@@ -30,10 +30,12 @@ fn set_minimize_to_tray(app: tauri::AppHandle, enabled: bool) {
 /// 返回当前是否启用「最小化到托盘」（供前端启动时校准开关状态）。
 #[tauri::command]
 fn get_minimize_to_tray(app: tauri::AppHandle) -> bool {
-    app.try_state::<Mutex<AppState>>()
-        .and_then(|s| s.lock().ok())
-        .map(|s| s.minimize_to_tray)
-        .unwrap_or(false)
+    if let Some(state) = app.try_state::<Mutex<AppState>>() {
+        if let Ok(s) = state.lock() {
+            return s.minimize_to_tray;
+        }
+    }
+    false
 }
 
 #[tauri::command]
@@ -157,12 +159,17 @@ pub fn run() {
             // 核心逻辑：用户开启「最小化到托盘」后，点击关闭按钮时拦截默认
             // 行为，改为隐藏窗口（应用继续在后台运行），直到从托盘恢复或退出。
             if let WindowEvent::CloseRequested { api, .. } = event {
-                let minimize = window
-                    .app_handle()
-                    .try_state::<Mutex<AppState>>()
-                    .and_then(|s| s.lock().ok())
-                    .map(|s| s.minimize_to_tray)
-                    .unwrap_or(false);
+                let minimize = if let Some(state) =
+                    window.app_handle().try_state::<Mutex<AppState>>()
+                {
+                    if let Ok(s) = state.lock() {
+                        s.minimize_to_tray
+                    } else {
+                        false
+                    }
+                } else {
+                    false
+                };
                 if minimize {
                     api.prevent_close();
                     let _ = window.hide();
