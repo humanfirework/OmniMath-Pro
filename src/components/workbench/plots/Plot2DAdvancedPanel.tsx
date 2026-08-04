@@ -1,0 +1,637 @@
+'use client';
+
+/**
+ * OmniMath Pro — 2D Plot Advanced Features Panel (collapsible)
+ *
+ * A compact, default-collapsed panel that houses the "advanced" 2D plot
+ * features so they don't clutter the toolbar:
+ *   - 交点 (Intersections): compute & list where two curves cross
+ *   - 切线 (Tangent): draw the tangent line of a curve at x₀
+ *   - 求导 (Derivative): show the 1st/2nd/3rd numerical derivative curve
+ *   - 范围 (Range mode): switch between free (auto-adaptive) / manual Y range
+ *
+ * Design intent (from the user spec):
+ *   "避免过多按钮影响界面美观，可采用可折叠面板或上下文菜单形式集成高级功能"
+ *   → The panel defaults to collapsed; a single chevron button toggles it.
+ *
+ * The panel is a *controlled* component — it reports results + range mode
+ * via callbacks. The parent (Plot2DPanel) decides how to render overlays.
+ */
+
+import { useCallback, useEffect, useMemo, useState } from 'react';
+import { ChevronDown, ChevronRight, GitCompare, Spline, Sigma, Ruler, Layers, Grid3x3 } from 'lucide-react';
+import { Collapsible, CollapsibleTrigger, CollapsibleContent } from '@/components/ui/collapsible';
+import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs';
+import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
+import { Button } from '@/components/ui/button';
+import { ToggleGroup, ToggleGroupItem } from '@/components/ui/toggle-group';
+import { ScrollArea } from '@/components/ui/scroll-area';
+import {
+  findIntersections,
+  tangentLine,
+  numericDerivative,
+  symbolicDerivative,
+  type IntersectionPoint,
+  type TangentResult,
+} from '@/lib/plots/plot2dAnalysis';
+import type { PlotSample } from '@/lib/plots/plot2d';
+import type { PlotConfig } from '@/lib/store/workbench';
+import { FormulaRenderer } from '@/components/workbench/FormulaRenderer';
+import { useScopeVersion } from '@/lib/hooks/useScopeVersion';
+import { useT, tf } from '@/lib/i18n';
+
+/* ------------------------------------------------------------------ */
+/*  Types                                                             */
+/* ------------------------------------------------------------------ */
+
+export type RangeMode = 'free' | 'manual';
+
+/**
+ * Compare mode for multi-plot rendering.
+ * - `overlay`: all curves on a single shared-Y canvas (legacy).
+ * - `facet`: each curve in its own mini-canvas with independent Y axis
+ *   (default for multi-plot — solves the "x²/sin x/eˣ all crushed
+ *   together" problem).
+ */
+export type CompareMode = 'overlay' | 'facet';
+
+export interface AdvancedOverlays {
+  intersections: IntersectionPoint[];
+  tangent: TangentResult | null;
+  derivativeSamples: PlotSample[];
+  derivativeOrder: 1 | 2 | 3;
+}
+
+export interface Plot2DAdvancedPanelProps {
+  plots: PlotConfig[];
+  xRange: [number, number];
+  yRange: [number, number];
+  /** Labels of curves flagged as outliers by coordinatedYRange (e.g. ["e^x"]). */
+  outliers: string[];
+  /** Current range mode. */
+  rangeMode: RangeMode;
+  onRangeModeChange: (mode: RangeMode) => void;
+  /** 是否显示关键点（极值 / 零点标记）。 */
+  showMarkers?: boolean;
+  onShowMarkersChange?: (v: boolean) => void;
+  /** Current compare mode (overlay vs facet). */
+  compareMode: CompareMode;
+  onCompareModeChange: (mode: CompareMode) => void;
+  /** Called whenever the computed overlays change. */
+  onOverlaysChange: (overlays: AdvancedOverlays) => void;
+}
+
+/* ------------------------------------------------------------------ */
+/*  Component                                                         */
+/* ------------------------------------------------------------------ */
+
+export function Plot2DAdvancedPanel({
+  plots,
+  xRange,
+  yRange,
+  outliers,
+  rangeMode,
+  onRangeModeChange,
+  showMarkers,
+  onShowMarkersChange,
+  compareMode,
+  onCompareModeChange,
+  onOverlaysChange,
+}: Plot2DAdvancedPanelProps) {
+  const [open, setOpen] = useState(false);
+  const t = useT();
+  const showCompareToggle = plots.length > 1;
+
+  return (
+    <Collapsible open={open} onOpenChange={setOpen} className="border-b border-border/60 bg-background/40">
+      <CollapsibleTrigger asChild>
+        <button
+          type="button"
+          className="flex h-7 w-full items-center gap-1.5 px-2.5 text-[11px] font-medium text-muted-foreground hover:bg-accent/40 hover:text-foreground transition-colors"
+          aria-label={open ? t('plotAdvCollapse') : t('plotAdvExpand')}
+        >
+          {open ? <ChevronDown className="size-3" /> : <ChevronRight className="size-3" />}
+          <span>{t('plotAdvTitle')}</span>
+          {showCompareToggle && (
+            <span className="ml-auto flex items-center gap-1 text-[9px] text-muted-foreground">
+              {compareMode === 'facet' ? <Grid3x3 className="size-2.5" /> : <Layers className="size-2.5" />}
+              {compareMode === 'facet' ? t('plotAdvCompareFacet') : t('plotAdvCompareOverlay')}
+            </span>
+          )}
+        </button>
+      </CollapsibleTrigger>
+      <CollapsibleContent>
+        <div className="px-2 pb-2 pt-0.5">
+          <Tabs defaultValue="range" className="gap-1.5">
+            <TabsList className="h-7 text-[10px]">
+              <TabsTrigger value="range" className="gap-1 px-2 py-0.5 text-[10px]">
+                <Ruler className="size-3" /> {t('plotAdvRange')}
+              </TabsTrigger>
+              <TabsTrigger value="intersect" className="gap-1 px-2 py-0.5 text-[10px]">
+                <GitCompare className="size-3" /> {t('plotAdvIntersections')}
+              </TabsTrigger>
+              <TabsTrigger value="tangent" className="gap-1 px-2 py-0.5 text-[10px]">
+                <Spline className="size-3" /> {t('plotAdvTangent')}
+              </TabsTrigger>
+              <TabsTrigger value="deriv" className="gap-1 px-2 py-0.5 text-[10px]">
+                <Sigma className="size-3" /> {t('plotAdvDerivative')}
+              </TabsTrigger>
+            </TabsList>
+
+            <TabsContent value="range">
+              <RangeTab
+                outliers={outliers}
+                rangeMode={rangeMode}
+                onRangeModeChange={onRangeModeChange}
+                compareMode={compareMode}
+                onCompareModeChange={onCompareModeChange}
+                showCompareToggle={showCompareToggle}
+                showMarkers={showMarkers}
+                onShowMarkersChange={onShowMarkersChange}
+              />
+            </TabsContent>
+            <TabsContent value="intersect">
+              <IntersectTab plots={plots} xRange={xRange} onOverlaysChange={onOverlaysChange} />
+            </TabsContent>
+            <TabsContent value="tangent">
+              <TangentTab plots={plots} xRange={xRange} onOverlaysChange={onOverlaysChange} />
+            </TabsContent>
+            <TabsContent value="deriv">
+              <DerivativeTab plots={plots} xRange={xRange} onOverlaysChange={onOverlaysChange} />
+            </TabsContent>
+          </Tabs>
+        </div>
+      </CollapsibleContent>
+    </Collapsible>
+  );
+}
+
+/* ------------------------------------------------------------------ */
+/*  Range mode tab                                                    */
+/* ------------------------------------------------------------------ */
+
+function RangeTab({
+  outliers,
+  rangeMode,
+  onRangeModeChange,
+  compareMode,
+  onCompareModeChange,
+  showCompareToggle,
+  showMarkers,
+  onShowMarkersChange,
+}: {
+  outliers: string[];
+  rangeMode: RangeMode;
+  onRangeModeChange: (m: RangeMode) => void;
+  compareMode: CompareMode;
+  onCompareModeChange: (m: CompareMode) => void;
+  showCompareToggle: boolean;
+  showMarkers?: boolean;
+  onShowMarkersChange?: (v: boolean) => void;
+}) {
+  const t = useT();
+  return (
+    <div className="flex flex-col gap-2 py-1">
+      {showCompareToggle && (
+        <>
+          <Label className="text-[10px] text-muted-foreground">{t('plotAdvCompareMode')}</Label>
+          <ToggleGroup
+            type="single"
+            value={compareMode}
+            onValueChange={(v) => {
+              if (v === 'overlay' || v === 'facet') onCompareModeChange(v);
+            }}
+            className="h-7"
+            size="sm"
+          >
+            <ToggleGroupItem value="facet" className="h-7 px-2 text-[10px] gap-1" aria-label={t('plotAdvCompareFacet')}>
+              <Grid3x3 className="size-3" /> {t('plotAdvCompareFacet')}
+            </ToggleGroupItem>
+            <ToggleGroupItem value="overlay" className="h-7 px-2 text-[10px] gap-1" aria-label={t('plotAdvCompareOverlay')}>
+              <Layers className="size-3" /> {t('plotAdvCompareOverlay')}
+            </ToggleGroupItem>
+          </ToggleGroup>
+          <p className="text-[10px] text-muted-foreground">
+            {compareMode === 'facet'
+              ? t('plotAdvCompareFacetHint')
+              : t('plotAdvCompareOverlayHint')}
+          </p>
+        </>
+      )}
+      <Label className="text-[10px] text-muted-foreground">
+        {t('plotAdvYRangeMode')}
+        {showCompareToggle && compareMode === 'facet' ? t('plotAdvYRangeFacetNote') : ''}
+      </Label>
+      <ToggleGroup
+        type="single"
+        value={rangeMode}
+        onValueChange={(v) => {
+          if (v === 'free' || v === 'manual') onRangeModeChange(v);
+        }}
+        className="h-7"
+        size="sm"
+        disabled={showCompareToggle && compareMode === 'facet'}
+      >
+        <ToggleGroupItem value="free" className="h-7 px-2 text-[10px]" aria-label={t('plotAdvFree')}>
+          {t('plotAdvFree')}
+        </ToggleGroupItem>
+        <ToggleGroupItem value="manual" className="h-7 px-2 text-[10px]" aria-label={t('plotAdvManual')}>
+          {t('plotAdvManual')}
+        </ToggleGroupItem>
+      </ToggleGroup>
+      <div className="flex items-center justify-between border-t border-border/30 pt-2">
+        <span className="text-[10px] text-muted-foreground">显示关键点（极值 / 零点）</span>
+        <label className="flex cursor-pointer items-center gap-1.5">
+          <input
+            type="checkbox"
+            checked={showMarkers ?? true}
+            onChange={(e) => onShowMarkersChange?.(e.target.checked)}
+            className="h-3.5 w-3.5 accent-primary"
+          />
+        </label>
+      </div>
+      {outliers.length > 0 && (
+        <p
+          className="rounded border px-2 py-1 text-[10px]"
+          style={{
+            borderColor: 'color-mix(in oklab, var(--primary) 30%, transparent)',
+            backgroundColor: 'color-mix(in oklab, var(--primary) 5%, transparent)',
+            color: 'var(--primary)',
+          }}
+        >
+          {tf('plotOutlierClipped', { values: outliers.join(', ') })}
+        </p>
+      )}
+      {outliers.length === 0 && rangeMode === 'free' && !(showCompareToggle && compareMode === 'facet') && (
+        <p className="text-[10px] text-muted-foreground">
+          {t('plotAdvFreeHint')}
+        </p>
+      )}
+    </div>
+  );
+}
+
+/* ------------------------------------------------------------------ */
+/*  Intersections tab                                                 */
+/* ------------------------------------------------------------------ */
+
+function IntersectTab({
+  plots,
+  xRange,
+  onOverlaysChange,
+}: {
+  plots: PlotConfig[];
+  xRange: [number, number];
+  onOverlaysChange: (o: AdvancedOverlays) => void;
+}) {
+  const t = useT();
+  const visiblePlots = useMemo(() => plots.filter((p) => p.visible && p.plotType !== 'surface3d'), [plots]);
+  const [idx1, setIdx1] = useState(0);
+  const [idx2, setIdx2] = useState(1);
+  // 默认开启"自动全部交点"：对所有可见曲线两两组合计算交点；
+  // 手动 A/B 逐对选择保留为可选模式。
+  const [enabled, setEnabled] = useState(true);
+  const [mode, setMode] = useState<'auto' | 'manual'>('auto');
+  const scopeVersion = useScopeVersion();
+
+  const results = useMemo<IntersectionPoint[]>(() => {
+    void scopeVersion; // re-compute when a slider / variable changes
+    if (!enabled || visiblePlots.length < 2) return [];
+    if (mode === 'auto') {
+      // 两两组合（i < j），每个交点附带所属曲线对标签。
+      const out: IntersectionPoint[] = [];
+      for (let i = 0; i < visiblePlots.length; i++) {
+        for (let j = i + 1; j < visiblePlots.length; j++) {
+          const a = visiblePlots[i];
+          const b = visiblePlots[j];
+          const label = `${shortExpr(a.expression)} ∩ ${shortExpr(b.expression)}`;
+          for (const p of findIntersections(a.expression, b.expression, xRange)) {
+            out.push({ ...p, pairLabel: label });
+          }
+        }
+      }
+      return out;
+    }
+    // 手动模式：选定的曲线 A / B 逐对计算。
+    const a = visiblePlots[Math.min(idx1, visiblePlots.length - 1)];
+    const b = visiblePlots[Math.min(idx2, visiblePlots.length - 1)];
+    if (!a || !b || a.id === b.id) return [];
+    const label = `${shortExpr(a.expression)} ∩ ${shortExpr(b.expression)}`;
+    return findIntersections(a.expression, b.expression, xRange)
+      .map((p) => ({ ...p, pairLabel: label }));
+  }, [enabled, mode, visiblePlots, idx1, idx2, xRange, scopeVersion]);
+
+  useEffect(() => {
+    onOverlaysChange({
+      intersections: results,
+      tangent: null,
+      derivativeSamples: [],
+      derivativeOrder: 1,
+    });
+    return () => {
+      onOverlaysChange({ intersections: [], tangent: null, derivativeSamples: [], derivativeOrder: 1 });
+    };
+  }, [results, onOverlaysChange]);
+
+  if (visiblePlots.length < 2) {
+    return <p className="py-2 text-[10px] text-muted-foreground">{t('plotAdvNeed2Curves')}</p>;
+  }
+
+  return (
+    <div className="flex flex-col gap-2 py-1">
+      <div className="flex items-center gap-1.5">
+        <Button
+          size="sm"
+          variant={enabled ? 'default' : 'outline'}
+          className="h-6 px-2 text-[10px]"
+          onClick={() => setEnabled((v) => !v)}
+        >
+          {enabled ? t('plotAdvIntersectionsOff') : t('plotAdvIntersectionsOn')}
+        </Button>
+        {enabled && (
+          <ToggleGroup
+            type="single"
+            value={mode}
+            onValueChange={(v) => {
+              if (v === 'auto' || v === 'manual') setMode(v);
+            }}
+            className="h-6"
+            size="sm"
+          >
+            <ToggleGroupItem value="auto" className="h-6 px-2 text-[10px]" aria-label={t('plotAdvAutoAll')}>
+              {t('plotAdvAutoAll')}
+            </ToggleGroupItem>
+            <ToggleGroupItem value="manual" className="h-6 px-2 text-[10px]" aria-label={t('plotAdvManualPair')}>
+              {t('plotAdvManualPair')}
+            </ToggleGroupItem>
+          </ToggleGroup>
+        )}
+        {enabled && (
+          <span className="ml-auto text-[10px] text-muted-foreground">
+            {tf('plotAdvIntersectionsFound', { n: results.length })}
+          </span>
+        )}
+      </div>
+      {enabled && mode === 'manual' && (
+        <div className="grid grid-cols-2 gap-1.5">
+          <CurveSelect label={t('plotAdvCurveA')} plots={visiblePlots} value={idx1} onChange={setIdx1} />
+          <CurveSelect label={t('plotAdvCurveB')} plots={visiblePlots} value={idx2} onChange={setIdx2} />
+        </div>
+      )}
+      {enabled && results.length > 0 && (
+        <ScrollArea className="max-h-32 rounded border border-border/40">
+          <div className="p-1.5 font-mono text-[10px]">
+            {results.map((p, i) => (
+              <div key={i} className="flex items-baseline justify-between gap-2 py-0.5">
+                <span className="min-w-0 truncate text-muted-foreground" title={p.pairLabel}>
+                  {p.pairLabel ?? `[${i + 1}]`}
+                </span>
+                <span className="shrink-0 text-foreground/80">
+                  ({p.x.toFixed(4)}, {p.y.toFixed(4)})
+                </span>
+              </div>
+            ))}
+          </div>
+        </ScrollArea>
+      )}
+    </div>
+  );
+}
+
+/** 曲线对标签里的表达式缩写：过长时截断，保持列表单行可读。 */
+function shortExpr(expr: string): string {
+  return expr.length > 20 ? `${expr.slice(0, 20)}…` : expr;
+}
+
+/* ------------------------------------------------------------------ */
+/*  Tangent tab                                                       */
+/* ------------------------------------------------------------------ */
+
+function TangentTab({
+  plots,
+  xRange,
+  onOverlaysChange,
+}: {
+  plots: PlotConfig[];
+  xRange: [number, number];
+  onOverlaysChange: (o: AdvancedOverlays) => void;
+}) {
+  const t = useT();
+  const visiblePlots = useMemo(() => plots.filter((p) => p.visible && p.plotType !== 'surface3d'), [plots]);
+  const [idx, setIdx] = useState(0);
+  const [x0, setX0] = useState(0);
+  const [enabled, setEnabled] = useState(false);
+  const scopeVersion = useScopeVersion();
+
+  const tangent = useMemo<TangentResult | null>(() => {
+    void scopeVersion; // re-compute when a slider / variable changes
+    if (!enabled || visiblePlots.length === 0) return null;
+    const p = visiblePlots[Math.min(idx, visiblePlots.length - 1)];
+    if (!p) return null;
+    return tangentLine(p.expression, x0, xRange);
+     
+  }, [enabled, visiblePlots, idx, x0, xRange, scopeVersion]);
+
+  useEffect(() => {
+    onOverlaysChange({
+      intersections: [],
+      tangent,
+      derivativeSamples: [],
+      derivativeOrder: 1,
+    });
+    return () => {
+      onOverlaysChange({ intersections: [], tangent: null, derivativeSamples: [], derivativeOrder: 1 });
+    };
+  }, [tangent, onOverlaysChange]);
+
+  if (visiblePlots.length === 0) {
+    return <p className="py-2 text-[10px] text-muted-foreground">{t('plotAdvNoCurves')}</p>;
+  }
+
+  return (
+    <div className="flex flex-col gap-2 py-1">
+      <div className="flex items-center gap-1.5">
+        <Button
+          size="sm"
+          variant={enabled ? 'default' : 'outline'}
+          className="h-6 px-2 text-[10px]"
+          onClick={() => setEnabled((v) => !v)}
+        >
+          {enabled ? t('plotAdvTangentOff') : t('plotAdvTangentOn')}
+        </Button>
+      </div>
+      {enabled && (
+        <>
+          <CurveSelect label={t('plotAdvDerivativeCurve')} plots={visiblePlots} value={idx} onChange={setIdx} />
+          <div className="flex items-center gap-1.5">
+            <Label className="text-[10px] text-muted-foreground">x₀ =</Label>
+            <Input
+              type="number"
+              step="any"
+              value={x0}
+              onChange={(e) => {
+                const v = parseFloat(e.target.value);
+                if (Number.isFinite(v)) setX0(v);
+              }}
+              className="h-6 w-20 rounded px-1.5 font-mono text-[11px]"
+            />
+          </div>
+          {tangent && (
+            <div className="rounded border border-border/40 bg-muted/20 p-1.5 font-mono text-[10px]">
+              <div className="text-muted-foreground">{t('plotAdvTangentSlopeK')} <span className="text-primary">{tangent.slope.toFixed(4)}</span></div>
+              <div className="text-muted-foreground">{t('plotAdvTangentAtXY')} ({tangent.at.x.toFixed(2)}, {tangent.at.y.toFixed(2)})</div>
+              <div className="text-foreground/80">y = {tangent.slope.toFixed(3)}·x {tangent.intercept >= 0 ? '+' : '−'} {Math.abs(tangent.intercept).toFixed(3)}</div>
+            </div>
+          )}
+        </>
+      )}
+    </div>
+  );
+}
+
+/* ------------------------------------------------------------------ */
+/*  Derivative tab                                                    */
+/* ------------------------------------------------------------------ */
+
+function DerivativeTab({
+  plots,
+  xRange,
+  onOverlaysChange,
+}: {
+  plots: PlotConfig[];
+  xRange: [number, number];
+  onOverlaysChange: (o: AdvancedOverlays) => void;
+}) {
+  const t = useT();
+  const visiblePlots = useMemo(() => plots.filter((p) => p.visible && p.plotType !== 'surface3d'), [plots]);
+  const [idx, setIdx] = useState(0);
+  const [order, setOrder] = useState<1 | 2 | 3>(1);
+  const [enabled, setEnabled] = useState(false);
+  const [symbolic, setSymbolic] = useState<{ latex: string; success: boolean } | null>(null);
+  const scopeVersion = useScopeVersion();
+
+  const derivSamples = useMemo<PlotSample[]>(() => {
+    void scopeVersion; // re-compute when a slider / variable changes
+    if (!enabled || visiblePlots.length === 0) return [];
+    const p = visiblePlots[Math.min(idx, visiblePlots.length - 1)];
+    if (!p) return [];
+    return numericDerivative(p.expression, xRange, order);
+     
+  }, [enabled, visiblePlots, idx, order, xRange, scopeVersion]);
+
+  // Compute symbolic derivative (async, for display only).
+  useEffect(() => {
+    void scopeVersion; // re-run when the underlying variables change
+    if (!enabled || visiblePlots.length === 0) {
+      setSymbolic(null);
+      return;
+    }
+    const p = visiblePlots[Math.min(idx, visiblePlots.length - 1)];
+    if (!p) return;
+    let cancelled = false;
+    symbolicDerivative(p.expression, 'x', order).then((res) => {
+      if (!cancelled) setSymbolic({ latex: res.latex, success: res.success });
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [enabled, visiblePlots, idx, scopeVersion, order]);
+
+  useEffect(() => {
+    onOverlaysChange({
+      intersections: [],
+      tangent: null,
+      derivativeSamples: derivSamples,
+      derivativeOrder: order,
+    });
+    return () => {
+      onOverlaysChange({ intersections: [], tangent: null, derivativeSamples: [], derivativeOrder: 1 });
+    };
+  }, [derivSamples, order, onOverlaysChange]);
+
+  if (visiblePlots.length === 0) {
+    return <p className="py-2 text-[10px] text-muted-foreground">{t('plotAdvNoCurves')}</p>;
+  }
+
+  return (
+    <div className="flex flex-col gap-2 py-1">
+      <div className="flex items-center gap-1.5">
+        <Button
+          size="sm"
+          variant={enabled ? 'default' : 'outline'}
+          className="h-6 px-2 text-[10px]"
+          onClick={() => setEnabled((v) => !v)}
+        >
+          {enabled ? t('plotAdvDerivativeOff') : t('plotAdvDerivativeOn')}
+        </Button>
+      </div>
+      {enabled && (
+        <>
+          <CurveSelect label={t('plotAdvDerivativeCurve')} plots={visiblePlots} value={idx} onChange={setIdx} />
+          <div className="flex items-center gap-1.5">
+            <Label className="text-[10px] text-muted-foreground">{t('plotAdvDerivativeOrder')}</Label>
+            <ToggleGroup
+              type="single"
+              value={String(order)}
+              onValueChange={(v) => {
+                const n = Number(v);
+                if (n === 1 || n === 2 || n === 3) setOrder(n as 1 | 2 | 3);
+              }}
+              className="h-6"
+              size="sm"
+            >
+              <ToggleGroupItem value="1" className="h-6 px-2 text-[10px]">{t('plotAdvDerivative1st')}</ToggleGroupItem>
+              <ToggleGroupItem value="2" className="h-6 px-2 text-[10px]">{t('plotAdvDerivative2nd')}</ToggleGroupItem>
+              <ToggleGroupItem value="3" className="h-6 px-2 text-[10px]">{t('plotAdvDerivative3rd')}</ToggleGroupItem>
+            </ToggleGroup>
+          </div>
+          {symbolic?.success && symbolic.latex && (
+            <div className="rounded border border-primary/30 bg-primary/5 p-1.5">
+              <div className="mb-1 text-[9px] uppercase tracking-wider text-muted-foreground">
+                {t('plotAdvDerivativeSymbolic')} d<sup>{order}</sup>/dx<sup>{order}</sup>
+              </div>
+              <FormulaRenderer latex={symbolic.latex} displayMode className="text-[11px]" />
+            </div>
+          )}
+          {symbolic && !symbolic.success && (
+            <p className="text-[10px] text-muted-foreground">{t('plotAdvDerivativeSymbolicUnavailable')}</p>
+          )}
+        </>
+      )}
+    </div>
+  );
+}
+
+/* ------------------------------------------------------------------ */
+/*  Shared sub-component: curve selector                              */
+/* ------------------------------------------------------------------ */
+
+function CurveSelect({
+  label,
+  plots,
+  value,
+  onChange,
+}: {
+  label: string;
+  plots: PlotConfig[];
+  value: number;
+  onChange: (i: number) => void;
+}) {
+  return (
+    <div className="flex flex-col gap-0.5">
+      <Label className="text-[10px] text-muted-foreground">{label}</Label>
+      <select
+        value={value}
+        onChange={(e) => onChange(parseInt(e.target.value, 10) || 0)}
+        className="h-6 rounded border border-border/60 bg-background/40 px-1.5 font-mono text-[10px]"
+      >
+        {plots.map((p, i) => (
+          <option key={p.id} value={i}>
+            {p.expression.slice(0, 24)}
+          </option>
+        ))}
+      </select>
+    </div>
+  );
+}

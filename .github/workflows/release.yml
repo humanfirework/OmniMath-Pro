@@ -1,0 +1,130 @@
+name: release
+
+# 触发条件：推送 v* 标签时构建并发布多平台安装包
+# 也可在 Actions 页面手动触发
+on:
+  push:
+    tags:
+      - "v*"
+  workflow_dispatch:
+
+jobs:
+  # 质量门禁：类型检查 / Lint / 单元测试全部通过后才进入构建发布
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Install dependencies
+        run: npm ci --no-audit --no-fund
+
+      - name: Type check
+        run: npx tsc --noEmit
+
+      - name: Lint
+        run: npx eslint . --max-warnings=0
+
+      - name: Run tests
+        run: npx vitest run
+
+  publish-tauri:
+    needs: test
+    permissions:
+      contents: write
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - platform: "macos-14"
+            args: "--target aarch64-apple-darwin"
+          - platform: "macos-14"
+            args: "--target x86_64-apple-darwin"
+          - platform: "ubuntu-22.04"
+            args: ""
+          - platform: "windows-latest"
+            args: ""
+
+    runs-on: ${{ matrix.platform }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install dependencies (Ubuntu)
+        if: matrix.platform == 'ubuntu-22.04'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libwebkit2gtk-4.1-dev build-essential curl wget file libxdo-dev libssl-dev libayatana-appindicator3-dev librsvg2-dev libgtk-3-dev
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Install frontend dependencies
+        # 锁定依赖保证可复现性（package-lock.json 已在仓库中）
+        run: npm ci --no-audit --no-fund
+
+      - name: Install Rust stable
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          # 锁定 toolchain 保证可复现性
+          # 1.88.0 — darling/plist/serde_with/time 等 crate 依赖的最低版本
+          toolchain: "1.88.0"
+          targets: ${{ matrix.args == '--target aarch64-apple-darwin' && 'aarch64-apple-darwin' || matrix.args == '--target x86_64-apple-darwin' && 'x86_64-apple-darwin' || '' }}
+
+      - name: Rust cache
+        uses: swatinem/rust-cache@v2
+        with:
+          workspaces: "./src-tauri -> target"
+
+      - name: Build and publish Tauri app
+        uses: tauri-apps/tauri-action@v0
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          projectPath: "./src-tauri"
+          tagName: ${{ github.ref_name }}
+          releaseName: "OmniMath Pro ${{ github.ref_name }}"
+          releaseBody: |
+            OmniMath Pro ${{ github.ref_name }} 桌面端安装包
+
+            | 平台 | 推荐下载 |
+            |---|---|
+            | Windows | `OmniMath-Pro_***_x64-setup.exe` / `.msi` |
+            | macOS (Apple Silicon / M 系列) | `OmniMath-Pro_***_aarch64.dmg` |
+            | macOS (Intel) | `OmniMath-Pro_***_x64.dmg` |
+            | Linux | `OmniMath-Pro_***_amd64.deb` / `.AppImage` |
+
+            文件名中包含版本号 `${{ github.ref_name }}` 和目标平台，请根据你的系统选择对应安装包。
+          releaseDraft: false
+          prerelease: false
+          args: ${{ matrix.args }}
+
+      - name: Generate SHA256 checksums for release artifacts
+        if: startsWith(github.ref, 'refs/tags/v')
+        run: |
+          set -e
+          ARTIFACT_DIR="src-tauri/target/release/bundle"
+          if [ ! -d "$ARTIFACT_DIR" ]; then
+            echo "No bundle directory found, skipping checksums"
+            exit 0
+          fi
+          mkdir -p checksums
+          find "$ARTIFACT_DIR" -type f \( \
+            -name "*.exe" -o -name "*.msi" -o \
+            -name "*.dmg" -o -name "*.app" -o \
+            -name "*.deb" -o -name "*.AppImage" -o \
+            -name "*.rpm" \
+          \) -exec sh -c 'sha256sum "$1" | sed "s| .*/| |" >> checksums/SHA256SUMS.txt' _ {} \;
+          cat checksums/SHA256SUMS.txt
+        shell: bash
+
+      - name: Upload checksums to release
+        if: startsWith(github.ref, 'refs/tags/v')
+        uses: softprops/action-gh-release@v2
+        with:
+          files: checksums/SHA256SUMS.txt
