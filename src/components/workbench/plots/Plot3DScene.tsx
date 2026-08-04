@@ -752,38 +752,7 @@ export function Plot3DScene({
   // instead of mounting <Canvas> (which would synchronously throw).
   const [webglOk] = useState<boolean>(() => isWebGLAvailable());
 
-  // The renderer must only initialize once the container has non-zero
-  // size. Mounting <Canvas> while the host is 0×0 (hidden tab, collapsed
-  // panel, dialog animating open) creates a 0×0 drawing buffer that
-  // stays black — with frameloop="demand" nothing forces a re-render.
-  // ResizeObserver waits for the first visible layout before mounting,
-  // and keeps the renderer sized correctly afterwards (fibre handles
-  // the resize itself via its own observer).
-  const hostRef = useRef<HTMLDivElement>(null);
-  const [hostReady, setHostReady] = useState(false);
-  useEffect(() => {
-    const el = hostRef.current;
-    if (!el) return;
-    const check = () => {
-      if (el.clientWidth > 0 && el.clientHeight > 0) {
-        setHostReady(true);
-      }
-    };
-    check();
-    if (hostReady) return; // already visible — no observer needed
-    const ro = new ResizeObserver((entries) => {
-      for (const entry of entries) {
-        const { width, height } = entry.contentRect;
-        if (width > 0 && height > 0) {
-          setHostReady(true);
-          ro.disconnect();
-          return;
-        }
-      }
-    });
-    ro.observe(el);
-    return () => ro.disconnect();
-  }, [hostReady]);
+
 
   if (!webglOk) {
     return (
@@ -799,39 +768,33 @@ export function Plot3DScene({
   }
 
   return (
-    <div ref={hostRef} className="plot-3d-scene-root h-full w-full">
-      {hostReady ? (
-        <Canvas
-          camera={{
-            position: upAxis === 'z' ? [6, 6, 5] : [6, 5, 6],
-            up: upAxis === 'z' ? [0, 0, 1] : [0, 1, 0],
-            fov: 50,
-            near: 0.1,
-            far: 100,
-          }}
-          dpr={[1, 2]}
-          frameloop={frameloop}
-          gl={{ antialias: true, alpha: false, preserveDrawingBuffer: false, powerPreference: 'high-performance' }}
-          style={{ width: '100%', height: '100%', touchAction: 'none' }}
-        >
-          <SceneContents
-            surfaces={surfaces}
-            theme={theme}
-            showAxes={showAxes}
-            showGrid={showGrid}
-            wireframe={wireframe}
-            autoRotate={autoRotate}
-            colorMode={colorMode}
-            upAxis={upAxis}
-            resetSignal={resetSignal}
-            captureRef={captureRef}
-          />
-        </Canvas>
-      ) : (
-        // Placeholder while waiting for the first non-zero layout —
-        // matches the dynamic-import loading fallback in Plot3DPanel.
-        <div className="h-full w-full bg-background/40" />
-      )}
+    <div className="plot-3d-scene-root h-full w-full">
+      <Canvas
+        camera={{
+          position: upAxis === 'z' ? [6, 6, 5] : [6, 5, 6],
+          up: upAxis === 'z' ? [0, 0, 1] : [0, 1, 0],
+          fov: 50,
+          near: 0.1,
+          far: 100,
+        }}
+        dpr={[1, 2]}
+        frameloop={frameloop}
+        gl={{ antialias: true, alpha: false, preserveDrawingBuffer: true, powerPreference: 'high-performance' }}
+        style={{ width: '100%', height: '100%', touchAction: 'none' }}
+      >
+        <SceneContents
+          surfaces={surfaces}
+          theme={theme}
+          showAxes={showAxes}
+          showGrid={showGrid}
+          wireframe={wireframe}
+          autoRotate={autoRotate}
+          colorMode={colorMode}
+          upAxis={upAxis}
+          resetSignal={resetSignal}
+          captureRef={captureRef}
+        />
+      </Canvas>
     </div>
   );
 }
