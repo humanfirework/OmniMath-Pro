@@ -201,6 +201,60 @@ const templateImageVectorizationQuickstart: PipelineTemplate = {
   },
 };
 
+/* ------------------------------------------------------------------ *
+ * Template 7 — 一阶 ODE 闭环仿真（Simulink 风格）
+ *   step → (sum: −feedback) → gain → integrator → scope
+ *   并引入正弦信源做扰动：ẋ = gain·(setpoint − x)。
+ *   展示反馈回路 + 定步长求解器（默认 euler，可切 rk4）。
+ * ------------------------------------------------------------------ */
+const templateOdeLoop: PipelineTemplate = {
+  id: 'ode-feedback-loop',
+  name: '一阶系统反馈仿真',
+  description: '阶跃设定值 → 求和(负反馈) → 增益 → 积分器 → 示波器。演示闭环反馈与 ODE 数值求解（支持 Euler / RK4）。',
+  category: 'simulation',
+  thumbnailColor: '#a78bfa',
+  nodes: [
+    { id: 's_sp', type: 'sim-step', position: { x: 60, y: 120 }, config: { stepTime: 0, initialValue: 0, finalValue: 1 } },
+    { id: 's_sum', type: 'sim-sum', position: { x: 320, y: 120 }, config: { signs: '+-' } },
+    { id: 's_gain', type: 'sim-gain', position: { x: 560, y: 120 }, config: { gain: 2 } },
+    { id: 's_int', type: 'sim-integrator', position: { x: 800, y: 120 }, config: { initialCondition: 0 } },
+    { id: 's_scope', type: 'sim-scope', position: { x: 1040, y: 120 }, config: {} },
+  ],
+  edges: [
+    edge('s1', 's_sp', 'out', 's_sum', 'in1'),
+    edge('s2', 's_int', 'out', 's_sum', 'in2'),
+    edge('s3', 's_sum', 'out', 's_gain', 'u'),
+    edge('s4', 's_gain', 'out', 's_int', 'u'),
+    edge('s5', 's_int', 'out', 's_scope', 'u'),
+  ],
+  onLoad: { viewMode: 'pipeline', activePreviewTab: 'plot2d' },
+};
+
+/* ------------------------------------------------------------------ *
+ * Template 8 — 一阶惯性环节阶跃响应（Simulink 经典 First-Order）
+ *   step → first-order(1/(Ts+1)) → scope
+ *   展示 Saturation 限幅与一阶惯性环节的响应曲线。
+ * ------------------------------------------------------------------ */
+const templateStepResponse: PipelineTemplate = {
+  id: 'first-order-response',
+  name: '一阶惯性环节阶跃响应',
+  description: '阶跃 → 一阶惯性环节(1/(Ts+1)) → 饱和 → 示波器。观察时间常数 T 对上升曲线的影响。',
+  category: 'simulation',
+  thumbnailColor: '#f59e0b',
+  nodes: [
+    { id: 'f_step', type: 'sim-step', position: { x: 60, y: 120 }, config: { stepTime: 0, initialValue: 0, finalValue: 1 } },
+    { id: 'f_fo', type: 'sim-first-order', position: { x: 340, y: 120 }, config: { timeConstant: 1, initialOutput: 0 } },
+    { id: 'f_sat', type: 'sim-saturation', position: { x: 620, y: 120 }, config: { lowerLimit: 0, upperLimit: 0.8 } },
+    { id: 'f_scope', type: 'sim-scope', position: { x: 900, y: 120 }, config: {} },
+  ],
+  edges: [
+    edge('f1', 'f_step', 'out', 'f_fo', 'u'),
+    edge('f2', 'f_fo', 'out', 'f_sat', 'u'),
+    edge('f3', 'f_sat', 'out', 'f_scope', 'u'),
+  ],
+  onLoad: { viewMode: 'pipeline', activePreviewTab: 'plot2d' },
+};
+
 export const PIPELINE_TEMPLATES: PipelineTemplate[] = [
   templateBasicArithmetic,
   templateTrigPlot,
@@ -208,6 +262,8 @@ export const PIPELINE_TEMPLATES: PipelineTemplate[] = [
   templateDerivative,
   templateCompositeFunction,
   templateImageVectorizationQuickstart,
+  templateOdeLoop,
+  templateStepResponse,
 ];
 
 /**

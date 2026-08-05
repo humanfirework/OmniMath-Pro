@@ -1212,6 +1212,29 @@ export interface TranslationDict {
   npPortY: string;
   npPortAngle: string;
 
+  /* simulation — Simulink-style 仿真节点 */
+  npCategorySimulation: string;
+  npSimClock: string;
+  npSimConstant: string;
+  npSimSine: string;
+  npSimStep: string;
+  npSimRamp: string;
+  npSimPulse: string;
+  npSimNoise: string;
+  npSimSum: string;
+  npSimGain: string;
+  npSimProduct: string;
+  npSimSaturation: string;
+  npSimFirstOrder: string;
+  npSimIntegrator: string;
+  npSimDerivative: string;
+  npSimDelay: string;
+  npSimScope: string;
+  npSimIn: string;
+  npSimIn1: string;
+  npSimIn2: string;
+  npSimOut: string;
+
   templates: {
     imageVectorization: {
       name: string;
@@ -2349,6 +2372,27 @@ const zhCN: TranslationDict = {
   npCategoryStatistics: "统计",
   npCategoryLogic: "逻辑",
   npCategoryVision: "视觉",
+  npCategorySimulation: "仿真",
+  npSimClock: "时钟",
+  npSimConstant: "常数",
+  npSimSine: "正弦波",
+  npSimStep: "阶跃",
+  npSimRamp: "斜坡",
+  npSimPulse: "脉冲",
+  npSimNoise: "噪声",
+  npSimSum: "求和",
+  npSimGain: "增益",
+  npSimProduct: "乘积",
+  npSimSaturation: "饱和（限幅）",
+  npSimFirstOrder: "一阶惯性环节",
+  npSimIntegrator: "积分器",
+  npSimDerivative: "微分器",
+  npSimDelay: "延迟",
+  npSimScope: "示波器",
+  npSimIn: "输入",
+  npSimIn1: "输入 1",
+  npSimIn2: "输入 2",
+  npSimOut: "输出",
   npTaylorSeries: "泰勒级数",
   npOdeSolve: "常微分方程",
   npPortX0: "X₀",
@@ -3555,6 +3599,27 @@ const en: TranslationDict = {
   npCategoryStatistics: "Statistics",
   npCategoryLogic: "Logic",
   npCategoryVision: "Vision",
+  npCategorySimulation: "Simulation",
+  npSimClock: "Clock",
+  npSimConstant: "Constant",
+  npSimSine: "Sine Wave",
+  npSimStep: "Step",
+  npSimRamp: "Ramp",
+  npSimPulse: "Pulse",
+  npSimNoise: "Noise",
+  npSimSum: "Sum",
+  npSimGain: "Gain",
+  npSimProduct: "Product",
+  npSimSaturation: "Saturation",
+  npSimFirstOrder: "First-Order",
+  npSimIntegrator: "Integrator",
+  npSimDerivative: "Derivative",
+  npSimDelay: "Delay",
+  npSimScope: "Scope",
+  npSimIn: "Input",
+  npSimIn1: "Input 1",
+  npSimIn2: "Input 2",
+  npSimOut: "Output",
   npTaylorSeries: "Taylor Series",
   npOdeSolve: "ODE Solver",
   npPortX0: "X₀",
