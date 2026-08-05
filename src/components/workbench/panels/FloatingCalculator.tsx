@@ -8,10 +8,12 @@ import {
   FlaskConical, Binary, Grid3x3, History, NotebookPen,
   StickyNote, Plus, Sparkles,
   Maximize2, Minimize2, ChevronRight,
+  Download,
 } from 'lucide-react';
 import { evaluateExpression, math } from '@/lib/engine';
 import { cn } from '@/lib/utils';
 import { useT } from '@/lib/i18n';
+import { saveTextToFile } from '@/lib/nativeExport';
 
 type CalcMode = 'basic' | 'scientific' | 'programmer' | 'linalg' | 'converter';
 type ConverterCategory = 'length' | 'weight' | 'temperature' | 'area' | 'volume' | 'time';
@@ -158,6 +160,46 @@ function formatMatrixString(m: unknown[][]): string {
 // -1 means "use the CSS default position" (bottom-right corner via bottom-4 right-4)
 const DEFAULT_FAB_POS = { x: -1, y: -1 };
 
+/** 科学模式的可折叠函数分区（按分类收缩/展开）。 */
+function SciSection({
+  id, label, collapsed, onToggle, children,
+}: {
+  id: string;
+  label: string;
+  collapsed?: boolean;
+  onToggle: (id: string) => void;
+  children: React.ReactNode;
+}) {
+  return (
+    <div>
+      <button
+        type="button"
+        onClick={() => onToggle(id)}
+        className="w-full flex items-center gap-1.5 px-2 py-1.5 rounded-lg hover:bg-accent/40 text-[11px] font-medium text-muted-foreground transition-colors"
+      >
+        <ChevronRight
+          className={cn('size-3 transition-transform shrink-0', collapsed ? '' : 'rotate-90')}
+        />
+        <span className="flex-1 text-left">{label}</span>
+        <span className="text-[9px] text-muted-foreground/50">{collapsed ? '展开' : '收起'}</span>
+      </button>
+      <AnimatePresence initial={false}>
+        {!collapsed && (
+          <motion.div
+            initial={{ height: 0, opacity: 0 }}
+            animate={{ height: 'auto', opacity: 1 }}
+            exit={{ height: 0, opacity: 0 }}
+            transition={{ duration: 0.15 }}
+            className="overflow-hidden"
+          >
+            <div className="grid grid-cols-5 gap-2 pt-1 pb-1 px-1">{children}</div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+    </div>
+  );
+}
+
 export function FloatingCalculator() {
   const t = useT();
   const modeLabel: Record<CalcMode, string> = {
@@ -182,6 +224,12 @@ export function FloatingCalculator() {
   const [expression, setExpression] = useState('');
   const [justEvaluated, setJustEvaluated] = useState(false);
   const [copied, setCopied] = useState(false);
+
+  // 科学模式函数分区折叠状态（按分类收缩/展开，功能多时更清爽）
+  const [collapsedSci, setCollapsedSci] = useState<Record<string, boolean>>({});
+  const toggleSci = useCallback((id: string) => {
+    setCollapsedSci((prev) => ({ ...prev, [id]: !prev[id] }));
+  }, []);
 
   // Converter state
   const [convCategory, setConvCategory] = useState<ConverterCategory>('length');
@@ -374,6 +422,17 @@ export function FloatingCalculator() {
       return next;
     });
   }, []);
+
+  // 导出便签为 Markdown(.md)
+  const handleExportNotepad = useCallback(async () => {
+    const text = notepadText.trim();
+    if (!text) return;
+    const md = `# ${t('exportNotepadHead')}\n\n${text}`;
+    await saveTextToFile(md, {
+      defaultName: `omnimath-notepad-${Date.now()}`,
+      extensions: ['md'],
+    });
+  }, [notepadText, t]);
 
   // Append a calculation line (HH:MM:SS  expr = result) to the notepad and open it
   const appendToNotepad = useCallback((expr: string, result: string) => {
@@ -1131,9 +1190,10 @@ export function FloatingCalculator() {
   }) => {
     const variants = {
       default: 'bg-accent/50 hover:bg-accent text-foreground',
-      op: 'bg-primary/10 hover:bg-primary/20 text-primary font-semibold',
+      // 运算符：更实的底色 + 加粗，让 ÷ × − + 等符号清晰可辨
+      op: 'bg-primary/20 hover:bg-primary/30 text-primary font-bold',
       fn: 'bg-muted hover:bg-muted/70 text-muted-foreground',
-      eq: 'bg-primary hover:bg-primary/90 text-primary-foreground font-semibold',
+      eq: 'bg-primary hover:bg-primary/90 text-primary-foreground font-bold',
       clear: 'bg-destructive/10 hover:bg-destructive/20 text-destructive',
       ans: 'bg-primary/15 hover:bg-primary/25 text-primary font-semibold',
     };
@@ -1855,40 +1915,54 @@ export function FloatingCalculator() {
                     </div>
                   )}
                   {mode === 'scientific' && (
-                    <>
-                      <div className="grid grid-cols-5 gap-2 mb-2">
-                        <Btn variant="fn" onClick={() => inputConstant('pi', 'π')}>π</Btn>
-                        <Btn variant="fn" onClick={() => inputConstant('e', 'e')}>e</Btn>
+                    <div className="space-y-0.5 mb-1">
+                      <SciSection id="pwr" label="幂与根" collapsed={collapsedSci.pwr} onToggle={toggleSci}>
                         <Btn variant="fn" onClick={() => inputOperator('^2')}>x²</Btn>
+                        <Btn variant="fn" onClick={() => inputOperator('^3')}>x³</Btn>
                         <Btn variant="fn" onClick={() => inputOperator('^')}>x^y</Btn>
                         <Btn variant="fn" onClick={() => inputOperator('sqrt(')}>√</Btn>
+                        <Btn variant="fn" onClick={() => inputOperator('10^(')}>10ˣ</Btn>
+                        <Btn variant="fn" onClick={() => inputOperator('exp(')}>eˣ</Btn>
+                        <Btn variant="fn" onClick={() => inputOperator('1/(')}>1/x</Btn>
+                      </SciSection>
+                      <SciSection id="trig" label="三角函数" collapsed={collapsedSci.trig} onToggle={toggleSci}>
                         <Btn variant="fn" onClick={() => inputOperator('sin(')}>sin</Btn>
                         <Btn variant="fn" onClick={() => inputOperator('cos(')}>cos</Btn>
                         <Btn variant="fn" onClick={() => inputOperator('tan(')}>tan</Btn>
-                        <Btn variant="fn" onClick={() => inputOperator('ln(')}>ln</Btn>
-                        <Btn variant="fn" onClick={() => inputOperator('log(')}>log</Btn>
                         <Btn variant="fn" onClick={() => inputOperator('asin(')}>asin</Btn>
                         <Btn variant="fn" onClick={() => inputOperator('acos(')}>acos</Btn>
                         <Btn variant="fn" onClick={() => inputOperator('atan(')}>atan</Btn>
+                      </SciSection>
+                      <SciSection id="hyp" label="双曲函数" collapsed={collapsedSci.hyp} onToggle={toggleSci}>
                         <Btn variant="fn" onClick={() => inputOperator('sinh(')}>sinh</Btn>
                         <Btn variant="fn" onClick={() => inputOperator('cosh(')}>cosh</Btn>
                         <Btn variant="fn" onClick={() => inputOperator('tanh(')}>tanh</Btn>
+                      </SciSection>
+                      <SciSection id="log" label="对数" collapsed={collapsedSci.log} onToggle={toggleSci}>
+                        <Btn variant="fn" onClick={() => inputOperator('ln(')}>ln</Btn>
+                        <Btn variant="fn" onClick={() => inputOperator('log(')}>log</Btn>
+                      </SciSection>
+                      <SciSection id="num" label="数论" collapsed={collapsedSci.num} onToggle={toggleSci}>
                         <Btn variant="fn" onClick={computeFactorial}>n!</Btn>
                         <Btn variant="fn" onClick={() => inputOperator('gcd(')}>gcd</Btn>
                         <Btn variant="fn" onClick={() => inputOperator('lcm(')}>lcm</Btn>
-                        <Btn variant="fn" onClick={() => inputOperator('abs(')}>abs</Btn>
+                        <Btn variant="fn" onClick={() => inputOperator('mod(')}>mod</Btn>
+                      </SciSection>
+                      <SciSection id="round" label="取整与绝对值" collapsed={collapsedSci.round} onToggle={toggleSci}>
                         <Btn variant="fn" onClick={() => inputOperator('floor(')}>floor</Btn>
                         <Btn variant="fn" onClick={() => inputOperator('ceil(')}>ceil</Btn>
                         <Btn variant="fn" onClick={() => inputOperator('round(')}>round</Btn>
-                        <Btn variant="fn" onClick={() => inputOperator('10^(')}>10^x</Btn>
-                        <Btn variant="fn" onClick={() => inputOperator('1/(')}>1/x</Btn>
-                        <Btn variant="fn" onClick={() => inputOperator('^3')}>x³</Btn>
-                        <Btn variant="fn" onClick={() => inputOperator('exp(')}>e^x</Btn>
-                        <Btn variant="fn" onClick={() => inputOperator('mod(')}>mod</Btn>
+                        <Btn variant="fn" onClick={() => inputOperator('abs(')}>abs</Btn>
+                      </SciSection>
+                      <SciSection id="const" label="常量" collapsed={collapsedSci.const} onToggle={toggleSci}>
+                        <Btn variant="fn" onClick={() => inputConstant('pi', 'π')}>π</Btn>
+                        <Btn variant="fn" onClick={() => inputConstant('e', 'e')}>e</Btn>
+                      </SciSection>
+                      <SciSection id="tool" label="工具" collapsed={collapsedSci.tool} onToggle={toggleSci}>
                         <Btn variant="fn" onClick={() => inputOperator(',')}>,</Btn>
                         <Btn variant="ans" onClick={inputAns} disabled={!ansAvailable}>Ans</Btn>
-                      </div>
-                    </>
+                      </SciSection>
+                    </div>
                   )}
                   <div className="grid grid-cols-4 gap-2">
                     <Btn variant="clear" onClick={clearAll}>
@@ -1896,27 +1970,27 @@ export function FloatingCalculator() {
                     </Btn>
                     <Btn variant="fn" onClick={toggleSign}>±</Btn>
                     <Btn variant="fn" onClick={inputPercent}>%</Btn>
-                    <Btn variant="op" onClick={() => inputOperator('/')}>÷</Btn>
+                    <Btn variant="op" onClick={() => inputOperator('/')} className="text-xl leading-none">÷</Btn>
 
                     <Btn variant="fn" onClick={() => inputOperator('(')}>(</Btn>
                     <Btn variant="fn" onClick={() => inputOperator(')')}>)</Btn>
                     <Btn variant="fn" onClick={backspace}>⌫</Btn>
-                    <Btn variant="op" onClick={() => inputOperator('*')}>×</Btn>
+                    <Btn variant="op" onClick={() => inputOperator('*')} className="text-xl leading-none">×</Btn>
 
                     <Btn onClick={() => inputDigit('7')}>7</Btn>
                     <Btn onClick={() => inputDigit('8')}>8</Btn>
                     <Btn onClick={() => inputDigit('9')}>9</Btn>
-                    <Btn variant="op" onClick={() => inputOperator('-')}>−</Btn>
+                    <Btn variant="op" onClick={() => inputOperator('-')} className="text-xl leading-none">−</Btn>
 
                     <Btn onClick={() => inputDigit('4')}>4</Btn>
                     <Btn onClick={() => inputDigit('5')}>5</Btn>
                     <Btn onClick={() => inputDigit('6')}>6</Btn>
-                    <Btn variant="op" onClick={() => inputOperator('+')}>+</Btn>
+                    <Btn variant="op" onClick={() => inputOperator('+')} className="text-xl leading-none">+</Btn>
 
                     <Btn onClick={() => inputDigit('1')}>1</Btn>
                     <Btn onClick={() => inputDigit('2')}>2</Btn>
                     <Btn onClick={() => inputDigit('3')}>3</Btn>
-                    <Btn variant="eq" onClick={evaluate} className="row-span-2">=</Btn>
+                    <Btn variant="eq" onClick={evaluate} className="row-span-2 text-xl leading-none">=</Btn>
 
                     <Btn onClick={() => inputDigit('0')} className="col-span-2">0</Btn>
                     <Btn onClick={() => inputDigit('.')}>.</Btn>
@@ -1970,6 +2044,17 @@ export function FloatingCalculator() {
                     <div className="flex items-center gap-1 px-1 text-[10px] text-muted-foreground">
                       <NotebookPen className="size-3" />
                       <span>{t('qcNotepad')}</span>
+                      <button
+                        type="button"
+                        onClick={handleExportNotepad}
+                        disabled={!notepadText.trim()}
+                        className="ml-auto inline-flex items-center gap-1 rounded px-1 py-0.5 text-[10px] font-medium text-muted-foreground hover:text-foreground hover:bg-accent transition-colors disabled:opacity-40 disabled:pointer-events-none"
+                        title={t('exportNotepad')}
+                        aria-label={t('exportNotepad')}
+                      >
+                        <Download className="size-3" />
+                        <span>{t('exportNotepad')}</span>
+                      </button>
                     </div>
                     <textarea
                       value={notepadText}

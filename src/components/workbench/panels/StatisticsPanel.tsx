@@ -191,6 +191,24 @@ function tPValueTwoTailed(t: number, df: number): number {
   return Math.min(1, Math.max(0, ib));
 }
 
+/**
+ * 双侧 t 临界值：找到 t 使 P(|T| > t) = alpha，即 P(-t < T < t) = 1 - alpha。
+ * 用于计算均值置信区间与回归预测置信带。
+ */
+function tCritical(alpha: number, df: number): number {
+  if (df <= 0 || !Number.isFinite(alpha)) return NaN;
+  let lo = 0;
+  let hi = 100;
+  let guard = 0;
+  while (tPValueTwoTailed(hi, df) > alpha && guard++ < 60) hi *= 2;
+  for (let i = 0; i < 60; i++) {
+    const mid = (lo + hi) / 2;
+    if (tPValueTwoTailed(mid, df) > alpha) lo = mid;
+    else hi = mid;
+  }
+  return (lo + hi) / 2;
+}
+
 /** Chi-square upper-tail p-value (1 - CDF). */
 function chiSquarePValue(chi2: number, df: number): number {
   if (df <= 0 || chi2 < 0) return NaN;
@@ -344,13 +362,17 @@ function parseCSVNumbers(text: string): number[] {
 /* ================================================================== *
  * StatChart — SVG-based mini charts (Task 9)
  * ================================================================== */
-type ChartType = 'histogram' | 'boxplot' | 'scatter';
+type ChartType = 'histogram' | 'boxplot' | 'scatter' | 'qq';
 
 interface StatChartProps {
   type: ChartType;
   data?: number[];
   points?: Array<{ x: number; y: number }>;
   regressionLine?: { slope: number; intercept: number };
+  vertical?: boolean;
+  showPoints?: boolean;
+  residuals?: boolean;
+  band?: boolean;
 }
 
 const CHART_W = 280;
@@ -368,12 +390,91 @@ function ChartEmpty({ label }: { label: string }) {
 interface HistogramChartProps {
   data: number[];
   zoomed?: boolean;
+  binRule?: BinRule;
+  density?: boolean;
+  cumulative?: boolean;
+  showPoints?: boolean;
 }
 
 const MIN_BAR_WIDTH = 28;
 
-function HistogramChart({ data, zoomed = false }: HistogramChartProps) {
+/** 箱数规则：Sturges / 平方根 / Freedman-Diaconis / 自定义整数。 */
+type BinRule = 'sturges' | 'sqrt' | 'fd' | number;
+
+function binCountFor(data: number[], rule: BinRule): number {
+  const n = data.length;
+  if (typeof rule === 'number') return Math.max(1, Math.round(rule));
+  if (rule === 'sqrt') return Math.max(1, Math.ceil(Math.sqrt(n)));
+  if (rule === 'fd') {
+    const sorted = [...data].sort((a, b) => a - b);
+    const q1 = quantileSorted(sorted, 0.25);
+    const q3 = quantileSorted(sorted, 0.75);
+    const iqr = q3 - q1;
+    const h = iqr > 0 ? (2 * iqr) / Math.cbrt(n) : 0;
+    const span = Math.max(...data) - Math.min(...data);
+    if (h > 0 && span > 0) return Math.max(1, Math.ceil(span / h));
+  }
+  // Sturges 默认
+  return Math.max(1, Math.ceil(Math.log2(n) + 1));
+}
+
+/** 测量容器宽度，让图表随容器自适应（替代固定 280px 宽度）。 */
+function useMeasureWidth<T extends HTMLElement>() {
+  const ref = useRef<T | null>(null);
+  const [width, setWidth] = useState(0);
+  useEffect(() => {
+    const el = ref.current;
+    if (!el) return;
+    const update = () => setWidth(Math.max(0, Math.floor(el.getBoundingClientRect().width)));
+    update();
+    let ro: ResizeObserver | null = null;
+    if (typeof ResizeObserver !== 'undefined') {
+      ro = new ResizeObserver(update);
+      ro.observe(el);
+    }
+    return () => ro?.disconnect();
+  }, []);
+  return { ref, width };
+}
+
+/** 紧凑统计摘要条：均值 / 中位数 / 标准差 / 最小 / 最大 / n */
+function StatStrip({ data }: { data: number[] }) {
+  const sorted = useMemo(() => [...data].sort((a, b) => a - b), [data]);
+  const n = data.length;
+  if (n < 1) return null;
+  const mean = data.reduce((a, b) => a + b, 0) / n;
+  const median =
+    sorted.length % 2
+      ? sorted[(sorted.length - 1) / 2]
+      : (sorted[sorted.length / 2 - 1] + sorted[sorted.length / 2]) / 2;
+  const variance = data.reduce((a, b) => a + (b - mean) ** 2, 0) / n;
+  const std = Math.sqrt(variance);
+  const items: Array<[string, string]> = [
+    ['样本数 n', String(n)],
+    ['均值', fmt(mean, 4)],
+    ['中位数', fmt(median, 4)],
+    ['标准差', fmt(std, 4)],
+    ['最小', fmt(sorted[0], 4)],
+    ['最大', fmt(sorted[sorted.length - 1], 4)],
+  ];
+  return (
+    <div className="grid grid-cols-3 sm:grid-cols-6 gap-1.5">
+      {items.map(([lbl, v]) => (
+        <div
+          key={lbl}
+          className="rounded-md border border-border/40 bg-muted/30 px-1.5 py-1 text-center"
+        >
+          <div className="text-[9px] text-muted-foreground">{lbl}</div>
+          <div className="text-[11px] font-mono font-semibold tabular-nums text-primary">{v}</div>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+function HistogramChart({ data, zoomed = false, binRule = 'sturges', density = false, cumulative = false, showPoints = false }: HistogramChartProps) {
   const [hover, setHover] = useState<number | null>(null);
+  const { ref, width } = useMeasureWidth<HTMLDivElement>();
   const n = data.length;
 
   // Memoize the expensive binning. Previously every hover (setHover) re-rendered
@@ -382,10 +483,16 @@ function HistogramChart({ data, zoomed = false }: HistogramChartProps) {
   // on `data`, so it is computed once and reused across hover re-renders.
   const model = useMemo(() => {
     if (n < 2) return null;
-    const min = Math.min(...data);
-    const max = Math.max(...data);
-    if (min === max) return null;
-    const k = Math.max(1, Math.ceil(Math.log2(n) + 1)); // Sturges' rule
+    let min = Math.min(...data);
+    let max = Math.max(...data);
+    // 所有值相同（min === max）时无法按正常区间分箱，人为扩展一个区间，
+    // 用单个柱展示全部数据，避免出现"无法分箱"的错误提示。
+    if (min === max) {
+      const pad = Math.abs(min) * 0.5 || 1;
+      min -= pad;
+      max += pad;
+    }
+    const k = binCountFor(data, binRule);
     const binWidth = (max - min) / k;
     const bins = new Array(k).fill(0);
     for (const v of data) {
@@ -394,23 +501,87 @@ function HistogramChart({ data, zoomed = false }: HistogramChartProps) {
       if (idx < 0) idx = 0;
       bins[idx]++;
     }
-    return { min, max, k, binWidth, bins, maxFreq: Math.max(...bins, 1) };
-  }, [data, n]);
+    // 累计频数（用于 ECDF 叠加）
+    const cum = new Array(k).fill(0);
+    let acc = 0;
+    for (let i = 0; i < k; i++) {
+      acc += bins[i];
+      cum[i] = acc;
+    }
+    return { min, max, k, binWidth, bins, cum, maxFreq: Math.max(...bins, 1) };
+  }, [data, n, binRule]);
 
-  if (!model) return <ChartEmpty label={n < 2 ? '需要至少 2 个数据点' : '数据无变化，无法分箱'} />;
+  // 均值 / 中位数标记（用于观察分布位置）— 必须在条件返回前调用 Hook
+  const sorted = useMemo(() => [...data].sort((a, b) => a - b), [data]);
+  const median =
+    sorted.length % 2
+      ? sorted[(sorted.length - 1) / 2]
+      : (sorted[sorted.length / 2 - 1] + sorted[sorted.length / 2]) / 2;
 
-  const { min, max, k, binWidth, bins, maxFreq } = model;
-  const yCeil = zoomed ? Math.ceil(maxFreq * 1.15) : maxFreq;
+  if (!model) return <ChartEmpty label="需要至少 2 个数据点" />;
+
+  const { min, max, k, binWidth, bins, cum, maxFreq } = model;
+  const mean = data.reduce((a, b) => a + b, 0) / n;
+  // y 轴单位：density 模式用 概率密度（频数 / (n·binWidth)），否则用频数
+  const barValue = (f: number) => (density ? f / (n * binWidth) : f);
+  const maxBar = Math.max(...bins.map(barValue), 1);
+  const yCeil = zoomed ? maxBar * 1.15 : maxBar;
+  const sigma = Math.sqrt(data.reduce((a, b) => a + (b - mean) ** 2, 0) / n);
+  const normalDensity = (x: number) =>
+    (1 / (sigma * Math.sqrt(2 * Math.PI))) * Math.exp(-((x - mean) ** 2) / (2 * sigma * sigma));
   const ch = zoomed ? 280 : 200;
-  const contentW = Math.max(CHART_W, k * MIN_BAR_WIDTH + CHART_PAD.l + CHART_PAD.r);
+  // 自适应：优先容器宽度，池化最小宽度（避免 null 时跳动）。
+  const baseW = Math.max(width, CHART_W);
+  const contentW = Math.max(baseW, k * MIN_BAR_WIDTH + CHART_PAD.l + CHART_PAD.r);
   const plotW = contentW - CHART_PAD.l - CHART_PAD.r;
   const plotH = ch - CHART_PAD.t - CHART_PAD.b;
   const barW = plotW / k;
   const yScale = (f: number) => CHART_PAD.t + plotH - (f / yCeil) * plotH;
   const showTopLabels = k <= 15;
+  const dataSpan = max - min || 1;
+  const sx = (v: number) => CHART_PAD.l + ((v - min) / dataSpan) * plotW;
+
+  const marker = (v: number, label: string, color: string) => {
+    const x = sx(v);
+    return (
+      <g key={label}>
+        <line
+          x1={x}
+          x2={x}
+          y1={CHART_PAD.t}
+          y2={CHART_PAD.t + plotH}
+          stroke={color}
+          strokeWidth={1.5}
+          strokeDasharray="4 3"
+          opacity={0.9}
+        />
+        <text x={x} y={CHART_PAD.t - 3} textAnchor="middle" fontSize={8} fontWeight={600} fill={color}>
+          {label}
+        </text>
+      </g>
+    );
+  };
+
+  // 正态密度叠加（density 模式为主）
+  const normCurve = density
+    ? new Array(80).fill(0).map((_, i) => {
+        const x = min + ((max - min) * i) / 79;
+        return { x: sx(x), y: yScale(normalDensity(x)) };
+      })
+    : [];
+
+  // ECDF 步进线（右轴 0–1）
+  const ecdfPoints = cumulative
+    ? Array.from({ length: k + 1 }, (_, i) => {
+        const x = i === k ? max : min + i * binWidth;
+        const frac = i === 0 ? 0 : cum[i - 1] / n;
+        return { x: sx(x), y: CHART_PAD.t + plotH - frac * plotH };
+      })
+    : [];
 
   return (
     <div
+      ref={ref}
       className="relative w-full"
       style={{
         overflowX: k * MIN_BAR_WIDTH > CHART_W - CHART_PAD.l - CHART_PAD.r ? 'auto' : 'visible',
@@ -424,19 +595,24 @@ function HistogramChart({ data, zoomed = false }: HistogramChartProps) {
       >
         {[0, 0.5, 1].map((t) => {
           const y = CHART_PAD.t + plotH - t * plotH;
-          const yVal = Math.round(t * yCeil);
+          const yVal = density ? parseFloat((t * yCeil).toPrecision(3)) : Math.round(t * yCeil);
           return (
             <g key={t}>
               <line x1={CHART_PAD.l} y1={y} x2={contentW - CHART_PAD.r} y2={y} stroke="currentColor" strokeOpacity={0.08} />
               <text x={CHART_PAD.l - 4} y={y + 3} textAnchor="end" fontSize={8} fill="currentColor" opacity={0.55}>
                 {yVal}
               </text>
+              {cumulative && (
+                <text x={contentW - CHART_PAD.r + 4} y={y + 3} textAnchor="start" fontSize={8} fill="#8b5cf6" opacity={0.8}>
+                  {t === 0 ? 0 : t === 1 ? 1 : 0.5}
+                </text>
+              )}
             </g>
           );
         })}
         {bins.map((f, i) => {
           const x = CHART_PAD.l + i * barW;
-          const y = yScale(f);
+          const y = yScale(barValue(f));
           const h = CHART_PAD.t + plotH - y;
           const lo = min + i * binWidth;
           const hi = i === k - 1 ? max : min + (i + 1) * binWidth;
@@ -482,6 +658,43 @@ function HistogramChart({ data, zoomed = false }: HistogramChartProps) {
             </g>
           );
         })}
+        {/* 正态密度叠加线 */}
+        {density && normCurve.length > 1 && (
+          <polyline
+            points={normCurve.map((p) => `${p.x.toFixed(1)},${p.y.toFixed(1)}`).join(' ')}
+            fill="none"
+            stroke="#f59e0b"
+            strokeWidth={1.8}
+            strokeDasharray="5 3"
+          />
+        )}
+        {/* ECDF 累计步进线 */}
+        {cumulative && ecdfPoints.length > 1 && (
+          <polyline
+            points={ecdfPoints.map((p) => `${p.x.toFixed(1)},${p.y.toFixed(1)}`).join(' ')}
+            fill="none"
+            stroke="#8b5cf6"
+            strokeWidth={2}
+            strokeLinejoin="round"
+          />
+        )}
+        {/* 均值 / 中位数标记线 */}
+        {marker(mean, `均值 ${fmt(mean, 3)}`, '#f59e0b')}
+        {marker(median, `中位 ${fmt(median, 3)}`, '#0ea5e9')}
+        {/* 数据点 rug 条带：在底部绘制每个观测值，便于观察个体分布与稀疏区 */}
+        {showPoints && (
+          <g>
+            {data.map((v, i) => {
+              const x = sx(v);
+              const y = CHART_PAD.t + plotH - 4 - ((i * 7919) % 11) * 1.5;
+              return (
+                <circle key={i} cx={x} cy={y} r={1.4} fill="#34d399" fillOpacity={0.75}>
+                  <title>{`第 ${i + 1} 个观测: ${fmt(v, 4)}`}</title>
+                </circle>
+              );
+            })}
+          </g>
+        )}
         <line x1={CHART_PAD.l} y1={CHART_PAD.t} x2={CHART_PAD.l} y2={CHART_PAD.t + plotH} stroke="currentColor" strokeOpacity={0.3} />
         <line x1={CHART_PAD.l} y1={CHART_PAD.t + plotH} x2={contentW - CHART_PAD.r} y2={CHART_PAD.t + plotH} stroke="currentColor" strokeOpacity={0.3} />
       </svg>
@@ -497,6 +710,30 @@ function HistogramChart({ data, zoomed = false }: HistogramChartProps) {
           }}
         />
       )}
+      {/* 图例 */}
+      <div className="mt-1 flex flex-wrap items-center gap-3 text-[10px] text-muted-foreground">
+        <span className="inline-flex items-center gap-1">
+          <span className="inline-block w-3 h-0.5 bg-amber-500" /> 均值
+        </span>
+        <span className="inline-flex items-center gap-1">
+          <span className="inline-block w-3 h-0.5 bg-sky-500" /> 中位数
+        </span>
+        {density && (
+          <span className="inline-flex items-center gap-1">
+            <span className="inline-block w-3 border-t border-dashed border-amber-500" /> 正态密度
+          </span>
+        )}
+        {cumulative && (
+          <span className="inline-flex items-center gap-1">
+            <span className="inline-block w-3 h-0.5 bg-violet-500" /> 累计 (ECDF)
+          </span>
+        )}
+        {showPoints && (
+          <span className="inline-flex items-center gap-1">
+            <span className="inline-block size-1.5 rounded-full bg-emerald-400" /> 数据点
+          </span>
+        )}
+      </div>
     </div>
   );
 }
@@ -512,7 +749,8 @@ function quantileSorted(sorted: number[], q: number): number {
   return sorted[base];
 }
 
-function BoxPlotChart({ data }: { data: number[] }) {
+function BoxPlotChart({ data, vertical = false, showPoints = false }: { data: number[]; vertical?: boolean; showPoints?: boolean }) {
+  const { ref, width } = useMeasureWidth<HTMLDivElement>();
   if (data.length < 2) return <ChartEmpty label="需要至少 2 个数据点" />;
   const sorted = [...data].sort((a, b) => a - b);
   const q1 = quantileSorted(sorted, 0.25);
@@ -525,61 +763,174 @@ function BoxPlotChart({ data }: { data: number[] }) {
   const whiskerLo = inliers.length > 0 ? Math.min(...inliers) : q1;
   const whiskerHi = inliers.length > 0 ? Math.max(...inliers) : q3;
   const outliers = sorted.filter((v) => v < loFence || v > hiFence);
+  const mean = data.reduce((a, b) => a + b, 0) / data.length;
 
-  const allVals = sorted;
-  const dMin = Math.min(...allVals, whiskerLo);
-  const dMax = Math.max(...allVals, whiskerHi);
+  const dMin = Math.min(...sorted, whiskerLo);
+  const dMax = Math.max(...sorted, whiskerHi);
   const span = dMax - dMin || 1;
   const pad = span * 0.08;
-  const xMin = dMin - pad;
-  const xMax = dMax + pad;
-  const range = xMax - xMin || 1;
+  const vMin = dMin - pad;
+  const vMax = dMax + pad;
+  const range = vMax - vMin || 1;
 
-  const plotW = CHART_W - CHART_PAD.l - CHART_PAD.r;
-  const plotH = CHART_H - CHART_PAD.t - CHART_PAD.b;
-  const cy = CHART_PAD.t + plotH / 2;
+  const W = Math.max(width, CHART_W);
+  const H = CHART_H;
+  const plotW = W - CHART_PAD.l - CHART_PAD.r;
+  const plotH = H - CHART_PAD.t - CHART_PAD.b;
+  const cMid = CHART_PAD.t + plotH / 2;
   const boxH = Math.min(plotH * 0.5, 40);
-  const sx = (v: number) => CHART_PAD.l + ((v - xMin) / range) * plotW;
+  // 值轴坐标：水平 → 横向 px(v)；垂直 → 纵向 py(v)
+  const sx = (v: number) => CHART_PAD.l + ((v - vMin) / range) * plotW;
+  const sy = (v: number) => CHART_PAD.t + plotH - ((v - vMin) / range) * plotH;
+
+  // 坐标(px, py)与两个方向的画线/画框辅助
+  const hLine = (v: number, y1: number, y2: number, stroke: string, w = 1.5) => (
+    <line x1={sx(v)} y1={y1} x2={sx(v)} y2={y2} stroke={stroke} strokeWidth={w} />
+  );
+  const vLine = (v: number, x1: number, x2: number, stroke: string, w = 1.5) => (
+    <line x1={x1} y1={sy(v)} x2={x2} y2={sy(v)} stroke={stroke} strokeWidth={w} />
+  );
+
+  // 数值标注（避开箱体，放在两端外侧）
+  const valLabel = (v: number, label: string, color: string) =>
+    vertical ? (
+      <text x={CHART_PAD.t + 10} y={sy(v) + 3} fontSize={8} fill={color} fontWeight={600}>
+        {label} {fmt(v, 3)}
+      </text>
+    ) : (
+      <text x={sx(v)} y={cMid + boxH / 2 + 12} textAnchor="middle" fontSize={8} fill={color} fontWeight={600}>
+        {label} {fmt(v, 3)}
+      </text>
+    );
 
   return (
-    <svg viewBox={`0 0 ${CHART_W} ${CHART_H}`} className="w-full" style={{ height: 200 }}>
-      {/* x-axis ticks */}
-      {[0, 0.25, 0.5, 0.75, 1].map((t) => {
-        const xv = xMin + t * range;
-        const x = sx(xv);
-        return (
-          <g key={t}>
-            <line x1={x} y1={CHART_PAD.t} x2={x} y2={CHART_PAD.t + plotH} stroke="currentColor" strokeOpacity={0.06} />
-            <text x={x} y={CHART_H - CHART_PAD.b + 12} textAnchor="middle" fontSize={8} fill="currentColor" opacity={0.55}>
-              {fmt(xv, 3)}
-            </text>
+    <div ref={ref} className="w-full">
+      <svg viewBox={`0 0 ${W} ${H}`} className="w-full" style={{ height: 200 }}>
+        {/* 值轴刻度 */}
+        {[0, 0.25, 0.5, 0.75, 1].map((t) => {
+          const vv = vMin + t * range;
+          return vertical ? (
+            <g key={t}>
+              <line x1={CHART_PAD.l} y1={sy(vv)} x2={W - CHART_PAD.r} y2={sy(vv)} stroke="currentColor" strokeOpacity={0.06} />
+              <text x={CHART_PAD.l - 4} y={sy(vv) + 3} textAnchor="end" fontSize={8} fill="currentColor" opacity={0.55}>
+                {fmt(vv, 3)}
+              </text>
+            </g>
+          ) : (
+            <g key={t}>
+              <line x1={sx(vv)} y1={CHART_PAD.t} x2={sx(vv)} y2={CHART_PAD.t + plotH} stroke="currentColor" strokeOpacity={0.06} />
+              <text x={sx(vv)} y={H - CHART_PAD.b + 12} textAnchor="middle" fontSize={8} fill="currentColor" opacity={0.55}>
+                {fmt(vv, 3)}
+              </text>
+            </g>
+          );
+        })}
+
+        {vertical ? (
+          <>
+            {/* whiskers */}
+            {vLine(whiskerLo, cMid, cMid - boxH / 2, '#2dd4bf')}
+            {vLine(whiskerHi, cMid, cMid + boxH / 2, '#2dd4bf')}
+            {vLine(whiskerLo, CHART_PAD.l + plotW / 2 - 4, CHART_PAD.l + plotW / 2 + 4, '#2dd4bf')}
+            {vLine(whiskerHi, CHART_PAD.l + plotW / 2 - 4, CHART_PAD.l + plotW / 2 + 4, '#2dd4bf')}
+            {/* box */}
+            <rect x={cMid - boxH / 2} y={sy(q3)} width={boxH} height={Math.max(1, sy(q1) - sy(q3))} fill="#2dd4bf" fillOpacity={0.25} stroke="#2dd4bf" strokeWidth={1.5} rx={2} />
+            {/* median */}
+            <line x1={cMid - boxH / 2} y1={sy(median)} x2={cMid + boxH / 2} y2={sy(median)} stroke="#0f766e" strokeWidth={2} />
+            {/* outliers */}
+            {outliers.map((o, i) => (
+              <circle key={i} cx={cMid} cy={sy(o)} r={2.5} fill="none" stroke="#f43f5e" strokeWidth={1.2} />
+            ))}
+            {/* mean diamond */}
+            <rect x={cMid - 3.5} y={sy(mean) - 3.5} width={7} height={7} transform={`rotate(45 ${cMid} ${sy(mean)})`} fill="#f59e0b" stroke="#fff" strokeWidth={0.8} />
+            {/* 数值标注 */}
+            {valLabel(whiskerLo, '下须', '#2dd4bf')}
+            {valLabel(q1, 'Q1', '#94a3b8')}
+            {valLabel(median, '中位', '#94a3b8')}
+            {valLabel(q3, 'Q3', '#94a3b8')}
+            {valLabel(whiskerHi, '上须', '#2dd4bf')}
+            {valLabel(mean, '均值', '#f59e0b')}
+          </>
+        ) : (
+          <>
+            {/* whiskers */}
+            {hLine(whiskerLo, cMid, cMid - boxH / 2, '#2dd4bf')}
+            {hLine(whiskerHi, cMid, cMid + boxH / 2, '#2dd4bf')}
+            {hLine(whiskerLo, cMid - boxH / 3, cMid + boxH / 3, '#2dd4bf')}
+            {hLine(whiskerHi, cMid - boxH / 3, cMid + boxH / 3, '#2dd4bf')}
+            {/* box */}
+            <rect x={sx(q1)} y={cMid - boxH / 2} width={Math.max(1, sx(q3) - sx(q1))} height={boxH} fill="#2dd4bf" fillOpacity={0.25} stroke="#2dd4bf" strokeWidth={1.5} rx={2} />
+            {/* median */}
+            <line x1={sx(median)} y1={cMid - boxH / 2} x2={sx(median)} y2={cMid + boxH / 2} stroke="#0f766e" strokeWidth={2} />
+            {/* outliers */}
+            {outliers.map((o, i) => (
+              <circle key={i} cx={sx(o)} cy={cMid} r={2.5} fill="none" stroke="#f43f5e" strokeWidth={1.2} />
+            ))}
+            {/* mean diamond */}
+            <rect x={sx(mean) - 3.5} y={cMid - 3.5} width={7} height={7} transform={`rotate(45 ${sx(mean)} ${cMid})`} fill="#f59e0b" stroke="#fff" strokeWidth={0.8} />
+            {/* 数值标注 */}
+            {valLabel(whiskerLo, '下须', '#2dd4bf')}
+            {valLabel(q1, 'Q1', '#94a3b8')}
+            {valLabel(median, '中位', '#94a3b8')}
+            {valLabel(q3, 'Q3', '#94a3b8')}
+            {valLabel(whiskerHi, '上须', '#2dd4bf')}
+            {valLabel(mean, '均值', '#f59e0b')}
+          </>
+        )}
+        {/* 抖动数据点：叠加在箱体上，展示每个观测的实际位置 */}
+        {showPoints && (
+          <g>
+            {data.map((v, i) => {
+              const jitter = ((i * 2654435761) % 100) / 100 - 0.5;
+              const jx = jitter * boxH * 0.9;
+              const jy = jitter * boxH * 0.9;
+              return vertical ? (
+                <circle key={i} cx={cMid + jx} cy={sy(v)} r={1.6} fill="#34d399" fillOpacity={0.7}>
+                  <title>{`第 ${i + 1} 个观测: ${fmt(v, 4)}`}</title>
+                </circle>
+              ) : (
+                <circle key={i} cx={sx(v)} cy={cMid + jy} r={1.6} fill="#34d399" fillOpacity={0.7}>
+                  <title>{`第 ${i + 1} 个观测: ${fmt(v, 4)}`}</title>
+                </circle>
+              );
+            })}
           </g>
-        );
-      })}
-      {/* whiskers */}
-      <line x1={sx(whiskerLo)} y1={cy} x2={sx(q1)} y2={cy} stroke="#2dd4bf" strokeWidth={1.5} />
-      <line x1={sx(q3)} y1={cy} x2={sx(whiskerHi)} y2={cy} stroke="#2dd4bf" strokeWidth={1.5} />
-      <line x1={sx(whiskerLo)} y1={cy - boxH / 3} x2={sx(whiskerLo)} y2={cy + boxH / 3} stroke="#2dd4bf" strokeWidth={1.5} />
-      <line x1={sx(whiskerHi)} y1={cy - boxH / 3} x2={sx(whiskerHi)} y2={cy + boxH / 3} stroke="#2dd4bf" strokeWidth={1.5} />
-      {/* box */}
-      <rect x={sx(q1)} y={cy - boxH / 2} width={Math.max(1, sx(q3) - sx(q1))} height={boxH} fill="#2dd4bf" fillOpacity={0.25} stroke="#2dd4bf" strokeWidth={1.5} rx={2} />
-      {/* median */}
-      <line x1={sx(median)} y1={cy - boxH / 2} x2={sx(median)} y2={cy + boxH / 2} stroke="#0f766e" strokeWidth={2} />
-      {/* outliers */}
-      {outliers.map((o, i) => (
-        <circle key={i} cx={sx(o)} cy={cy} r={2.5} fill="none" stroke="#f43f5e" strokeWidth={1.2} />
-      ))}
-      {/* labels */}
-      <text x={sx(q1)} y={cy - boxH / 2 - 4} textAnchor="middle" fontSize={8} fill="currentColor" opacity={0.6}>Q1</text>
-      <text x={sx(median)} y={cy - boxH / 2 - 4} textAnchor="middle" fontSize={8} fill="currentColor" opacity={0.6}>中位</text>
-      <text x={sx(q3)} y={cy - boxH / 2 - 4} textAnchor="middle" fontSize={8} fill="currentColor" opacity={0.6}>Q3</text>
-      {/* x-axis */}
-      <line x1={CHART_PAD.l} y1={CHART_PAD.t + plotH} x2={CHART_W - CHART_PAD.r} y2={CHART_PAD.t + plotH} stroke="currentColor" strokeOpacity={0.3} />
-    </svg>
+        )}
+        {/* 值轴 */}
+        {vertical ? (
+          <line x1={CHART_PAD.l} y1={CHART_PAD.t} x2={CHART_PAD.l} y2={CHART_PAD.t + plotH} stroke="currentColor" strokeOpacity={0.3} />
+        ) : (
+          <line x1={CHART_PAD.l} y1={CHART_PAD.t + plotH} x2={W - CHART_PAD.r} y2={CHART_PAD.t + plotH} stroke="currentColor" strokeOpacity={0.3} />
+        )}
+      </svg>
+      {/* 图例与说明 */}
+      <div className="mt-1 flex flex-wrap items-center gap-3 text-[10px] text-muted-foreground">
+        <span className="inline-flex items-center gap-1">
+          <span className="inline-block w-3 h-1.5 bg-teal-600/40 border border-teal-600" /> IQR (Q1–Q3)
+        </span>
+        <span className="inline-flex items-center gap-1">
+          <span className="inline-block w-3 h-0.5 bg-teal-700" /> 中位数
+        </span>
+        <span className="inline-flex items-center gap-1">
+          <span className="inline-block size-1.5 bg-amber-500 rotate-45" /> 均值
+        </span>
+        <span className="inline-flex items-center gap-1">
+          <span className="inline-block size-2 rounded-full border border-rose-500" /> 离群点
+        </span>
+        {showPoints && (
+          <span className="inline-flex items-center gap-1">
+            <span className="inline-block size-1.5 rounded-full bg-emerald-400" /> 数据点
+          </span>
+        )}
+        <span className="text-muted-foreground/70">IQR = {fmt(iqr, 3)}</span>
+      </div>
+    </div>
   );
 }
 
-function ScatterChart({ points, regressionLine }: { points: Array<{ x: number; y: number }>; regressionLine?: { slope: number; intercept: number } }) {
+function ScatterChart({ points, regressionLine, residuals = false, band = false }: { points: Array<{ x: number; y: number }>; regressionLine?: { slope: number; intercept: number }; residuals?: boolean; band?: boolean }) {
+  const { ref, width } = useMeasureWidth<HTMLDivElement>();
+  const [hover, setHover] = useState<number | null>(null);
   if (points.length < 1) return <ChartEmpty label="需要 (x, y) 数据对" />;
   const xs = points.map((p) => p.x);
   const ys = points.map((p) => p.y);
@@ -598,54 +949,294 @@ function ScatterChart({ points, regressionLine }: { points: Array<{ x: number; y
   const xRange = hiX - loX || 1;
   const yRange = hiY - loY || 1;
 
-  const plotW = CHART_W - CHART_PAD.l - CHART_PAD.r;
-  const plotH = CHART_H - CHART_PAD.t - CHART_PAD.b;
+  const W = Math.max(width, CHART_W);
+  const H = CHART_H;
+  const plotW = W - CHART_PAD.l - CHART_PAD.r;
+  const plotH = H - CHART_PAD.t - CHART_PAD.b;
   const sx = (v: number) => CHART_PAD.l + ((v - loX) / xRange) * plotW;
   const sy = (v: number) => CHART_PAD.t + plotH - ((v - loY) / yRange) * plotH;
 
+  // 皮尔逊相关系数 r
+  const n = points.length;
+  const mx = xs.reduce((a, b) => a + b, 0) / n;
+  const my = ys.reduce((a, b) => a + b, 0) / n;
+  let cxx = 0, cyy = 0, cxy = 0;
+  for (const p of points) {
+    cxx += (p.x - mx) ** 2;
+    cyy += (p.y - my) ** 2;
+    cxy += (p.x - mx) * (p.y - my);
+  }
+  const r = Math.sqrt(cxx * cyy) > 0 ? cxy / Math.sqrt(cxx * cyy) : NaN;
+
+  const hoverPt = hover !== null ? points[hover] : null;
+
+  // 回归置信带（95% 预测均值区间）与残差条数据。
+  // yhat ± t_{0.025, n-2} * s * sqrt(1/n + (x-x̄)²/Sxx)，s = sqrt(SSres/(n-2)).
+  let bandLower: Array<{ x: number; y: number }> | null = null;
+  let bandUpper: Array<{ x: number; y: number }> | null = null;
+  const residualsList: Array<{ x: number; y: number; yhat: number }> = [];
+  if (regressionLine && n >= 3) {
+    const xbar = mx;
+    let sxxAcc = 0;
+    let ssresAcc = 0;
+    for (const p of points) {
+      sxxAcc += (p.x - xbar) ** 2;
+      const yhat = regressionLine.slope * p.x + regressionLine.intercept;
+      ssresAcc += (p.y - yhat) ** 2;
+      residualsList.push({ x: p.x, y: p.y, yhat });
+    }
+    const s = Math.sqrt(ssresAcc / (n - 2));
+    const tc = tCritical(0.05, n - 2);
+    if (Number.isFinite(tc) && sxxAcc > 0) {
+      const N = 40;
+      const lo: Array<{ x: number; y: number }> = [];
+      const up: Array<{ x: number; y: number }> = [];
+      bandLower = lo;
+      bandUpper = up;
+      for (let i = 0; i <= N; i++) {
+        const x = loX + (xRange * i) / N;
+        const yhat = regressionLine.slope * x + regressionLine.intercept;
+        const se = s * Math.sqrt(1 / n + ((x - xbar) ** 2) / sxxAcc);
+        const w = tc * se;
+        lo.push({ x, y: yhat - w });
+        up.push({ x, y: yhat + w });
+      }
+    }
+  }
+
   return (
-    <svg viewBox={`0 0 ${CHART_W} ${CHART_H}`} className="w-full" style={{ height: 200 }}>
-      {/* grid + ticks */}
-      {[0, 0.25, 0.5, 0.75, 1].map((t) => {
-        const xv = loX + t * xRange;
-        const yv = loY + t * yRange;
-        const gx = sx(xv);
-        const gy = sy(yv);
-        return (
-          <g key={t}>
-            <line x1={gx} y1={CHART_PAD.t} x2={gx} y2={CHART_PAD.t + plotH} stroke="currentColor" strokeOpacity={0.06} />
-            <line x1={CHART_PAD.l} y1={gy} x2={CHART_W - CHART_PAD.r} y2={gy} stroke="currentColor" strokeOpacity={0.06} />
-            <text x={gx} y={CHART_H - CHART_PAD.b + 12} textAnchor="middle" fontSize={8} fill="currentColor" opacity={0.55}>{fmt(xv, 3)}</text>
-            <text x={CHART_PAD.l - 4} y={gy + 3} textAnchor="end" fontSize={8} fill="currentColor" opacity={0.55}>{fmt(yv, 3)}</text>
+    <div ref={ref} className="w-full">
+      <svg viewBox={`0 0 ${W} ${H}`} className="w-full" style={{ height: 200 }}>
+        {/* grid + ticks */}
+        {[0, 0.25, 0.5, 0.75, 1].map((t) => {
+          const xv = loX + t * xRange;
+          const yv = loY + t * yRange;
+          const gx = sx(xv);
+          const gy = sy(yv);
+          return (
+            <g key={t}>
+              <line x1={gx} y1={CHART_PAD.t} x2={gx} y2={CHART_PAD.t + plotH} stroke="currentColor" strokeOpacity={0.06} />
+              <line x1={CHART_PAD.l} y1={gy} x2={W - CHART_PAD.r} y2={gy} stroke="currentColor" strokeOpacity={0.06} />
+              <text x={gx} y={H - CHART_PAD.b + 12} textAnchor="middle" fontSize={8} fill="currentColor" opacity={0.55}>{fmt(xv, 3)}</text>
+              <text x={CHART_PAD.l - 4} y={gy + 3} textAnchor="end" fontSize={8} fill="currentColor" opacity={0.55}>{fmt(yv, 3)}</text>
+            </g>
+          );
+        })}
+        {/* regression line */}
+        {regressionLine && (
+          <line
+            x1={sx(loX)}
+            y1={sy(regressionLine.slope * loX + regressionLine.intercept)}
+            x2={sx(hiX)}
+            y2={sy(regressionLine.slope * hiX + regressionLine.intercept)}
+            stroke="#f59e0b"
+            strokeWidth={1.8}
+          />
+        )}
+        {/* 95% 置信带 */}
+        {band && bandLower && bandUpper && regressionLine && (
+          <g>
+            <polygon
+              points={[
+                ...bandLower.map((p) => `${sx(p.x).toFixed(1)},${sy(p.y).toFixed(1)}`),
+                ...[...bandUpper].reverse().map((p) => `${sx(p.x).toFixed(1)},${sy(p.y).toFixed(1)}`),
+              ].join(' ')}
+              fill="#f59e0b"
+              fillOpacity={0.12}
+              stroke="none"
+            />
           </g>
-        );
-      })}
-      {/* regression line */}
-      {regressionLine && (
-        <line
-          x1={sx(loX)}
-          y1={sy(regressionLine.slope * loX + regressionLine.intercept)}
-          x2={sx(hiX)}
-          y2={sy(regressionLine.slope * hiX + regressionLine.intercept)}
-          stroke="#f59e0b"
-          strokeWidth={1.8}
-        />
-      )}
-      {/* points */}
-      {points.map((p, i) => (
-        <circle key={i} cx={sx(p.x)} cy={sy(p.y)} r={2.6} fill="#2dd4bf" fillOpacity={0.8} stroke="#0f766e" strokeWidth={0.6} />
-      ))}
-      {/* axes */}
-      <line x1={CHART_PAD.l} y1={CHART_PAD.t} x2={CHART_PAD.l} y2={CHART_PAD.t + plotH} stroke="currentColor" strokeOpacity={0.3} />
-      <line x1={CHART_PAD.l} y1={CHART_PAD.t + plotH} x2={CHART_W - CHART_PAD.r} y2={CHART_PAD.t + plotH} stroke="currentColor" strokeOpacity={0.3} />
-    </svg>
+        )}
+        {/* 残差竖线：每个点到回归线的垂直距离 */}
+        {residuals && regressionLine && (
+          <g>
+            {residualsList.map((p, i) => (
+              <line
+                key={i}
+                x1={sx(p.x)}
+                y1={sy(p.y)}
+                x2={sx(p.x)}
+                y2={sy(p.yhat)}
+                stroke="#f43f5e"
+                strokeOpacity={0.5}
+                strokeWidth={1}
+                strokeDasharray="2 2"
+              />
+            ))}
+          </g>
+        )}
+        {/* points */}
+        {points.map((p, i) => (
+          <g key={i} onMouseEnter={() => setHover(i)} onMouseLeave={() => setHover(null)}>
+            <title>{`第 ${i + 1} 个点: x=${fmt(p.x, 4)}, y=${fmt(p.y, 4)}`}</title>
+            <circle
+              cx={sx(p.x)}
+              cy={sy(p.y)}
+              r={hover === i ? 4 : 2.6}
+              fill="#2dd4bf"
+              fillOpacity={hover === i ? 1 : 0.8}
+              stroke="#0f766e"
+              strokeWidth={0.6}
+            />
+          </g>
+        ))}
+        {/* 悬浮提示框 */}
+        {hoverPt && (
+          <g pointerEvents="none">
+            <rect x={sx(hoverPt.x) + 6} y={Math.max(CHART_PAD.t, sy(hoverPt.y) - 22)} width={110} height={20} rx={3} fill="#0f172a" opacity={0.92} />
+            <text x={sx(hoverPt.x) + 12} y={Math.max(CHART_PAD.t, sy(hoverPt.y) - 22) + 14} fontSize={8.5} fill="#fff">
+              x={fmt(hoverPt.x, 4)}, y={fmt(hoverPt.y, 4)}
+            </text>
+          </g>
+        )}
+        {/* axes */}
+        <line x1={CHART_PAD.l} y1={CHART_PAD.t} x2={CHART_PAD.l} y2={CHART_PAD.t + plotH} stroke="currentColor" strokeOpacity={0.3} />
+        <line x1={CHART_PAD.l} y1={CHART_PAD.t + plotH} x2={W - CHART_PAD.r} y2={CHART_PAD.t + plotH} stroke="currentColor" strokeOpacity={0.3} />
+      </svg>
+      {/* 说明：相关系数 / 点数量 */}
+      <div className="mt-1 flex flex-wrap items-center gap-3 text-[10px] text-muted-foreground">
+        <span>共 {n} 个点</span>
+        {Number.isFinite(r) && (
+          <span className="inline-flex items-center gap-1">
+            相关系数 r =
+            <span className="font-mono font-semibold tabular-nums text-primary">{fmt(r, 4)}</span>
+            <span className="text-muted-foreground/70">（{r > 0.5 ? '强正相关' : r < -0.5 ? '强负相关' : Math.abs(r) < 0.3 ? '弱相关' : '中等相关'}）</span>
+          </span>
+        )}
+        {regressionLine && (
+          <span className="font-mono">
+            y = {fmt(regressionLine.slope, 4)}x {regressionLine.intercept >= 0 ? '+' : '−'} {fmt(Math.abs(regressionLine.intercept), 4)}
+          </span>
+        )}
+      </div>
+    </div>
   );
 }
 
-function StatChart({ type, data, points, regressionLine }: StatChartProps) {
+/** 标准正态分位数（probit）— Acklam 算法。 */
+function normsinv(p: number): number {
+  const a = [-3.969683028665376e1, 2.209460984245205e2, -2.759285104469687e2, 1.38357751867269e2, -3.066479806614716e1, 2.506628277459239];
+  const b = [-5.447609879822406e1, 1.615858368580409e2, -1.556989798598866e2, 6.680131188771972e1, -1.328068155288572e1];
+  const c = [-7.784894002430293e-3, -3.223964580411365e-1, -2.400758277161838, -2.549732539343734, 4.374664141464968, 2.938163982698783];
+  const d = [7.784695709041462e-3, 3.224671290700398e-1, 2.445134137142996, 3.754408661907416];
+  const pLow = 0.02425;
+  const pHigh = 1 - pLow;
+  let q: number, r: number;
+  if (p < pLow) {
+    q = Math.sqrt(-2 * Math.log(p));
+    return (((((c[0] * q + c[1]) * q + c[2]) * q + c[3]) * q + c[4]) * q + c[5]) / ((((d[0] * q + d[1]) * q + d[2]) * q + d[3]) * q + 1);
+  } else if (p <= pHigh) {
+    q = p - 0.5;
+    r = q * q;
+    return (((((a[0] * r + a[1]) * r + a[2]) * r + a[3]) * r + a[4]) * r + a[5]) * q / (((((b[0] * r + b[1]) * r + b[2]) * r + b[3]) * r + b[4]) * r + 1);
+  } else {
+    q = Math.sqrt(-2 * Math.log(1 - p));
+    return -(((((c[0] * q + c[1]) * q + c[2]) * q + c[3]) * q + c[4]) * q + c[5]) / ((((d[0] * q + d[1]) * q + d[2]) * q + d[3]) * q + 1);
+  }
+}
+
+/**
+ * Q-Q 正态概率图：把排序后的数据值 vs 理论标准正态分位数绘图。
+ * 若数据近似正态，点会落在一条直线附近；参考线过 Q1/Q3 两点。
+ */
+function QQPlotChart({ data }: { data: number[] }) {
+  const { ref, width } = useMeasureWidth<HTMLDivElement>();
+  const [hover, setHover] = useState<number | null>(null);
+  if (data.length < 2) return <ChartEmpty label="需要至少 2 个数据点" />;
+  const sorted = [...data].sort((a, b) => a - b);
+  const n = sorted.length;
+  const pts = sorted.map((v, i) => ({ q: normsinv((i + 0.5) / n), v }));
+  const q1 = quantileSorted(sorted, 0.25);
+  const q3 = quantileSorted(sorted, 0.75);
+  const zq1 = normsinv(0.25);
+  const zq3 = normsinv(0.75);
+  const slope = zq3 - zq1 !== 0 ? (q3 - q1) / (zq3 - zq1) : 1;
+  const intercept = q1 - slope * zq1;
+
+  // 皮尔逊相关系数（Q-Q 线性度，近似正态性指标）
+  const mq = pts.reduce((s, p) => s + p.q, 0) / n;
+  const mv = pts.reduce((s, p) => s + p.v, 0) / n;
+  let cqq = 0, cvv = 0, cqv = 0;
+  for (const p of pts) {
+    cqq += (p.q - mq) ** 2;
+    cvv += (p.v - mv) ** 2;
+    cqv += (p.q - mq) * (p.v - mv);
+  }
+  const r = Math.sqrt(cqq * cvv) > 0 ? cqv / Math.sqrt(cqq * cvv) : NaN;
+
+  const qMin = Math.min(...pts.map((p) => p.q));
+  const qMax = Math.max(...pts.map((p) => p.q));
+  const vMin = Math.min(...pts.map((p) => p.v));
+  const vMax = Math.max(...pts.map((p) => p.v));
+  const qPad = (qMax - qMin || 1) * 0.08;
+  const vPad = (vMax - vMin || 1) * 0.08;
+  const loQ = qMin - qPad;
+  const hiQ = qMax + qPad;
+  const loV = vMin - vPad;
+  const hiV = vMax + vPad;
+  const qRange = hiQ - loQ || 1;
+  const vRange = hiV - loV || 1;
+
+  const W = Math.max(width, CHART_W);
+  const H = CHART_H;
+  const plotW = W - CHART_PAD.l - CHART_PAD.r;
+  const plotH = H - CHART_PAD.t - CHART_PAD.b;
+  const sx = (v: number) => CHART_PAD.l + ((v - loQ) / qRange) * plotW;
+  const sy = (v: number) => CHART_PAD.t + plotH - ((v - loV) / vRange) * plotH;
+  const normText = Number.isFinite(r)
+    ? r >= 0.99 ? '近似正态（r 接近 1）' : r >= 0.95 ? '接近正态' : '偏离正态，需谨慎'
+    : '';
+
+  return (
+    <div ref={ref} className="w-full">
+      <svg viewBox={`0 0 ${W} ${H}`} className="w-full" style={{ height: 200 }}>
+        {[0, 0.25, 0.5, 0.75, 1].map((t) => {
+          const qv = loQ + t * qRange;
+          const vv = loV + t * vRange;
+          return (
+            <g key={t}>
+              <line x1={sx(qv)} y1={CHART_PAD.t} x2={sx(qv)} y2={CHART_PAD.t + plotH} stroke="currentColor" strokeOpacity={0.06} />
+              <line x1={CHART_PAD.l} y1={sy(vv)} x2={W - CHART_PAD.r} y2={sy(vv)} stroke="currentColor" strokeOpacity={0.06} />
+              <text x={sx(qv)} y={H - CHART_PAD.b + 12} textAnchor="middle" fontSize={8} fill="currentColor" opacity={0.55}>{fmt(qv, 2)}</text>
+              <text x={CHART_PAD.l - 4} y={sy(vv) + 3} textAnchor="end" fontSize={8} fill="currentColor" opacity={0.55}>{fmt(vv, 2)}</text>
+            </g>
+          );
+        })}
+        {/* 参考直线（过 Q1/Q3） */}
+        <line
+          x1={sx(loQ)} y1={sy(slope * loQ + intercept)}
+          x2={sx(hiQ)} y2={sy(slope * hiQ + intercept)}
+          stroke="#f59e0b" strokeWidth={1.6} strokeDasharray="5 3"
+        />
+        {/* 数据点 */}
+        {pts.map((p, i) => (
+          <g key={i} onMouseEnter={() => setHover(i)} onMouseLeave={() => setHover(null)}>
+            <title>{`第 ${i + 1} 个: 值=${fmt(p.v, 4)}, 理论分位 z=${fmt(p.q, 3)}`}</title>
+            <circle cx={sx(p.q)} cy={sy(p.v)} r={hover === i ? 4 : 2.6} fill="#2dd4bf" fillOpacity={hover === i ? 1 : 0.8} stroke="#0f766e" strokeWidth={0.6} />
+          </g>
+        ))}
+        <line x1={CHART_PAD.l} y1={CHART_PAD.t} x2={CHART_PAD.l} y2={CHART_PAD.t + plotH} stroke="currentColor" strokeOpacity={0.3} />
+        <line x1={CHART_PAD.l} y1={CHART_PAD.t + plotH} x2={W - CHART_PAD.r} y2={CHART_PAD.t + plotH} stroke="currentColor" strokeOpacity={0.3} />
+      </svg>
+      <div className="mt-1 flex flex-wrap items-center gap-3 text-[10px] text-muted-foreground">
+        <span>共 {n} 个点</span>
+        {Number.isFinite(r) && (
+          <span className="inline-flex items-center gap-1">
+            线性度 r =
+            <span className="font-mono font-semibold tabular-nums text-primary">{fmt(r, 4)}</span>
+            <span className="text-muted-foreground/70">（{normText}）</span>
+          </span>
+        )}
+      </div>
+    </div>
+  );
+}
+
+function StatChart({ type, data, points, regressionLine, vertical = false, showPoints = false, residuals = false, band = false }: StatChartProps) {
   if (type === 'histogram') return <HistogramChart data={data ?? []} />;
-  if (type === 'boxplot') return <BoxPlotChart data={data ?? []} />;
-  return <ScatterChart points={points ?? []} regressionLine={regressionLine} />;
+  if (type === 'boxplot') return <BoxPlotChart data={data ?? []} vertical={vertical} showPoints={showPoints} />;
+  if (type === 'qq') return <QQPlotChart data={data ?? []} />;
+  return <ScatterChart points={points ?? []} regressionLine={regressionLine} residuals={residuals} band={band} />;
 }
 
 /* ================================================================== *
@@ -888,6 +1479,9 @@ interface DescResult {
   skewness: number;
   kurtosis: number;
   sum: number;
+  se: number;
+  ciLo: number;
+  ciHi: number;
 }
 
 function computeDescriptive(data: number[]): DescResult | null {
@@ -919,6 +1513,12 @@ function computeDescriptive(data: number[]): DescResult | null {
   const skewness = m2 > 0 ? m3 / Math.pow(m2, 1.5) : 0;
   const kurtosis = m2 > 0 ? m4 / (m2 * m2) - 3 : 0;
 
+  // 标准误（均值的标准误差）与 95% 置信区间（t 分布，df = n-1）
+  const se = n > 1 ? std / Math.sqrt(n) : NaN;
+  const tc = n > 1 ? tCritical(0.05, n - 1) : NaN;
+  const ciLo = Number.isFinite(tc) ? mean - tc * se : mean;
+  const ciHi = Number.isFinite(tc) ? mean + tc * se : mean;
+
   return {
     count: n,
     mean,
@@ -934,6 +1534,9 @@ function computeDescriptive(data: number[]): DescResult | null {
     skewness,
     kurtosis,
     sum,
+    se,
+    ciLo,
+    ciHi,
   };
 }
 
@@ -1004,7 +1607,14 @@ export function DescriptiveStatsTab({ fullscreen = false }: { fullscreen?: boole
 
   const [chartType, setChartType] = useState<ChartType | null>(fullscreen ? 'histogram' : null);
   const [histZoomed, setHistZoomed] = useState(false);
+  const [binRule, setBinRule] = useState<BinRule>('sturges');
+  const [density, setDensity] = useState(false);
+  const [cumulative, setCumulative] = useState(false);
+  const [showHistPoints, setShowHistPoints] = useState(false);
+  const [boxVertical, setBoxVertical] = useState(false);
+  const [showBoxPoints, setShowBoxPoints] = useState(false);
   const [copied, setCopied] = useState(false);
+  const [quantileP, setQuantileP] = useState(50);
 
   const [datasets, setDatasets] = useState<SavedDataset[]>([]);
   const [showDatasets, setShowDatasets] = useState(false);
@@ -1104,6 +1714,9 @@ export function DescriptiveStatsTab({ fullscreen = false }: { fullscreen?: boole
             { label: '偏度', value: result.skewness },
             { label: '峰度 (excess)', value: result.kurtosis },
             { label: '求和 Σx', value: result.sum },
+            { label: '标准误 SE', value: result.se },
+            { label: '95% CI 下限', value: result.ciLo },
+            { label: '95% CI 上限', value: result.ciHi },
           ]
         : [],
     [result],
@@ -1117,6 +1730,26 @@ export function DescriptiveStatsTab({ fullscreen = false }: { fullscreen?: boole
   const five = useMemo(() => (result ? fiveNumSummary(data) : null), [data, result]);
   const distSummary = useMemo(() => (result ? computeDistSummary(result) : null), [result]);
 
+  // 分位数查询：输入 0–100 的百分位，返回对应数据值。
+  const quantileValue = useMemo(() => {
+    if (data.length === 0) return null;
+    const p = Math.min(100, Math.max(0, quantileP)) / 100;
+    const sortedAsc = [...data].sort((a, b) => a - b);
+    return quantileSorted(sortedAsc, p);
+  }, [data, quantileP]);
+
+  // 众数：出现次数最多的值（可多个）。
+  const mode = useMemo(() => {
+    if (data.length === 0) return null;
+    const count = new Map<number, number>();
+    for (const v of data) count.set(v, (count.get(v) ?? 0) + 1);
+    let max = 0;
+    for (const c of count.values()) max = Math.max(max, c);
+    if (max <= 1) return '无（所有值唯一）';
+    const modes = [...count.entries()].filter(([, c]) => c === max).map(([v]) => v);
+    return modes.map((v) => fmt(v, 4)).join(', ');
+  }, [data]);
+
   const highlights = useMemo(() => {
     if (!result) return [];
     const list: string[] = [];
@@ -1124,6 +1757,9 @@ export function DescriptiveStatsTab({ fullscreen = false }: { fullscreen?: boole
       `均值 x̄=${fmt(result.mean)}，中位数=${fmt(result.median)}，标准差 s=${fmt(result.std)}`,
     );
     list.push(`数据范围 [${fmt(result.min)} .. ${fmt(result.max)}]（共 ${result.count} 个观测）`);
+    if (Number.isFinite(result.se)) {
+      list.push(`均值 95% 置信区间 [${fmt(result.ciLo, 4)} .. ${fmt(result.ciHi, 4)}]（标准误 ${fmt(result.se, 4)}）`);
+    }
     if (distSummary) {
       const skewText =
         result.skewness > 0.2 ? '正偏（右尾较长）' : result.skewness < -0.2 ? '负偏（左尾较长）' : '近似对称';
@@ -1193,19 +1829,76 @@ export function DescriptiveStatsTab({ fullscreen = false }: { fullscreen?: boole
               <div className="grid grid-cols-1 lg:grid-cols-[1fr_auto] gap-2">
                 <div className="relative">
                   <div className="flex items-center justify-between mb-1 px-1">
-                    <div className="text-[10.5px] text-muted-foreground">频数直方图</div>
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      className="h-5 text-[10px] px-1.5 gap-0.5"
-                      onClick={() => setHistZoomed((z) => !z)}
-                      title="缩放到合适范围 (y 轴 × 1.15)"
-                    >
-                      <ZoomIn className="size-3" />
-                      {histZoomed ? '已缩放' : '↕ Zoom'}
-                    </Button>
+                    <div className="text-[10.5px] text-muted-foreground">
+                      {density ? '概率密度直方图' : '频数直方图'}
+                    </div>
+                    <div className="flex flex-wrap items-center gap-1">
+                      <select
+                        value={binRule === 'sturges' ? 'sturges' : binRule === 'sqrt' ? 'sqrt' : binRule === 'fd' ? 'fd' : 'custom'}
+                        onChange={(e) => {
+                          const v = e.target.value;
+                          setBinRule(v === 'sturges' ? 'sturges' : v === 'sqrt' ? 'sqrt' : v === 'fd' ? 'fd' : 'sturges');
+                        }}
+                        className="h-5 rounded border border-border/50 bg-muted/40 px-1 text-[10px] outline-none"
+                        title="箱数规则"
+                      >
+                        <option value="sturges">Sturges</option>
+                        <option value="sqrt">√n</option>
+                        <option value="fd">Freedman-Diaconis</option>
+                      </select>
+                      <button
+                        type="button"
+                        onClick={() => setDensity((v) => !v)}
+                        className={cn(
+                          'h-5 px-1.5 rounded text-[10px] border transition-colors',
+                          density ? 'border-primary/50 bg-primary/10 text-primary' : 'border-border/50 text-muted-foreground hover:bg-accent/60',
+                        )}
+                        title="切换频数 / 概率密度"
+                      >
+                        密度
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setCumulative((v) => !v)}
+                        className={cn(
+                          'h-5 px-1.5 rounded text-[10px] border transition-colors',
+                          cumulative ? 'border-violet-500/50 bg-violet-500/10 text-violet-500' : 'border-border/50 text-muted-foreground hover:bg-accent/60',
+                        )}
+                        title="叠加累计分布 (ECDF)"
+                      >
+                        累计
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setShowHistPoints((v) => !v)}
+                        className={cn(
+                          'h-5 px-1.5 rounded text-[10px] border transition-colors',
+                          showHistPoints ? 'border-emerald-500/50 bg-emerald-500/10 text-emerald-500' : 'border-border/50 text-muted-foreground hover:bg-accent/60',
+                        )}
+                        title="在底部叠加每个数据点 (rug)"
+                      >
+                        数据点
+                      </button>
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        className="h-5 text-[10px] px-1.5 gap-0.5"
+                        onClick={() => setHistZoomed((z) => !z)}
+                        title="缩放到合适范围 (y 轴 × 1.15)"
+                      >
+                        <ZoomIn className="size-3" />
+                        {histZoomed ? '已缩放' : '↕ Zoom'}
+                      </Button>
+                    </div>
                   </div>
-                  <HistogramChart data={data} zoomed={histZoomed} />
+                  <HistogramChart
+                    data={data}
+                    zoomed={histZoomed}
+                    binRule={binRule}
+                    density={density}
+                    cumulative={cumulative}
+                    showPoints={showHistPoints}
+                  />
                 </div>
                 {distSummary && (
                   <div className="grid grid-cols-1 gap-2 text-xs rounded-md border border-border/40 bg-muted/20 p-2 lg:w-[220px]">
@@ -1231,7 +1924,32 @@ export function DescriptiveStatsTab({ fullscreen = false }: { fullscreen?: boole
 
             {chartType === 'boxplot' && (
               <div className="space-y-2">
-                <StatChart type="boxplot" data={data} />
+                <div className="flex items-center justify-between px-1">
+                  <div className="text-[10.5px] text-muted-foreground">箱线图</div>
+                  <button
+                    type="button"
+                    onClick={() => setBoxVertical((v) => !v)}
+                    className={cn(
+                      'h-5 px-1.5 rounded text-[10px] border transition-colors',
+                      boxVertical ? 'border-primary/50 bg-primary/10 text-primary' : 'border-border/50 text-muted-foreground hover:bg-accent/60',
+                    )}
+                    title="切换水平 / 垂直方向"
+                  >
+                    {boxVertical ? '垂直' : '水平'}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setShowBoxPoints((v) => !v)}
+                    className={cn(
+                      'h-5 px-1.5 rounded text-[10px] border transition-colors',
+                      showBoxPoints ? 'border-emerald-500/50 bg-emerald-500/10 text-emerald-500' : 'border-border/50 text-muted-foreground hover:bg-accent/60',
+                    )}
+                    title="叠加每个数据点 (strip)"
+                  >
+                    数据点
+                  </button>
+                </div>
+                <StatChart type="boxplot" data={data} vertical={boxVertical} showPoints={showBoxPoints} />
                 {five && (
                   <>
                     <div className="grid grid-cols-5 gap-2 text-center text-xs">
@@ -1542,6 +2260,27 @@ export function DescriptiveStatsTab({ fullscreen = false }: { fullscreen?: boole
                   </span>
                 </div>
               ))}
+            </div>
+            <div className="rounded-md border border-border/60 bg-muted/30 p-2 mt-2 space-y-1.5">
+              <div className="flex items-center gap-2">
+                <span className="text-[10.5px] text-muted-foreground shrink-0">众数</span>
+                <span className="text-[11px] font-mono tabular-nums text-primary truncate">{mode ?? '—'}</span>
+              </div>
+              <div className="flex items-center gap-2">
+                <span className="text-[10.5px] text-muted-foreground shrink-0">分位数</span>
+                <input
+                  type="number"
+                  min={0}
+                  max={100}
+                  value={quantileP}
+                  onChange={(e) => setQuantileP(parseFloat(e.target.value) || 0)}
+                  className="h-5 w-14 rounded border border-border/50 bg-background/40 px-1 text-[10.5px] font-mono tabular-nums outline-none"
+                />
+                <span className="text-[10.5px] text-muted-foreground">% →</span>
+                <span className="text-[11px] font-mono font-semibold tabular-nums text-primary">
+                  {quantileValue === null ? '—' : fmt(quantileValue, 4)}
+                </span>
+              </div>
             </div>
           </motion.div>
         ) : (
@@ -2766,6 +3505,8 @@ export function RegressionTab() {
   const [yInput, setYInput] = useState('2.1, 3.9, 6.2, 7.8, 10.3, 11.9, 14.1, 16.2');
   const [result, setResult] = useState<RegressionResult | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [showResiduals, setShowResiduals] = useState(false);
+  const [showBand, setShowBand] = useState(false);
 
   const pairs = useMemo(() => parsePairs(xInput, yInput), [xInput, yInput]);
   // Live regression for the scatter + line overlay (updates as you type)
@@ -2915,8 +3656,50 @@ export function RegressionTab() {
       {/* Scatter plot with regression line overlay (reuses StatChart) */}
       {pairs.length >= 2 && (
         <div className="rounded-md border border-border/40 bg-background/30 p-1.5 text-foreground">
-          <div className="text-[10.5px] text-muted-foreground mb-1 px-1">散点图 + 回归直线</div>
-          <StatChart type="scatter" points={pairs} regressionLine={regressionLine} />
+          <div className="flex items-center justify-between mb-1 px-1">
+            <div className="text-[10.5px] text-muted-foreground">散点图 + 回归直线</div>
+            <div className="flex flex-wrap items-center gap-1">
+              <button
+                type="button"
+                onClick={() => setShowResiduals((v) => !v)}
+                className={cn(
+                  'h-5 px-1.5 rounded text-[10px] border transition-colors',
+                  showResiduals ? 'border-rose-500/50 bg-rose-500/10 text-rose-500' : 'border-border/50 text-muted-foreground hover:bg-accent/60',
+                )}
+                title="显示每个点到回归线的残差"
+              >
+                残差
+              </button>
+              <button
+                type="button"
+                onClick={() => setShowBand((v) => !v)}
+                className={cn(
+                  'h-5 px-1.5 rounded text-[10px] border transition-colors',
+                  showBand ? 'border-amber-500/50 bg-amber-500/10 text-amber-500' : 'border-border/50 text-muted-foreground hover:bg-accent/60',
+                )}
+                title="显示 95% 置信带"
+              >
+                置信带
+              </button>
+            </div>
+          </div>
+          <StatChart
+            type="scatter"
+            points={pairs}
+            regressionLine={regressionLine}
+            residuals={showResiduals}
+            band={showBand}
+          />
+          {liveResult && (
+            <div className="mt-1 flex flex-wrap items-center gap-3 text-[10px] text-muted-foreground px-1">
+              <span className="font-mono">
+                R² = <span className="font-semibold text-primary">{fmt(liveResult.rSquared, 4)}</span>
+              </span>
+              <span className="font-mono">
+                r = <span className="font-semibold text-primary">{fmt(Math.sign(liveResult.slope) * Math.sqrt(Math.max(0, liveResult.rSquared)), 4)}</span>
+              </span>
+            </div>
+          )}
         </div>
       )}
     </div>

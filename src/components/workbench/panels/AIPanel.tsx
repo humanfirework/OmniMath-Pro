@@ -502,6 +502,23 @@ export function AIPanel() {
     [loading, messages, attachContext],
   );
 
+  // 端到端闭环：接收外部「AI 解释」请求（如 PreviewPanel 的结果解释按钮），
+  // 自动填充输入并发送，打通「计算 → 绘图 → AI 解释」链路。
+  useEffect(() => {
+    const handler = (e: Event) => {
+      const prompt = (e as CustomEvent<string>).detail;
+      if (typeof prompt !== 'string' || !prompt.trim()) return;
+      setInput(prompt);
+      // 交给 send 的 debounce 通道，避免与 loading 状态竞争。
+      clearTimeout(pendingSendTimerRef.current);
+      pendingSendTimerRef.current = setTimeout(() => {
+        send(prompt);
+      }, 60);
+    };
+    window.addEventListener('omnimath:ai-explain', handler);
+    return () => window.removeEventListener('omnimath:ai-explain', handler);
+  }, [send]);
+
   const handleSaveConfig = useCallback(
     (cfg: AIConfig) => {
       saveAIConfig(cfg);

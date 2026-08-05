@@ -39,6 +39,8 @@ import {
   Rows2,
   Maximize2,
   Minimize2,
+  Download,
+  FileCode,
 } from 'lucide-react';
 import {
   Tooltip,
@@ -63,8 +65,10 @@ import { useWorkbenchStore } from '@/lib/store/workbench';
 import { useLayoutStore } from '@/lib/store/layoutStore';
 import { t } from '@/lib/i18n';
 import { cn } from '@/lib/utils';
+import { saveTextToFile } from '@/lib/nativeExport';
+import { resultToMarkdown, resultToLatex } from '@/lib/exportMarkdown';
 import { useState } from 'react';
-import type { PreviewTab } from '@/lib/store/workbench';
+import type { PreviewTab, CalculationResult } from '@/lib/store/workbench';
 
 // Plot3DPanel uses three.js — must NOT load on the server.
 const Plot3DPanel = dynamic(
@@ -336,6 +340,33 @@ const FormulaView = memo(function FormulaView({
   results: ReturnType<typeof useWorkbenchStore.getState>['results'];
   previewSize: 'compact' | 'large';
 }) {
+  // 导出单个计算结果为 LaTeX / Markdown
+  const handleExportResult = useCallback(
+    async (result: CalculationResult, format: 'latex' | 'md') => {
+      const stamp = `omnimath-result-${Date.now()}`;
+      if (format === 'latex') {
+        await saveTextToFile(resultToLatex(result), {
+          defaultName: stamp,
+          extensions: ['tex'],
+        });
+      } else {
+        await saveTextToFile(resultToMarkdown(result), {
+          defaultName: stamp,
+          extensions: ['md'],
+        });
+      }
+    },
+    [],
+  );
+
+  // 端到端闭环：把当前结果交给 AI 解释。切到 AI 标签并通过事件把
+  // 一句包含上下文的提示词注入 AIPanel（由 AIPanel 监听并自动发送）。
+  const handleAIExplain = useCallback((result: CalculationResult) => {
+    useWorkbenchStore.getState().setActivePreviewTab('ai');
+    const prompt = `请用中文解释这个计算结果：\n输入：\`${result.input}\`\n输出：\`${result.output}\`\n请你不仅陈述结果，还要说明它的数学含义、推导依据和常见易错点。`;
+    window.dispatchEvent(new CustomEvent<string>('omnimath:ai-explain', { detail: prompt }));
+  }, []);
+
   if (results.length === 0) {
     return (
       <div className="h-full flex flex-col items-center justify-center text-center px-8 py-12">
@@ -424,7 +455,7 @@ const FormulaView = memo(function FormulaView({
                         {result.output}
                       </code>
                     )}
-                    {/* Type badge */}
+                    {/* Type badge + export */}
                     <div className="mt-3 flex items-center justify-center gap-2 text-[10px] text-muted-foreground">
                       <span className="inline-flex items-center px-1.5 py-0.5 rounded border border-border/60 bg-muted/40 font-mono uppercase tracking-wide">
                         {result.type}
@@ -434,6 +465,49 @@ const FormulaView = memo(function FormulaView({
                           {result.matrix.length}×{result.matrix[0]?.length ?? 0}
                         </span>
                       )}
+                      <div className="ml-auto flex items-center gap-1">
+                        <button
+                          type="button"
+                          onClick={() => handleAIExplain(result)}
+                          className="inline-flex items-center gap-1 rounded-md px-1.5 py-0.5 text-[10.5px] font-medium text-primary hover:bg-primary/10 transition-colors"
+                          aria-label="AI 解释结果"
+                        >
+                          <Sparkles className="size-3" />
+                          AI 解释
+                        </button>
+                        <DropdownMenu>
+                          <DropdownMenuTrigger asChild>
+                            <button
+                              type="button"
+                              className="inline-flex items-center gap-1 rounded-md px-1.5 py-0.5 text-[10.5px] font-medium text-muted-foreground hover:text-foreground hover:bg-accent transition-colors"
+                              aria-label={t('exportResult')}
+                            >
+                              <Download className="size-3" />
+                              {t('exportResult')}
+                            </button>
+                          </DropdownMenuTrigger>
+                          <DropdownMenuContent align="end" className="w-44">
+                            <DropdownMenuLabel className="text-xs text-muted-foreground">
+                              {t('exportResultHint')}
+                            </DropdownMenuLabel>
+                            <DropdownMenuSeparator />
+                            <DropdownMenuItem
+                              onClick={() => handleExportResult(result, 'latex')}
+                              className="gap-2 cursor-pointer"
+                            >
+                              <FileText className="size-3.5 text-primary" />
+                              <span className="text-xs">{t('exportResultLatex')}</span>
+                            </DropdownMenuItem>
+                            <DropdownMenuItem
+                              onClick={() => handleExportResult(result, 'md')}
+                              className="gap-2 cursor-pointer"
+                            >
+                              <FileCode className="size-3.5 text-primary" />
+                              <span className="text-xs">{t('exportResultMarkdown')}</span>
+                            </DropdownMenuItem>
+                          </DropdownMenuContent>
+                        </DropdownMenu>
+                      </div>
                     </div>
                   </div>
                 </div>

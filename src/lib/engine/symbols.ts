@@ -229,11 +229,42 @@ export const symbolAliases: SymbolAliasEntry[] = [
   { alias: 'integrate', canonical: 'integrate', category: 'calculus', latex: '\\int', description: 'Definite integral (Simpson)' },
   { alias: 'taylor', canonical: 'taylor', category: 'calculus', latex: '\\sum', description: 'Taylor / Maclaurin series' },
   { alias: 'limit', canonical: 'limit', category: 'calculus', latex: '\\lim', description: 'Numerical limit' },
-  // a few greek letters for the palette
-  { alias: 'theta', canonical: 'θ', category: 'greek', latex: '\\theta', description: 'Greek theta (angle variable)' },
-  { alias: 'alpha', canonical: 'α', category: 'greek', latex: '\\alpha', description: 'Greek alpha' },
-  { alias: 'beta', canonical: 'β', category: 'greek', latex: '\\beta', description: 'Greek beta' },
-  { alias: 'lambda', canonical: 'λ', category: 'greek', latex: '\\lambda', description: 'Greek lambda' },
+  // trig functions
+  { alias: 'sin', canonical: 'sin', category: 'trig', latex: '\\sin', description: 'Sine 正弦' },
+  { alias: 'cos', canonical: 'cos', category: 'trig', latex: '\\cos', description: 'Cosine 余弦' },
+  { alias: 'tan', canonical: 'tan', category: 'trig', latex: '\\tan', description: 'Tangent 正切' },
+  { alias: 'cot', canonical: 'cot', category: 'trig', latex: '\\cot', description: 'Cotangent 余切 (1/tan)' },
+  { alias: 'sec', canonical: 'sec', category: 'trig', latex: '\\sec', description: 'Secant 正割 (1/cos)' },
+  { alias: 'csc', canonical: 'csc', category: 'trig', latex: '\\csc', description: 'Cosecant 余割 (1/sin)' },
+  { alias: 'sinh', canonical: 'sinh', category: 'trig', latex: '\\sinh', description: 'Hyperbolic sine 双曲正弦' },
+  { alias: 'cosh', canonical: 'cosh', category: 'trig', latex: '\\cosh', description: 'Hyperbolic cosine 双曲余弦' },
+  { alias: 'tanh', canonical: 'tanh', category: 'trig', latex: '\\tanh', description: 'Hyperbolic tangent 双曲正切' },
+  // inverse hyperbolic
+  { alias: 'asinh', canonical: 'asinh', category: 'inverse-trig', latex: '\\operatorname{arsinh}', description: 'Inverse hyperbolic sine 反双曲正弦' },
+  { alias: 'acosh', canonical: 'acosh', category: 'inverse-trig', latex: '\\operatorname{arcosh}', description: 'Inverse hyperbolic cosine 反双曲余弦' },
+  { alias: 'atanh', canonical: 'atanh', category: 'inverse-trig', latex: '\\operatorname{artanh}', description: 'Inverse hyperbolic tangent 反双曲正切' },
+  // power / factorial
+  { alias: 'factorial', canonical: 'factorial', category: 'power', latex: '\\left(\\cdot\\right)!', description: 'Factorial 阶乘 (n! = n×(n−1)×…×1)' },
+  // greek letters (lowercase)
+  { alias: 'theta', canonical: 'θ', category: 'greek', latex: '\\theta', description: 'Greek theta 西塔 (常用角度变量)' },
+  { alias: 'alpha', canonical: 'α', category: 'greek', latex: '\\alpha', description: 'Greek alpha 阿尔法' },
+  { alias: 'beta', canonical: 'β', category: 'greek', latex: '\\beta', description: 'Greek beta 贝塔' },
+  { alias: 'gamma', canonical: 'γ', category: 'greek', latex: '\\gamma', description: 'Greek gamma 伽马' },
+  { alias: 'delta', canonical: 'δ', category: 'greek', latex: '\\delta', description: 'Greek delta 德尔塔' },
+  { alias: 'epsilon', canonical: 'ε', category: 'greek', latex: '\\varepsilon', description: 'Greek epsilon 艾普西龙' },
+  { alias: 'zeta', canonical: 'ζ', category: 'greek', latex: '\\zeta', description: 'Greek zeta 泽塔' },
+  { alias: 'eta', canonical: 'η', category: 'greek', latex: '\\eta', description: 'Greek eta 艾塔' },
+  { alias: 'kappa', canonical: 'κ', category: 'greek', latex: '\\kappa', description: 'Greek kappa 卡帕' },
+  { alias: 'lambda', canonical: 'λ', category: 'greek', latex: '\\lambda', description: 'Greek lambda 兰布达' },
+  { alias: 'mu', canonical: 'μ', category: 'greek', latex: '\\mu', description: 'Greek mu 缪 (单位: 微)' },
+  { alias: 'nu', canonical: 'ν', category: 'greek', latex: '\\nu', description: 'Greek nu 纽' },
+  { alias: 'xi', canonical: 'ξ', category: 'greek', latex: '\\xi', description: 'Greek xi 克西' },
+  { alias: 'rho', canonical: 'ρ', category: 'greek', latex: '\\rho', description: 'Greek rho 柔' },
+  { alias: 'sigma', canonical: 'σ', category: 'greek', latex: '\\sigma', description: 'Greek sigma 西格玛 (求和符号大写 Σ)' },
+  { alias: 'upsilon', canonical: 'υ', category: 'greek', latex: '\\upsilon', description: 'Greek upsilon 宇普西龙' },
+  { alias: 'chi', canonical: 'χ', category: 'greek', latex: '\\chi', description: 'Greek chi 凯' },
+  { alias: 'psi', canonical: 'ψ', category: 'greek', latex: '\\psi', description: 'Greek psi 普西' },
+  { alias: 'omega', canonical: 'ω', category: 'greek', latex: '\\omega', description: 'Greek omega 欧米伽 (角频率)' },
 ];
 
 /* ------------------------------------------------------------------ *

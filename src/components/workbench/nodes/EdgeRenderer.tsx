@@ -31,6 +31,8 @@ export interface EdgePathData {
   edge: PipelineEdge;
   from: EdgeEndpoint;
   to: EdgeEndpoint;
+  /** 源端口数据类型对应的颜色（供边随类型着色，类 Unreal Blueprint）。 */
+  color?: string;
 }
 
 interface EdgeRendererProps {
@@ -80,12 +82,13 @@ export const EdgeRenderer = memo(function EdgeRenderer({
         </linearGradient>
       </defs>
 
-      {edges.map(({ edge, from, to }) => (
+      {edges.map(({ edge, from, to, color }) => (
         <EdgePath
           key={edge.id}
           edge={edge}
           from={from}
           to={to}
+          color={color}
           selected={selectedEdgeId === edge.id || selectedNodeId === edge.from || selectedNodeId === edge.to}
           onDelete={() => onDeleteEdge(edge.id)}
           onSelect={() => onSelectEdge(edge.id)}
@@ -129,12 +132,13 @@ interface EdgePathProps {
   edge: PipelineEdge;
   from: EdgeEndpoint;
   to: EdgeEndpoint;
+  color?: string;
   selected: boolean;
   onDelete: () => void;
   onSelect: () => void;
 }
 
-function EdgePath({ edge, from, to, selected, onDelete, onSelect }: EdgePathProps) {
+function EdgePath({ edge, from, to, color, selected, onDelete, onSelect }: EdgePathProps) {
   const [hover, setHover] = useState(false);
   // P7: 两步确认。confirming=true 时垃圾桶变红显示对勾，再点一次才真删。
   const [confirming, setConfirming] = useState(false);
@@ -184,7 +188,7 @@ function EdgePath({ edge, from, to, selected, onDelete, onSelect }: EdgePathProp
       <path
         d={d}
         fill="none"
-        stroke={hover || selected ? 'url(#edge-gradient-active)' : 'url(#edge-gradient)'}
+        stroke={color ?? 'url(#edge-gradient)'}
         strokeWidth={hover || selected ? 2.5 : 2}
         className="node-connector animated"
         style={{ opacity: hover || selected ? 1 : 0.85 }}

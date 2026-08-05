@@ -63,35 +63,6 @@ export function parseMatrixGrid(cells: { value: string }[][]): any {
 }
 
 /* ------------------------------------------------------------------ *
- * matrixRank — mathjs doesn't expose rank directly
+ * matrixRank — 统一实现（matrixCore.ts），避免与 linearSystem 重复
  * ------------------------------------------------------------------ */
-export function matrixRank(m: any): number {
-  const arr = math.isMatrix(m) ? m.toArray() : m;
-  if (!Array.isArray(arr) || arr.length === 0) return 0;
-  const rows = arr as number[][];
-  const r = rows.length;
-  const c = (rows[0] as unknown[]).length || 0;
-  if (r === 0 || c === 0) return 0;
-  // Gaussian elimination with partial pivoting.
-  const A: number[][] = rows.map((row) =>
-    (Array.isArray(row) ? row : [row]).map((v) => Number(v) || 0),
-  );
-  let rank = 0;
-  for (let col = 0; col < c && rank < r; col++) {
-    let pivot = rank;
-    for (let i = rank + 1; i < r; i++) {
-      if (Math.abs(A[i][col]) > Math.abs(A[pivot][col])) pivot = i;
-    }
-    if (Math.abs(A[pivot][col]) < 1e-10) continue;
-    [A[rank], A[pivot]] = [A[pivot], A[rank]];
-    const pv = A[rank][col];
-    for (let j = col; j < c; j++) A[rank][j] /= pv;
-    for (let i = 0; i < r; i++) {
-      if (i === rank) continue;
-      const f = A[i][col];
-      for (let j = col; j < c; j++) A[i][j] -= f * A[rank][j];
-    }
-    rank++;
-  }
-  return rank;
-}
+export { matrixRank } from '@/lib/engine/matrixCore';

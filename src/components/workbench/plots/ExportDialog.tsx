@@ -3,8 +3,9 @@
 /**
  * OmniMath Pro — 通用导出对话框
  *
- * 用于将 2D/3D 画布导出为 PNG 图片。
- * - 支持选择分辨率（1x / 2x / 4x DPI）
+ * 用于将 2D/3D 画布导出为 PNG / SVG。
+ * - PNG：支持选择分辨率（1x / 2x / 4x DPI）
+ * - SVG：矢量格式 —— 用 html-to-image 将画布容器序列化为 SVG 文本后保存
  * - 支持自定义文件名
  * - Tauri 环境：原生保存对话框；Web 环境：浏览器下载
  *
@@ -37,9 +38,11 @@ import {
 import {
   Download,
   FileImage,
+  FileCode,
   Loader2,
 } from 'lucide-react';
-import { saveCanvasToFile } from '@/lib/nativeExport';
+import { toSvg } from 'html-to-image';
+import { saveCanvasToFile, saveTextToFile } from '@/lib/nativeExport';
 import { useSettingsStore } from '@/lib/store/settingsStore';
 import { toast } from 'sonner';
 
@@ -57,11 +60,17 @@ export interface ExportDialogProps {
 }
 
 type DpiOption = 1 | 2 | 4;
+type ExportFormat = 'png' | 'svg';
 
 const DPI_OPTIONS: { value: DpiOption; label: string; hint: string }[] = [
   { value: 1, label: '标准', hint: '1× — 体积最小' },
   { value: 2, label: '高清', hint: '2× — 推荐' },
   { value: 4, label: '超清', hint: '4× — 打印质量' },
+];
+
+const FORMAT_OPTIONS: { value: ExportFormat; label: string; hint: string }[] = [
+  { value: 'png', label: 'PNG', hint: '位图 · 体积小' },
+  { value: 'svg', label: 'SVG', hint: '矢量 · 可缩放' },
 ];
 
 export function ExportDialog({
@@ -70,13 +79,14 @@ export function ExportDialog({
   canvasRef,
   defaultName = `omnimath-${Date.now()}`,
   title = '导出图像',
-  description = '选择分辨率后导出 PNG 图像',
+  description = '选择格式与分辨率后导出',
 }: ExportDialogProps) {
   // DPI 默认值来自全局设置（defaultExportDpi），用户在导出对话框中
   // 切换 DPI 时同步回写设置，实现"上次选择的分辨率"持久化。
   const dpi = useSettingsStore((s) => s.defaultExportDpi);
   const setDefaultExportDpi = useSettingsStore((s) => s.setDefaultExportDpi);
   const [fileName, setFileName] = useState(defaultName);
+  const [format, setFormat] = useState<ExportFormat>('png');
   const [exporting, setExporting] = useState(false);
 
   // 每次打开时重置文件名为默认名（DPI 不再重置，沿用全局设置）
@@ -88,14 +98,49 @@ export function ExportDialog({
   }, [open, defaultName]);
 
   const handleExport = useCallback(async () => {
-    const canvas = canvasRef.current?.querySelector('canvas');
+    const node = canvasRef.current;
+    const trimmed = fileName.trim() || defaultName;
+
+    // SVG：把画布容器整个序列化为矢量 SVG 文本
+    if (format === 'svg') {
+      if (!node) {
+        toast.error('画布未就绪，请稍后再试');
+        return;
+      }
+      setExporting(true);
+      try {
+        const dataUrl = await toSvg(node, {
+          backgroundColor: '#0b1220',
+          pixelRatio: 1,
+          cacheBust: true,
+        });
+        const svgText = dataUrlToText(dataUrl);
+        if (!svgText) {
+          toast.error('SVG 转换失败');
+          return;
+        }
+        const ok = await saveTextToFile(svgText, {
+          defaultName: trimmed,
+          extensions: ['svg'],
+        });
+        if (ok) onOpenChange(false);
+      } catch (err) {
+        console.error('[ExportDialog] SVG export failed', err);
+        toast.error('SVG 导出失败');
+      } finally {
+        setExporting(false);
+      }
+      return;
+    }
+
+    // PNG：走 saveCanvasToFile（统一处理 DPI 与原生对话框）
+    const canvas = node?.querySelector('canvas');
     if (!canvas) {
       toast.error('画布未就绪，请稍后再试');
       return;
     }
     setExporting(true);
     try {
-      const trimmed = fileName.trim() || defaultName;
       const ok = await saveCanvasToFile(canvas, {
         defaultName: trimmed,
         dpi,
@@ -107,14 +152,18 @@ export function ExportDialog({
     } finally {
       setExporting(false);
     }
-  }, [canvasRef, fileName, defaultName, dpi, onOpenChange]);
+  }, [canvasRef, fileName, defaultName, dpi, format, onOpenChange]);
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="sm:max-w-md">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
-            <FileImage className="size-4 text-primary" />
+            {format === 'svg' ? (
+              <FileCode className="size-4 text-primary" />
+            ) : (
+              <FileImage className="size-4 text-primary" />
+            )}
             {title}
           </DialogTitle>
           {description && (
@@ -123,6 +172,41 @@ export function ExportDialog({
         </DialogHeader>
 
         <div className="space-y-4 py-2">
+          {/* 导出格式 */}
+          <div className="space-y-2">
+            <Label className="text-xs text-muted-foreground">格式</Label>
+            <RadioGroup
+              value={format}
+              onValueChange={(v) => setFormat(v as ExportFormat)}
+              className="grid grid-cols-2 gap-2"
+            >
+              {FORMAT_OPTIONS.map((opt) => (
+                <label
+                  key={opt.value}
+                  htmlFor={`export-format-${opt.value}`}
+                  className={(
+                    'flex flex-col items-start gap-1 rounded-lg border p-2.5 cursor-pointer transition-colors ' +
+                    (format === opt.value
+                      ? 'border-primary bg-primary/5 '
+                      : 'border-border hover:border-primary/40 hover:bg-accent/40 ')
+                  ).trim()}
+                >
+                  <div className="flex items-center gap-1.5">
+                    <RadioGroupItem
+                      id={`export-format-${opt.value}`}
+                      value={opt.value}
+                      className="scale-90"
+                    />
+                    <span className="text-xs font-medium">{opt.label}</span>
+                  </div>
+                  <span className="text-[10px] text-muted-foreground leading-tight">
+                    {opt.hint}
+                  </span>
+                </label>
+              ))}
+            </RadioGroup>
+          </div>
+
           {/* 文件名 */}
           <div className="space-y-1.5">
             <Label htmlFor="export-filename" className="text-xs text-muted-foreground">
@@ -137,44 +221,46 @@ export function ExportDialog({
                 className="h-9"
                 disabled={exporting}
               />
-              <span className="text-xs text-muted-foreground shrink-0">.png</span>
+              <span className="text-xs text-muted-foreground shrink-0">.{format}</span>
             </div>
           </div>
 
-          {/* 分辨率 */}
-          <div className="space-y-2">
-            <Label className="text-xs text-muted-foreground">分辨率</Label>
-            <RadioGroup
-              value={String(dpi)}
-              onValueChange={(v) => setDefaultExportDpi(Number(v) as DpiOption)}
-              className="grid grid-cols-3 gap-2"
-            >
-              {DPI_OPTIONS.map((opt) => (
-                <label
-                  key={opt.value}
-                  htmlFor={`dpi-${opt.value}`}
-                  className={(
-                    'flex flex-col items-start gap-1 rounded-lg border p-2.5 cursor-pointer transition-colors ' +
-                    (dpi === opt.value
-                      ? 'border-primary bg-primary/5 '
-                      : 'border-border hover:border-primary/40 hover:bg-accent/40 ')
-                  ).trim()}
-                >
-                  <div className="flex items-center gap-1.5">
-                    <RadioGroupItem
-                      id={`dpi-${opt.value}`}
-                      value={String(opt.value)}
-                      className="scale-90"
-                    />
-                    <span className="text-xs font-medium">{opt.label}</span>
-                  </div>
-                  <span className="text-[10px] text-muted-foreground leading-tight">
-                    {opt.hint}
-                  </span>
-                </label>
-              ))}
-            </RadioGroup>
-          </div>
+          {/* 分辨率（仅 PNG） */}
+          {format === 'png' && (
+            <div className="space-y-2">
+              <Label className="text-xs text-muted-foreground">分辨率</Label>
+              <RadioGroup
+                value={String(dpi)}
+                onValueChange={(v) => setDefaultExportDpi(Number(v) as DpiOption)}
+                className="grid grid-cols-3 gap-2"
+              >
+                {DPI_OPTIONS.map((opt) => (
+                  <label
+                    key={opt.value}
+                    htmlFor={`dpi-${opt.value}`}
+                    className={(
+                      'flex flex-col items-start gap-1 rounded-lg border p-2.5 cursor-pointer transition-colors ' +
+                      (dpi === opt.value
+                        ? 'border-primary bg-primary/5 '
+                        : 'border-border hover:border-primary/40 hover:bg-accent/40 ')
+                    ).trim()}
+                  >
+                    <div className="flex items-center gap-1.5">
+                      <RadioGroupItem
+                        id={`dpi-${opt.value}`}
+                        value={String(opt.value)}
+                        className="scale-90"
+                      />
+                      <span className="text-xs font-medium">{opt.label}</span>
+                    </div>
+                    <span className="text-[10px] text-muted-foreground leading-tight">
+                      {opt.hint}
+                    </span>
+                  </label>
+                ))}
+              </RadioGroup>
+            </div>
+          )}
         </div>
 
         <DialogFooter className="gap-2 sm:gap-2">
@@ -197,7 +283,7 @@ export function ExportDialog({
             ) : (
               <>
                 <Download className="size-3.5" />
-                导出 PNG
+                导出 {format.toUpperCase()}
               </>
             )}
           </Button>
@@ -205,4 +291,25 @@ export function ExportDialog({
       </DialogContent>
     </Dialog>
   );
+}
+
+/** 把 data:image/svg+xml;base64,... 解码为 SVG 文本。 */
+function dataUrlToText(dataUrl: string): string | null {
+  const match = /^data:image\/svg\+xml;base64,(.+)$/.exec(dataUrl);
+  if (match) {
+    try {
+      return atob(match[1]);
+    } catch {
+      return null;
+    }
+  }
+  const plainMatch = /^data:image\/svg\+xml;charset=utf-8,(.+)$/.exec(dataUrl);
+  if (plainMatch) {
+    try {
+      return decodeURIComponent(plainMatch[1]);
+    } catch {
+      return null;
+    }
+  }
+  return null;
 }

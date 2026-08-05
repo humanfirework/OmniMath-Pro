@@ -11,6 +11,7 @@ import {
   getNodeVariableDeps,
   findVariableDependents,
   buildPipelineDependencyIndex,
+  traceErrorChain,
   NODE_TYPES,
   NODE_WIDTH,
   NODE_HEADER_H,
@@ -560,6 +561,81 @@ describe('pipelineEngine', () => {
 
     it('空图只导出头部注释', () => {
       expect(exportPipelineToScript([], [])).toBe('# OmniMath Pro — Pipeline Export\n#');
+    });
+  });
+
+  describe('executePipeline 执行到节点 (P3)', () => {
+    const nodes = [
+      makeNode('n1', 'number-input', { value: 2 }),
+      makeNode('n2', 'number-input', { value: 3 }),
+      makeNode('sum', 'arithmetic', { op: '+' }),
+      makeNode('disp', 'display'),
+    ];
+    const edges = [
+      makeEdge('n1', 'value', 'sum', 'a'),
+      makeEdge('n2', 'value', 'sum', 'b'),
+      makeEdge('sum', 'result', 'disp', 'value'),
+    ];
+
+    it('不传 stopAt 时执行整条链', async () => {
+      const out = await executePipeline(nodes, edges, emptyCtx);
+      const byId = new Map(out.map((n) => [n.id, n]));
+      expect(byId.get('disp')!.result).toBe(5);
+    });
+
+    it('stopAt=sum 时只执行到 sum，disp 保持未执行', async () => {
+      const out = await executePipeline(nodes, edges, emptyCtx, { stopAt: 'sum' });
+      const byId = new Map(out.map((n) => [n.id, n]));
+      expect(byId.get('sum')!.result).toBe(5);
+      expect(byId.get('sum')!.error).toBeUndefined();
+      expect(byId.get('disp')!.result).toBeUndefined();
+      expect(byId.get('disp')!.error).toBeUndefined();
+    });
+
+    it('stopAt=disp 时执行到 end，disp 有结果', async () => {
+      const out = await executePipeline(nodes, edges, emptyCtx, { stopAt: 'disp' });
+      const byId = new Map(out.map((n) => [n.id, n]));
+      expect(byId.get('disp')!.result).toBe(5);
+    });
+  });
+
+  describe('traceErrorChain 错误传播链 (P3)', () => {
+    it('返回出错节点及其上游链，并标记根因', async () => {
+      const nodes = [
+        makeNode('m1', 'matrix-input', { cells: [[{ value: '1' }, { value: '2' }]] }),
+        makeNode('m2', 'matrix-input', { cells: [[{ value: '1' }, { value: '2' }]] }),
+        makeNode('mul', 'matrix-multiply'),
+        makeNode('disp', 'display'),
+      ];
+      const edges = [
+        makeEdge('m1', 'matrix', 'mul', 'a'),
+        makeEdge('m2', 'matrix', 'mul', 'b'),
+        makeEdge('mul', 'result', 'disp', 'value'),
+      ];
+      // 先真实执行，让 mul 报错（维度不匹配）
+      const executed = await executePipeline(nodes, edges, emptyCtx);
+      const byId = new Map(executed.map((n) => [n.id, n]));
+      expect(byId.get('mul')!.error).toContain('Dimension mismatch');
+
+      const { chain, roots } = traceErrorChain(
+        executed,
+        edges,
+        'disp',
+      );
+      // 链应包含 mul 及其上游，且根因是 mul（真正抛错者）
+      expect(chain).toContain('mul');
+      expect(chain).toContain('m1');
+      expect(chain).toContain('m2');
+      expect(chain).toContain('disp');
+      expect(roots).toContain('mul');
+      expect(roots).not.toContain('m1');
+    });
+
+    it('无上游出错节点时 roots 为空', () => {
+      const nodes = [makeNode('n1', 'number-input', { value: 2 })];
+      const { chain, roots } = traceErrorChain(nodes, [], 'n1');
+      expect(chain).toEqual(['n1']);
+      expect(roots).toEqual([]);
     });
   });
 });

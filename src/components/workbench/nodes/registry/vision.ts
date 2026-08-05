@@ -24,11 +24,14 @@ import {
   toGrayscale,
   visionWorkerClient,
   fineOutline,
+  generateCurveFitCandidates,
+  applyCurveTransforms,
   type ImageDataLike,
   type Polyline,
   type Point,
   type BezierPath,
   type FineOutlineResult,
+  type CurveCandidate,
 } from '@/lib/vision';
 import {
   extractVideoFrames,
@@ -73,6 +76,16 @@ export interface CurvesValue {
     flippedY?: boolean;
     [key: string]: unknown;
   };
+  /**
+   * 拟合前的原始折线（供 2D 绘图「人工修正 → 调整参数重新拟合」使用）。
+   * 仅 curve-fit 在输入为 Polyline[] 时附带。
+   */
+  originalPolylines?: Polyline[];
+  /**
+   * 多档拟合候选（粗略 / 均衡 / 精细）。仅 curve-fit 在输入为 Polyline[]
+   * 时附带；供 2D 绘图「切换候选结果」使用。坐标为像素→数学坐标变换后。
+   */
+  candidates?: CurveCandidate[];
 }
 
 /** video 端口值：视频源引用（data URL / blob URL / http URL）。 */
@@ -233,6 +246,9 @@ export const visionNodes = {
     inputs: [],
     outputs: [{ id: 'image', labelKey: 'npPortImage', type: 'image' }],
     defaultConfig: { src: '' },
+    configSchema: [
+      { key: 'src', label: '选择图片 Image', type: 'file', accept: 'image/*', hint: '选择图片' },
+    ],
     execute: async (_inputs, config) => {
       const src = String(config.src ?? '');
       if (!src) {
@@ -331,6 +347,18 @@ export const visionNodes = {
     inputs: [{ id: 'image', labelKey: 'npPortImage', type: 'image' }],
     outputs: [{ id: 'binary', labelKey: 'npPortBinary', type: 'image' }],
     defaultConfig: { threshold: 128, levels: 4, method: 'multi' as const },
+    configSchema: [
+      {
+        key: 'method', label: '阈值方法 Method', type: 'select', default: 'multi',
+        options: [
+          { value: 'multi', label: '多阈值 Multi' },
+          { value: 'simple', label: '单阈值 Simple' },
+          { value: 'adaptive', label: '自适应 Adaptive' },
+        ],
+      },
+      { key: 'threshold', label: '阈值 Threshold', type: 'number', min: 0, max: 255, step: 1, default: 128 },
+      { key: 'levels', label: '层级 Levels', type: 'number', min: 2, max: 8, step: 1, default: 4 },
+    ],
     execute: async (inputs, config) => {
       const img = toImageValue(inputs.image);
       if (img.width === 0 || img.height === 0) {
@@ -378,6 +406,17 @@ export const visionNodes = {
     inputs: [{ id: 'image', labelKey: 'npPortImage', type: 'image' }],
     outputs: [{ id: 'edges', labelKey: 'npPortEdges', type: 'image' }],
     defaultConfig: { method: 'sobel' as const, lowThreshold: 30, highThreshold: 80 },
+    configSchema: [
+      {
+        key: 'method', label: '边缘方法 Method', type: 'select', default: 'sobel',
+        options: [
+          { value: 'sobel', label: 'Sobel' },
+          { value: 'canny', label: 'Canny' },
+        ],
+      },
+      { key: 'lowThreshold', label: '低阈值 Low', type: 'number', min: 0, max: 255, step: 1, default: 30 },
+      { key: 'highThreshold', label: '高阈值 High', type: 'number', min: 0, max: 255, step: 1, default: 80 },
+    ],
     execute: async (inputs, config) => {
       const img = toImageValue(inputs.image);
       if (img.width === 0 || img.height === 0) {
@@ -414,6 +453,10 @@ export const visionNodes = {
     inputs: [{ id: 'image', labelKey: 'npPortImage', type: 'image' }],
     outputs: [{ id: 'contours', labelKey: 'npPortContours', type: 'curves' }],
     defaultConfig: { turdsize: 2, skeletonize: false },
+    configSchema: [
+      { key: 'turdsize', label: '降噪像素 Turd Size', type: 'number', min: 0, max: 20, step: 1, default: 2 },
+      { key: 'skeletonize', label: '骨架化 (Skeletonize)', type: 'boolean', default: false },
+    ],
     execute: async (inputs, config) => {
       const img = toImageValue(inputs.image);
       if (img.width === 0 || img.height === 0) {
@@ -462,6 +505,29 @@ export const visionNodes = {
       flipX: false,
       scale: 1.0,
     },
+    configSchema: [
+      {
+        key: 'fitMode', label: '拟合模式 Fit', type: 'select', default: 'bezier',
+        options: [
+          { value: 'bezier', label: '贝塞尔 Bezier' },
+          { value: 'fourier', label: '傅里叶 Fourier' },
+        ],
+      },
+      {
+        key: 'quality', label: '质量 Quality', type: 'select', default: 'balanced',
+        options: [
+          { value: 'precise', label: '精细 Precise' },
+          { value: 'balanced', label: '均衡 Balanced' },
+          { value: 'smooth', label: '平滑 Smooth' },
+        ],
+      },
+      { key: 'errorThreshold', label: '误差阈值 Error', type: 'number', min: 0.1, max: 5, step: 0.1, default: 1.5 },
+      { key: 'cornerThreshold', label: '角点阈值 Corner', type: 'number', min: 0.05, max: 1.5, step: 0.05, default: 0.7 },
+      { key: 'fourierOrder', label: '傅里叶阶数 Fourier Order', type: 'number', min: 4, max: 200, step: 1, default: 50 },
+      { key: 'flipY', label: '翻转 Y 轴', type: 'boolean', default: true },
+      { key: 'flipX', label: '翻转 X 轴', type: 'boolean', default: false },
+      { key: 'scale', label: '缩放 Scale', type: 'number', min: 0.1, max: 4, step: 0.05, default: 1 },
+    ],
     execute: async (inputs, config) => {
       const input = normalizeCurveInput(inputs.contours);
       const fitMode = String(config.fitMode ?? 'bezier') as 'bezier' | 'fourier';
@@ -535,6 +601,23 @@ export const visionNodes = {
       const curves = fitted.filter((bp) => bp.segments.length > 0);
       const transformed = applyTransforms(curves);
 
+      // 容错增强：对同一组折线一次性生成多档候选拟合（粗略/均衡/精细），
+      // 供 2D 绘图「切换候选结果」挑选。候选坐标应用与主结果一致的
+      // 像素→数学坐标变换。仅当存在原始折线时可生成。
+      let candidates: CurveCandidate[] | undefined;
+      if (input.polylines.length > 0 && fitMode === 'bezier') {
+        candidates = generateCurveFitCandidates(input.polylines).map((c) => ({
+          ...c,
+          curves: applyCurveTransforms(c.curves, {
+            width: sourceWidth,
+            height: sourceHeight,
+            flipX,
+            flipY,
+            scale,
+          }),
+        }));
+      }
+
       return {
         curves: {
           curves: transformed,
@@ -542,7 +625,8 @@ export const visionNodes = {
           height: sourceHeight,
           meta: { imageHeight: sourceHeight, flippedY: flipY },
           originalPolylines: input.polylines,
-        } satisfies CurvesValue & { originalPolylines?: Polyline[] },
+          candidates,
+        } satisfies CurvesValue & { originalPolylines?: Polyline[]; candidates?: CurveCandidate[] },
       };
     },
   },
@@ -557,6 +641,10 @@ export const visionNodes = {
     inputs: [{ id: 'curves', labelKey: 'npPortCurves', type: 'curves' }],
     outputs: [],
     defaultConfig: { color: '#a78bfa', width: 2 },
+    configSchema: [
+      { key: 'color', label: '颜色 Color', type: 'text', default: '#a78bfa', placeholder: '#a78bfa' },
+      { key: 'width', label: '线宽 Width', type: 'number', min: 0.5, max: 6, step: 0.5, default: 2 },
+    ],
     execute: (inputs, config) => {
       // 透传曲线集；实际 addCurveSet 副作用在 NodePipeline.runPipeline 中处理
       // （类似 plot-output 的 pushPlotsToWorkbench 逻辑）。
@@ -564,8 +652,12 @@ export const visionNodes = {
       const curves = input.existingCurves ?? [];
       const color = String(config.color ?? '#a78bfa');
       const width = Number(config.width ?? 2);
-      // 尝试取出上游（curve-fit）带过来的 originalPolylines
-      const withOrig = inputs.curves as unknown as { originalPolylines?: Polyline[] };
+      // 尝试取出上游（curve-fit）带过来的 originalPolylines / candidates
+      const withMeta = inputs.curves as unknown as {
+        originalPolylines?: Polyline[];
+        candidates?: CurveCandidate[];
+      };
+      const candidates = Array.isArray(withMeta.candidates) ? withMeta.candidates : undefined;
       return {
         curves: {
           curves,
@@ -573,8 +665,14 @@ export const visionNodes = {
           height: input.height,
           color,
           strokeWidth: width,
-          originalPolylines: withOrig.originalPolylines ?? [],
-        } satisfies CurvesValue & { color: string; strokeWidth: number; originalPolylines?: Polyline[] },
+          originalPolylines: withMeta.originalPolylines ?? [],
+          candidates,
+        } satisfies CurvesValue & {
+          color: string;
+          strokeWidth: number;
+          originalPolylines?: Polyline[];
+          candidates?: CurveCandidate[];
+        },
       };
     },
   },
@@ -616,6 +714,32 @@ export const visionNodes = {
       fgMaskDilation: 2,
       fgMaskMinAreaRatio: 0.01,
     },
+    configSchema: [
+      {
+        key: 'imageType', label: '图像类型 Type', type: 'select', default: 'auto',
+        options: [
+          { value: 'auto', label: '自动 Auto' },
+          { value: 'standard', label: '标准 Standard' },
+          { value: 'highContrast', label: '高对比 High Contrast' },
+        ],
+      },
+      {
+        key: 'preset', label: '预设 Preset', type: 'select', default: 'balanced',
+        options: [
+          { value: 'precise', label: '精细 Precise' },
+          { value: 'balanced', label: '均衡 Balanced' },
+          { value: 'rough', label: '粗略 Rough' },
+        ],
+      },
+      { key: 'threshold', label: '阈值 Threshold', type: 'number', min: 0, max: 255, step: 1, default: 128 },
+      { key: 'low', label: '低阈值 Low', type: 'number', min: 0, max: 255, step: 1, default: 55 },
+      { key: 'high', label: '高阈值 High', type: 'number', min: 0, max: 255, step: 1, default: 130 },
+      { key: 'minStrand', label: '最短链长 Min Strand', type: 'number', min: 4, max: 200, step: 1, default: 40 },
+      { key: 'eps', label: '简化阈值 Eps', type: 'number', min: 0.1, max: 3, step: 0.05, default: 0.9 },
+      { key: 'maxPaths', label: '最大路径 Max Paths', type: 'number', min: 10, max: 2000, step: 10, default: 200 },
+      { key: 'strokeWidth', label: '描边宽度 Stroke', type: 'number', min: 0.8, max: 4, step: 0.1, default: 1.6 },
+      { key: 'enableForegroundMask', label: '前景遮罩增强', type: 'boolean', default: false },
+    ],
     execute: async (inputs, config) => {
       const img = toImageValue(inputs.image);
       if (img.width === 0 || img.height === 0) {
@@ -701,6 +825,9 @@ export const visionNodes = {
     inputs: [],
     outputs: [{ id: 'video', labelKey: 'npPortVideo', type: 'animation' }],
     defaultConfig: { src: '', name: '' },
+    configSchema: [
+      { key: 'src', label: '选择视频/GIF Video', type: 'file', accept: 'video/*,image/gif', hint: '选择视频/GIF' },
+    ],
     execute: async (_inputs, config) => {
       const src = String(config.src ?? '');
       const name = String(config.name ?? '');
@@ -723,6 +850,10 @@ export const visionNodes = {
     inputs: [{ id: 'video', labelKey: 'npPortVideo', type: 'animation' }],
     outputs: [{ id: 'frames', labelKey: 'npPortFrames', type: 'animation' }],
     defaultConfig: { maxFrames: 300, fps: 30 },
+    configSchema: [
+      { key: 'maxFrames', label: '最大帧数 Max Frames', type: 'number', min: 10, max: 600, step: 10, default: 300 },
+      { key: 'fps', label: '采样帧率 FPS', type: 'number', min: 1, max: 60, step: 1, default: 30 },
+    ],
     execute: async (inputs, config) => {
       const video = inputs.video as VideoValue | undefined;
       const src = String(video?.src ?? '');
@@ -780,6 +911,11 @@ export const visionNodes = {
       minCutoff: 1.0,
       beta: 0.007,
     },
+    configSchema: [
+      { key: 'smooth', label: '关键点平滑 (One Euro)', type: 'boolean', default: true },
+      { key: 'minCutoff', label: '平滑截止频率 Min Cutoff', type: 'number', min: 0.1, max: 5, step: 0.1, default: 1.0 },
+      { key: 'beta', label: '速度系数 Beta', type: 'number', min: 0.001, max: 0.05, step: 0.001, default: 0.007 },
+    ],
     execute: async (inputs, config) => {
       const framesValue = inputs.frames as FramesValue | undefined;
       if (!framesValue || !framesValue.frames || framesValue.frames.length === 0) {
@@ -838,6 +974,13 @@ export const visionNodes = {
       minCutoff: 1.0,
       beta: 0.007,
     },
+    configSchema: [
+      { key: 'color', label: '颜色 Color', type: 'text', default: '#a78bfa', placeholder: '#a78bfa' },
+      { key: 'width', label: '线宽 Width', type: 'number', min: 0.5, max: 6, step: 0.5, default: 2 },
+      { key: 'smooth', label: '控制点平滑 (One Euro)', type: 'boolean', default: false },
+      { key: 'minCutoff', label: '平滑截止频率 Min Cutoff', type: 'number', min: 0.1, max: 5, step: 0.1, default: 1.0 },
+      { key: 'beta', label: '速度系数 Beta', type: 'number', min: 0.001, max: 0.05, step: 0.001, default: 0.007 },
+    ],
     execute: (inputs, config) => {
       const anim = inputs.animation as AnimationValue | undefined;
       if (!anim || !Array.isArray(anim.frames) || anim.frames.length === 0) {

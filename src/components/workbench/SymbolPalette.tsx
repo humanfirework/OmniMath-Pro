@@ -403,16 +403,32 @@ export function SymbolPalette() {
                           {entry.alias}
                         </button>
                       </TooltipTrigger>
-                      <TooltipContent side="top" className="max-w-[280px]">
-                        <div className="space-y-1 text-left">
-                          <div className="katex-display text-center" style={{ fontSize: '28px' }}>
+                      <TooltipContent side="top" className="max-w-[320px]">
+                        <div className="space-y-2 text-left">
+                          {/* 解释：符号功能说明 */}
+                          <div className="text-[12px] leading-snug text-foreground font-medium">
+                            {entry.description}
+                          </div>
+                          {/* 公式渲染（明确前景色，避免主题下发黄/看不清） */}
+                          <div
+                            className="katex-display text-center bg-muted/40 rounded-md py-1.5 text-foreground"
+                            style={{ fontSize: '26px' }}
+                          >
                             {entry.latex}
                           </div>
-                          <code className="text-xs text-muted-foreground bg-muted px-2 py-0.5 rounded block">
-                            {entry.latex}
-                          </code>
-                          <div className="text-[10px] text-green-400">
-                            键盘快捷：输入 &quot;{entry.alias}&quot; + 空格自动替换
+                          {/* 录入：输入别名 */}
+                          <div className="flex items-center gap-2 text-[11px] text-foreground/80">
+                            <span className="text-muted-foreground">输入</span>
+                            <code className="font-mono text-foreground bg-muted px-1.5 py-0.5 rounded">
+                              {entry.alias}
+                            </code>
+                            <span className="text-muted-foreground">→</span>
+                            <code className="font-mono text-foreground/80 bg-muted px-1.5 py-0.5 rounded">
+                              {entry.canonical}
+                            </code>
+                          </div>
+                          <div className="text-[10px] text-foreground/60">
+                            点击插入到光标处 · 输入 &quot;{entry.alias}&quot; + 空格自动替换
                           </div>
                         </div>
                       </TooltipContent>

@@ -58,6 +58,23 @@ export interface PortDef {
   type: PortDataType;
 }
 
+/**
+ * 声明式节点配置字段 —— 让「配置面板」由 schema 自动生成，消灭手写 case。
+ *
+ * 每个字段描述一个可编辑配置项；UI 侧（NodePipeline 的 SchemaConfig）据此
+ * 渲染对应的控件（数字滑块 / 下拉 / 开关 / 文本 / 文件）。新增节点只需声明
+ * 字段，无需手写 UI，从根本上消除「节点写了代码但没配 UI」类 bug。
+ *
+ * `label` 为直接展示文案（与蓝图现有配置面板一致的中文文案）；如需 i18n
+ * 可扩展为 labelKey，此处暂用 plain label 以匹配既有 UI 风格。
+ */
+export type NodeConfigField =
+  | { key: string; label: string; type: 'number'; min?: number; max?: number; step?: number; default?: number }
+  | { key: string; label: string; type: 'select'; options: { value: string; label: string }[]; default?: string }
+  | { key: string; label: string; type: 'boolean'; default?: boolean }
+  | { key: string; label: string; type: 'text'; default?: string; placeholder?: string }
+  | { key: string; label: string; type: 'file'; accept: string; hint: string };
+
 export interface PipelineNode {
   id: string;
   type: NodeType;
@@ -94,6 +111,11 @@ export interface NodeTypeDef {
   inputs: PortDef[];
   outputs: PortDef[];
   defaultConfig: Record<string, unknown>;
+  /**
+   * 可选声明式配置 schema。存在时，NodePipeline 的配置面板由它自动生成，
+   * 无需手写 UI case；缺省时回退到手写 switch（迁移期兜底）。
+   */
+  configSchema?: NodeConfigField[];
   execute: (
     inputs: Record<string, unknown>,
     config: Record<string, unknown>,
@@ -427,6 +449,7 @@ export async function executePipeline(
   nodes: PipelineNode[],
   edges: PipelineEdge[],
   ctx: PipelineContext,
+  opts?: { stopAt?: string },
 ): Promise<PipelineNode[]> {
   const byId = new Map<string, PipelineNode>();
   for (const n of nodes) byId.set(n.id, { ...n });
@@ -457,9 +480,16 @@ export async function executePipeline(
     }
   }
 
+  // P3「执行到节点」：若指定了 stopAt，只执行拓扑序中到该节点为止的部分，
+  // 后续节点保持未执行（result/outputs 置为 undefined，不报错）。
+  const effectiveOrder = opts?.stopAt
+    ? ordered.slice(0, ordered.indexOf(opts.stopAt) + 1)
+    : ordered;
+  const executedSet = new Set(effectiveOrder);
+
   // Execute in topo order, propagating outputs.
   const outputs = new Map<string, Record<string, unknown>>();
-  for (const id of ordered) {
+  for (const id of effectiveOrder) {
     const node = byId.get(id)!;
     const def = NODE_TYPES[node.type];
     if (!def) {
@@ -527,7 +557,59 @@ export async function executePipeline(
     }
   }
 
+  // P3「执行到节点」：未执行到的节点清除旧结果，避免显示过期值。
+  if (opts?.stopAt) {
+    for (const n of Array.from(byId.values())) {
+      if (!executedSet.has(n.id) && !ordered.includes(n.id)) {
+        n.result = undefined;
+        n.outputs = {};
+        n.error = undefined;
+      }
+    }
+  }
+
   return Array.from(byId.values());
+}
+
+/* ------------------------------------------------------------------ *
+ * traceErrorChain — P3 错误传播链
+ * ------------------------------------------------------------------ *
+ * 给定一个出错节点，沿其直接上游边反向收集出错路径上的节点 id，
+ * 用于高亮「首个出错节点」及其上游链，帮助定位根因。
+ * 返回 { chain: string[], roots: string[] }：
+ *   - chain : 从根因到该出错节点的有序上游节点 id（含出错节点自身）
+ *   - roots : 链中真正抛出错误的节点 id（上游执行失败会向下游传播）
+ */
+export function traceErrorChain(
+  nodes: PipelineNode[],
+  edges: PipelineEdge[],
+  targetId: string,
+): { chain: string[]; roots: string[] } {
+  const byId = new Map(nodes.map((n) => [n.id, n]));
+  // 反向邻接：to -> [from, ...]
+  const revAdj = new Map<string, string[]>();
+  for (const e of edges) {
+    if (!byId.has(e.from) || !byId.has(e.to)) continue;
+    if (!revAdj.has(e.to)) revAdj.set(e.to, []);
+    revAdj.get(e.to)!.push(e.from);
+  }
+
+  const chain: string[] = [];
+  const visited = new Set<string>();
+  const roots = new Set<string>(); // 直接报错的节点（其自身 error 非空）
+  const stack = [targetId];
+  while (stack.length) {
+    const id = stack.pop()!;
+    if (visited.has(id)) continue;
+    visited.add(id);
+    chain.push(id);
+    const node = byId.get(id);
+    if (node?.error) roots.add(id);
+    for (const from of revAdj.get(id) ?? []) {
+      if (!visited.has(from)) stack.push(from);
+    }
+  }
+  return { chain, roots: Array.from(roots) };
 }
 
 /* ------------------------------------------------------------------ *

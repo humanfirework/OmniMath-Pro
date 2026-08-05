@@ -267,6 +267,7 @@ export {
   sampleFourierCurve,
   fourierError,
 } from './fourier';
+export * from './curveCandidates';
 export { visionWorkerClient, type VisionWorkerClient } from './visionWorkerClient';
 export {
   fineOutline,

@@ -85,6 +85,9 @@ interface WorkbenchState {
   previewVisible: boolean;
   activePreviewTab: PreviewTab;
   viewMode: ViewMode;
+  /** 供「首次启动引导 / 一键示例」从工作台切换到蓝图时异步加载的模板 id。
+   *  由 OnboardingOverlay 写入，NodePipeline 挂载后消费并清空（瞬态，不持久化）。 */
+  pendingPipelineTemplate: string | null;
   commandPaletteOpen: boolean;
   globalCalcOpen: boolean;
   activityBarPosition: ActivityBarPosition;
@@ -129,6 +132,7 @@ interface WorkbenchState {
   setPreviewVisible: (v: boolean) => void;
   setActivePreviewTab: (tab: PreviewTab) => void;
   setViewMode: (mode: ViewMode) => void;
+  setPendingPipelineTemplate: (id: string | null) => void;
   setCommandPaletteOpen: (v: boolean) => void;
   setGlobalCalcOpen: (v: boolean) => void;
   setActivityBarPosition: (p: ActivityBarPosition) => void;
@@ -218,8 +222,15 @@ function sanitizeCurveSet(raw: unknown): CurveSetData | null {
   const strokeWidth = typeof o.strokeWidth === 'number' ? o.strokeWidth : undefined;
   const flipX = typeof o.flipX === 'boolean' ? o.flipX : undefined;
   const flipY = typeof o.flipY === 'boolean' ? o.flipY : undefined;
+  const frames = Array.isArray(o.frames) && o.frames.length > 0 ? (o.frames as unknown[]) : undefined;
+  const fps = typeof o.fps === 'number' && Number.isFinite(o.fps) ? o.fps : undefined;
+  const candidates = Array.isArray(o.candidates) ? (o.candidates as unknown[]) : undefined;
+  const originalPolylines = Array.isArray(o.originalPolylines)
+    ? (o.originalPolylines as unknown[])
+    : undefined;
+  const presetId = typeof o.presetId === 'string' ? o.presetId : undefined;
   if (!curves || width <= 0 || height <= 0) return null;
-  return { id, curves, width, height, color, strokeWidth, flipX, flipY } as CurveSetData;
+  return { id, curves, width, height, color, strokeWidth, flipX, flipY, frames, fps, candidates, originalPolylines, presetId } as CurveSetData;
 }
 
 function loadInitial(): Partial<WorkbenchState> {
@@ -310,6 +321,7 @@ export const useWorkbenchStore = create<WorkbenchState>((set, get) => ({
   previewVisible: true,
   activePreviewTab: 'formula',
   viewMode: 'workbench',
+  pendingPipelineTemplate: null,
   commandPaletteOpen: false,
   globalCalcOpen: false,
   activityBarPosition: 'left',
@@ -449,6 +461,7 @@ export const useWorkbenchStore = create<WorkbenchState>((set, get) => ({
   setPreviewVisible: (v) => { set({ previewVisible: v }); get().saveToStorage(); },
   setActivePreviewTab: (tab) => { set({ activePreviewTab: tab }); get().saveToStorage(); },
   setViewMode: (mode) => { set({ viewMode: mode }); get().saveToStorage(); },
+  setPendingPipelineTemplate: (id) => set({ pendingPipelineTemplate: id }),
   setCommandPaletteOpen: (v) => set({ commandPaletteOpen: v }),
   setGlobalCalcOpen: (v) => set({ globalCalcOpen: v }),
   setActivityBarPosition: (p) => { set({ activityBarPosition: p }); get().saveToStorage(); },

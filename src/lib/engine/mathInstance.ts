@@ -30,6 +30,8 @@
 
 import { create, all, type MathJsInstance } from 'mathjs';
 import type { Scope } from './types';
+import { makeDistNamed, resolveDist } from '@/lib/probability/distributions';
+import { mulberry32, toSeed } from '@/lib/probability/rng';
 
 /* ================================================================== *
  * mathjs instance — created & configured exactly once
@@ -67,6 +69,71 @@ math.import(
     },
     arccos: function (x: any) {
       return math.acos(x);
+    },
+  },
+  { override: true }
+);
+
+/* ================================================================== *
+ * 概率分布函数 — 统一走 distributions.ts，供控制台 / 绘图 / 蓝图共用
+ * ================================================================== *
+ * 在表达式里可直接调用（参数为对象字面量）：
+ *   distpdf('normal', 0, { mu: 0, sigma: 1 })
+ *   distcdf('normal', 0, { mu: 0, sigma: 1 })
+ *   distinv('normal', 0.975, { mu: 0, sigma: 1 })
+ *   distsample('normal', 100, { mu: 0, sigma: 1 }, 42)   // 可种子复现
+ * 以及常用便捷函数：
+ *   normpdf(x, mu, sigma) / normcdf(x, mu, sigma) / norminv(p, mu, sigma)
+ */
+function toParams(raw: any): Record<string, number> {
+  if (raw && typeof raw === 'object') {
+    const out: Record<string, number> = {};
+    for (const [k, v] of Object.entries(raw)) {
+      const n = typeof v === 'number' ? v : Number(v);
+      out[k] = Number.isFinite(n) ? n : 0;
+    }
+    return out;
+  }
+  return {};
+}
+
+math.import(
+  {
+    distpdf: function (name: any, x: any, params: any) {
+      const n = resolveDist(String(name ?? ''));
+      const d = makeDistNamed(n ?? 'normal', toParams(params));
+      return d.pdf(Number(x));
+    },
+    distcdf: function (name: any, x: any, params: any) {
+      const n = resolveDist(String(name ?? ''));
+      const d = makeDistNamed(n ?? 'normal', toParams(params));
+      return d.cdf(Number(x));
+    },
+    distinv: function (name: any, p: any, params: any) {
+      const n = resolveDist(String(name ?? ''));
+      const d = makeDistNamed(n ?? 'normal', toParams(params));
+      return d.inv(Number(p));
+    },
+    distsample: function (name: any, count: any, params: any, seed: any) {
+      const n = resolveDist(String(name ?? ''));
+      const d = makeDistNamed(n ?? 'normal', toParams(params));
+      const c = Math.max(0, Math.floor(Number(count) || 0));
+      const rng =
+        seed !== undefined && String(seed) !== ''
+          ? mulberry32(toSeed(seed))
+          : undefined;
+      const out: number[] = [];
+      for (let i = 0; i < c; i++) out.push(d.sample(rng));
+      return out;
+    },
+    normpdf: function (x: any, mu: any, sigma: any) {
+      return makeDistNamed('normal', { mu: Number(mu) || 0, sigma: Number(sigma) || 1 }).pdf(Number(x));
+    },
+    normcdf: function (x: any, mu: any, sigma: any) {
+      return makeDistNamed('normal', { mu: Number(mu) || 0, sigma: Number(sigma) || 1 }).cdf(Number(x));
+    },
+    norminv: function (p: any, mu: any, sigma: any) {
+      return makeDistNamed('normal', { mu: Number(mu) || 0, sigma: Number(sigma) || 1 }).inv(Number(p));
     },
   },
   { override: true }

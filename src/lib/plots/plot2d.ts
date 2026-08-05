@@ -456,22 +456,384 @@ export function sampleParametric(
 /**
  * Sample a fully-resolved curve spec.
  *
- * - cartesian  → `sampleFunction(exprX, xRange)` (view-following window),
- * - polar      → `samplePolar(exprX, paramRange…)` (stable under pan/zoom),
- * - parametric → `sampleParametric(exprX, exprY, paramRange…)`.
+ * - cartesian  → adaptive recursive sampling (`sampleAdaptive`) over the
+ *                 view-following window, then universal break detection;
+ * - polar      → adaptive parametric sampling (`sampleParametricAdaptive`)
+ *                 with r = f(θ) → (r·cos θ, r·sin θ), stable under pan/zoom;
+ * - parametric → adaptive parametric sampling (`sampleParametricAdaptive`)
+ *                 over x = f(t), y = g(t).
+ *
+ * All branches keep their natural order (x ascending for cartesian, t/θ
+ * ascending for polar/parametric) so closed / self-intersecting curves
+ * render correctly.
  */
 export function sampleCurve(
   spec: Curve2DSpec,
   xRange: [number, number],
   count = defaultSampleCount,
 ): PlotSample[] {
+  const opts: AdaptiveOptions = {
+    // Map the user-facing sample count onto the adaptive budget: the coarse
+    // grid is a fraction of `count`, and the recursion is capped so the total
+    // never explodes on high-frequency curves.
+    initSegments: Math.max(16, Math.min(256, Math.round(count / 8))),
+    maxPoints: Math.max(1024, Math.min(4000, count * 4)),
+  };
   if (spec.mode === 'polar') {
-    return samplePolar(spec.exprX, spec.paramRange[0], spec.paramRange[1], count);
+    const compiledX = safeCompile(spec.exprX);
+    if (!compiledX) return [];
+    const px = (t: number): number => {
+      const r = evalNum(compiledX, getEvalScope({ x: t, t, theta: t }));
+      return r * Math.cos(t);
+    };
+    const py = (t: number): number => {
+      const r = evalNum(compiledX, getEvalScope({ x: t, t, theta: t }));
+      return r * Math.sin(t);
+    };
+    return sampleParametricAdaptive(px, py, spec.paramRange, opts);
   }
   if (spec.mode === 'parametric') {
-    return sampleParametric(spec.exprX, spec.exprY, spec.paramRange[0], spec.paramRange[1], count);
+    const compiledX = safeCompile(spec.exprX);
+    const compiledY = safeCompile(spec.exprY);
+    if (!compiledX || !compiledY) return [];
+    const px = (t: number): number => evalNum(compiledX, getEvalScope({ t, x: t }));
+    const py = (t: number): number => evalNum(compiledY, getEvalScope({ t, x: t }));
+    return sampleParametricAdaptive(px, py, spec.paramRange, opts);
   }
-  return sampleFunction(spec.exprX, xRange, 'cartesian', count);
+  // cartesian
+  const samples = sampleAdaptive(spec.exprX, xRange, opts);
+  return detectBreaks(samples);
+}
+
+/** Compile via the LRU cache, returning null on parse failure. */
+function safeCompile(
+  expr: string,
+): { evaluate: (scope?: Record<string, unknown>) => unknown } | null {
+  if (!expr || !expr.trim()) return null;
+  try {
+    return compileCached(expr);
+  } catch {
+    return null;
+  }
+}
+
+/* ------------------------------------------------------------------ */
+/*  Adaptive sampling & break detection                               */
+/* ------------------------------------------------------------------ */
+
+/** Options for adaptive sampling (`sampleAdaptive` / `sampleParametricAdaptive`). */
+export interface AdaptiveOptions {
+  /** Maximum recursion depth per initial segment. Default 14. */
+  maxDepth?: number;
+  /** Number of initial coarse segments. Default 64. */
+  initSegments?: number;
+  /**
+   * Deviation tolerance, in the curve's own units:
+   *  - cartesian: midpoint-to-chord |y| deviation on y = f(x);
+   *  - parametric/polar: midpoint-to-chord euclidean distance.
+   * A segment is split while its sampled midpoint deviates more than this.
+   * Default 1e-3.
+   */
+  tol?: number;
+  /** Hard cap on output points. Default 4000. */
+  maxPoints?: number;
+  /** Screen-space scale (world units per pixel) for tol interpretation. */
+  screenspaceScaler?: number;
+}
+
+/** Evaluate a cartesian expression to a number, or NaN on any failure. */
+function evalNum(compiled: { evaluate: (scope?: Record<string, unknown>) => unknown }, scope: Record<string, unknown>): number {
+  try {
+    return toNumber(compiled.evaluate(scope));
+  } catch {
+    return NaN;
+  }
+}
+
+/**
+ * Adaptive (recursive subdivison) sampling for a cartesian curve y = f(x).
+ *
+ * Replaces blind uniform sampling: starts from a sparse grid and bisects
+ * any segment whose midpoint deviates from the chord by more than `tol`,
+ * down to `maxDepth`. This concentrates points where the curve is curvy
+ * (`sin(1/x)`, steep `1/x`) and thins out where it is flat — without
+ * wasting points or dropping peaks.
+ *
+ * **Inline asymptote detection** — a robust, budget-independent break:
+ * once the global |y| scale is known (from a coarse pre-scan), a segment
+ * whose endpoints have *opposite signs and both exceed half the global
+ * maximum magnitude* is treated as a vertical wall (e.g. `tan` at π/2,
+ * `1/x` at 0). The pen is lifted there (a `NaN` gap) instead of spending
+ * budget subdividing the unbounded approach. This distinguishes a genuine
+ * asymptote from a legitimate zero crossing (small-magnitude sign flip)
+ * and from a steep-but-smooth line (`y = 1000x` — sign flip only at the
+ * origin, where both values are small).
+ *
+ * Non-finite values (NaN / ±Infinity) also break the pen. `maxDepth` +
+ * `maxPoints` double-guard against pathological inputs.
+ */
+export function sampleAdaptive(
+  expr: string,
+  xRange: [number, number],
+  opts: AdaptiveOptions = {},
+): PlotSample[] {
+  if (!expr || !expr.trim()) return [];
+  if (
+    !Array.isArray(xRange) || xRange.length !== 2 ||
+    !Number.isFinite(xRange[0]) || !Number.isFinite(xRange[1]) ||
+    xRange[0] === xRange[1]
+  ) {
+    return [];
+  }
+
+  let compiled: { evaluate: (scope?: Record<string, unknown>) => unknown };
+  try {
+    compiled = compileCached(expr);
+  } catch {
+    return [];
+  }
+
+  const { maxDepth = 14, initSegments = 64, tol = 1e-3, maxPoints = 4000 } = opts;
+  const [lo, hi] = xRange;
+  const segs = Math.max(1, Math.min(initSegments, 4096));
+  const dx = (hi - lo) / segs;
+
+  const f = (x: number): number => evalNum(compiled, getEvalScope({ x }));
+  // Cached f values so we don't re-evaluate segment endpoints.
+  const cache = new Map<number, number>();
+  const ev = (x: number): number => {
+    if (!cache.has(x)) cache.set(x, f(x));
+    return cache.get(x)!;
+  };
+
+  // Coarse pre-scan to establish the function's typical |y| scale. This is
+  // the reference for the inline asymptote test below and for the relative
+  // subdivision tolerance (an absolute 1e-3 over a wide-y-range function such
+  // as `tan` would exhaust the point budget on smooth regions before ever
+  // reaching the asymptote wall).
+  let maxAbs = 1;
+  for (let i = 0; i <= segs; i++) {
+    const y = ev(lo + i * dx);
+    if (Number.isFinite(y)) maxAbs = Math.max(maxAbs, Math.abs(y));
+  }
+  const scale = Math.max(1, maxAbs);
+  const effectiveTol = tol * scale;
+  const wallThreshold = 0.5 * maxAbs;
+
+  const out: PlotSample[] = [];
+  const result = new Set<number>();
+
+  // `push` records a real (finite) point; `pushGap` records a pen-up marker
+  // that is exempt from the x-dedup set so it always survives to the output.
+  const push = (x: number): void => {
+    if (result.has(x) || out.length >= maxPoints) return;
+    result.add(x);
+    out.push({ x, y: ev(x) });
+  };
+  const pushGap = (x: number): void => {
+    if (out.length >= maxPoints) return;
+    out.push({ x, y: NaN });
+  };
+
+  const stack: Array<{ a: number; b: number; depth: number }> = [];
+  for (let i = 0; i < segs; i++) stack.push({ a: lo + i * dx, b: lo + (i + 1) * dx, depth: 0 });
+
+  while (stack.length) {
+    const { a, b, depth } = stack.pop()!;
+    const mid = (a + b) / 2;
+    const fa = ev(a);
+    const fb = ev(b);
+    const fm = ev(mid);
+
+    // Break detection: any non-finite value → lift the pen across this gap.
+    if (!Number.isFinite(fa) || !Number.isFinite(fb) || !Number.isFinite(fm)) {
+      push(a);
+      push(b);
+      continue;
+    }
+
+    // Inline asymptote detection: opposite-signed endpoints that are BOTH
+    // large relative to the global scale → vertical wall. Lift the pen and
+    // stop subdividing so the budget isn't wasted on the unbounded approach.
+    if (fa * fb < 0 && Math.abs(fa) > wallThreshold && Math.abs(fb) > wallThreshold) {
+      push(a);
+      pushGap(b);
+      continue;
+    }
+
+    // Midpoint-to-chord deviation (relative tolerance).
+    const deviation = Math.abs(fm - (fa + fb) / 2);
+    if (deviation > effectiveTol && depth < maxDepth && out.length < maxPoints) {
+      stack.push({ a, b: mid, depth: depth + 1 });
+      stack.push({ a: mid, b, depth: depth + 1 });
+    } else {
+      push(a);
+      push(mid);
+      push(b);
+    }
+  }
+
+  // Cartesian: sort by x (NaN gap markers carry a finite x and sort with
+  // the rest), then collapse consecutive real points that share an x. A NaN
+  // gap is always kept even when it shares an x with a real point (pen-up),
+  // and a real point following a gap is kept too (pen-down).
+  out.sort((p, q) => p.x - q.x);
+  if (out.length > 1) {
+    const deduped: PlotSample[] = [out[0]];
+    for (let i = 1; i < out.length; i++) {
+      const prev = deduped[deduped.length - 1];
+      const sameX = out[i].x === prev.x;
+      if (!sameX || !Number.isFinite(out[i].y) || !Number.isFinite(prev.y)) {
+        deduped.push(out[i]);
+      }
+    }
+    return deduped;
+  }
+  return out;
+}
+
+/**
+ * Adaptive sampling for a parametric curve x = f(t), y = g(t) or a polar
+ * curve r = f(θ) (pass `toXY` to build the cartesian point from the param).
+ *
+ * Unlike the cartesian version, the parameter `t`/`θ` need not be monotone
+ * in x, so subdivision is driven by the euclidean distance from the midpoint
+ * point to the chord between the two endpoints. Points are returned in
+ * parameter order (never re-sorted), preserving closed curves.
+ *
+ * @param px  x (or r·cos θ) component evaluator.
+ * @param py  y (or r·sin θ) component evaluator.
+ */
+export function sampleParametricAdaptive(
+  px: (t: number) => number,
+  py: (t: number) => number,
+  tRange: [number, number],
+  opts: AdaptiveOptions = {},
+): PlotSample[] {
+  if (
+    !Array.isArray(tRange) || tRange.length !== 2 ||
+    !Number.isFinite(tRange[0]) || !Number.isFinite(tRange[1]) ||
+    tRange[0] === tRange[1]
+  ) {
+    return [];
+  }
+  const { maxDepth = 14, initSegments = 96, tol = 1e-3, maxPoints = 4000, screenspaceScaler = 1 } = opts;
+  const effTol = tol / Math.max(1e-12, screenspaceScaler);
+  const [lo, hi] = tRange;
+  const segs = Math.max(1, Math.min(initSegments, 4096));
+  const dt = (hi - lo) / segs;
+
+  const pt = (t: number): { x: number; y: number } => {
+    const x = px(t);
+    const y = py(t);
+    return { x: Number.isFinite(x) ? x : NaN, y: Number.isFinite(y) ? y : NaN };
+  };
+  const cache = new Map<number, { x: number; y: number }>();
+  const P = (t: number): { x: number; y: number } => {
+    if (!cache.has(t)) cache.set(t, pt(t));
+    return cache.get(t)!;
+  };
+
+  const out: PlotSample[] = [];
+  const seen = new Set<number>();
+  const push = (t: number): void => {
+    if (seen.has(t) || out.length >= maxPoints) return;
+    seen.add(t);
+    const p = P(t);
+    out.push(Number.isFinite(p.x) && Number.isFinite(p.y) ? p : { x: NaN, y: NaN });
+  };
+
+  const stack: Array<{ a: number; b: number; depth: number }> = [];
+  for (let i = 0; i < segs; i++) stack.push({ a: lo + i * dt, b: lo + (i + 1) * dt, depth: 0 });
+
+  while (stack.length) {
+    const { a, b, depth } = stack.pop()!;
+    const mid = (a + b) / 2;
+    const pa = P(a);
+    const pb = P(b);
+    const pm = P(mid);
+
+    if (!Number.isFinite(pa.x) || !Number.isFinite(pb.x) || !Number.isFinite(pm.x)) {
+      push(a);
+      push(b);
+      continue;
+    }
+    // Midpoint-to-chord euclidean distance.
+    const chordLen = Math.hypot(pb.x - pa.x, pb.y - pa.y);
+    const u = chordLen > 1e-12 ? ((pm.x - pa.x) * (pb.x - pa.x) + (pm.y - pa.y) * (pb.y - pa.y)) / (chordLen * chordLen) : 0.5;
+    const projX = pa.x + u * (pb.x - pa.x);
+    const projY = pa.y + u * (pb.y - pa.y);
+    const deviation = Math.hypot(pm.x - projX, pm.y - projY);
+
+    if (deviation > effTol && depth < maxDepth && out.length < maxPoints) {
+      stack.push({ a, b: mid, depth: depth + 1 });
+      stack.push({ a: mid, b, depth: depth + 1 });
+    } else {
+      push(a);
+      push(mid);
+      push(b);
+    }
+  }
+
+  return out;
+}
+
+/**
+ * Universal break / discontinuity detection for a sampled polyline.
+ *
+ * Replaces the `tan`-only heuristic with two complementary, scale-aware
+ * tests that run on consecutive finite samples:
+ *
+ *  1. **Vertical-asymptote (slope) test** — the most robust discriminator.
+ *     A genuinely steep-but-smooth curve (e.g. `y = 1000x`) has a finite,
+ *     bounded slope no matter how it is sampled, whereas a discontinuity
+ *     (`tan` at π/2, `1/x` at 0, `sqrt` domain edges) produces a near-vertical
+ *     jump: a huge |Δy| over a tiny |Δx|. If `|Δy / Δx|` exceeds `maxSlope`
+ *     the pen is lifted. Because adaptive sampling subdivides curvy regions,
+ *     the gap around an asymptote yields a vanishingly small `Δx`, so the
+ *     slope explodes far beyond `maxSlope` — without falsely breaking
+ *     legitimate steep lines (whose slope is constant and bounded).
+ *  2. **Jump / ratio test** — a secondary check for step discontinuities
+ *     (`sign`, `floor`) where the value jumps enormously between adjacent
+ *     samples even when `Δx` is not tiny.
+ *
+ * Any resulting sample is turned into a `NaN` gap (pen-up) so the renderer
+ * never bridges the discontinuity with a spurious vertical line.
+ *
+ * @param samples Sampled points (in screen/plot order).
+ * @returns       A new array with NaN gaps inserted at discontinuities.
+ */
+export function detectBreaks(
+  samples: PlotSample[],
+  opts: { maxJump?: number; maxRatio?: number; maxSlope?: number } = {},
+): PlotSample[] {
+  const { maxJump = 50, maxRatio = 1e3, maxSlope = 1e5 } = opts;
+  const out: PlotSample[] = [];
+  for (let i = 0; i < samples.length; i++) {
+    const s = samples[i];
+    if (!Number.isFinite(s.y)) {
+      out.push({ x: s.x, y: NaN });
+      continue;
+    }
+    const prev = out.length ? out[out.length - 1] : null;
+    if (prev && Number.isFinite(prev.y)) {
+      const dx = Math.abs(s.x - prev.x);
+      const dy = Math.abs(s.y - prev.y);
+      const absY = Math.abs(s.y);
+      const absPrev = Math.abs(prev.y);
+      const ratio = absY / Math.max(absPrev, 1e-12);
+      // Vertical-asymptote test: tiny horizontal step + unbounded slope.
+      const tooVertical = dx > 0 && dy / dx > maxSlope;
+      // Jump test: huge absolute jump with a huge magnitude ratio.
+      const tooJump = dy > maxJump && ratio > maxRatio;
+      if (tooVertical || tooJump) {
+        out.push({ x: s.x, y: NaN });
+        continue;
+      }
+    }
+    out.push(s);
+  }
+  return out;
 }
 
 /**

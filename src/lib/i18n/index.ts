@@ -101,6 +101,14 @@ export interface TranslationDict {
   formulaExportLatex: string;
   formulaExportHint: string;
 
+  /* ---------------- Result / notepad export ---------------- */
+  exportResult: string;
+  exportResultHint: string;
+  exportResultLatex: string;
+  exportResultMarkdown: string;
+  exportNotepad: string;
+  exportNotepadHead: string;
+
   /* ---------------- Layout switching ---------------- */
   layoutSwitch: string;
   layoutRight: string;
@@ -764,6 +772,7 @@ export interface TranslationDict {
   npDerivative: string;
   npIntegrate: string;
   npMatrixDecompose: string;
+  npMatrixLstsq: string;
   npSymbolicIntegrate: string;
   npSimplify: string;
   npSolveEquation: string;
@@ -1175,6 +1184,17 @@ export interface TranslationDict {
   npMeanVariance: string;
   npHistogram: string;
   npDataInput: string;
+  npDistribution: string;
+  npCorrelation: string;
+  npSummary: string;
+  npPortPdf: string;
+  npPortCdf: string;
+  npPortInv: string;
+  npPortCorr: string;
+  npPortStddev: string;
+  npPortMedian: string;
+  npPortSkewness: string;
+  npPortKurtosis: string;
   npSwitch: string;
   npThresholdGate: string;
   npPortCondition: string;
@@ -1337,6 +1357,14 @@ const zhCN: TranslationDict = {
   formulaExportSVG: "导出为 SVG",
   formulaExportLatex: "导出为 LaTeX",
   formulaExportHint: "选择导出格式",
+
+  /* Result / notepad export */
+  exportResult: "导出结果",
+  exportResultHint: "选择导出格式",
+  exportResultLatex: "导出 LaTeX (.tex)",
+  exportResultMarkdown: "导出 Markdown (.md)",
+  exportNotepad: "导出便签",
+  exportNotepadHead: "OmniMath 便签",
 
   /* Layout switching */
   layoutSwitch: "切换布局",
@@ -1999,6 +2027,7 @@ const zhCN: TranslationDict = {
   npDerivative: "求导",
   npIntegrate: "积分",
   npMatrixDecompose: "矩阵分解",
+  npMatrixLstsq: "最小二乘",
   npSymbolicIntegrate: "符号积分",
   npSimplify: "化简",
   npSolveEquation: "解方程",
@@ -2427,6 +2456,17 @@ const zhCN: TranslationDict = {
   npMeanVariance: "均值与方差",
   npHistogram: "直方图",
   npDataInput: "数据输入",
+  npDistribution: "概率分布",
+  npCorrelation: "相关系数",
+  npSummary: "统计汇总",
+  npPortPdf: "概率密度",
+  npPortCdf: "累积分布",
+  npPortInv: "分位数",
+  npPortCorr: "相关系数",
+  npPortStddev: "标准差",
+  npPortMedian: "中位数",
+  npPortSkewness: "偏度",
+  npPortKurtosis: "峰度",
   npSwitch: "条件开关",
   npThresholdGate: "阈值门",
   npPortCondition: "条件",
@@ -2563,6 +2603,14 @@ const en: TranslationDict = {
   formulaExportSVG: "Export as SVG",
   formulaExportLatex: "Export as LaTeX",
   formulaExportHint: "Choose export format",
+
+  /* Result / notepad export */
+  exportResult: "Export Result",
+  exportResultHint: "Choose export format",
+  exportResultLatex: "Export LaTeX (.tex)",
+  exportResultMarkdown: "Export Markdown (.md)",
+  exportNotepad: "Export Notepad",
+  exportNotepadHead: "OmniMath Notepad",
 
   /* Layout switching */
   layoutSwitch: "Switch Layout",
@@ -3226,6 +3274,7 @@ const en: TranslationDict = {
   npDerivative: "Derivative",
   npIntegrate: "Integrate",
   npMatrixDecompose: "Matrix decompose",
+  npMatrixLstsq: "Least Squares",
   npSymbolicIntegrate: "Symbolic integrate",
   npSimplify: "Simplify",
   npSolveEquation: "Solve equation",
@@ -3654,6 +3703,17 @@ const en: TranslationDict = {
   npMeanVariance: "Mean & Variance",
   npHistogram: "Histogram",
   npDataInput: "Data Input",
+  npDistribution: "Probability Distribution",
+  npCorrelation: "Correlation",
+  npSummary: "Summary Statistics",
+  npPortPdf: "PDF",
+  npPortCdf: "CDF",
+  npPortInv: "Quantile",
+  npPortCorr: "Correlation",
+  npPortStddev: "Std Dev",
+  npPortMedian: "Median",
+  npPortSkewness: "Skewness",
+  npPortKurtosis: "Kurtosis",
   npSwitch: "Switch",
   npThresholdGate: "Threshold Gate",
   npPortCondition: "Condition",

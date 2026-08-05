@@ -35,6 +35,7 @@ import {
 import { FacetGrid } from './FacetGrid';
 import { ParameterSliders } from './ParameterSliders';
 import { PlotCurveEditor } from './PlotCurveEditor';
+import { CurveSetCorrection } from './CurveSetCorrection';
 import { inputToLatex } from '@/lib/engine';
 import { extractFreeParameters } from '@/lib/engine/variableScanner';
 import {
@@ -485,6 +486,13 @@ export function Plot2DPanel() {
             />
           </>
         )}
+        {/* 视觉「图像转曲线」人工修正面板：逐条删除 / 切换候选 / 调参重拟合。
+            仅对携带 candidates 或 originalPolylines 的曲线集渲染（内部自行判断）。 */}
+        {curveSets.map((cs, i) => (
+          <div key={cs.id ?? i} className="pointer-events-none absolute inset-0 z-20">
+            <CurveSetCorrection curveSet={cs} />
+          </div>
+        ))}
       </div>
       <PlotExpandDialog open={expandOpen} onClose={() => setExpandOpen(false)} curveSpecs={curveSpecs} />
 
@@ -494,7 +502,7 @@ export function Plot2DPanel() {
         canvasRef={canvasWrapperRef}
         defaultName={`omnimath-plot-${Date.now()}`}
         title="导出 2D 图像"
-        description="选择分辨率后导出 PNG 图像"
+        description="选择格式与分辨率后导出 PNG / SVG"
       />
     </div>
   );

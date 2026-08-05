@@ -48,6 +48,7 @@ import { CommandPalette } from '@/components/workbench/panels/CommandPalette';
 import { GlobalCalcBar } from '@/components/workbench/panels/GlobalCalcBar';
 import { FloatingCalculator } from '@/components/workbench/panels/FloatingCalculator';
 import { MobileWorkbench } from '@/components/workbench/MobileWorkbench';
+import { OnboardingOverlay } from '@/components/workbench/OnboardingOverlay';
 import { SettingsPanel } from '@/components/workbench/panels/SettingsPanel';
 import { ErrorBoundary } from '@/components/ErrorBoundary';
 import { useShortcutsStore, SHORTCUTS_KEY } from '@/lib/store/shortcutsStore';
@@ -150,11 +151,29 @@ export function Workbench() {
         console.warn('[OmniMath] window error:', e.error ?? e.message);
       }
     };
+    // Window-level drag & drop guard.
+    //
+    // WebView2 (和部分浏览器) 在拖拽 HTML 元素时，若 drop 落在非明确放置目标上，
+    // 会触发默认行为——把 dataTransfer 当作 URL 或文件导航当前页面，导致
+    // 文件树内部的拖拽排序失效（拖到一半页面被"导航"走）。这里在 window 上
+    // 拦截 dragover/drop 并 preventDefault，阻止 WebView 的默认导航行为。
+    // React 合成事件（FilesPanel 自身的 dragover/drop 处理器）是独立监听器，
+    // 不受影响，仍会正常触发。
+    const onWindowDragOver = (e: DragEvent) => {
+      e.preventDefault();
+    };
+    const onWindowDrop = (e: DragEvent) => {
+      e.preventDefault();
+    };
     window.addEventListener('unhandledrejection', onUnhandledRejection);
     window.addEventListener('error', onError);
+    window.addEventListener('dragover', onWindowDragOver);
+    window.addEventListener('drop', onWindowDrop);
     return () => {
       window.removeEventListener('unhandledrejection', onUnhandledRejection);
       window.removeEventListener('error', onError);
+      window.removeEventListener('dragover', onWindowDragOver);
+      window.removeEventListener('drop', onWindowDrop);
     };
   }, [loadFromStorage, loadLayoutFromStorage, loadShortcutsFromStorage]);
 
@@ -261,6 +280,7 @@ export function Workbench() {
         <GlobalCalcBar />
         <FloatingCalculator />
         <SettingsPanel />
+        <OnboardingOverlay />
       </>
     );
   }
@@ -497,6 +517,7 @@ export function Workbench() {
       <GlobalCalcBar />
       <FloatingCalculator />
       <SettingsPanel />
+      <OnboardingOverlay />
     </motion.div>
   );
 }

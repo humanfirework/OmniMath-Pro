@@ -40,7 +40,7 @@ const ALL_TYPES: NodeType[] = [
   /* plot */
   'plot-output',
   /* matrix */
-  'matrix-input', 'matrix-op', 'matrix-multiply', 'matrix-decompose',
+  'matrix-input', 'matrix-op', 'matrix-multiply', 'matrix-decompose', 'matrix-lstsq',
   /* calculus */
   'derivative', 'integrate', 'symbolic-integrate', 'simplify',
   'solve-equation', 'evaluate', 'taylor-series', 'ode-solve', 'limit',
@@ -56,6 +56,7 @@ const ALL_TYPES: NodeType[] = [
   'curve-merge', 'curve-length',
   /* statistics */
   'random-sample', 'mean-variance', 'histogram', 'data-input',
+  'distribution', 'summary', 'correlation',
   /* logic */
   'switch', 'threshold-gate',
   /* vision */
@@ -71,8 +72,8 @@ const ALL_TYPES: NodeType[] = [
 ];
 
 describe('蓝图节点库扩展 — 注册表完整性', () => {
-  it('NODE_TYPES 恰好包含 78 个节点类型', () => {
-    expect(Object.keys(NODE_TYPES).length).toBe(78);
+  it('NODE_TYPES 恰好包含 82 个节点类型', () => {
+    expect(Object.keys(NODE_TYPES).length).toBe(82);
   });
 
   it('每个 ALL_TYPES 条目都存在于 NODE_TYPES', () => {

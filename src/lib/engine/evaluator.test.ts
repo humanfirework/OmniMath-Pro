@@ -341,6 +341,35 @@ describe('evaluator', () => {
     });
   });
 
+  describe('概率分布函数（distpdf/distcdf/distinv/distsample）', () => {
+    it('distpdf 标准正态在 0 处的密度 ≈ 0.3989', () => {
+      const r = evaluateExpression("distpdf('normal', 0, { mu: 0, sigma: 1 })");
+      expect(r.success).toBe(true);
+      expect(parseFloat(r.result as string)).toBeCloseTo(0.3989, 4);
+    });
+
+    it('normcdf 便捷函数：normcdf(0) = 0.5', () => {
+      const r = evaluateExpression('normcdf(0)');
+      expect(r.success).toBe(true);
+      expect(parseFloat(r.result as string)).toBeCloseTo(0.5, 4);
+    });
+
+    it('norminv 便捷函数：norminv(0.975) ≈ 1.96', () => {
+      const r = evaluateExpression('norminv(0.975)');
+      expect(r.success).toBe(true);
+      expect(parseFloat(r.result as string)).toBeCloseTo(1.96, 2);
+    });
+
+    it('distsample 支持中文分布名 + seed 可复现', () => {
+      const expr = "distsample('正态', 5, { mu: 0, sigma: 1 }, 42)";
+      const a = evaluateExpression(expr);
+      const b = evaluateExpression(expr);
+      expect(a.success).toBe(true);
+      expect(a.result).toBe(b.result);
+      expect((a.result as string).startsWith('[')).toBe(true);
+    });
+  });
+
   describe('evaluateExpressionAsync（Algebrite 符号路径）', () => {
     it('空输入返回错误', async () => {
       const r = await evaluateExpressionAsync('   ');

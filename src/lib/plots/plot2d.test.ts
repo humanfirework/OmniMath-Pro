@@ -391,34 +391,69 @@ describe('sampleParametric', () => {
 /* ----------------------------- sampleCurve ----------------------------- */
 
 describe('sampleCurve', () => {
-  it('dispatches cartesian specs to sampleFunction', () => {
-    const viaSpec = sampleCurve(
+  it('samples a cartesian line y = x across the view window (adaptive)', () => {
+    const samples = sampleCurve(
       { mode: 'cartesian', exprX: 'x', exprY: '', paramRange: [0, 1] },
       [0, 10],
       11,
     );
-    const direct = sampleFunction('x', [0, 10], 'cartesian', 11);
-    expect(viaSpec).toEqual(direct);
+    expect(samples.length).toBeGreaterThanOrEqual(2);
+    // Every finite point lies exactly on y = x.
+    for (const s of samples) {
+      expect(Number.isFinite(s.y)).toBe(true);
+      expect(s.y).toBeCloseTo(s.x, 6);
+    }
+    // Range is respected regardless of the ignored paramRange.
+    expect(samples[0].x).toBeCloseTo(0, 5);
+    expect(samples[samples.length - 1].x).toBeCloseTo(10, 5);
   });
 
-  it('dispatches polar specs to samplePolar', () => {
-    const viaSpec = sampleCurve(
+  it('samples a cartesian sinusoid and detects its peaks (adaptive)', () => {
+    const samples = sampleCurve(
+      { mode: 'cartesian', exprX: 'sin(x)', exprY: '', paramRange: [0, 1] },
+      [0, Math.PI * 2],
+      200,
+    );
+    // The peak sin(π/2) = 1 must be hit (adaptive sampling subdivides there).
+    expect(samples.some((s) => Math.abs(s.y - 1) < 1e-3)).toBe(true);
+    expect(samples.some((s) => Math.abs(s.y + 1) < 1e-3)).toBe(true);
+  });
+
+  it('samples polar r = 1 onto the unit circle (adaptive, ignores view range)', () => {
+    const samples = sampleCurve(
       { mode: 'polar', exprX: '1', exprY: '', paramRange: [0, Math.PI * 2] },
       [-10, 10], // view range must be ignored for polar
-      50,
+      64,
     );
-    const direct = samplePolar('1', 0, Math.PI * 2, 50);
-    expect(viaSpec).toEqual(direct);
+    expect(samples.length).toBeGreaterThanOrEqual(8);
+    for (const s of samples) {
+      expect(Number.isFinite(s.x) && Number.isFinite(s.y)).toBe(true);
+      expect(s.x * s.x + s.y * s.y).toBeCloseTo(1, 5);
+    }
   });
 
-  it('dispatches parametric specs to sampleParametric', () => {
-    const viaSpec = sampleCurve(
+  it('samples parametric x = cos(t), y = sin(t) onto the unit circle (adaptive)', () => {
+    const samples = sampleCurve(
       { mode: 'parametric', exprX: 'cos(t)', exprY: 'sin(t)', paramRange: [0, Math.PI * 2] },
       [-10, 10], // view range must be ignored for parametric
-      50,
+      64,
     );
-    const direct = sampleParametric('cos(t)', 'sin(t)', 0, Math.PI * 2, 50);
-    expect(viaSpec).toEqual(direct);
+    expect(samples.length).toBeGreaterThanOrEqual(8);
+    for (const s of samples) {
+      expect(Number.isFinite(s.x) && Number.isFinite(s.y)).toBe(true);
+      expect(s.x * s.x + s.y * s.y).toBeCloseTo(1, 5);
+    }
+  });
+
+  it('breaks the pen at a tan(x) asymptote via detectBreaks', () => {
+    const samples = sampleCurve(
+      { mode: 'cartesian', exprX: 'tan(x)', exprY: '', paramRange: [0, 1] },
+      [0, 5],
+      200,
+    );
+    // tan(x) has asymptotes at π/2 ≈ 1.571 and 3π/2 ≈ 4.712 inside [0, 5].
+    // At least one NaN gap must be present so the renderer lifts the pen.
+    expect(samples.some((s) => Number.isNaN(s.y))).toBe(true);
   });
 });
 

@@ -102,6 +102,8 @@ import {
   ArrowUpRight,
   Star,
   Clock3,
+  FastForward,
+  Bug,
   type LucideIcon,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
@@ -131,7 +133,7 @@ import { cn } from '@/lib/utils';
 import { t } from '@/lib/i18n';
 import type { TranslationDict } from '@/lib/i18n';
 import { toast } from 'sonner';
-import { useWorkbenchStore } from '@/lib/store/workbench';
+import { useWorkbenchStore, type PreviewTab } from '@/lib/store/workbench';
 import {
   NODE_TYPES,
   NODE_WIDTH,
@@ -144,12 +146,14 @@ import {
   executePipeline,
   exportPipelineToScript,
   getNodeVariableDeps,
+  traceErrorChain,
   type PipelineNode,
   type PipelineEdge,
   type NodeType,
   type NodeCategory,
   type PortDef,
   type PortDataType,
+  type NodeConfigField,
 } from './pipelineEngine';
 import { runSimulation, isSimulationNode, type SimSeries } from './simulationEngine';
 import { PIPELINE_TEMPLATES, loadTemplate } from './pipelineTemplates';
@@ -216,6 +220,25 @@ const CATEGORY_LABEL_KEY: Record<NodeCategory, keyof TranslationDict> = {
   logic:      'npCategoryLogic',
   vision:     'npCategoryVision',
   simulation: 'npCategorySimulation',
+};
+
+/* ------------------------------------------------------------------ *
+ * 端口类型颜色编码（类 Unreal Blueprint）
+ * ------------------------------------------------------------------ */
+// 端口颜色随数据类型编码，让「连得对（P2）」成为视觉直觉：
+//   number 绿 / expression 蓝 / matrix 紫 / curve·curves 橙 /
+//   image 红 / animation 青 / plot 天蓝 / any 灰。
+// 与 config-schema.test.ts 的 PORT_TYPE_COLORS 保持一致。
+const PORT_TYPE_STYLE: Record<PortDataType, { border: string; bg: string }> = {
+  number:     { border: 'oklch(0.72 0.16 155)', bg: 'oklch(0.72 0.16 155 / 0.35)' },
+  expression: { border: 'oklch(0.62 0.19 250)', bg: 'oklch(0.62 0.19 250 / 0.35)' },
+  matrix:     { border: 'oklch(0.6 0.2 310)',   bg: 'oklch(0.6 0.2 310 / 0.35)' },
+  curve:      { border: 'oklch(0.75 0.16 60)',  bg: 'oklch(0.75 0.16 60 / 0.35)' },
+  curves:     { border: 'oklch(0.75 0.16 60)',  bg: 'oklch(0.75 0.16 60 / 0.35)' },
+  image:      { border: 'oklch(0.62 0.21 25)',  bg: 'oklch(0.62 0.21 25 / 0.35)' },
+  animation:  { border: 'oklch(0.72 0.13 195)', bg: 'oklch(0.72 0.13 195 / 0.35)' },
+  plot:       { border: 'oklch(0.7 0.15 220)',  bg: 'oklch(0.7 0.15 220 / 0.35)' },
+  any:        { border: 'oklch(0.65 0 0)',      bg: 'oklch(0.65 0 0 / 0.35)' },
 };
 
 /* ------------------------------------------------------------------ *
@@ -512,13 +535,29 @@ function NodePipelineInner() {
   const [palettePos, setPalettePos] = useState<{ x: number; y: number } | null>(null);
 
   // Simulink 仿真求解器配置（时间范围 / 步长 / 求解方法）。
-  const [simConfig, setSimConfig] = useState<{ t0: number; tEnd: number; dt: number; method: 'euler' | 'rk4' }>({
+  const [simConfig, setSimConfig] = useState<{ t0: number; tEnd: number; dt: number; method: 'euler' | 'rk4' | 'rkf45' }>({
     t0: 0,
     tEnd: 10,
     dt: 0.05,
     method: 'euler',
   });
   const [simConfigOpen, setSimConfigOpen] = useState(false);
+
+  // P3 诊断面板开合。
+  const [diagnosticsOpen, setDiagnosticsOpen] = useState(false);
+
+  // P3 错误传播链高亮：当前选中/出错节点上游的节点 id 集合。
+  const errorChain = useMemo(() => {
+    if (!selectedId) return new Set<string>();
+    const { chain } = traceErrorChain(nodes, edges, selectedId);
+    return new Set(chain);
+  }, [selectedId, nodes, edges]);
+
+  // 出错节点列表（供诊断面板与工具栏徽标）。
+  const errorNodes = useMemo(
+    () => nodes.filter((n) => n.error),
+    [nodes],
+  );
 
   // 操作提示折叠状态（默认折叠，仅显示图标，点击展开文字）
   const [hintsOpen, setHintsOpen] = useState(false);
@@ -668,6 +707,12 @@ function NodePipelineInner() {
       if (curves.length <= 0 || width <= 0 || height <= 0) continue;
       const color = typeof node.config.color === 'string' ? node.config.color : '#a78bfa';
       const strokeWidth = typeof node.config.width === 'number' ? node.config.width : 2;
+      // 容错增强：把 curve-fit 产出的候选档位 + 原始折线转发到 2D 画布，
+      // 供「人工修正」面板「切换候选结果 / 调整参数重新拟合」使用。
+      const candidates = Array.isArray((o as any).candidates) ? (o as any).candidates : undefined;
+      const originalPolylines = Array.isArray((o as any).originalPolylines)
+        ? (o as any).originalPolylines
+        : undefined;
       store.addCurveSet({
         curves,
         width,
@@ -676,6 +721,35 @@ function NodePipelineInner() {
         strokeWidth,
         flipX: !!node.config.flipX,
         flipY: !!node.config.flipY,
+        candidates,
+        originalPolylines,
+        presetId: 'balanced',
+      } as any);
+    }
+    // 视频/姿态 → 曲线动画：把完整逐帧序列推送到 2D 画布，由画布内置的
+    // 时间轴滑块/播放控制逐帧播放（frames + fps）；`curves` 取第 0 帧作为静态回退。
+    for (const node of nodes) {
+      if (node.type !== 'curve-animate') continue;
+      const anim = node.outputs?.animation as
+        | { frames?: unknown[]; width?: number; height?: number; color?: string; strokeWidth?: number; fps?: number }
+        | undefined;
+      if (!anim || !Array.isArray(anim.frames) || anim.frames.length === 0) continue;
+      const firstFrame = anim.frames[0];
+      if (!Array.isArray(firstFrame)) continue;
+      const width = typeof anim.width === 'number' ? anim.width : 0;
+      const height = typeof anim.height === 'number' ? anim.height : 0;
+      if (firstFrame.length <= 0 || width <= 0 || height <= 0) continue;
+      const frames = anim.frames.filter((f): f is unknown[] => Array.isArray(f));
+      store.addCurveSet({
+        curves: firstFrame,
+        frames,
+        fps: typeof anim.fps === 'number' ? anim.fps : 30,
+        width,
+        height,
+        color: anim.color ?? '#a78bfa',
+        strokeWidth: anim.strokeWidth ?? 2,
+        flipY: true,
+        flipX: false,
       } as any);
     }
   }, []);
@@ -773,6 +847,31 @@ function NodePipelineInner() {
       });
     }
   }, [nodes, edges, variables, simConfig, pushPlotsToWorkbench, pushCurvesToWorkbench, addResult, setViewMode, setActivePreviewTab]);
+
+  /* ── P3 执行到选中节点 ─────────────────────────────────────── */
+  const runToSelected = useCallback(async () => {
+    if (!selectedId) {
+      toast.warning('请先选中一个节点', { duration: 2500 });
+      return;
+    }
+    try {
+      const ctx = {
+        variables: Object.fromEntries(
+          Object.entries(variables).map(([k, v]) => [k, v.value]),
+        ),
+      };
+      const executed = await executePipeline(nodes, edges, ctx, { stopAt: selectedId });
+      setNodes(executed);
+      setComputeTick((n) => n + 1);
+      pushCurvesToWorkbench(executed);
+      toast.success('已执行到选中节点', {
+        description: '下游节点已暂停，可继续排查',
+        duration: 2500,
+      });
+    } catch (err) {
+      toast.error('执行到节点失败', { description: (err as Error).message, duration: 4000 });
+    }
+  }, [selectedId, nodes, edges, variables, pushCurvesToWorkbench]);
 
   /* ── Auto-execute on graph / config change (debounced) ───────── */
   useEffect(() => {
@@ -1066,7 +1165,22 @@ function NodePipelineInner() {
     // Frame the freshly-loaded graph so it lands in view.
     const next = fitViewFor(loaded.nodes, canvasSize);
     if (next) setView(next);
-  }, [canvasSize]);
+    // 模板的 onLoad 声明了加载后应切到的预览标签（如 plot2d 曲线集）。
+    const tpl = PIPELINE_TEMPLATES.find((t) => t.id === id);
+    if (tpl?.onLoad?.activePreviewTab) {
+      setActivePreviewTab(tpl.onLoad.activePreviewTab as PreviewTab);
+    }
+  }, [canvasSize, setActivePreviewTab]);
+
+  /* ── 首次启动引导的一键示例：消费 store 中暂存的模板 id ─────── */
+  useEffect(() => {
+    const pending = useWorkbenchStore.getState().pendingPipelineTemplate;
+    if (pending) {
+      useWorkbenchStore.getState().setPendingPipelineTemplate(null);
+      loadTemplateById(pending);
+    }
+    // 仅在挂载时消费一次（懒加载视图切换后 remount 不再重复加载）。
+  }, [loadTemplateById]);
 
   /* ── Fit view to all nodes ───────────────────────────────────── */
   const fitView = useCallback(() => {
@@ -1545,6 +1659,16 @@ function NodePipelineInner() {
     return m;
   }, [nodes]);
 
+  // P2: 正在拖线源的端口数据类型。用于拖动时输入端口兼容高亮。
+  const connectingFromType = useMemo<PortDataType | null>(() => {
+    if (!connecting) return null;
+    const from = nodeById.get(connecting.fromNode);
+    if (!from) return null;
+    const def = NODE_TYPES[from.type];
+    const port = def?.outputs.find((p) => p.id === connecting.fromPort);
+    return port?.type ?? null;
+  }, [connecting, nodeById]);
+
   const edgePaths = useMemo(() => {
     return edges
       .map((e) => {
@@ -1554,9 +1678,13 @@ function NodePipelineInner() {
         const p1 = getPortPosition(from, e.fromPort, true, portPositions);
         const p2 = getPortPosition(to, e.toPort, false, portPositions);
         if (!p1 || !p2) return null;
-        return { edge: e, from: p1, to: p2 };
+        // 边随源端口数据类型着色（类 Unreal Blueprint）。
+        const fromDef = NODE_TYPES[from.type];
+        const fromPort = fromDef?.outputs.find((p) => p.id === e.fromPort);
+        const color = fromPort ? PORT_TYPE_STYLE[fromPort.type]?.border : undefined;
+        return { edge: e, from: p1, to: p2, color };
       })
-      .filter((x): x is { edge: PipelineEdge; from: { x: number; y: number }; to: { x: number; y: number } } => x !== null);
+      .filter((x): x is NonNullable<typeof x> => x !== null);
   }, [edges, nodeById, portPositions]);
 
   const pendingPath = useMemo(() => {
@@ -1574,6 +1702,8 @@ function NodePipelineInner() {
       <PipelineToolbar
         onBack={() => setViewMode('workbench')}
         onRun={runPipeline}
+        onRunToSelected={runToSelected}
+        onToggleDiagnostics={() => setDiagnosticsOpen((v) => !v)}
         onClear={clearAll}
         onExport={exportScript}
         onZoomIn={() => setView((v) => ({ ...v, scale: Math.min(2, v.scale * 1.2) }))}
@@ -1588,6 +1718,8 @@ function NodePipelineInner() {
         nodeCount={nodes.length}
         edgeCount={edges.length}
         selectedCount={selectedIds.size}
+        errorCount={errorNodes.length}
+        diagnosticsOpen={diagnosticsOpen}
       />
 
       <div
@@ -1640,6 +1772,8 @@ function NodePipelineInner() {
                   multiSelected={selectedIds.has(node.id)}
                   computeTick={computeTick}
                   isConnecting={!!connecting}
+                  connectingFromType={connectingFromType}
+                  inErrorChain={errorChain.has(node.id)}
                   snapPortId={snapTarget?.nodeId === node.id ? snapTarget.portId : null}
                   onPointerDownHeader={(e) => startNodeDrag(e, node.id)}
                   onDelete={() => deleteNode(node.id)}
@@ -1732,14 +1866,14 @@ function NodePipelineInner() {
                   <label className="text-[10px] text-muted-foreground/80 uppercase tracking-wider">求解方法</label>
                   <Select
                     value={simConfig.method}
-                    onValueChange={(v) => setSimConfig((c) => ({ ...c, method: v as 'euler' | 'rk4' }))}
-                  >
+                    onValueChange={(v) => setSimConfig((c) => ({ ...c, method: v as 'euler' | 'rk4' | 'rkf45' }))}>
                     <SelectTrigger className="h-7 text-[12px]">
                       <SelectValue />
                     </SelectTrigger>
                     <SelectContent>
                       <SelectItem value="euler">Euler（ode1）</SelectItem>
                       <SelectItem value="rk4">RK4（ode4，更精确）</SelectItem>
+                      <SelectItem value="rkf45">RKF45（ode45，自适应）</SelectItem>
                     </SelectContent>
                   </Select>
                 </div>
@@ -1752,6 +1886,50 @@ function NodePipelineInner() {
                   <Play className="size-3 mr-1" /> 运行仿真
                 </Button>
               </div>
+            </div>
+          </div>
+        )}
+
+        {/* P3 诊断面板：列出出错节点 + 错误传播链 */}
+        {diagnosticsOpen && (
+          <div
+            className="absolute top-3 right-3 z-30 w-80 max-h-[70%] glass-strong border border-border rounded-xl shadow-2xl flex flex-col pointer-events-auto"
+            onPointerDown={(e) => e.stopPropagation()}
+          >
+            <div className="flex items-center justify-between px-3 h-9 border-b border-border/60 shrink-0">
+              <span className="text-[12px] font-semibold flex items-center gap-1.5">
+                <Bug className="size-3.5 text-destructive" /> 诊断
+              </span>
+              <button
+                type="button"
+                onClick={() => setDiagnosticsOpen(false)}
+                className="size-5 grid place-items-center rounded text-muted-foreground hover:text-foreground hover:bg-accent"
+              >
+                <X className="size-3" />
+              </button>
+            </div>
+            <div className="flex-1 min-h-0 overflow-auto p-2.5 space-y-2">
+              {errorNodes.length === 0 ? (
+                <div className="text-[11px] text-muted-foreground/70 py-6 text-center">
+                  没有错误。当前流水线运行正常 ✓
+                </div>
+              ) : (
+                <>
+                  <div className="text-[10px] text-muted-foreground/80 uppercase tracking-wider px-1">
+                    {errorNodes.length} 个节点出错
+                  </div>
+                  {errorNodes.map((n) => (
+                    <DiagnosticRow
+                      key={n.id}
+                      node={n}
+                      onClick={() => setSelectedId(n.id)}
+                    />
+                  ))}
+                </>
+              )}
+            </div>
+            <div className="px-3 py-2 border-t border-border/60 text-[10px] text-muted-foreground/70 shrink-0">
+              点击节点可高亮其上游错误传播链。
             </div>
           </div>
         )}
@@ -1792,6 +1970,8 @@ function NodePipelineInner() {
 interface ToolbarProps {
   onBack: () => void;
   onRun: () => void;
+  onRunToSelected: () => void;
+  onToggleDiagnostics: () => void;
   onClear: () => void;
   onExport: () => void;
   onZoomIn: () => void;
@@ -1806,13 +1986,15 @@ interface ToolbarProps {
   nodeCount: number;
   edgeCount: number;
   selectedCount: number;
+  errorCount: number;
+  diagnosticsOpen: boolean;
 }
 
 function PipelineToolbar({
-  onBack, onRun, onClear, onExport,
+  onBack, onRun, onRunToSelected, onToggleDiagnostics, onClear, onExport,
   onZoomIn, onZoomOut, onResetView, onCenter, onOpenSimConfig, onLoadTemplate, onAutoLayout,
   onAddNode, onDeleteSelected,
-  nodeCount, edgeCount, selectedCount,
+  nodeCount, edgeCount, selectedCount, errorCount, diagnosticsOpen,
 }: ToolbarProps) {
   return (
     <div className="shrink-0 h-11 flex items-center justify-between px-3 gap-3 glass border-b border-border">
@@ -1869,6 +2051,40 @@ function PipelineToolbar({
           <Play className="size-3.5" />
           {t('npRunAll')}
         </Button>
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <Button
+              variant="outline"
+              size="sm"
+              className="h-8 px-2.5 gap-1.5 text-[12px]"
+              onClick={onRunToSelected}
+              disabled={selectedCount === 0}
+            >
+              <FastForward className="size-3.5" />
+              <span className="hidden sm:inline">执行到选中</span>
+            </Button>
+          </TooltipTrigger>
+          <TooltipContent side="bottom">从起点执行到当前选中的节点（用于定位问题）</TooltipContent>
+        </Tooltip>
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <Button
+              variant={diagnosticsOpen ? 'secondary' : 'outline'}
+              size="sm"
+              className="h-8 px-2.5 gap-1.5 text-[12px] relative"
+              onClick={onToggleDiagnostics}
+            >
+              <Bug className="size-3.5" />
+              <span className="hidden sm:inline">诊断</span>
+              {errorCount > 0 && (
+                <span className="absolute -top-1.5 -right-1.5 min-w-[16px] h-4 px-1 rounded-full bg-destructive text-white text-[10px] grid place-items-center">
+                  {errorCount}
+                </span>
+              )}
+            </Button>
+          </TooltipTrigger>
+          <TooltipContent side="bottom">打开错误诊断面板（错误传播链）</TooltipContent>
+        </Tooltip>
         <Button
           variant="outline"
           size="sm"
@@ -1982,6 +2198,10 @@ interface NodeCardProps {
   multiSelected: boolean;
   computeTick: number;
   isConnecting: boolean;
+  /** P2: 当前正在拖线源的端口数据类型（用于输入端口兼容高亮）。 */
+  connectingFromType: PortDataType | null;
+  /** P3: 该节点是否位于「选中节点」的错误传播链上（用于路径高亮）。 */
+  inErrorChain: boolean;
   snapPortId: string | null;
   onPointerDownHeader: (e: React.PointerEvent) => void;
   onDelete: () => void;
@@ -1994,7 +2214,7 @@ interface NodeCardProps {
 }
 
 function NodeCard({
-  node, selected, multiSelected, computeTick, isConnecting, snapPortId,
+  node, selected, multiSelected, computeTick, isConnecting, connectingFromType, inErrorChain, snapPortId,
   onPointerDownHeader, onDelete, onSelect,
   onConfigChange, onStartConnection, onCompleteConnection,
   variables, onPlotOpen,
@@ -2078,6 +2298,7 @@ function NodeCard({
         'absolute node-card group overflow-visible',
         selected && 'selected',
         multiSelected && 'ring-2 ring-blue-500 ring-offset-0',
+        inErrorChain && !selected && 'with-error-chain',
       )}
       style={{
         width: NODE_WIDTH,
@@ -2129,6 +2350,7 @@ function NodeCard({
             y={i * PORT_ROW_H}
             connected={Boolean(node.outputs && port.id in (node.outputs as object))}
             isConnecting={isConnecting}
+            connectingFromType={connectingFromType}
             snapped={snapPortId === port.id}
             onStartConnection={onStartConnection}
             onCompleteConnection={onCompleteConnection}
@@ -2143,6 +2365,7 @@ function NodeCard({
             y={i * PORT_ROW_H}
             connected={Boolean(node.outputs && port.id in (node.outputs as object))}
             isConnecting={isConnecting}
+            connectingFromType={connectingFromType}
             snapped={false}
             onStartConnection={onStartConnection}
             onCompleteConnection={onCompleteConnection}
@@ -2184,16 +2407,24 @@ interface PortLabelProps {
   y: number;
   connected: boolean;
   isConnecting: boolean;
+  /** P2: 正在拖线源的端口类型。非空时，输入端口按与它的兼容性高亮/置灰。 */
+  connectingFromType: PortDataType | null;
   snapped: boolean;
   onStartConnection: (portId: string, e: React.PointerEvent) => void;
   onCompleteConnection: (portId: string, type: PortDataType) => void;
 }
 
 function PortLabel({
-  nodeId, port, isOutput, y, connected, isConnecting, snapped,
+  nodeId, port, isOutput, y, connected, isConnecting, connectingFromType, snapped,
   onStartConnection, onCompleteConnection,
 }: PortLabelProps) {
   const [hover, setHover] = useState(false);
+  // P2: 拖线时，输入端口按源类型兼容性判断是否可连。
+  //   兼容 → active 高亮；不兼容 → 置灰（降低透明度）。
+  const compatible =
+    isConnecting && !isOutput && connectingFromType !== null
+      ? canConnect(connectingFromType, port.type)
+      : true;
   // Measure this port dot's center offset relative to its ancestor
   // .node-card, and report it to the PortPositionsProvider context so
   // edge routing + snap detection use real DOM positions (not estimates).
@@ -2227,17 +2458,18 @@ function PortLabel({
         className={cn(
           'node-port',
           connected && 'connected',
-          (hover || (isConnecting && !isOutput)) && 'active',
+          (hover || (isConnecting && !isOutput && compatible)) && 'active',
+          isConnecting && !isOutput && !compatible && 'opacity-30',
           snapped && 'ring-2 ring-cyan-400 scale-125',
         )}
         style={{
           borderColor: snapped
             ? 'oklch(0.75 0.18 195)'
-            : (isOutput ? 'oklch(0.78 0.15 75)' : 'oklch(0.7 0.15 165)'),
+            : PORT_TYPE_STYLE[port.type]?.border ?? 'oklch(0.7 0.15 165)',
           background: snapped
             ? 'oklch(0.75 0.18 195 / 0.35)'
             : connected
-              ? (isOutput ? 'oklch(0.78 0.15 75)' : 'oklch(0.7 0.15 165)')
+              ? (PORT_TYPE_STYLE[port.type]?.border ?? 'oklch(0.7 0.15 165)')
               : 'var(--node-bg)',
         }}
       />
@@ -2295,6 +2527,12 @@ function NodeDependencyBadge({
 }
 
 function NodeConfig({ node, onConfigChange, variables }: NodeConfigProps) {
+  // P0 蓝图可用性：若节点声明了 configSchema，则配置面板由 schema 自动生成，
+  // 无需手写 case。手写 switch 仅作为未迁移节点的兜底。
+  const schema = NODE_TYPES[node.type]?.configSchema;
+  if (schema && schema.length > 0) {
+    return <SchemaConfig schema={schema} node={node} onConfigChange={onConfigChange} />;
+  }
   switch (node.type) {
     case 'number-input':
       return <NumberInputConfig node={node} onConfigChange={onConfigChange} />;
@@ -2652,6 +2890,217 @@ function NodeConfig({ node, onConfigChange, variables }: NodeConfigProps) {
     case 'sim-clock':
     case 'sim-scope':
       return <p className="text-[11px] text-muted-foreground/70">仿真节点，点击工具栏「▶ 运行仿真」查看结果。</p>;
+
+    /* ── 视觉 Vision 节点参数面板 ───────────────────────────
+     * 之前这些节点没有对应的 case，全部落入 default 返回 null，
+     * 导致「图像转曲线 / 视频转曲线」在工作流里无法配置输入文件，
+     * 节点面板什么都不显示 —— 这就是该功能『存在却用不了』的根因。
+     * 现在为每个视觉节点补全配置 UI，让用户可以选图、选视频、调参。 */
+    case 'image-input':
+      return (
+        <VisionFileConfig
+          node={node}
+          onConfigChange={onConfigChange}
+          accept="image/*,.png,.jpg,.jpeg,.webp,.bmp,image/svg+xml"
+          label="输入图片"
+          hint="选择图片文件"
+        />
+      );
+    case 'video-input':
+      return (
+        <VisionFileConfig
+          node={node}
+          onConfigChange={onConfigChange}
+          accept="video/*,image/gif,.mp4,.webm,.mov,.avi,.gif"
+          label="输入视频 / GIF"
+          hint="选择视频或 GIF"
+        />
+      );
+    case 'grayscale-threshold':
+      return (
+        <div className="space-y-2">
+          <ConfigSelect
+            label="方法 Method"
+            value={String(node.config.method ?? 'multi')}
+            onChange={(v) => onConfigChange({ method: v })}
+            options={[
+              { value: 'multi', label: '多阈值分层 (multi)' },
+              { value: 'simple', label: '固定阈值 (simple)' },
+              { value: 'adaptive', label: '自适应 (adaptive)' },
+            ]}
+          />
+          <ConfigSlider label="阈值 Threshold" value={Number(node.config.threshold ?? 128)} onChange={(v) => onConfigChange({ threshold: v })} min={0} max={255} step={1} />
+          <ConfigSlider label="层级 Levels" value={Number(node.config.levels ?? 4)} onChange={(v) => onConfigChange({ levels: v })} min={2} max={8} step={1} />
+        </div>
+      );
+    case 'edge-detect':
+      return (
+        <div className="space-y-2">
+          <ConfigSelect
+            label="方法 Method"
+            value={String(node.config.method ?? 'sobel')}
+            onChange={(v) => onConfigChange({ method: v })}
+            options={[
+              { value: 'sobel', label: 'Sobel 梯度' },
+              { value: 'canny', label: 'Canny 双阈值' },
+            ]}
+          />
+          <ConfigSlider label="低阈值 Low" value={Number(node.config.lowThreshold ?? 30)} onChange={(v) => onConfigChange({ lowThreshold: v })} min={0} max={255} step={1} />
+          <ConfigSlider label="高阈值 High" value={Number(node.config.highThreshold ?? 80)} onChange={(v) => onConfigChange({ highThreshold: v })} min={0} max={255} step={1} />
+        </div>
+      );
+    case 'contour-trace':
+      return (
+        <div className="space-y-2">
+          <ConfigSlider label="降噪像素 Turd Size" value={Number(node.config.turdsize ?? 2)} onChange={(v) => onConfigChange({ turdsize: v })} min={0} max={20} step={1} />
+          <ConfigToggle label="骨架化 (Skeletonize)" value={Boolean(node.config.skeletonize)} onChange={(v) => onConfigChange({ skeletonize: v })} />
+        </div>
+      );
+    case 'curve-fit':
+      return (
+        <div className="space-y-2">
+          <ConfigSelect
+            label="拟合模式 Fit Mode"
+            value={String(node.config.fitMode ?? 'bezier')}
+            onChange={(v) => onConfigChange({ fitMode: v })}
+            options={[
+              { value: 'bezier', label: '贝塞尔 (Bezier)' },
+              { value: 'fourier', label: '傅里叶 (Fourier)' },
+            ]}
+          />
+          <ConfigSelect
+            label="质量 Quality"
+            value={String(node.config.quality ?? 'balanced')}
+            onChange={(v) => {
+              // 切换质量预设时，同步写入对应的误差/角点阈值，
+              // 否则 execute 里 `config.error ?? preset` 会因默认值恒存在而忽略预设。
+              const p = (() => {
+                switch (v) {
+                  case 'precise': return { errorThreshold: 0.2, cornerThreshold: 0.14 };
+                  case 'smooth': return { errorThreshold: 2.5, cornerThreshold: 1.05 };
+                  default: return { errorThreshold: 1.5, cornerThreshold: 0.7 };
+                }
+              })();
+              onConfigChange({ quality: v, ...p });
+            }}
+            options={[
+              { value: 'precise', label: '精细 Precise' },
+              { value: 'balanced', label: '均衡 Balanced' },
+              { value: 'smooth', label: '平滑 Smooth' },
+            ]}
+          />
+          <ConfigSlider label="误差阈值 Error" value={Number(node.config.errorThreshold ?? 1.5)} onChange={(v) => onConfigChange({ errorThreshold: v })} min={0.1} max={5} step={0.1} />
+          <ConfigSlider label="角点阈值 Corner" value={Number(node.config.cornerThreshold ?? 0.7)} onChange={(v) => onConfigChange({ cornerThreshold: v })} min={0.05} max={1.5} step={0.05} />
+          <ConfigToggle label="翻转 Y 轴" value={Boolean(node.config.flipY ?? true)} onChange={(v) => onConfigChange({ flipY: v })} />
+          <ConfigToggle label="翻转 X 轴" value={Boolean(node.config.flipX)} onChange={(v) => onConfigChange({ flipX: v })} />
+          <ConfigSlider label="缩放 Scale" value={Number(node.config.scale ?? 1)} onChange={(v) => onConfigChange({ scale: v })} min={0.1} max={4} step={0.05} />
+        </div>
+      );
+    case 'fine-outline':
+      return (
+        <div className="space-y-2">
+          <ConfigSelect
+            label="图像类型 Image Type"
+            value={String(node.config.imageType ?? 'auto')}
+            onChange={(v) => onConfigChange({ imageType: v })}
+            options={[
+              { value: 'auto', label: '自动 Auto' },
+              { value: 'standard', label: '标准 (照片/普通)' },
+              { value: 'highContrast', label: '高对比 / 线稿' },
+            ]}
+          />
+          <ConfigSelect
+            label="精细度预设 Preset"
+            value={String(node.config.preset ?? 'balanced')}
+            onChange={(v) => {
+              // 同步写入当前 imageType 对应的预设数值，让「预设」真正生效。
+              const imageType = String(node.config.imageType ?? 'auto');
+              const std = {
+                precise: { low: 45, high: 115, minStrand: 28, eps: 0.55, maxPaths: 400, strokeWidth: 1.4 },
+                balanced: { low: 55, high: 130, minStrand: 40, eps: 0.9, maxPaths: 200, strokeWidth: 1.6 },
+                rough: { low: 70, high: 160, minStrand: 80, eps: 1.6, maxPaths: 80, strokeWidth: 2.0 },
+              } as const;
+              const hc = {
+                precise: { threshold: 128, minStrand: 6, eps: 0.4, maxPaths: 2000, strokeWidth: 1.2 },
+                balanced: { threshold: 128, minStrand: 10, eps: 0.6, maxPaths: 1000, strokeWidth: 1.4 },
+                rough: { threshold: 140, minStrand: 20, eps: 1.0, maxPaths: 400, strokeWidth: 1.8 },
+              } as const;
+              const p = std[v as keyof typeof std];
+              const hp = hc[v as keyof typeof hc];
+              const patch: Record<string, unknown> = { preset: v };
+              if (imageType === 'highContrast') {
+                Object.assign(patch, hp);
+              } else {
+                // standard / auto 都以标准预设为基准（auto 内部会再自动判断）
+                Object.assign(patch, p);
+                if (imageType === 'highContrast') patch.threshold = hp.threshold;
+              }
+              onConfigChange(patch);
+            }}
+            options={[
+              { value: 'precise', label: '精细 Precise' },
+              { value: 'balanced', label: '均衡 Balanced' },
+              { value: 'rough', label: '粗略 Rough' },
+            ]}
+          />
+          <ConfigSlider label="阈值 Threshold" value={Number(node.config.threshold ?? 128)} onChange={(v) => onConfigChange({ threshold: v })} min={0} max={255} step={1} />
+          <ConfigSlider label="低阈值 Low" value={Number(node.config.low ?? 55)} onChange={(v) => onConfigChange({ low: v })} min={0} max={255} step={1} />
+          <ConfigSlider label="高阈值 High" value={Number(node.config.high ?? 130)} onChange={(v) => onConfigChange({ high: v })} min={0} max={255} step={1} />
+          <ConfigSlider label="最短链长 Min Strand" value={Number(node.config.minStrand ?? 40)} onChange={(v) => onConfigChange({ minStrand: v })} min={4} max={200} step={1} />
+          <ConfigSlider label="简化阈值 Eps" value={Number(node.config.eps ?? 0.9)} onChange={(v) => onConfigChange({ eps: v })} min={0.1} max={3} step={0.05} />
+          <ConfigSlider label="最大路径 Max Paths" value={Number(node.config.maxPaths ?? 200)} onChange={(v) => onConfigChange({ maxPaths: v })} min={10} max={2000} step={10} />
+          <ConfigSlider label="描边宽度 Stroke" value={Number(node.config.strokeWidth ?? 1.6)} onChange={(v) => onConfigChange({ strokeWidth: v })} min={0.8} max={4} step={0.1} />
+          <ConfigToggle label="前景遮罩增强" value={Boolean(node.config.enableForegroundMask)} onChange={(v) => onConfigChange({ enableForegroundMask: v })} />
+        </div>
+      );
+    case 'plot-curves':
+      return (
+        <div className="space-y-2">
+          <div className="space-y-1">
+            <label className="text-[10px] text-muted-foreground/80 uppercase tracking-wider">描边颜色 Color</label>
+            <input
+              type="color"
+              value={String(node.config.color ?? '#a78bfa')}
+              onChange={(e) => onConfigChange({ color: e.target.value })}
+              className="h-7 w-full rounded-md border border-border/60 bg-muted/40 cursor-pointer"
+            />
+          </div>
+          <ConfigSlider label="线宽 Width" value={Number(node.config.width ?? 2)} onChange={(v) => onConfigChange({ width: v })} min={0.5} max={6} step={0.5} />
+        </div>
+      );
+    case 'frame-extract':
+      return (
+        <div className="space-y-2">
+          <ConfigSlider label="最大帧数 Max Frames" value={Number(node.config.maxFrames ?? 300)} onChange={(v) => onConfigChange({ maxFrames: v })} min={10} max={600} step={10} />
+          <ConfigSlider label="采样帧率 FPS" value={Number(node.config.fps ?? 30)} onChange={(v) => onConfigChange({ fps: v })} min={1} max={60} step={1} />
+        </div>
+      );
+    case 'pose-track':
+      return (
+        <div className="space-y-2">
+          <ConfigToggle label="关键点平滑 (One Euro)" value={Boolean(node.config.smooth ?? true)} onChange={(v) => onConfigChange({ smooth: v })} />
+          <ConfigSlider label="平滑截止频率 Min Cutoff" value={Number(node.config.minCutoff ?? 1.0)} onChange={(v) => onConfigChange({ minCutoff: v })} min={0.1} max={5} step={0.1} />
+          <ConfigSlider label="速度系数 Beta" value={Number(node.config.beta ?? 0.007)} onChange={(v) => onConfigChange({ beta: v })} min={0.001} max={0.05} step={0.001} />
+        </div>
+      );
+    case 'curve-animate':
+      return (
+        <div className="space-y-2">
+          <div className="space-y-1">
+            <label className="text-[10px] text-muted-foreground/80 uppercase tracking-wider">动画颜色 Color</label>
+            <input
+              type="color"
+              value={String(node.config.color ?? '#a78bfa')}
+              onChange={(e) => onConfigChange({ color: e.target.value })}
+              className="h-7 w-full rounded-md border border-border/60 bg-muted/40 cursor-pointer"
+            />
+          </div>
+          <ConfigSlider label="线宽 Width" value={Number(node.config.width ?? 2)} onChange={(v) => onConfigChange({ width: v })} min={0.5} max={6} step={0.5} />
+          <ConfigToggle label="控制点平滑 (One Euro)" value={Boolean(node.config.smooth)} onChange={(v) => onConfigChange({ smooth: v })} />
+          <ConfigSlider label="平滑截止频率 Min Cutoff" value={Number(node.config.minCutoff ?? 1.0)} onChange={(v) => onConfigChange({ minCutoff: v })} min={0.1} max={5} step={0.1} />
+          <ConfigSlider label="速度系数 Beta" value={Number(node.config.beta ?? 0.007)} onChange={(v) => onConfigChange({ beta: v })} min={0.001} max={0.05} step={0.001} />
+        </div>
+      );
     default:
       return null;
   }
@@ -2672,6 +3121,224 @@ function NumField({
         onChange={(e) => onChange(Number(e.target.value))}
         className="h-7 text-[12px] font-mono"
       />
+    </div>
+  );
+}
+
+/* ── 视觉（Vision）节点配置通用控件 ─────────────────────────── */
+
+/** 带标签的滑块（视觉节点调参复用）。 */
+function ConfigSlider({
+  label, value, onChange, min, max, step = 1,
+}: { label: string; value: number; onChange: (v: number) => void; min: number; max: number; step?: number }) {
+  return (
+    <div className="space-y-1">
+      <div className="flex items-center justify-between">
+        <label className="text-[10px] text-muted-foreground/80 uppercase tracking-wider">{label}</label>
+        <span className="text-[10px] font-mono text-primary tabular-nums">{value}</span>
+      </div>
+      <Slider
+        value={[Number.isFinite(value) ? value : min]}
+        min={min}
+        max={max}
+        step={step}
+        onValueChange={(v) => onChange(v[0])}
+        className="cursor-pointer"
+      />
+    </div>
+  );
+}
+
+/** 带标签的下拉选择（视觉节点调参复用）。 */
+function ConfigSelect({
+  label, value, onChange, options,
+}: { label: string; value: string; onChange: (v: string) => void; options: { value: string; label: string }[] }) {
+  return (
+    <div className="space-y-1">
+      <label className="text-[10px] text-muted-foreground/80 uppercase tracking-wider">{label}</label>
+      <Select value={String(value)} onValueChange={onChange}>
+        <SelectTrigger className="h-7 text-[12px]">
+          <SelectValue />
+        </SelectTrigger>
+        <SelectContent>
+          {options.map((o) => (
+            <SelectItem key={o.value} value={o.value}>{o.label}</SelectItem>
+          ))}
+        </SelectContent>
+      </Select>
+    </div>
+  );
+}
+
+/** 布尔开关（视觉节点调参复用）。 */
+function ConfigToggle({
+  label, value, onChange,
+}: { label: string; value: boolean; onChange: (v: boolean) => void }) {
+  return (
+    <label className="flex items-center justify-between gap-2 text-[11px] text-foreground/80 cursor-pointer py-0.5">
+      <span>{label}</span>
+      <input
+        type="checkbox"
+        checked={Boolean(value)}
+        onChange={(e) => onChange(e.target.checked)}
+        className="size-3.5 rounded accent-primary cursor-pointer"
+      />
+    </label>
+  );
+}
+
+/** 图片 / 视频文件选择（image-input / video-input 节点复用）。
+ *  隐藏 <input type=file>，读取为 data URL 写入 config.src，并显示预览。 */
+function VisionFileConfig({
+  node, onConfigChange, accept, label, hint,
+}: {
+  node: PipelineNode;
+  onConfigChange: (p: Record<string, unknown>) => void;
+  accept: string;
+  label: string;
+  hint: string;
+}) {
+  const inputRef = useRef<HTMLInputElement>(null);
+  const src = String(node.config.src ?? '');
+  const name = String(node.config.name ?? '');
+  const isImage = /^data:image\//.test(src);
+
+  const handleFile = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = () => {
+      const dataUrl = String(reader.result ?? '');
+      onConfigChange({ src: dataUrl, name: file.name });
+    };
+    reader.readAsDataURL(file);
+    e.target.value = '';
+  }, [onConfigChange]);
+
+  return (
+    <div className="space-y-1.5">
+      <label className="text-[10px] text-muted-foreground/80 uppercase tracking-wider">{label}</label>
+      <input
+        ref={inputRef}
+        type="file"
+        accept={accept}
+        className="hidden"
+        onChange={handleFile}
+      />
+      <button
+        type="button"
+        onClick={() => inputRef.current?.click()}
+        className="w-full h-7 rounded-md bg-accent/60 hover:bg-accent text-[12px] font-medium flex items-center justify-center gap-1.5 transition-colors"
+      >
+        <FileImage className="size-3.5 shrink-0" />
+        <span className="truncate">{name || hint}</span>
+      </button>
+      {src && (
+        <div className="rounded-md border border-border/50 bg-muted/30 overflow-hidden">
+          {isImage ? (
+            <img src={src} alt="预览" className="h-20 w-full object-contain" />
+          ) : (
+            <video src={src} className="h-20 w-full object-contain bg-black/60" muted playsInline />
+          )}
+        </div>
+      )}
+      {src && (
+        <button
+          type="button"
+          onClick={() => onConfigChange({ src: '', name: '' })}
+          className="text-[10px] text-destructive hover:underline"
+        >
+          清除文件
+        </button>
+      )}
+    </div>
+  );
+}
+
+/* ── 声明式配置面板（configSchema 自动渲染）────────────────── */
+
+/**
+ * 由 `NodeTypeDef.configSchema` 自动生成配置面板的通用渲染器。
+ *
+ * 它在内部复用 ConfigSlider / ConfigSelect / ConfigToggle / Input /
+ * VisionFileConfig 等既有控件，把声明式字段映射为 UI。新增节点只须在
+ * 注册表里写 `configSchema`，无需手写 UI case —— 这正是消灭「节点写了
+ * 代码却无 UI」类 bug 的机制（P0 蓝图可用性）。
+ */
+function SchemaConfig({
+  schema,
+  node,
+  onConfigChange,
+}: {
+  schema: NodeConfigField[];
+  node: PipelineNode;
+  onConfigChange: (p: Record<string, unknown>) => void;
+}) {
+  return (
+    <div className="space-y-1.5">
+      {schema.map((field) => {
+        switch (field.type) {
+          case 'number':
+            return (
+              <ConfigSlider
+                key={field.key}
+                label={field.label}
+                value={Number(node.config[field.key] ?? field.default ?? 0)}
+                onChange={(v) => onConfigChange({ [field.key]: v })}
+                min={field.min ?? 0}
+                max={field.max ?? 1}
+                step={field.step ?? 1}
+              />
+            );
+          case 'select':
+            return (
+              <ConfigSelect
+                key={field.key}
+                label={field.label}
+                value={String(node.config[field.key] ?? field.default ?? field.options[0]?.value ?? '')}
+                onChange={(v) => onConfigChange({ [field.key]: v })}
+                options={field.options}
+              />
+            );
+          case 'boolean':
+            return (
+              <ConfigToggle
+                key={field.key}
+                label={field.label}
+                value={Boolean(node.config[field.key] ?? field.default)}
+                onChange={(v) => onConfigChange({ [field.key]: v })}
+              />
+            );
+          case 'text':
+            return (
+              <div key={field.key} className="space-y-1">
+                <label className="text-[10px] text-muted-foreground/80 uppercase tracking-wider">
+                  {field.label}
+                </label>
+                <Input
+                  type="text"
+                  value={String(node.config[field.key] ?? field.default ?? '')}
+                  onChange={(e) => onConfigChange({ [field.key]: e.target.value })}
+                  placeholder={field.placeholder ?? ''}
+                  className="h-7 text-[12px] font-mono"
+                />
+              </div>
+            );
+          case 'file':
+            return (
+              <VisionFileConfig
+                key={field.key}
+                node={node}
+                onConfigChange={onConfigChange}
+                accept={field.accept}
+                label={field.label}
+                hint={field.hint}
+              />
+            );
+          default:
+            return null;
+        }
+      })}
     </div>
   );
 }
@@ -2762,6 +3429,40 @@ function MatrixConfig({ node, onConfigChange }: { node: PipelineNode; onConfigCh
         )}
       </div>
     </div>
+  );
+}
+
+/* ================================================================== *
+ * P3: 诊断面板行 —— 单个出错节点 + 错误传播链提示
+ * ================================================================== */
+function DiagnosticRow({
+  node,
+  onClick,
+}: {
+  node: PipelineNode;
+  onClick: () => void;
+}) {
+  const def = NODE_TYPES[node.type];
+  const label = def ? t(def.labelKey) : String(node.type);
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className="w-full text-left rounded-lg border border-destructive/40 bg-destructive/5 hover:bg-destructive/10 px-2.5 py-2 transition-colors"
+    >
+      <div className="flex items-center gap-1.5">
+        <AlertCircle className="size-3 shrink-0 text-destructive" />
+        <span className="text-[11px] font-medium text-foreground truncate flex-1">
+          {label}
+        </span>
+        <span className="text-[9px] font-mono text-muted-foreground/60 truncate">
+          {node.id.slice(0, 8)}
+        </span>
+      </div>
+      <div className="mt-1 text-[10.5px] text-destructive/90 break-words leading-snug">
+        {node.error}
+      </div>
+    </button>
   );
 }
 
@@ -2909,7 +3610,7 @@ function Sparkline({
 function runSimulationPipeline(
   nodes: PipelineNode[],
   edges: PipelineEdge[],
-  config: { t0: number; tEnd: number; dt: number; method: 'euler' | 'rk4' },
+  config: { t0: number; tEnd: number; dt: number; method: 'euler' | 'rk4' | 'rkf45' },
 ): PipelineNode[] {
   const { series, t } = runSimulation(nodes, edges, config);
   return nodes.map((n) => {

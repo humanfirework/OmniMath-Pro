@@ -43,7 +43,7 @@ import {
   type PlotSample,
 } from '@/lib/plots/plot2d';
 import type { IntersectionPoint, TangentResult } from '@/lib/plots/plot2dAnalysis';
-import { AlertTriangle, RotateCcw, Maximize } from 'lucide-react';
+import { AlertTriangle, RotateCcw, Maximize, Play, Pause } from 'lucide-react';
 import type { PlotConfig } from '@/lib/store/workbench';
 import { useScopeVersion } from '@/lib/hooks/useScopeVersion';
 import { useSettingsStore } from '@/lib/store/settingsStore';
@@ -58,17 +58,33 @@ export interface PlotOverlay {
   intersections: IntersectionPoint[];
 }
 
+/** 2D 点：兼容 [x, y] 元组（画布命令）与 { x, y } 对象（vision 贝塞尔段）。 */
+export type Pt2 = { x: number; y: number } | [number, number];
+
 /** 贝塞尔段 — 兼容 vision/types 的序列化结构。 */
 export type BezierSegmentData =
   | { cmd: 'moveTo'; pts: Array<[number, number]> }
   | { cmd: 'lineTo'; pts: Array<[number, number]> }
   | { cmd: 'quadTo'; pts: Array<[number, number]> }   // [c, end]
-  | { cmd: 'cubicTo'; pts: Array<[number, number]> }; // [c1, c2, end]
+  | { cmd: 'cubicTo'; pts: Array<[number, number]> } // [c1, c2, end]
+  // vision 拟合结果（Schneider 三次贝塞尔段）：p0/c1/c2/p1 各为 2D 点。
+  | { p0: Pt2; c1: Pt2; c2: Pt2; p1: Pt2 };
 
 /** 一条贝塞尔路径 = 多段组成（通常是一条闭合或开放的轮廓）。 */
 export interface BezierPathData {
   segments: BezierSegmentData[];
   closed?: boolean;
+}
+
+/** 一档拟合候选（粗略 / 均衡 / 精细 / 自定义），供人工修正面板切换。 */
+export interface CurveCorrectionCandidate {
+  /** 档位标识：loose | balanced | fine | custom。 */
+  id: string;
+  labelZh: string;
+  labelEn: string;
+  curves: BezierPathData[];
+  errorThreshold: number;
+  cornerThreshold: number;
 }
 
 /** 蓝图 plot-curves 节点输出的曲线集。 */
@@ -82,6 +98,25 @@ export interface CurveSetData {
   strokeWidth?: number;
   flipY?: boolean;
   flipX?: boolean;
+  /**
+   * 逐帧动画：`frames[i]` = 第 i 帧的曲线路径数组。存在且非空时，
+   * 2D 画布的时间轴会按帧播放，`curves` 仅作为「第 0 帧」的静态回退。
+   */
+  frames?: BezierPathData[][];
+  /** 播放帧率（fps），用于时间轴自动播放速度。 */
+  fps?: number;
+  /**
+   * 多档拟合候选（镜像 vision curve-fit 的 candidates）。
+   * 存在时，2D 绘图可让用户「切换候选结果」。
+   */
+  candidates?: CurveCorrectionCandidate[];
+  /**
+   * 拟合前的原始折线（像素坐标）。存在时，2D 绘图可让用户
+   * 「调整参数（误差阈值/角点阈值）后重新拟合」。
+   */
+  originalPolylines?: Array<{ points: Pt2[]; closed?: boolean; area?: number }>;
+  /** 当前选中的候选档位（默认 'balanced'）。 */
+  presetId?: string;
 }
 
 export interface HoveredPoint {
@@ -138,6 +173,20 @@ const PLOT_COLORS = [
   '#00838f', // cyan
 ];
 
+/**
+ * DPR 上限。高 DPI 屏（2x / 3x Retina）会被裁剪到该值，避免画布 backing store
+ * 像素爆炸导致内存/绘制开销失控，同时 ≥1 保证普通屏仍然清晰。2x 足够满足
+ * 绝大多数显示器的视觉锐度，是「清晰度 vs 性能」的稳妥折中。
+ */
+const MAX_DPR = 2;
+
+/** 返回裁剪后的 DPR（1 ~ MAX_DPR），等效于 window.devicePixelRatio 带上限。 */
+function getCappedDpr(window: Window): number {
+  const dpr = window.devicePixelRatio || 1;
+  if (!Number.isFinite(dpr) || dpr <= 0) return 1;
+  return Math.min(MAX_DPR, dpr);
+}
+
 const EXAMPLES = [
   { expr: 'sin x', label: 'sin x' },
   { expr: 'x^2', label: 'x²' },
@@ -175,13 +224,41 @@ interface HoverState {
  * @param start 当前起点（上一段的结束点），moveTo/lineTo 不需要
  * @param _tol 容差（当前实现未使用，保留接口兼容）
  */
+function toXY(p: Pt2): [number, number] {
+  return Array.isArray(p) ? [p[0], p[1]] : [p.x, p.y];
+}
+
 function bezierFlatten(
   seg: BezierSegmentData,
   start: [number, number] | null = null,
   _tol = 0.5,
 ): Array<[number, number]> {
-  if (!seg.pts || seg.pts.length === 0) return [];
   const SAMPLES = 16;
+  // vision 拟合结果用的是 Schneider 三次贝塞尔段 { p0, c1, c2, p1 }，无 cmd 字段。
+  if (!('cmd' in seg)) {
+    const [p0x, p0y] = toXY((seg as { p0: Pt2 }).p0);
+    const [c1x, c1y] = toXY((seg as { c1: Pt2 }).c1);
+    const [c2x, c2y] = toXY((seg as { c2: Pt2 }).c2);
+    const [p1x, p1y] = toXY((seg as { p1: Pt2 }).p1);
+    const result: Array<[number, number]> = [];
+    for (let i = 0; i <= SAMPLES; i++) {
+      const t = i / SAMPLES;
+      const mt = 1 - t;
+      const x =
+        mt * mt * mt * p0x +
+        3 * mt * mt * t * c1x +
+        3 * mt * t * t * c2x +
+        t * t * t * p1x;
+      const y =
+        mt * mt * mt * p0y +
+        3 * mt * mt * t * c1y +
+        3 * mt * t * t * c2y +
+        t * t * t * p1y;
+      result.push([x, y] as [number, number]);
+    }
+    return result;
+  }
+  if (!seg.pts || seg.pts.length === 0) return [];
   switch (seg.cmd) {
     case 'moveTo':
     case 'lineTo':
@@ -252,6 +329,22 @@ function plotPolyline(
 /*  Component                                                          */
 /* =================================================================== */
 
+/**
+ * Resolve which curve paths to draw for a curve set at the current playhead.
+ *
+ * Animated sets carry `frames`; the active frame's paths are returned. Static
+ * sets fall back to `curves`. The index is clamped to a valid range so a stale
+ * playhead (after the set is replaced with fewer frames) never overflows.
+ */
+function resolveCurveSetCurves(cs: CurveSetData, playhead: number): BezierPathData[] {
+  if (cs.frames && cs.frames.length > 0) {
+    const idx = Math.max(0, Math.min(cs.frames.length - 1, Math.floor(playhead) || 0));
+    const frame = cs.frames[idx];
+    if (Array.isArray(frame)) return frame;
+  }
+  return cs.curves;
+}
+
 export function Plot2DCanvas({
   plots,
   theme,
@@ -315,6 +408,11 @@ export function Plot2DCanvas({
   });
   const [canvasSize, setCanvasSize] = useState({ w: 0, h: 0 });
   const [drawError, setDrawError] = useState<string | null>(null);
+  // Timeline playhead for animated curveSets (frames[fps]). `playhead` is the
+  // current frame index; `isPlaying` drives auto-advance in a rAF loop below.
+  const [playhead, setPlayhead] = useState(0);
+  const [isPlaying, setIsPlaying] = useState(false);
+  const playheadRafRef = useRef<number | null>(null);
   // Task 8.A: multi-curve hovered points (within 6px screen distance).
   const [hoveredPoints, setHoveredPoints] = useState<HoveredPoint[]>([]);
   // Task 8.B: DOM tooltip follows mouse — store client-relative CSS pixel pos.
@@ -582,9 +680,10 @@ export function Plot2DCanvas({
       const viewStr = `${vx[0]}|${vx[1]}|${vy[0]}|${vy[1]}`;
       const sizeStr = `${targetW}|${targetH}`;
       const l1Sig = `${theme}|${showGrid}|${showAxes}|${viewStr}|${sizeStr}|${axisFontSize}`;
-      // 在签名里加入 curveSets 的引用与长度，使新增/替换 curveSets 时重绘 L2
+      // 在签名里加入 curveSets 的引用与长度，使新增/替换 curveSets 时重绘 L2；
+      // 动画曲线集（frames）还要带上当前 playhead，切换帧时触发 L2 重栅格化。
       const curveSetsSig = curveSets
-        .map((cs) => `${cs.id ?? ''}:${cs.curves.length}:${cs.width}x${cs.height}`)
+        .map((cs) => `${cs.id ?? ''}:${cs.curves.length}:${cs.frames?.length ?? 0}:${Number.isFinite(playhead) ? playhead : 0}:${cs.width}x${cs.height}`)
         .join('|');
       const l2Sig = `${theme}|${viewStr}|${sizeStr}|${curveSetsSig}`;
       const l3Sig = `${theme}|${showMarkers}|${viewStr}|${sizeStr}`;
@@ -776,7 +875,8 @@ export function Plot2DCanvas({
           const csH = Math.max(1, cs.height);
           const color = cs.color ?? '#a78bfa';
           const sw = cs.strokeWidth ?? 2;
-          for (const path of cs.curves) {
+          const activeCurves = resolveCurveSetCurves(cs, playhead);
+          for (const path of activeCurves) {
             // 对每条路径：每段 flatten → 转屏幕坐标 → 用 plotPolyline 绘制
             let current: [number, number] | null = null;
             for (const seg of path.segments) {
@@ -1085,13 +1185,52 @@ export function Plot2DCanvas({
       // 记录本帧耗时，供 lowQuality 自适应恢复延时参考（见 lastDrawMsRef）。
       lastDrawMsRef.current = performance.now() - t0;
     }
-  }, [computed, theme, dataToScreen, screenToData, showGrid, showAxes, showMarkers, showLegend, overlays, axisFontSize, curveSets]);
+  }, [computed, theme, dataToScreen, screenToData, showGrid, showAxes, showMarkers, showLegend, overlays, axisFontSize, curveSets, playhead]);
 
   // Keep the ref in sync so the rAF callback always uses the latest drawNow.
   // We must do this inside an effect (not during render) per React 19 rules.
   useEffect(() => {
     drawNowRef.current = drawNow;
   }, [drawNow]);
+
+  /* ---------------- Timeline: reset playhead when frames change ------- */
+  const maxFrames = useMemo(() => {
+    let m = 0;
+    for (const cs of curveSets) if (cs.frames && cs.frames.length > m) m = cs.frames.length;
+    return m;
+  }, [curveSets]);
+  // Clamp the playhead into range whenever the available frame count changes.
+  useEffect(() => {
+    setPlayhead((p) => (maxFrames > 0 ? Math.min(p, maxFrames - 1) : 0));
+  }, [maxFrames]);
+
+  /* ---------------- Timeline: auto-play loop (rAF) -------------------- */
+  useEffect(() => {
+    if (!isPlaying || maxFrames <= 0) return;
+    let last = performance.now();
+    const fps = Math.max(1, Math.min(60, curveSets[0]?.fps ?? 30));
+    const frameMs = 1000 / fps;
+    const tick = (now: number) => {
+      const dt = now - last;
+      if (dt >= frameMs) {
+        last = now - (dt % frameMs);
+        setPlayhead((p) => (p + 1) % maxFrames);
+      }
+      playheadRafRef.current = requestAnimationFrame(tick);
+    };
+    playheadRafRef.current = requestAnimationFrame(tick);
+    return () => {
+      if (playheadRafRef.current !== null) cancelAnimationFrame(playheadRafRef.current);
+    };
+  }, [isPlaying, maxFrames, curveSets]);
+
+  // Stop playback and reset to frame 0 when the animated set is replaced.
+  useEffect(() => {
+    if (maxFrames === 0) {
+      setIsPlaying(false);
+      setPlayhead(0);
+    }
+  }, [maxFrames]);
 
   /* ---------------- Task 8.A: multi-curve hit testing (rAF batched) -- */
   const computeHoveredPoints = useCallback(
@@ -1204,8 +1343,8 @@ export function Plot2DCanvas({
     const updateSize = () => {
       if (!containerRef.current) return;
       const rect = containerRef.current.getBoundingClientRect();
-      const dpr = window.devicePixelRatio || 1;
-      if (!Number.isFinite(rect.width) || !Number.isFinite(rect.height) || !Number.isFinite(dpr)) return;
+      const dpr = getCappedDpr(window);
+      if (!Number.isFinite(rect.width) || !Number.isFinite(rect.height)) return;
       const next = { w: rect.width, h: rect.height, dpr };
       sizeRef.current = next;
       setCanvasSize(next);
@@ -1219,7 +1358,7 @@ export function Plot2DCanvas({
     const ro = new ResizeObserver((entries) => {
       const cr = entries[0]?.contentRect;
       if (!cr) return;
-      const dpr = window.devicePixelRatio || 1;
+      const dpr = getCappedDpr(window);
       const next = { w: cr.width, h: cr.height, dpr };
       sizeRef.current = next;
       setCanvasSize(next);
@@ -1248,7 +1387,7 @@ export function Plot2DCanvas({
 
     let detachDpr: (() => void) | null = null;
     const setupDprListener = () => {
-      const ratio = window.devicePixelRatio || 1;
+      const ratio = getCappedDpr(window);
       const mql = window.matchMedia(`(resolution: ${ratio}dppx)`);
       const handler = () => {
         updateSize();
@@ -1724,6 +1863,35 @@ export function Plot2DCanvas({
       <div className="pointer-events-none absolute bottom-1.5 left-2 rounded bg-muted-foreground/20 px-1.5 py-0.5 font-mono text-[10px] text-foreground/80 backdrop-blur-sm">
         x ∈ [{xRange[0].toFixed(2)}, {xRange[1].toFixed(2)}] · y ∈ [{yRange[0].toFixed(2)}, {yRange[1].toFixed(2)}]
       </div>
+
+      {/* Task 9: Curve animation timeline — shown only when a curveSet carries frames */}
+      {maxFrames > 0 && (
+        <div className="pointer-events-auto absolute bottom-2 left-1/2 z-40 flex -translate-x-1/2 items-center gap-2 rounded-full border border-border bg-background/85 px-3 py-1.5 shadow-lg backdrop-blur-sm">
+          <button
+            type="button"
+            aria-label={isPlaying ? '暂停' : '播放'}
+            onClick={() => setIsPlaying((v) => !v)}
+            className="grid size-6 place-items-center rounded-full bg-primary text-primary-foreground transition hover:opacity-90"
+          >
+            {isPlaying ? <Pause className="size-3.5" /> : <Play className="size-3.5" />}
+          </button>
+          <input
+            type="range"
+            aria-label="动画帧"
+            min={0}
+            max={Math.max(0, maxFrames - 1)}
+            value={Math.min(playhead, maxFrames - 1)}
+            onChange={(e) => {
+              setIsPlaying(false);
+              setPlayhead(Number(e.target.value));
+            }}
+            className="h-1.5 w-36 cursor-pointer accent-primary sm:w-48"
+          />
+          <span className="min-w-10 text-center font-mono text-[10px] text-muted-foreground">
+            {Math.min(playhead, maxFrames - 1) + 1}/{maxFrames}
+          </span>
+        </div>
+      )}
 
       {/* Draw error overlay */}
       {drawError && (

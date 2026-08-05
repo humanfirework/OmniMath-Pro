@@ -6,6 +6,7 @@
 import { math } from '@/lib/engine/mathInstance';
 import type { NodeTypeDef } from '../pipelineEngine';
 import { toMatrix, parseMatrixGrid, matrixRank } from './helpers';
+import { svdRect, estimateConditionNumber, leastSquares } from '@/lib/engine/matrixCore';
 
 export const matrixNodes = {
   'matrix-input': {
@@ -48,6 +49,11 @@ export const matrixNodes = {
         case 'det': return { result: math.det(m) };
         case 'trace': return { result: math.trace(m) };
         case 'rank': return { result: matrixRank(m) };
+        case 'cond': return { result: estimateConditionNumber(m) };
+        case 'svd': {
+          const { U, s, V } = svdRect(m);
+          return { result: { U, s, V } };
+        }
         case 'eigen': {
           try {
             const eigs = math.eigs(m);
@@ -143,6 +149,28 @@ export const matrixNodes = {
       } catch (err) {
         return { result: 'decompose failed', latex: '', error: (err as Error).message };
       }
+    },
+  },
+
+  /** 最小二乘：min ||Ax − b||₂（超定/秩亏/欠定均适用）。 */
+  'matrix-lstsq': {
+    type: 'matrix-lstsq',
+    category: 'matrix',
+    labelKey: 'npMatrixLstsq',
+    icon: 'Minimize2',
+    color: 'emerald',
+    inputs: [
+      { id: 'a', labelKey: 'npPortA', type: 'matrix' },
+      { id: 'b', labelKey: 'npPortB', type: 'matrix' },
+    ],
+    outputs: [{ id: 'result', labelKey: 'npPortResult', type: 'any' }],
+    defaultConfig: {},
+    execute: (inputs) => {
+      const a = toMatrix(inputs.a).toArray ? toMatrix(inputs.a).toArray() : toMatrix(inputs.a);
+      const bm = toMatrix(inputs.b);
+      const b = bm.toArray ? bm.toArray() : bm;
+      const r = leastSquares(a, b);
+      return { result: r };
     },
   },
 } satisfies Record<string, NodeTypeDef>;
