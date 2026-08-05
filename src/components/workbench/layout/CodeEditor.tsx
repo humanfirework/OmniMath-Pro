@@ -15,18 +15,19 @@
  */
 
 import { useEffect, useMemo, useRef } from 'react';
-import { EditorState, EditorSelection, Compartment } from '@codemirror/state';
-import { EditorView, keymap, lineNumbers, highlightActiveLine, highlightActiveLineGutter } from '@codemirror/view';
+import { EditorState, EditorSelection, Compartment, StateField } from '@codemirror/state';
+import { EditorView, keymap, lineNumbers, highlightActiveLine, highlightActiveLineGutter, hoverTooltip, showTooltip } from '@codemirror/view';
 import { defaultKeymap, historyKeymap, history } from '@codemirror/commands';
 import { bracketMatching, indentUnit, indentOnInput, foldGutter, codeFolding, foldKeymap, StreamLanguage, HighlightStyle, syntaxHighlighting } from '@codemirror/language';
 import { linter, lintGutter } from '@codemirror/lint';
 import { searchKeymap, highlightSelectionMatches } from '@codemirror/search';
-import { autocompletion, completionKeymap, closeBrackets, closeBracketsKeymap } from '@codemirror/autocomplete';
+import { autocompletion, completionKeymap, closeBrackets, closeBracketsKeymap, type CompletionContext, type CompletionResult } from '@codemirror/autocomplete';
 import { python } from '@codemirror/lang-python';
 import { tags as t } from '@lezer/highlight';
-import { math } from '@/lib/editor/mathLanguage';
+import { math, KEYWORDS, FUNCTIONS, getFunctionInfo, MATLAB_STATEMENTS, type MathFnInfo } from '@/lib/editor/mathLanguage';
 import { checkSyntax } from '@/lib/editor/syntaxCheck';
 import { useSettingsStore } from '@/lib/store/settingsStore';
+import { useWorkbenchStore } from '@/lib/store/workbench';
 
 export interface CodeEditorProps {
   value: string;
@@ -387,8 +388,346 @@ export function CodeEditor({
 
 function getLanguageExtension(language: CodeEditorProps['language']) {
   if (language === 'python') return python();
-  // Simple and MATLAB both use the custom math StreamLanguage
-  return StreamLanguage.define(math);
+  // Simple and MATLAB both use the custom math StreamLanguage. We attach a
+  // completion source so the editor offers keyword/function/variable
+  // suggestions (previously only Python had autocompletion), plus a
+  // MATLAB-style hover tooltip that pops up a function's signature & doc.
+  const mathLang = StreamLanguage.define(math);
+  return [
+    mathLang,
+    // 现代 CodeMirror 用 Language.data.autocomplete 注册补全源
+    //（与 @codemirror/lang-python 的 localCompletionSource 一致）。
+    // MATLAB 模式额外注入语句片段补全（if/for/while/function/switch…）。
+    mathLang.data.of({ autocomplete: (ctx) => mathCompletionSource(ctx, language === 'matlab') }),
+    mathHoverTooltip,
+    mathSignatureHelp,
+  ];
+}
+
+/**
+ * 签名提示状态：光标位于函数调用括号内时，记录当前函数 + 参数下标。
+ * 在文档/光标变化时重算（纯函数，不持有 DOM）。
+ */
+const signatureHintState = StateField.define<{ pos: number; info: MathFnInfo; arg: number } | null>({
+  create() {
+    return null;
+  },
+  update(value, tr) {
+    if (!tr.docChanged && !tr.selection) return value;
+    const doc = tr.state.doc;
+    const pos = tr.state.selection.main.head;
+    const line = doc.lineAt(pos);
+    // 取光标所在行、光标左侧的文本。
+    const before = doc.sliceString(line.from, pos);
+    // 匹配最近一个未闭合的函数调用：funcName( 参数段（不含嵌套括号）。
+    const m = before.match(/([A-Za-z_][A-Za-z0-9_]*)\s*\(\s*([^()]*)$/);
+    if (!m) return null;
+    const fnName = m[1];
+    const info = getFunctionInfo(fnName);
+    // 无签名信息或零参数函数不提示；避免把普通括号误判为函数调用。
+    if (!info || info.args.length === 0) return null;
+    // 参数段内顶级逗号数 = 当前参数下标（0 起）。
+    const inside = m[2];
+    let arg = 0;
+    for (const ch of inside) if (ch === ',') arg++;
+    if (arg >= info.args.length) arg = info.args.length - 1;
+    return { pos, info, arg };
+  },
+});
+
+/**
+ * MATLAB 风格"函数签名提示"（signature help）。
+ *
+ * 当光标位于一个函数调用的括号内（如 `sin(|`、`log(x,|`）时，在光标正下方
+ * 弹窗显示该函数的完整签名，并高亮当前正在输入的第几个参数 —— 与 MATLAB
+ * Live Editor 键入 `(` 后弹出"函数构法提示"的体验一致。
+ */
+const mathSignatureHelp = [
+  signatureHintState,
+  showTooltip.from(signatureHintState, (sig) =>
+    sig
+      ? { pos: sig.pos, above: false, create: () => buildSignatureHelpDom(sig.info, sig.arg) }
+      : null),
+];
+
+/** 渲染签名提示浮窗：签名 + 高亮当前参数 + 简要说明（含参数类别/默认值）。 */
+function buildSignatureHelpDom(info: MathFnInfo, activeArg: number): { dom: HTMLElement } {
+  const dom = document.createElement('div');
+  dom.className = 'math-fn-tooltip';
+  const style: Partial<CSSStyleDeclaration> = {
+    maxWidth: '380px',
+    padding: '8px 10px',
+    fontSize: '12px',
+    lineHeight: '1.6',
+    color: 'var(--popover-foreground, #fafafa)',
+  };
+  Object.assign(dom.style, style);
+
+  const sig = document.createElement('div');
+  sig.style.fontFamily = 'ui-monospace, monospace';
+  sig.style.fontWeight = '500';
+  sig.style.whiteSpace = 'pre-wrap';
+  sig.style.wordBreak = 'break-all';
+  sig.style.marginBottom = '6px';
+  // 把 activeArg 对应的参数名用高亮 chip 呈现，其余参数用普通颜色。
+  const beforeStart = info.signature.indexOf('(');
+  const open = info.signature.slice(0, beforeStart + 1);
+  sig.appendChild(document.createTextNode(open));
+  info.args.forEach((a, i) => {
+    if (i > 0) sig.appendChild(document.createTextNode(', '));
+    const span = document.createElement('span');
+    span.textContent = a;
+    span.style.borderRadius = '4px';
+    span.style.padding = '0 3px';
+    if (i === activeArg) {
+      span.style.background = 'rgba(45, 212, 191, 0.28)';
+      span.style.color = 'var(--syntax-number, #fbbf24)';
+      span.style.fontWeight = '700';
+      span.style.boxShadow = 'inset 0 0 0 1px rgba(45,212,191,.4)';
+    } else {
+      span.style.color = 'var(--syntax-variable, #94a3b8)';
+    }
+    sig.appendChild(span);
+  });
+  sig.appendChild(document.createTextNode(')'));
+  dom.appendChild(sig);
+
+  // 参数明细（functionSignatures.json 风格：必选/可选/标志 + 类型 + 默认值）。
+  const params = info.params;
+  if (params && params.length > 0) {
+    const list = document.createElement('div');
+    list.style.borderTop = '1px solid var(--border, rgba(255,255,255,0.1))';
+    list.style.paddingTop = '6px';
+    list.style.marginBottom = '4px';
+    params.forEach((p, i) => {
+      const row = document.createElement('div');
+      row.style.display = 'flex';
+      row.style.alignItems = 'center';
+      row.style.gap = '6px';
+      row.style.margin = '2px 0';
+      if (i === activeArg) row.style.background = 'rgba(45,212,191,0.12)';
+      row.style.borderRadius = '4px';
+      row.style.padding = '1px 4px';
+      // 类别徽标
+      const kind = document.createElement('span');
+      const kindMap: Record<string, { text: string; color: string }> = {
+        required: { text: '必选', color: '#fb923c' },
+        optional: { text: '可选', color: '#94a3b8' },
+        flag: { text: '标志', color: '#38bdf8' },
+        namevalue: { text: '名值对', color: '#a78bfa' },
+      };
+      const k = kindMap[p.kind] ?? kindMap.optional;
+      kind.textContent = k.text;
+      kind.style.color = k.color;
+      kind.style.fontSize = '10px';
+      kind.style.border = `1px solid ${k.color}55`;
+      kind.style.padding = '0 4px';
+      kind.style.borderRadius = '3px';
+      kind.style.flexShrink = '0';
+      row.appendChild(kind);
+      // 参数名 + 类型
+      const name = document.createElement('span');
+      name.textContent = p.name;
+      name.style.fontFamily = 'ui-monospace, monospace';
+      name.style.fontWeight = i === activeArg ? '700' : '500';
+      name.style.color = i === activeArg ? 'var(--syntax-number,#fbbf24)' : 'var(--popover-foreground,#fafafa)';
+      row.appendChild(name);
+      if (p.type) {
+        const type = document.createElement('span');
+        type.textContent = p.type;
+        type.style.color = 'var(--muted-foreground,#888)';
+        type.style.fontSize = '10.5px';
+        row.appendChild(type);
+      }
+      if (p.default) {
+        const def = document.createElement('span');
+        def.textContent = `= ${p.default}`;
+        def.style.color = '#34d399';
+        def.style.fontFamily = 'ui-monospace, monospace';
+        def.style.fontSize = '10.5px';
+        row.appendChild(def);
+      }
+      list.appendChild(row);
+    });
+    dom.appendChild(list);
+  }
+
+  const hint = document.createElement('div');
+  hint.style.color = 'var(--muted-foreground, #999)';
+  hint.textContent = `正在输入参数 ${info.args[activeArg]}：${info.doc}`;
+  dom.appendChild(hint);
+
+  return { dom };
+}
+
+/** MATLAB-style 文档浮窗：悬停在函数名上弹出签名 + 参数说明。 */
+const mathHoverTooltip = hoverTooltip((view, pos) => {
+  const line = view.state.doc.lineAt(pos);
+  const text = line.text;
+  // 取光标所在位置的单词（identifier）。
+  let start = pos - line.from;
+  let end = start;
+  while (start > 0 && /[\w]/.test(text[start - 1])) start--;
+  while (end < text.length && /[\w]/.test(text[end])) end++;
+  const word = text.slice(start, end);
+  if (!word) return null;
+  const info = getFunctionInfo(word);
+  if (!info) return null;
+  const from = line.from + start;
+  const to = line.from + end;
+  return {
+    pos: from,
+    end: to,
+    create: () => buildInfoTooltip(info),
+  };
+});
+
+function buildInfoTooltip(info: MathFnInfo): { dom: HTMLElement } {
+  const dom = document.createElement('div');
+  dom.className = 'math-fn-tooltip';
+  const style: Partial<CSSStyleDeclaration> = {
+    maxWidth: '320px',
+    padding: '8px 10px',
+    fontSize: '12px',
+    lineHeight: '1.5',
+    color: 'var(--popover-foreground, #fafafa)',
+  };
+  Object.assign(dom.style, style);
+
+  const sig = document.createElement('div');
+  sig.style.fontWeight = '600';
+  sig.style.fontFamily = 'ui-monospace, monospace';
+  sig.style.color = 'var(--syntax-function, #7dd3fc)';
+  sig.style.marginBottom = '4px';
+  sig.textContent = info.signature;
+  dom.appendChild(sig);
+
+  if (info.args.length > 0) {
+    const args = document.createElement('div');
+    args.style.margin = '4px 0';
+    const argLabel = document.createElement('span');
+    argLabel.style.color = 'var(--muted-foreground, #888)';
+    argLabel.textContent = '参数：';
+    args.appendChild(argLabel);
+    info.args.forEach((a, i) => {
+      if (i > 0) args.appendChild(document.createTextNode('  '));
+      const chip = document.createElement('span');
+      chip.style.display = 'inline-block';
+      chip.style.padding = '0 4px';
+      chip.style.margin = '0 2px 2px 0';
+      chip.style.borderRadius = '4px';
+      chip.style.background = 'rgba(45, 212, 191, 0.15)';
+      chip.style.color = 'var(--syntax-number, #fbbf24)';
+      chip.style.fontFamily = 'ui-monospace, monospace';
+      chip.textContent = a;
+      args.appendChild(chip);
+    });
+    dom.appendChild(args);
+  }
+
+  const doc = document.createElement('div');
+  doc.style.color = 'var(--muted-foreground, #999)';
+  doc.textContent = info.doc;
+  dom.appendChild(doc);
+
+  return { dom };
+}
+
+/**
+ * Code completion for the math StreamLanguage (Simple / MATLAB modes).
+ * Sources, in boost order:
+ *  1. Control keywords / plot & solve commands (KEYWORDS)
+ *  2. Built-in math functions (FUNCTIONS)
+ *  3. User variables from the workbench store (read live at request time)
+ *  4. MATLAB 语句片段（if/for/while/…，仅 MATLAB 模式，`withStatements`）
+ */
+function mathCompletionSource(context: CompletionContext, withStatements = false): CompletionResult | null {
+  const word = context.matchBefore(/[\w]+/);
+  // Only trigger after the user has typed at least one word char (or hit
+  // Ctrl-Space, which sets context.explicit = true).
+  if (!word || (word.from === word.to && !context.explicit)) return null;
+
+  const vars = Object.keys(useWorkbenchStore.getState().variables ?? {});
+  const options = [
+    ...KEYWORDS.map((k) => ({ label: k, type: 'keyword', boost: 90 })),
+    ...FUNCTIONS.map((f) => {
+      const info = getFunctionInfo(f);
+      return {
+        label: f,
+        type: 'function',
+        boost: 80,
+        // MATLAB 风格：补全面板里同时展示函数签名摘要。
+        detail: info ? info.signature : undefined,
+        info: info ? buildInfoHtml(info) : undefined,
+        // 选中常用单参函数时直接用签名补全（方便继续输入参数）。
+        apply: info && info.args.length === 1 ? `${f}(${info.args[0]})` : undefined,
+      };
+    }),
+    ...vars.map((v) => ({ label: v, type: 'variable', boost: 70 })),
+  ];
+
+  // MATLAB 语句片段：更高优先级，插入后自动定位光标到占位处。
+  if (withStatements) {
+    const statements = MATLAB_STATEMENTS.map((s) => ({
+      label: s.label,
+      type: 'snippet' as const,
+      boost: 95,
+      detail: s.detail,
+      apply: (view: EditorView, completion: { apply?: string }, from: number, to: number) => {
+        const line = view.state.doc.lineAt(from);
+        const indent = line.text.slice(0, from - line.from);
+        const text = s.template(indent);
+        view.dispatch({
+          changes: { from, to, insert: text },
+          selection: { anchor: cursorAfterPlaceholder(text, s.cursorPlaceholder) },
+        });
+        return true;
+      },
+    }));
+    options.unshift(...statements);
+  }
+
+  return {
+    from: word.from,
+    options,
+  };
+}
+
+/** 计算模板中第一个占位字符串之后的字符偏移（用于定位光标）。 */
+function cursorAfterPlaceholder(text: string, placeholder: string): number {
+  if (!placeholder) return text.length;
+  const idx = text.indexOf(placeholder);
+  return idx >= 0 ? idx + placeholder.length : text.length;
+}
+
+/** 生成补班主任（info 面板）的 HTML 文档内容。 */
+function buildInfoHtml(info: MathFnInfo): string {
+  const paramsHtml = info.params?.length
+    ? `<div style="margin:4px 0;font-size:11px;line-height:1.7">
+        ${info.params.map((p) => {
+          const kind = p.kind === 'required' ? '必选' : p.kind === 'flag' ? '标志' : p.kind === 'namevalue' ? '名值对' : '可选';
+          const color = p.kind === 'required' ? '#fb923c' : '#94a3b8';
+          return `<div style="display:flex;gap:6px;align-items:baseline">
+            <span style="flex-shrink:0;color:${color};border:1px solid ${color}55;border-radius:3px;padding:0 4px;font-size:10px">${kind}</span>
+            <span style="font-family:ui-monospace,monospace;color:var(--syntax-number,#fbbf24)">${p.name}</span>
+            ${p.type ? `<span style="color:var(--muted-foreground,#888)">${p.type}</span>` : ''}
+            ${p.default ? `<span style="color:#34d399;font-family:ui-monospace,monospace">= ${p.default}</span>` : ''}
+          </div>`;
+        }).join('')}
+       </div>`
+    : (info.args.length
+        ? `<div style="margin:4px 0">
+            <span style="color:var(--muted-foreground,#888)">参数：</span>
+            ${info.args.map((a) =>
+              `<span style="display:inline-block;padding:0 4px;margin:0 2px 2px 0;border-radius:4px;background:rgba(45,212,191,.15);color:var(--syntax-number,#fbbf24);font-family:ui-monospace,monospace">${a}</span>`
+            ).join('')}
+           </div>`
+        : '');
+  return `<div style="font-size:12px;line-height:1.5;color:var(--popover-foreground,#fafafa)">
+    <div style="font-weight:600;font-family:ui-monospace,monospace;color:var(--syntax-function,#7dd3fc)">${info.signature}</div>
+    ${paramsHtml}
+    <div style="color:var(--muted-foreground,#999)">${info.doc}</div>
+  </div>`;
 }
 
 /** Toggle `#` comment on selected lines — mirrors the old textarea behavior. */

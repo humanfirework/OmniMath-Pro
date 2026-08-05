@@ -48,7 +48,8 @@ export type NodeCategory =
   | 'curve'
   | 'statistics'
   | 'logic'
-  | 'vision';
+  | 'vision'
+  | 'simulation';
 
 export interface PortDef {
   id: string;

@@ -21,6 +21,7 @@ import { statisticsNodes } from './statistics';
 import { logicNodes } from './logic';
 import { outputExtraNodes } from './output-extra';
 import { visionNodes } from './vision';
+import { simulationNodes } from './simulation';
 
 export type NodeType =
   /* input */
@@ -98,7 +99,22 @@ export type NodeType =
   | 'video-input'
   | 'frame-extract'
   | 'pose-track'
-  | 'curve-animate';
+  | 'curve-animate'
+  /* simulation — Simulink-style 仿真（信源/运算/连续/显示） */
+  | 'sim-clock'
+  | 'sim-constant'
+  | 'sim-sine'
+  | 'sim-step'
+  | 'sim-ramp'
+  | 'sim-sum'
+  | 'sim-gain'
+  | 'sim-product'
+  | 'sim-saturation'
+  | 'sim-first-order'
+  | 'sim-integrator'
+  | 'sim-derivative'
+  | 'sim-delay'
+  | 'sim-scope';
 
 export const NODE_TYPES: Record<NodeType, NodeTypeDef> = {
   ...inputNodes,
@@ -115,4 +131,5 @@ export const NODE_TYPES: Record<NodeType, NodeTypeDef> = {
   ...logicNodes,
   ...outputExtraNodes,
   ...visionNodes,
+  ...simulationNodes,
 };

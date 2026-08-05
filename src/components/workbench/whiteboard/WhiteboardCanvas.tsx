@@ -147,8 +147,20 @@ function recognizeShape(points: Point[]): Stroke['recognized'] {
 
   const start = points[0];
   const end = points[points.length - 1];
+  // 闭合判定：同时用「首尾距离 / 外接框对角」与「首尾距离 / 总周长」两个比例，
+  // 任一满足即视为闭合。原先只用 closingDist < max(w,h)*0.25，对手抖画的圆
+  // 过严，导致"画圆识别成线"。放宽后圆/椭圆/闭合多边形都能被正确识别。
+  const diag = Math.hypot(w, h) || 1;
+  const scale = Math.max(w, h) || 1;
   const closingDist = Math.hypot(end.x - start.x, end.y - start.y);
-  const isClosed = closingDist < Math.max(w, h) * 0.25;
+  let perimeter = 0;
+  for (let i = 1; i < points.length; i++) {
+    perimeter += Math.hypot(points[i].x - points[i - 1].x, points[i].y - points[i - 1].y);
+  }
+  const isClosed =
+    closingDist < scale * 0.45 ||
+    (perimeter > 0 && closingDist / perimeter < 0.12) ||
+    closingDist < diag * 0.3;
   if (!isClosed) {
     return 'line';
   }
@@ -158,6 +170,9 @@ function recognizeShape(points: Point[]): Stroke['recognized'] {
   const rx = w / 2;
   const ry = h / 2;
   if (rx < 2 || ry < 2) return 'line';
+
+  // 离心率（椭圆接近圆则判圆）：ecc = |rx - ry| / max(rx, ry)。
+  const ecc = Math.abs(rx - ry) / Math.max(rx, ry, 1e-6);
 
   let rectErr = 0;
   let circErr = 0;
@@ -176,7 +191,8 @@ function recognizeShape(points: Point[]): Stroke['recognized'] {
   circErr /= points.length;
   triErr /= points.length;
 
-  if (circErr < rectErr && circErr < triErr && circErr < 0.18) return 'circle';
+  // 圆：误差最小 + 离心率不高（椭圆也倾向判圆，避免手画不圆被误判为线/矩形）。
+  if (circErr < rectErr && circErr < triErr && circErr < 0.22 && ecc < 0.55) return 'circle';
   if (rectErr < circErr && rectErr < triErr && rectErr < 12) return 'rectangle';
   if (triErr < circErr && triErr < rectErr && triErr < 14) return 'triangle';
   return null;

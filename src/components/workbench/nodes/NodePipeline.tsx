@@ -43,8 +43,10 @@ import {
   Scan,
   ScanLine,
   LayoutTemplate,
+  LayoutGrid,
   Workflow,
   X,
+  Settings,
   Hash,
   Info,
   Type,
@@ -95,6 +97,11 @@ import {
   Triangle,
   Video,
   Waves,
+  Timer,
+  TimerReset,
+  ArrowUpRight,
+  Star,
+  Clock3,
   type LucideIcon,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
@@ -144,6 +151,7 @@ import {
   type PortDef,
   type PortDataType,
 } from './pipelineEngine';
+import { runSimulation, isSimulationNode, type SimSeries } from './simulationEngine';
 import { PIPELINE_TEMPLATES, loadTemplate } from './pipelineTemplates';
 import {
   PortPositionsProvider,
@@ -170,6 +178,7 @@ const ICONS: Record<string, LucideIcon> = {
   RefreshCw, RotateCw, Ruler,
   Scale, ScanLine, Shrink, Spline, ToggleLeft, TrendingUp,
   Triangle, Video, Waves,
+  Timer, TimerReset, ArrowUpRight,
 };
 
 /* ------------------------------------------------------------------ *
@@ -189,6 +198,7 @@ const CATEGORY_COLOR: Record<NodeCategory, { stripe: string; text: string; bg: s
   statistics: { stripe: 'bg-lime-600',     text: 'text-lime-600',     bg: 'bg-lime-600/10' },
   logic:      { stripe: 'bg-slate-500',    text: 'text-slate-500',    bg: 'bg-slate-500/10' },
   vision:     { stripe: 'bg-fuchsia-600',  text: 'text-fuchsia-600',  bg: 'bg-fuchsia-600/10' },
+  simulation: { stripe: 'bg-violet-600',   text: 'text-violet-600',   bg: 'bg-violet-600/10' },
 };
 
 const CATEGORY_LABEL_KEY: Record<NodeCategory, keyof TranslationDict> = {
@@ -205,6 +215,7 @@ const CATEGORY_LABEL_KEY: Record<NodeCategory, keyof TranslationDict> = {
   statistics: 'npCategoryStatistics',
   logic:      'npCategoryLogic',
   vision:     'npCategoryVision',
+  simulation: 'npCategorySimulation',
 };
 
 /* ------------------------------------------------------------------ *
@@ -500,6 +511,15 @@ function NodePipelineInner() {
   const [paletteOpen, setPaletteOpen] = useState(false);
   const [palettePos, setPalettePos] = useState<{ x: number; y: number } | null>(null);
 
+  // Simulink 仿真求解器配置（时间范围 / 步长 / 求解方法）。
+  const [simConfig, setSimConfig] = useState<{ t0: number; tEnd: number; dt: number; method: 'euler' | 'rk4' }>({
+    t0: 0,
+    tEnd: 10,
+    dt: 0.05,
+    method: 'euler',
+  });
+  const [simConfigOpen, setSimConfigOpen] = useState(false);
+
   // 操作提示折叠状态（默认折叠，仅显示图标，点击展开文字）
   const [hintsOpen, setHintsOpen] = useState(false);
 
@@ -667,9 +687,41 @@ function NodePipelineInner() {
           Object.entries(variables).map(([k, v]) => [k, v.value]),
         ),
       };
-      const executed = await executePipeline(nodes, edges, ctx);
-      setNodes(executed);
-      setComputeTick((n) => n + 1);
+
+      // Simulink-style 仿真：若图中存在仿真节点，走定步长求解器，
+      // 否则走常规单次数据流 pipeline。
+      const hasSim = nodes.some(isSimulationNode);
+      let executed: PipelineNode[];
+      if (hasSim) {
+        executed = runSimulationPipeline(nodes, edges, simConfig);
+        setNodes(executed);
+        setComputeTick((n) => n + 1);
+        // 把 scope 时序以曲线集形式发送到 2D 绘图面板。
+        const scopes = executed.filter((n) => n.type === 'sim-scope' && n.outputs?.series);
+        if (scopes.length > 0) {
+          const store = useWorkbenchStore.getState();
+          store.clearCurveSets();
+          scopes.forEach((n) => {
+            const series = n.outputs?.series as { t: number[]; y: number[] } | undefined;
+            if (!series || series.t.length < 2) return;
+            const pts = series.t.map((t, i) => ({ x: t, y: series.y[i] ?? 0 }));
+            store.addCurveSet({
+              curves: [{ segments: [{ points: pts }], color: '#a78bfa', width: 2 }],
+              width: 1,
+              height: 1,
+              color: '#a78bfa',
+              strokeWidth: 2,
+              flipX: false,
+              flipY: false,
+            } as any);
+          });
+          setViewMode('workbench');
+          setActivePreviewTab('plot2d');
+        }
+        return;
+      }
+
+      executed = await executePipeline(nodes, edges, ctx);
 
       // Side-effects: plot-output nodes push plots to the workbench store;
       // display nodes push results to history.
@@ -720,7 +772,7 @@ function NodePipelineInner() {
         duration: 4000,
       });
     }
-  }, [nodes, edges, variables, pushPlotsToWorkbench, pushCurvesToWorkbench, addResult, setViewMode, setActivePreviewTab]);
+  }, [nodes, edges, variables, simConfig, pushPlotsToWorkbench, pushCurvesToWorkbench, addResult, setViewMode, setActivePreviewTab]);
 
   /* ── Auto-execute on graph / config change (debounced) ───────── */
   useEffect(() => {
@@ -890,6 +942,96 @@ function NodePipelineInner() {
     [selectedId],
   );
 
+  /* ── Clipboard: copy / paste selected nodes (with internal edges) */
+  const clipboardRef = useRef<{ nodes: PipelineNode[]; edges: PipelineEdge[] } | null>(null);
+
+  const copySelected = useCallback(() => {
+    const ids = selectedIds.size > 0 ? selectedIds : selectedId ? new Set([selectedId]) : new Set<string>();
+    if (ids.size === 0) return;
+    clipboardRef.current = {
+      nodes: nodes.filter((n) => ids.has(n.id)),
+      edges: edges.filter((e) => ids.has(e.from) && ids.has(e.to)),
+    };
+    toast.success(`已复制 ${clipboardRef.current.nodes.length} 个节点`);
+  }, [nodes, edges, selectedIds, selectedId]);
+
+  const pasteClipboard = useCallback(() => {
+    const clip = clipboardRef.current;
+    if (!clip || clip.nodes.length === 0) return;
+    const idMap = new Map<string, string>();
+    // Compute the clipboard bounding-box top-left as the origin, so pasted
+    // nodes land slightly offset from the existing selection / canvas origin.
+    const minX = Math.min(...clip.nodes.map((n) => n.position.x));
+    const minY = Math.min(...clip.nodes.map((n) => n.position.y));
+    const OFFSET = 24;
+    const newNodes = clip.nodes.map((n) => {
+      const id = makeId();
+      idMap.set(n.id, id);
+      return {
+        ...n,
+        id,
+        position: { x: n.position.x - minX + OFFSET + 40, y: n.position.y - minY + OFFSET + 40 },
+        result: undefined,
+        outputs: undefined,
+        error: undefined,
+      };
+    });
+    const newEdges = clip.edges
+      .map((e) => idMap.get(e.from) && idMap.get(e.to) ? {
+        id: makeEdgeId(),
+        from: idMap.get(e.from)!,
+        fromPort: e.fromPort,
+        to: idMap.get(e.to)!,
+        toPort: e.toPort,
+      } : null)
+      .filter((x): x is PipelineEdge => x !== null);
+    setNodes((prev) => [...prev, ...newNodes]);
+    setEdges((prev) => [...prev, ...newEdges]);
+    const newIds = new Set(newNodes.map((n) => n.id));
+    setSelectedIds(newIds);
+    setSelectedId(newNodes[0]?.id ?? null);
+  }, []);
+
+  /** Duplicate the current selection (Ctrl+D) — same as copy+paste in place. */
+  const duplicateSelected = useCallback(() => {
+    copySelected();
+    pasteClipboard();
+  }, [copySelected, pasteClipboard]);
+
+  /* ── Align / distribute selected nodes ───────────────────────── */
+  const alignSelected = useCallback((mode: 'left' | 'center' | 'right' | 'top' | 'middle' | 'bottom' | 'hspace' | 'vspace') => {
+    const ids = selectedIds.size > 0 ? selectedIds : selectedId ? new Set([selectedId]) : new Set<string>();
+    if (ids.size < 2) return;
+    const selNodes = nodes.filter((n) => ids.has(n.id));
+    const minX = Math.min(...selNodes.map((n) => n.position.x));
+    const maxX = Math.max(...selNodes.map((n) => n.position.x + NODE_WIDTH));
+    const minY = Math.min(...selNodes.map((n) => n.position.y));
+    const maxY = Math.max(...selNodes.map((n) => n.position.y + APPROX_NODE_H));
+
+    const positions: Record<string, { x: number; y: number }> = {};
+    if (mode === 'left') for (const n of selNodes) positions[n.id] = { ...n.position, x: minX };
+    else if (mode === 'right') for (const n of selNodes) positions[n.id] = { ...n.position, x: maxX - NODE_WIDTH };
+    else if (mode === 'center') for (const n of selNodes) positions[n.id] = { ...n.position, x: minX + (maxX - minX - NODE_WIDTH) / 2 };
+    else if (mode === 'top') for (const n of selNodes) positions[n.id] = { ...n.position, y: minY };
+    else if (mode === 'bottom') for (const n of selNodes) positions[n.id] = { ...n.position, y: maxY - APPROX_NODE_H };
+    else if (mode === 'middle') for (const n of selNodes) positions[n.id] = { ...n.position, y: minY + (maxY - minY - APPROX_NODE_H) / 2 };
+    else if (mode === 'hspace') {
+      // Distribute horizontally by center-x.
+      const sorted = [...selNodes].sort((a, b) => a.position.x - b.position.x);
+      const span = maxX - minX;
+      const gap = (span - NODE_WIDTH) / (sorted.length - 1);
+      let x = minX;
+      for (const n of sorted) { positions[n.id] = { ...n.position, x }; x += gap; }
+    } else if (mode === 'vspace') {
+      const sorted = [...selNodes].sort((a, b) => a.position.y - b.position.y);
+      const span = maxY - minY;
+      const gap = (span - APPROX_NODE_H) / (sorted.length - 1);
+      let y = minY;
+      for (const n of sorted) { positions[n.id] = { ...n.position, y }; y += gap; }
+    }
+    setNodes((prev) => prev.map((n) => positions[n.id] ? { ...n, position: positions[n.id] } : n));
+  }, [nodes, selectedIds, selectedId]);
+
   /* ── Delete all nodes in the multi-selection ─────────────────── */
   const deleteSelected = useCallback(() => {
     setSelectedIds((curr) => {
@@ -931,6 +1073,56 @@ function NodePipelineInner() {
     const next = fitViewFor(nodes, canvasSize);
     if (next) setView(next);
   }, [nodes, canvasSize]);
+
+  /* ── Auto-layout: 一键整理节点，按依赖深度分层排列 ─────────── */
+  const autoLayoutNodes = useCallback(() => {
+    if (nodes.length === 0) return;
+    // 计算每个节点的依赖深度（最长路径层号），用于分层排布。
+    const inEdges = new Map<string, string[]>();
+    for (const n of nodes) inEdges.set(n.id, []);
+    for (const e of edges) inEdges.get(e.to)?.push(e.from);
+    const depth = new Map<string, number>();
+    const order = nodes.map((n) => n.id);
+    // 迭代求解最长依赖层（拓扑排序思想，有限次收敛）。
+    for (let iter = 0; iter < nodes.length; iter++) {
+      let changed = false;
+      for (const id of order) {
+        const deps = inEdges.get(id) ?? [];
+        const depDepth = deps.length === 0 ? -1 : Math.max(...deps.map((d) => depth.get(d) ?? 0));
+        const next = depDepth + 1;
+        if ((depth.get(id) ?? 0) !== next) { depth.set(id, next); changed = true; }
+      }
+      if (!changed) break;
+    }
+    // 按层分组，层内保持原相对顺序。
+    const layers = new Map<number, string[]>();
+    for (const id of order) {
+      const d = depth.get(id) ?? 0;
+      if (!layers.has(d)) layers.set(d, []);
+      layers.get(d)!.push(id);
+    }
+    const COL_GAP = 56;
+    const ROW_GAP = 40;
+    const START_X = 40;
+    const START_Y = 60;
+    const positions: Record<string, { x: number; y: number }> = {};
+    const sortedLayers = [...layers.keys()].sort((a, b) => a - b);
+    sortedLayers.forEach((layer, col) => {
+      const ids = layers.get(layer)!;
+      const x = START_X + col * (NODE_WIDTH + COL_GAP);
+      // 同层节点垂直居中分布。
+      const totalH = ids.length * APPROX_NODE_H + (ids.length - 1) * ROW_GAP;
+      let y = START_Y;
+      ids.forEach((id, i) => {
+        positions[id] = { x, y: y };
+        y += APPROX_NODE_H + ROW_GAP;
+      });
+    });
+    setNodes((prev) => prev.map((n) => positions[n.id] ? { ...n, position: positions[n.id] } : n));
+    // 排好后自动居中到视野。
+    const next = fitViewFor(nodes.map((n) => ({ ...n, position: positions[n.id] ?? n.position })), canvasSize);
+    if (next) setView(next);
+  }, [nodes, edges, canvasSize]);
 
   /* ── Export pipeline → script ────────────────────────────────── */
   const exportScript = useCallback(() => {
@@ -1390,6 +1582,9 @@ function NodePipelineInner() {
         onCenter={fitView}
         onAddNode={() => { setPalettePos(null); setPaletteOpen(true); }}
         onDeleteSelected={deleteSelected}
+        onOpenSimConfig={() => setSimConfigOpen(true)}
+        onLoadTemplate={loadTemplateById}
+        onAutoLayout={autoLayoutNodes}
         nodeCount={nodes.length}
         edgeCount={edges.length}
         selectedCount={selectedIds.size}
@@ -1493,6 +1688,74 @@ function NodePipelineInner() {
           )}
         </AnimatePresence>
 
+        {/* Simulink 仿真配置弹窗 */}
+        {simConfigOpen && (
+          <div
+            className="absolute inset-0 z-30 flex items-center justify-center bg-black/40 backdrop-blur-sm"
+            onPointerDown={(e) => { e.stopPropagation(); setSimConfigOpen(false); }}
+          >
+            <div
+              className="w-80 glass-strong border border-border rounded-xl shadow-2xl p-4 space-y-3"
+              onPointerDown={(e) => e.stopPropagation()}
+            >
+              <div className="flex items-center justify-between">
+                <span className="text-[13px] font-semibold flex items-center gap-1.5">
+                  <Settings className="size-3.5 text-primary" /> 仿真求解器配置
+                </span>
+                <button
+                  type="button"
+                  onClick={() => setSimConfigOpen(false)}
+                  className="size-5 grid place-items-center rounded text-muted-foreground hover:text-foreground hover:bg-accent"
+                >
+                  <X className="size-3" />
+                </button>
+              </div>
+              <div className="space-y-2">
+                <div className="grid grid-cols-2 gap-2">
+                  <div className="space-y-1">
+                    <label className="text-[10px] text-muted-foreground/80 uppercase tracking-wider">起始 t0</label>
+                    <Input type="number" className="h-7 text-[12px] font-mono" value={String(simConfig.t0 ?? 0)}
+                      onChange={(e) => setSimConfig((c) => ({ ...c, t0: Number(e.target.value) }))} />
+                  </div>
+                  <div className="space-y-1">
+                    <label className="text-[10px] text-muted-foreground/80 uppercase tracking-wider">结束 tEnd</label>
+                    <Input type="number" className="h-7 text-[12px] font-mono" value={String(simConfig.tEnd ?? 10)}
+                      onChange={(e) => setSimConfig((c) => ({ ...c, tEnd: Number(e.target.value) }))} />
+                  </div>
+                </div>
+                <div className="space-y-1">
+                  <label className="text-[10px] text-muted-foreground/80 uppercase tracking-wider">步长 dt</label>
+                  <Input type="number" step={0.01} className="h-7 text-[12px] font-mono" value={String(simConfig.dt ?? 0.05)}
+                    onChange={(e) => setSimConfig((c) => ({ ...c, dt: Number(e.target.value) }))} />
+                </div>
+                <div className="space-y-1">
+                  <label className="text-[10px] text-muted-foreground/80 uppercase tracking-wider">求解方法</label>
+                  <Select
+                    value={simConfig.method}
+                    onValueChange={(v) => setSimConfig((c) => ({ ...c, method: v as 'euler' | 'rk4' }))}
+                  >
+                    <SelectTrigger className="h-7 text-[12px]">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="euler">Euler（ode1）</SelectItem>
+                      <SelectItem value="rk4">RK4（ode4，更精确）</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+              </div>
+              <div className="flex justify-end gap-2 pt-1">
+                <Button variant="outline" size="sm" className="h-7 text-[12px]" onClick={() => setSimConfigOpen(false)}>
+                  关闭
+                </Button>
+                <Button size="sm" className="h-7 text-[12px]" onClick={() => { setSimConfigOpen(false); runPipeline(); }}>
+                  <Play className="size-3 mr-1" /> 运行仿真
+                </Button>
+              </div>
+            </div>
+          </div>
+        )}
+
         {/* Zoom indicator (click to reset) + collapsible control hints */}
         <button
           type="button"
@@ -1537,6 +1800,9 @@ interface ToolbarProps {
   onCenter: () => void;
   onAddNode: () => void;
   onDeleteSelected: () => void;
+  onOpenSimConfig: () => void;
+  onLoadTemplate: (id: string) => void;
+  onAutoLayout: () => void;
   nodeCount: number;
   edgeCount: number;
   selectedCount: number;
@@ -1544,7 +1810,8 @@ interface ToolbarProps {
 
 function PipelineToolbar({
   onBack, onRun, onClear, onExport,
-  onZoomIn, onZoomOut, onResetView, onCenter, onAddNode, onDeleteSelected,
+  onZoomIn, onZoomOut, onResetView, onCenter, onOpenSimConfig, onLoadTemplate, onAutoLayout,
+  onAddNode, onDeleteSelected,
   nodeCount, edgeCount, selectedCount,
 }: ToolbarProps) {
   return (
@@ -1611,6 +1878,32 @@ function PipelineToolbar({
           <Plus className="size-3.5" />
           <span className="hidden sm:inline">{t('npAddNodeTitle')}</span>
         </Button>
+        <DropdownMenu>
+          <DropdownMenuTrigger asChild>
+            <Button variant="outline" size="sm" className="h-8 px-2 gap-1.5 text-[12px]">
+              <LayoutTemplate className="size-3.5" />
+              <span className="hidden sm:inline">模板</span>
+            </Button>
+          </DropdownMenuTrigger>
+          <DropdownMenuContent align="start" className="w-64">
+            <DropdownMenuLabel>示例工作流</DropdownMenuLabel>
+            <DropdownMenuSeparator />
+            {PIPELINE_TEMPLATES.map((tpl) => (
+              <DropdownMenuItem key={tpl.id} onSelect={() => onLoadTemplate(tpl.id)} className="flex flex-col items-start gap-0.5 py-2">
+                <span className="text-[12px] font-medium">{tpl.name}</span>
+                <span className="text-[10px] text-muted-foreground leading-snug">{tpl.description}</span>
+              </DropdownMenuItem>
+            ))}
+          </DropdownMenuContent>
+        </DropdownMenu>
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <Button variant="outline" size="sm" className="h-8 w-8 p-0" onClick={onOpenSimConfig}>
+              <Settings className="size-3.5" />
+            </Button>
+          </TooltipTrigger>
+          <TooltipContent side="bottom">仿真配置（时间/步长/求解器）</TooltipContent>
+        </Tooltip>
         <Button
           variant="outline"
           size="sm"
@@ -1644,6 +1937,14 @@ function PipelineToolbar({
             </Button>
           </TooltipTrigger>
           <TooltipContent side="bottom">居中所有节点</TooltipContent>
+        </Tooltip>
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <Button variant="ghost" size="sm" className="h-8 w-8 p-0" onClick={onAutoLayout}>
+              <LayoutGrid className="size-3.5" />
+            </Button>
+          </TooltipTrigger>
+          <TooltipContent side="bottom">一键整理布局（按依赖自动分层）</TooltipContent>
         </Tooltip>
         <Tooltip>
           <TooltipTrigger asChild>
@@ -2267,9 +2568,112 @@ function NodeConfig({ node, onConfigChange, variables }: NodeConfigProps) {
     case 'evaluate':
     case 'matrix-multiply':
     case 'display':
+      return null;
+
+    /* ── Simulink-style 仿真节点参数面板 ────────────────────── */
+    case 'sim-constant':
+      return <NumField label="数值 Constant" value={node.config.value} onChange={(v) => onConfigChange({ value: v })} />;
+    case 'sim-sine':
+      return (
+        <div className="space-y-2">
+          <NumField label="幅度 Amplitude" value={node.config.amplitude} onChange={(v) => onConfigChange({ amplitude: v })} />
+          <NumField label="频率 Frequency (Hz)" value={node.config.frequency} onChange={(v) => onConfigChange({ frequency: v })} />
+          <NumField label="相位 Phase (rad)" value={node.config.phase} onChange={(v) => onConfigChange({ phase: v })} />
+          <NumField label="偏置 Bias" value={node.config.bias} onChange={(v) => onConfigChange({ bias: v })} />
+        </div>
+      );
+    case 'sim-step':
+      return (
+        <div className="space-y-2">
+          <NumField label="阶跃时刻 Step Time" value={node.config.stepTime} onChange={(v) => onConfigChange({ stepTime: v })} />
+          <NumField label="初始值 Initial Value" value={node.config.initialValue} onChange={(v) => onConfigChange({ initialValue: v })} />
+          <NumField label="终值 Final Value" value={node.config.finalValue} onChange={(v) => onConfigChange({ finalValue: v })} />
+        </div>
+      );
+    case 'sim-ramp':
+      return (
+        <div className="space-y-2">
+          <NumField label="斜率 Slope" value={node.config.slope} onChange={(v) => onConfigChange({ slope: v })} />
+          <NumField label="起始时刻 Start Time" value={node.config.startTime} onChange={(v) => onConfigChange({ startTime: v })} />
+        </div>
+      );
+    case 'sim-pulse':
+      return (
+        <div className="space-y-2">
+          <NumField label="幅度 Amplitude" value={node.config.amplitude} onChange={(v) => onConfigChange({ amplitude: v })} />
+          <NumField label="周期 Period" value={node.config.period} onChange={(v) => onConfigChange({ period: v })} />
+          <NumField label="脉宽 Pulse Width" value={node.config.pulseWidth} onChange={(v) => onConfigChange({ pulseWidth: v })} />
+          <NumField label="相位延迟 Phase Delay" value={node.config.phaseDelay} onChange={(v) => onConfigChange({ phaseDelay: v })} />
+        </div>
+      );
+    case 'sim-noise':
+      return (
+        <div className="space-y-2">
+          <NumField label="下限 Min" value={node.config.min} onChange={(v) => onConfigChange({ min: v })} />
+          <NumField label="上限 Max" value={node.config.max} onChange={(v) => onConfigChange({ max: v })} />
+        </div>
+      );
+    case 'sim-gain':
+      return <NumField label="增益 Gain" value={node.config.gain} onChange={(v) => onConfigChange({ gain: v })} />;
+    case 'sim-sum':
+      return (
+        <div className="space-y-1">
+          <label className="text-[10px] text-muted-foreground/80 uppercase tracking-wider">
+            符号 Signs（如 +-）
+          </label>
+          <Input
+            type="text"
+            value={String(node.config.signs ?? '++')}
+            onChange={(e) => onConfigChange({ signs: e.target.value })}
+            className="h-7 text-[12px] font-mono"
+          />
+        </div>
+      );
+    case 'sim-integrator':
+      return <NumField label="初值 Initial Condition" value={node.config.initialCondition} onChange={(v) => onConfigChange({ initialCondition: v })} />;
+    case 'sim-derivative':
+      return <NumField label="初值 Initial Condition" value={node.config.initialCondition} onChange={(v) => onConfigChange({ initialCondition: v })} />;
+    case 'sim-delay':
+      return <NumField label="初始输出 Initial Output" value={node.config.initialOutput} onChange={(v) => onConfigChange({ initialOutput: v })} />;
+    case 'sim-saturation':
+      return (
+        <div className="space-y-2">
+          <NumField label="下限 Lower Limit" value={node.config.lowerLimit} onChange={(v) => onConfigChange({ lowerLimit: v })} />
+          <NumField label="上限 Upper Limit" value={node.config.upperLimit} onChange={(v) => onConfigChange({ upperLimit: v })} />
+        </div>
+      );
+    case 'sim-first-order':
+      return (
+        <div className="space-y-2">
+          <NumField label="时间常数 T" value={node.config.timeConstant} onChange={(v) => onConfigChange({ timeConstant: v })} />
+          <NumField label="初值 Initial Output" value={node.config.initialOutput} onChange={(v) => onConfigChange({ initialOutput: v })} />
+        </div>
+      );
+    case 'sim-clock':
+    case 'sim-scope':
+      return <p className="text-[11px] text-muted-foreground/70">仿真节点，点击工具栏「▶ 运行仿真」查看结果。</p>;
     default:
       return null;
   }
+}
+
+/** 单个数字配置字段（仿真节点参数面板复用）。 */
+function NumField({
+  label, value, onChange,
+}: { label: string; value: unknown; onChange: (v: number) => void }) {
+  return (
+    <div className="space-y-1">
+      <label className="text-[10px] text-muted-foreground/80 uppercase tracking-wider">
+        {label}
+      </label>
+      <Input
+        type="number"
+        value={String(value ?? 0)}
+        onChange={(e) => onChange(Number(e.target.value))}
+        className="h-7 text-[12px] font-mono"
+      />
+    </div>
+  );
 }
 
 function NumberInputConfig({ node, onConfigChange }: { node: PipelineNode; onConfigChange: (p: Record<string, unknown>) => void }) {
@@ -2384,6 +2788,11 @@ function NodeResultFooter({
     const plot = node.outputs.plot as { samples: Array<[number, number]> };
     return <Sparkline samples={plot.samples} onClick={onPlotOpen} />;
   }
+  // Simulink scope → mini time-series sparkline
+  if (node.type === 'sim-scope' && node.outputs?.series) {
+    const series = node.outputs.series as { t: number[]; y: number[] };
+    return <Sparkline samples={series.t.map((t, i): [number, number] => [t, series.y[i] ?? 0])} onClick={onPlotOpen} />;
+  }
   // All other results (number / string / MathNode / matrix / {latex}) →
   // unified MathRender (see MathRender.tsx).
   return <MathRender value={node.result} />;
@@ -2490,17 +2899,57 @@ function Sparkline({
 }
 
 /* ================================================================== *
+ * Simulation helpers
+ * ================================================================== */
+/**
+ * 用定步长仿真求解器驱动图中所有仿真节点，并把结果写回节点。
+ *  - sim-scope：outputs.series = { t, y }（供节点内迷你图 + 2D 绘图）。
+ *  - 其它仿真节点：result 记录一个摘要（如积分器末值）。
+ */
+function runSimulationPipeline(
+  nodes: PipelineNode[],
+  edges: PipelineEdge[],
+  config: { t0: number; tEnd: number; dt: number; method: 'euler' | 'rk4' },
+): PipelineNode[] {
+  const { series, t } = runSimulation(nodes, edges, config);
+  return nodes.map((n) => {
+    if (!isSimulationNode(n)) return n;
+    const samples = series[n.id];
+    if (n.type === 'sim-scope') {
+      return {
+        ...n,
+        error: undefined,
+        outputs: { series: { t, y: samples ?? [] } },
+        result: { sim: true, samples: (samples ?? []).slice(-1)[0] ?? 0 },
+      };
+    }
+    return {
+      ...n,
+      error: undefined,
+      outputs: { last: (samples ?? []).slice(-1)[0] ?? 0 },
+      result: { sim: true, last: (samples ?? []).slice(-1)[0] ?? 0 },
+    };
+  });
+}
+
+/* ================================================================== *
  * Node palette (add-node drawer)
  * ================================================================== */
 const PALETTE_GROUPS: Array<{ category: NodeCategory; types: NodeType[] }> = [
   { category: 'input', types: ['number-input', 'expression-input', 'variable', 'constant'] },
   { category: 'operation', types: ['arithmetic'] },
-  { category: 'function', types: ['function-apply'] },
+  { category: 'function', types: ['function-apply', 'log-base', 'hypotenuse', 'sign', 'degrees-radians'] },
   { category: 'plot', types: ['plot-output'] },
   { category: 'matrix', types: ['matrix-input', 'matrix-op', 'matrix-multiply', 'matrix-decompose'] },
-  { category: 'calculus', types: ['derivative', 'integrate', 'symbolic-integrate', 'simplify', 'solve-equation', 'evaluate'] },
-  { category: 'output', types: ['display'] },
-  { category: 'vision', types: ['image-input', 'grayscale-threshold', 'edge-detect', 'contour-trace', 'fine-outline', 'curve-fit'] },
+  { category: 'calculus', types: ['derivative', 'integrate', 'symbolic-integrate', 'simplify', 'solve-equation', 'evaluate', 'taylor-series', 'ode-solve', 'limit'] },
+  { category: 'mapping', types: ['negate', 'reciprocal', 'clamp', 'map-range', 'lerp', 'min-max', 'compare'] },
+  { category: 'vector', types: ['vec2-compose', 'vec2-decompose', 'dot-product', 'cross-product', 'vec-magnitude', 'vec-normalize', 'vec-rotate'] },
+  { category: 'curve', types: ['parametric-curve', 'curve-resample', 'curve-transform', 'curve-merge', 'curve-length'] },
+  { category: 'statistics', types: ['random-sample', 'mean-variance', 'histogram', 'data-input'] },
+  { category: 'logic', types: ['switch', 'threshold-gate'] },
+  { category: 'output', types: ['display', 'svg-export'] },
+  { category: 'vision', types: ['image-input', 'grayscale-threshold', 'edge-detect', 'contour-trace', 'fine-outline', 'curve-fit', 'plot-curves', 'video-input', 'frame-extract', 'pose-track', 'curve-animate'] },
+  { category: 'simulation', types: ['sim-clock', 'sim-constant', 'sim-sine', 'sim-step', 'sim-ramp', 'sim-pulse', 'sim-noise', 'sim-sum', 'sim-gain', 'sim-product', 'sim-saturation', 'sim-first-order', 'sim-integrator', 'sim-derivative', 'sim-delay', 'sim-scope'] },
 ];
 
 function NodePalette({
@@ -2526,19 +2975,62 @@ function NodePalette({
   // Search filter — matches node type id or localized label (case-insensitive).
   const [paletteSearch, setPaletteSearch] = useState('');
   const query = paletteSearch.trim().toLowerCase();
-  const filteredGroups = useMemo(() => {
-    if (!query) return PALETTE_GROUPS;
-    return PALETTE_GROUPS
-      .map((group) => ({
-        ...group,
-        types: group.types.filter((type) => {
-          const def = NODE_TYPES[type];
-          const label = t(def.labelKey).toLowerCase();
-          return type.toLowerCase().includes(query) || label.includes(query);
-        }),
-      }))
-      .filter((g) => g.types.length > 0);
-  }, [query]);
+
+  // ── 收藏 & 最近使用（localStorage 持久化，解决"节点太多太难找"）──────
+  const FAV_KEY = 'omnimath-palette-favs';
+  const RECENT_KEY = 'omnimath-palette-recent';
+  const loadList = (key: string): NodeType[] => {
+    try {
+      const raw = localStorage.getItem(key);
+      if (!raw) return [];
+      const arr = JSON.parse(raw);
+      return Array.isArray(arr) ? arr.filter((x) => typeof x === 'string' && x in NODE_TYPES) : [];
+    } catch {
+      return [];
+    }
+  };
+  const [favs, setFavs] = useState<NodeType[]>(() => loadList(FAV_KEY));
+  const [recent, setRecent] = useState<NodeType[]>(() => loadList(RECENT_KEY));
+  const persistFavs = (list: NodeType[]) => {
+    setFavs(list);
+    try { localStorage.setItem(FAV_KEY, JSON.stringify(list)); } catch { /* ignore */ }
+  };
+  const toggleFav = (type: NodeType) => {
+    persistFavs(favs.includes(type) ? favs.filter((x) => x !== type) : [...favs, type]);
+  };
+  const recordRecent = (type: NodeType) => {
+    const next = [type, ...recent.filter((x) => x !== type)].slice(0, 8);
+    setRecent(next);
+    try { localStorage.setItem(RECENT_KEY, JSON.stringify(next)); } catch { /* ignore */ }
+  };
+
+  const matchesQuery = (type: NodeType): boolean => {
+    if (!query) return true;
+    const def = NODE_TYPES[type];
+    const label = t(def.labelKey).toLowerCase();
+    return type.toLowerCase().includes(query) || label.includes(query);
+  };
+
+  type PaletteGroup = { pinned?: 'fav' | 'recent'; category: NodeCategory; types: NodeType[] };
+  const filteredGroups = useMemo<PaletteGroup[]>(() => {
+    const base: PaletteGroup[] = !query ? PALETTE_GROUPS as PaletteGroup[] : PALETTE_GROUPS
+          .map((group) => ({
+            ...group,
+            types: group.types.filter((type) => {
+              const def = NODE_TYPES[type];
+              const label = t(def.labelKey).toLowerCase();
+              return type.toLowerCase().includes(query) || label.includes(query);
+            }),
+          }))
+          .filter((g) => g.types.length > 0);
+    // 置顶"收藏"与"最近"分组（同样受搜索过滤）。
+    const favGroup = favs.filter(matchesQuery);
+    const recentGroup = recent.filter(matchesQuery);
+    const pinned: PaletteGroup[] = [];
+    if (favGroup.length > 0) pinned.push({ pinned: 'fav', category: 'input', types: favGroup });
+    if (recentGroup.length > 0) pinned.push({ pinned: 'recent', category: 'output', types: recentGroup });
+    return [...pinned, ...base];
+  }, [query, favs, recent]);
 
   return (
     <>
@@ -2590,33 +3082,54 @@ function NodePalette({
             </div>
           )}
           {filteredGroups.map((group) => (
-            <div key={group.category}>
+            <div key={group.pinned ?? group.category}>
               <div className={cn(
                 'text-[10px] font-semibold uppercase tracking-wider mb-1 px-1 flex items-center gap-1.5',
                 CATEGORY_COLOR[group.category].text,
               )}>
                 <span className={cn('size-1.5 rounded-full', CATEGORY_COLOR[group.category].stripe)} />
-                {t(CATEGORY_LABEL_KEY[group.category])}
+                {group.pinned === 'fav' ? (
+                  <span className="inline-flex items-center gap-1">
+                    <Star className="size-2.5" /> 收藏
+                  </span>
+                ) : group.pinned === 'recent' ? (
+                  <span className="inline-flex items-center gap-1">
+                    <Clock3 className="size-2.5" /> 最近使用
+                  </span>
+                ) : (
+                  t(CATEGORY_LABEL_KEY[group.category])
+                )}
               </div>
               <div className="space-y-0.5">
                 {group.types.map((type) => {
                   const def = NODE_TYPES[type];
                   const Icon = ICONS[def.icon] ?? Hash;
                   const cat = CATEGORY_COLOR[def.category];
+                  const isFav = favs.includes(type);
                   return (
                     <button
                       key={type}
                       type="button"
-                      onClick={() => onPick(type)}
-                      className={cn(
-                        'w-full flex items-center gap-2 px-2 py-1.5 rounded-md text-[12px] text-left transition-all',
-                        'hover:bg-accent hover:translate-x-0.5 interactive-card',
-                      )}
+                      onClick={() => { recordRecent(type); onPick(type); }}
+                      className="group/row w-full flex items-center gap-2 px-2 py-1.5 rounded-md text-[12px] text-left transition-all hover:bg-accent hover:translate-x-0.5 interactive-card"
                     >
-                      <div className={cn('size-6 grid place-items-center rounded-md', cat.bg)}>
+                      <div className={cn('size-6 grid place-items-center rounded-md shrink-0', cat.bg)}>
                         <Icon className={cn('size-3.5', cat.text)} />
                       </div>
-                      <span>{t(def.labelKey)}</span>
+                      <span className="flex-1 truncate">{t(def.labelKey)}</span>
+                      <span
+                        role="button"
+                        tabIndex={-1}
+                        title={isFav ? '取消收藏' : '收藏'}
+                        onClick={(e) => { e.stopPropagation(); toggleFav(type); }}
+                        onPointerDown={(e) => e.stopPropagation()}
+                        className={cn(
+                          'size-5 grid place-items-center rounded opacity-0 transition-opacity group-hover/row:opacity-100',
+                          isFav ? 'opacity-100 text-amber-400' : 'text-muted-foreground hover:text-amber-400 hover:bg-accent',
+                        )}
+                      >
+                        <Star className={cn('size-3', isFav && 'fill-amber-400')} />
+                      </span>
                     </button>
                   );
                 })}
