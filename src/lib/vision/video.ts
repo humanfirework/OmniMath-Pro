@@ -331,15 +331,68 @@ export async function decodeGif(data: ArrayBuffer): Promise<FrameSequence> {
  * ------------------------------------------------------------------ */
 
 /**
+ * 把一张视频/图像帧的像素数据降采样到长边 ≤ maxDimension（保持宽高比，
+ * 输出宽高取偶数）。返回新的 ImageDataLike；若无需缩放则原样返回。
+ *
+ * 双线性插值（4 通道独立），是 `extractVideoFrames` 以外的纯 TS 降采样路径
+ * （GIF 解码帧、姿态追踪输入等场景复用）。
+ */
+export function downsampleVideoFrame(imageData: ImageDataLike, maxDimension: number): ImageDataLike {
+  const w = imageData.width;
+  const h = imageData.height;
+  if (maxDimension <= 0 || Math.max(w, h) <= maxDimension) return imageData;
+  const scale = maxDimension / Math.max(w, h);
+  let nw = Math.max(1, Math.round(w * scale));
+  let nh = Math.max(1, Math.round(h * scale));
+  if (nw % 2 !== 0) nw -= 1;
+  if (nh % 2 !== 0) nh -= 1;
+  if (nw < 1) nw = 1;
+  if (nh < 1) nh = 1;
+  if (nw === w && nh === h) return imageData;
+
+  const src = imageData.data;
+  const out = new Uint8ClampedArray(nw * nh * 4);
+  const sx = w / nw;
+  const sy = h / nh;
+  for (let y = 0; y < nh; y++) {
+    const srcY = Math.min(h - 1, y * sy);
+    const y0 = Math.floor(srcY);
+    const y1 = Math.min(h - 1, y0 + 1);
+    const fy = srcY - y0;
+    for (let x = 0; x < nw; x++) {
+      const srcX = Math.min(w - 1, x * sx);
+      const x0 = Math.floor(srcX);
+      const x1 = Math.min(w - 1, x0 + 1);
+      const fx = srcX - x0;
+      const o = (y * nw + x) * 4;
+      for (let c = 0; c < 4; c++) {
+        const i00 = (y0 * w + x0) * 4 + c;
+        const i10 = (y0 * w + x1) * 4 + c;
+        const i01 = (y1 * w + x0) * 4 + c;
+        const i11 = (y1 * w + x1) * 4 + c;
+        const top = src[i00] * (1 - fx) + src[i10] * fx;
+        const bot = src[i01] * (1 - fx) + src[i11] * fx;
+        out[o + c] = top * (1 - fy) + bot * fy;
+      }
+    }
+  }
+  return { data: out, width: nw, height: nh };
+}
+
+/**
  * 用 HTMLVideoElement 逐帧 seek → canvas drawImage → getImageData。
  * 浏览器环境专用；vitest jsdom 中无法测试。
+ *
+ * 高分辨率视频会自动降采样：`maxDimension`（默认 512）控制输出长边上限，
+ * 画布按缩放后的尺寸创建，每帧像素数据与内存开销大幅降低。
  */
 export async function extractVideoFrames(
   src: string,
-  options?: { maxFrames?: number; fps?: number },
+  options?: { maxFrames?: number; fps?: number; maxDimension?: number },
 ): Promise<FrameSequence> {
   const maxFrames = Math.max(1, Math.floor(options?.maxFrames ?? 300));
   const targetFps = Math.max(1, options?.fps ?? 30);
+  const maxDimension = Math.max(0, Math.floor(options?.maxDimension ?? 512));
 
   if (typeof document === 'undefined' || typeof HTMLVideoElement === 'undefined') {
     throw new Error('extractVideoFrames requires a browser environment (HTMLVideoElement)');
@@ -374,9 +427,23 @@ export async function extractVideoFrames(
     throw new Error('invalid video metadata');
   }
 
+  // 降采样：长边超过 maxDimension 时等比缩放（保持宽高比、取偶数），
+  // 画布按缩放后的尺寸创建，每帧像素数据与内存开销大幅削减。
+  let outW = width;
+  let outH = height;
+  if (maxDimension > 0 && Math.max(width, height) > maxDimension) {
+    const scale = maxDimension / Math.max(width, height);
+    outW = Math.max(1, Math.round(width * scale));
+    outH = Math.max(1, Math.round(height * scale));
+    if (outW % 2 !== 0) outW -= 1;
+    if (outH % 2 !== 0) outH -= 1;
+    if (outW < 1) outW = 1;
+    if (outH < 1) outH = 1;
+  }
+
   const canvas = document.createElement('canvas');
-  canvas.width = width;
-  canvas.height = height;
+  canvas.width = outW;
+  canvas.height = outH;
   const ctx = canvas.getContext('2d', { willReadFrequently: true });
   if (!ctx) throw new Error('canvas 2d context unavailable');
 
@@ -388,16 +455,16 @@ export async function extractVideoFrames(
   for (let i = 0; i < count; i++) {
     const t = Math.min(duration - 1e-3, i * frameInterval);
     await seekTo(video, t);
-    ctx.drawImage(video, 0, 0, width, height);
-    const img = ctx.getImageData(0, 0, width, height);
+    ctx.drawImage(video, 0, 0, outW, outH);
+    const img = ctx.getImageData(0, 0, outW, outH);
     frames.push({
-      imageData: { data: new Uint8ClampedArray(img.data), width, height },
+      imageData: { data: new Uint8ClampedArray(img.data), width: outW, height: outH },
       timestamp: t * 1000,
       index: i,
     });
   }
 
-  return { frames, fps: targetFps, width, height };
+  return { frames, fps: targetFps, width: outW, height: outH };
 }
 
 /** 把 video 元素 seek 到指定时间（秒），等待 seeked 事件完成。 */

@@ -49,7 +49,8 @@ export type NodeCategory =
   | 'statistics'
   | 'logic'
   | 'vision'
-  | 'simulation';
+  | 'simulation'
+  | 'control';
 
 export interface PortDef {
   id: string;
@@ -85,6 +86,10 @@ export interface PipelineNode {
   /** Last computed all-outputs map. */
   outputs?: Record<string, unknown>;
   error?: string;
+  /** 静音：跳过执行，把首个输入透传到输出（Blender 式 Mute）。 */
+  muted?: boolean;
+  /** 分组：拥有相同 `group.id` 的节点归属同一 Frame（可命名/折叠）。 */
+  group?: { id: string; title: string };
 }
 
 export interface PipelineEdge {
@@ -449,7 +454,7 @@ export async function executePipeline(
   nodes: PipelineNode[],
   edges: PipelineEdge[],
   ctx: PipelineContext,
-  opts?: { stopAt?: string },
+  opts?: { stopAt?: string; onProgress?: (done: number, total: number) => void },
 ): Promise<PipelineNode[]> {
   const byId = new Map<string, PipelineNode>();
   for (const n of nodes) byId.set(n.id, { ...n });
@@ -489,7 +494,11 @@ export async function executePipeline(
 
   // Execute in topo order, propagating outputs.
   const outputs = new Map<string, Record<string, unknown>>();
-  for (const id of effectiveOrder) {
+  const total = effectiveOrder.length;
+  for (let step = 0; step < effectiveOrder.length; step++) {
+    const id = effectiveOrder[step];
+    // P2-5: 逐节点上报进度（供 UI 显示「运行中」进度条）。
+    opts?.onProgress?.(step + 1, total);
     const node = byId.get(id)!;
     const def = NODE_TYPES[node.type];
     if (!def) {
@@ -515,6 +524,19 @@ export async function executePipeline(
       node.outputs = {};
       node.error = undefined;
       outputs.set(id, {});
+      continue;
+    }
+    // Muted node：跳过执行，把首个输入透传到首个输出（Blender 式 Mute），
+    // 让下游节点仍能拿到数据、且不报错。
+    if (node.muted) {
+      const firstInId = def.inputs[0]?.id;
+      const firstOutId = def.outputs[0]?.id;
+      const out: Record<string, unknown> = {};
+      if (firstInId && firstOutId) out[firstOutId] = ins[firstInId];
+      outputs.set(id, out);
+      node.outputs = out;
+      node.result = firstOutId ? out[firstOutId] : undefined;
+      node.error = undefined;
       continue;
     }
     // Also skip if some inputs are connected but not ALL declared inputs

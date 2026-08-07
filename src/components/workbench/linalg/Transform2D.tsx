@@ -215,7 +215,8 @@ export function Transform2D({ matrix, onMatrixChange }: Transform2DProps) {
   const updateCell = (idx: number, value: string) => {
     const n = parseFloat(value);
     const next = [...matrix];
-    next[idx] = Number.isNaN(n) ? 0 : n;
+    // Infinity / NaN 输入一律按 0 处理，杜绝几何体整体消失
+    next[idx] = Number.isFinite(n) ? n : 0;
     onMatrixChange?.(next);
     setProgress(1);
   };

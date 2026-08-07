@@ -21,6 +21,7 @@ import type {
   BezierPath,
   Polyline,
   Point,
+  FitMode,
 } from './types';
 import {
   toGrayscale,
@@ -28,8 +29,11 @@ import {
   multiLevelThreshold,
   binarizeByLevel,
   removeSmallRegions,
+  binaryMorphology,
 } from './preprocess';
+import { sobel, canny } from './edges';
 import { traceContours } from './trace';
+import { marchingSquaresGray } from './marchingSquare';
 import { zhangSuenThin, skeletonToPolylines } from './skeleton';
 import { rdpSimplify, fitBezierPath } from './fit';
 import { fitFourier, sampleFourierCurve } from './fourier';
@@ -44,6 +48,14 @@ const DEFAULTS = {
   errorThreshold: 1.0,
   skeletonize: false,
   edgeMethod: 'sobel' as const,
+  cannyLow: 40,
+  cannyHigh: 100,
+  denoiseRadius: 0,
+  useEdgeDetection: false,
+  useMarchingSquares: false,
+  marchLevels: 4,
+  marchSmoothRadius: 1,
+  marchMinPerimeter: 0,
 };
 
 /**
@@ -127,26 +139,84 @@ function polylineToBezierPath(
   return fitBezierPath(poly, effectiveErr, cornerThreshold);
 }
 
-/** 长边上限：超过则先最近邻降采样再进管线，防止 4K+ 大图拖垮追踪/拟合。 */
-const MAX_DIM = 2048;
-
-/** 最近邻重采样：把 RGBA 图像缩小到 nw×nh，返回新的 ImageDataLike。 */
-function downsampleNearest(imageData: ImageDataLike, nw: number, nh: number): ImageDataLike {
-  const { data, width: w, height: h } = imageData;
-  const out = new Uint8ClampedArray(nw * nh * 4);
-  for (let y = 0; y < nh; y++) {
-    const sy = Math.min(h - 1, Math.floor((y * h) / nh));
-    for (let x = 0; x < nw; x++) {
-      const sx = Math.min(w - 1, Math.floor((x * w) / nw));
-      const si = (sy * w + sx) * 4;
-      const di = (y * nw + x) * 4;
-      out[di] = data[si];
-      out[di + 1] = data[si + 1];
-      out[di + 2] = data[si + 2];
-      out[di + 3] = data[si + 3];
+/** 从单张二值图提取轮廓并拟合为贝塞尔曲线，追加到 curves。 */
+function extractContours(
+  bin: Uint8Array,
+  w: number,
+  h: number,
+  curves: BezierPath[],
+  opts: {
+    fitMode: FitMode;
+    errorThreshold: number;
+    cornerThreshold: number;
+    fourierOrder: number;
+  },
+): void {
+  const contours = traceContours(bin, w, h);
+  const rdpEps = Math.max(0.25, opts.errorThreshold * 0.5);
+  for (const contour of contours) {
+    if (contour.points.length < 3) continue;
+    const simplified: Polyline = {
+      points: rdpSimplify(contour.points, rdpEps),
+      closed: contour.closed,
+      area: contour.area,
+    };
+    if (simplified.points.length < 3) continue;
+    const bp = polylineToBezierPath(
+      simplified,
+      opts.fitMode,
+      opts.errorThreshold,
+      opts.cornerThreshold,
+      opts.fourierOrder,
+    );
+    if (bp.segments.length > 0) {
+      bp.area = contour.area;
+      curves.push(bp);
     }
   }
-  return { data: out, width: nw, height: nh };
+}
+
+/** 长边上限：超过则先亚像素双线性降采样再进管线，防止 4K+ 大图拖垮追踪/拟合。 */
+const MAX_DIM = 2048;
+
+/**
+ * 亚像素双线性重采样：把 **灰度** 图缩小到 nw×nh。
+ *
+ * 只用单通道比 RGBA 四通道更准也更省：
+ *   - 旧实现「先双线性缩小 RGBA、再算灰度」会引入两次舍入 / 通道间平均模糊，
+ *     对细线、发丝这类高精度边缘不利；
+ *   - 这里先算灰度、再对灰度做双线性，亮度信息只经历一次插值，边缘保持更锐利。
+ */
+function downsampleGray(
+  gray: Uint8ClampedArray,
+  w: number,
+  h: number,
+  nw: number,
+  nh: number,
+): Uint8ClampedArray {
+  const out = new Uint8ClampedArray(nw * nh);
+  const sx = w / nw;
+  const sy = h / nh;
+  for (let y = 0; y < nh; y++) {
+    const srcY = y * sy;
+    const y0 = Math.min(h - 1, Math.floor(srcY));
+    const y1 = Math.min(h - 1, y0 + 1);
+    const fy = srcY - y0;
+    for (let x = 0; x < nw; x++) {
+      const srcX = x * sx;
+      const x0 = Math.min(w - 1, Math.floor(srcX));
+      const x1 = Math.min(w - 1, x0 + 1);
+      const fx = srcX - x0;
+      const i00 = y0 * w + x0;
+      const i10 = y0 * w + x1;
+      const i01 = y1 * w + x0;
+      const i11 = y1 * w + x1;
+      const top = gray[i00] * (1 - fx) + gray[i10] * fx;
+      const bot = gray[i01] * (1 - fx) + gray[i11] * fx;
+      out[y * nw + x] = top * (1 - fy) + bot * fy;
+    }
+  }
+  return out;
 }
 
 /** 主管线：ImageData → CurveSet。 */
@@ -154,7 +224,14 @@ export function imageToCurves(
   imageData: ImageDataLike,
   options?: VisionOptions,
 ): CurveSet {
-  const opts = { ...DEFAULTS, ...options };
+  const opts = {
+    ...DEFAULTS,
+    ...options,
+    ...(options?.cannyLow != null ? { cannyLow: options.cannyLow } : {}),
+    ...(options?.cannyHigh != null ? { cannyHigh: options.cannyHigh } : {}),
+    ...(options?.denoiseRadius != null ? { denoiseRadius: options.denoiseRadius } : {}),
+    ...(options?.useEdgeDetection != null ? { useEdgeDetection: options.useEdgeDetection } : {}),
+  };
   // 大图保护：长边超过 MAX_DIM 时按比例缩小（最近邻），曲线在缩小后的
   // 坐标系产出；调用方可凭 metadata.scaleFactor 自行放大回原图坐标。
   let src = imageData;
@@ -164,7 +241,18 @@ export function imageToCurves(
     const scale = MAX_DIM / Math.max(imageData.width, imageData.height);
     const nw = Math.max(1, Math.round(imageData.width * scale));
     const nh = Math.max(1, Math.round(imageData.height * scale));
-    src = downsampleNearest(imageData, nw, nh);
+    // 先算灰度再对灰度做双线性降采样（保边缘），再重建 4 通道图供下游 unify 处理
+    const gray0 = toGrayscale(imageData);
+    const downGray = downsampleGray(gray0, imageData.width, imageData.height, nw, nh);
+    const rgba = new Uint8ClampedArray(nw * nh * 4);
+    for (let i = 0; i < nw * nh; i++) {
+      const gv = downGray[i];
+      rgba[i * 4] = gv;
+      rgba[i * 4 + 1] = gv;
+      rgba[i * 4 + 2] = gv;
+      rgba[i * 4 + 3] = 255;
+    }
+    src = { data: rgba, width: nw, height: nh };
     downsampled = true;
     scaleFactor = imageData.width / nw;
   }
@@ -189,30 +277,19 @@ export function imageToCurves(
       if (bp.segments.length > 0) curves.push(bp);
     }
   } else {
-    const labels = multiLevelThreshold(gray, w, h, opts.levels);
-    for (let lvl = 0; lvl < opts.levels; lvl++) {
-      let bin = binarizeByLevel(labels, w, h, lvl);
-      // 跳过空层
-      let any = false;
-      for (let i = 0; i < bin.length; i++) {
-        if (bin[i] === 1) {
-          any = true;
-          break;
-        }
-      }
-      if (!any) continue;
-      // 跳过跨越四条边的背景级
-      if (isBackgroundLevel(bin, w, h)) continue;
-      bin = removeSmallRegions(bin, w, h, opts.turdsize);
-      const contours = traceContours(bin, w, h);
+    if (opts.useMarchingSquares) {
+      // 灰度亚像素 marching squares 等值线：保留抗锯齿子像素边界
+      const polys = marchingSquaresGray(gray, w, h, {
+        levels: opts.marchLevels,
+        smoothRadius: opts.marchSmoothRadius,
+        minPerimeter: opts.marchMinPerimeter,
+      });
       const rdpEps = Math.max(0.25, opts.errorThreshold * 0.5);
-      for (const contour of contours) {
-        // 仅保留面积有意义的外轮廓 / 孔洞
-        if (contour.points.length < 3) continue;
+      for (const poly of polys) {
         const simplified: Polyline = {
-          points: rdpSimplify(contour.points, rdpEps),
-          closed: contour.closed,
-          area: contour.area,
+          points: rdpSimplify(poly.points, rdpEps),
+          closed: poly.closed,
+          area: poly.area,
         };
         if (simplified.points.length < 3) continue;
         const bp = polylineToBezierPath(
@@ -223,9 +300,41 @@ export function imageToCurves(
           opts.fourierOrder,
         );
         if (bp.segments.length > 0) {
-          bp.area = contour.area;
+          bp.area = poly.area;
           curves.push(bp);
         }
+      }
+    } else if (opts.useEdgeDetection) {
+      // 边缘检测作为轮廓来源：sobel 幅值阈值化 或 canny 输出 0/1 边缘图
+      let bin: Uint8Array;
+      if (opts.edgeMethod === 'canny') {
+        bin = canny(gray, w, h, opts.cannyLow, opts.cannyHigh);
+      } else {
+        const mag = sobel(gray, w, h);
+        bin = new Uint8Array(w * h);
+        for (let i = 0; i < mag.length; i++) bin[i] = mag[i] > 80 ? 1 : 0;
+      }
+      if (opts.denoiseRadius > 0) bin = binaryMorphology(bin, w, h, 'open', opts.denoiseRadius);
+      bin = removeSmallRegions(bin, w, h, opts.turdsize);
+      extractContours(bin, w, h, curves, opts);
+    } else {
+      const labels = multiLevelThreshold(gray, w, h, opts.levels);
+      for (let lvl = 0; lvl < opts.levels; lvl++) {
+        let bin = binarizeByLevel(labels, w, h, lvl);
+        // 跳过空层
+        let any = false;
+        for (let i = 0; i < bin.length; i++) {
+          if (bin[i] === 1) {
+            any = true;
+            break;
+          }
+        }
+        if (!any) continue;
+        // 跳过跨越四条边的背景级
+        if (isBackgroundLevel(bin, w, h)) continue;
+        if (opts.denoiseRadius > 0) bin = binaryMorphology(bin, w, h, 'open', opts.denoiseRadius);
+        bin = removeSmallRegions(bin, w, h, opts.turdsize);
+        extractContours(bin, w, h, curves, opts);
       }
     }
   }
@@ -246,9 +355,11 @@ export function imageToCurves(
 
 // 重新导出全部子模块公开 API
 export * from './types';
+export * from './coords';
 export * from './preprocess';
 export * from './edges';
 export * from './trace';
+export * from './marchingSquare';
 export * from './skeleton';
 export {
   rdpSimplify,
@@ -268,6 +379,18 @@ export {
   fourierError,
 } from './fourier';
 export * from './curveCandidates';
+export {
+  videoToCurves,
+  associateTracks,
+  smoothTrack,
+  samplePath,
+  savitzkyGolay,
+  savgolKernel,
+  throttleFrames,
+  type VideoToCurvesOptions,
+  type VideoToCurvesResult,
+  type VideoTrack,
+} from './videoToCurves';
 export { visionWorkerClient, type VisionWorkerClient } from './visionWorkerClient';
 export {
   fineOutline,

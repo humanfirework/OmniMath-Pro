@@ -35,6 +35,7 @@ import {
 } from '@/lib/vision';
 import {
   extractVideoFrames,
+  downsampleVideoFrame,
   type FrameSequence,
   type VideoFrame,
 } from '@/lib/vision/video';
@@ -849,10 +850,11 @@ export const visionNodes = {
     color: 'cyan',
     inputs: [{ id: 'video', labelKey: 'npPortVideo', type: 'animation' }],
     outputs: [{ id: 'frames', labelKey: 'npPortFrames', type: 'animation' }],
-    defaultConfig: { maxFrames: 300, fps: 30 },
+    defaultConfig: { maxFrames: 300, fps: 30, maxDimension: 512 },
     configSchema: [
       { key: 'maxFrames', label: '最大帧数 Max Frames', type: 'number', min: 10, max: 600, step: 10, default: 300 },
       { key: 'fps', label: '采样帧率 FPS', type: 'number', min: 1, max: 60, step: 1, default: 30 },
+      { key: 'maxDimension', label: '帧长边上限 Max Dim', type: 'number', min: 128, max: 2048, step: 64, default: 512 },
     ],
     execute: async (inputs, config) => {
       const video = inputs.video as VideoValue | undefined;
@@ -862,6 +864,7 @@ export const visionNodes = {
       }
       const maxFrames = Math.max(1, Math.floor(Number(config.maxFrames ?? 300)));
       const targetFps = Math.max(1, Math.floor(Number(config.fps ?? 30)));
+      const maxDimension = Math.max(0, Math.floor(Number(config.maxDimension ?? 512)));
 
       // GIF：data URL 或裸 GIF 字节流。用纯 TS 解码器（jsdom 也能跑）。
       // LZW 解码是 CPU 密集型，经 Worker 执行避免阻塞主线程动画播放。
@@ -873,7 +876,7 @@ export const visionNodes = {
         seq = await visionWorkerClient.decodeGif(bytes);
       } else {
         // MP4 / WebM：浏览器 HTMLVideoElement seek 抽帧
-        seq = await extractVideoFrames(src, { maxFrames, fps: targetFps });
+        seq = await extractVideoFrames(src, { maxFrames, fps: targetFps, maxDimension });
       }
 
       // 限制最大帧数（防止超长 GIF / 视频导致内存爆炸）
@@ -884,6 +887,16 @@ export const visionNodes = {
           picked.push(seq.frames[Math.floor(i * stride)]);
         }
         seq = { ...seq, frames: picked.map((f, i) => ({ ...f, index: i })) };
+      }
+
+      // GIF 解码帧为原始分辨率：统一降采样到 maxDimension（MP4/WebM 已在
+      // extractVideoFrames 内降采样；GIF 走纯 TS 解码不受画布限制，需在此处理）。
+      if (maxDimension > 0) {
+        const frames = seq.frames.map((f, i) => {
+          const ds = downsampleVideoFrame(f.imageData, maxDimension);
+          return { ...f, imageData: ds, index: i };
+        });
+        seq = { ...seq, frames, width: frames[0]?.imageData.width ?? seq.width, height: frames[0]?.imageData.height ?? seq.height };
       }
 
       return { frames: seq satisfies FramesValue };
@@ -910,11 +923,15 @@ export const visionNodes = {
       smooth: true,
       minCutoff: 1.0,
       beta: 0.007,
+      maxFrames: 120,
+      maxDimension: 512,
     },
     configSchema: [
       { key: 'smooth', label: '关键点平滑 (One Euro)', type: 'boolean', default: true },
       { key: 'minCutoff', label: '平滑截止频率 Min Cutoff', type: 'number', min: 0.1, max: 5, step: 0.1, default: 1.0 },
       { key: 'beta', label: '速度系数 Beta', type: 'number', min: 0.001, max: 0.05, step: 0.001, default: 0.007 },
+      { key: 'maxFrames', label: '最大帧数 Max Frames', type: 'number', min: 10, max: 600, step: 10, default: 120 },
+      { key: 'maxDimension', label: '帧长边上限 Max Dim', type: 'number', min: 128, max: 2048, step: 64, default: 512 },
     ],
     execute: async (inputs, config) => {
       const framesValue = inputs.frames as FramesValue | undefined;
@@ -926,9 +943,13 @@ export const visionNodes = {
       const beta = Number(config.beta ?? 0.007);
 
       // 1. 帧序列 → 姿态序列（可能抛「pose model unavailable」）
+      //    姿态检测计算密集：节流帧数 + 降采样输入，避免全分辨率逐帧拖垮主线程。
       let poseSeq;
       try {
-        poseSeq = await detectPoses(framesValue);
+        poseSeq = await detectPoses(framesValue, {
+          maxFrames: Math.max(1, Math.floor(Number(config.maxFrames ?? 120))),
+          maxDimension: Math.max(0, Math.floor(Number(config.maxDimension ?? 512))),
+        });
       } catch (e) {
         throw new Error(`姿态检测失败: ${(e as Error).message}`);
       }
@@ -953,11 +974,13 @@ export const visionNodes = {
   },
 
   /* ── curve-animate ──────────────────────────────────────────── *
-   * 动画终端节点：接收逐帧曲线动画，可选 One Euro Filter 平滑控制点，
-   * 注入渲染样式（color / strokeWidth），输出 animation 端口。
+   * 动画终端节点：把「逐帧曲线动画」注入渲染样式并输出。
    *
-   * 实际 addCurveSet 副作用（带 isAnimation=true）在
-   * NodePipeline.runPipeline 的 pushAnimationsToWorkbench 中处理。
+   * 两种输入：
+   *   - animation（来自 pose-track）：逐帧 BezierPath[][]，可选 One Euro Filter
+   *     平滑控制点。
+   *   - frames（来自 frame-extract）：原生帧序列，先经 P1-1 `videoToCurves`
+   *     逐帧矢量化 + 帧间关联 + Savitzky-Golay 时域平滑，产出动画曲线集。
    * ───────────────────────────────────────────────────────────── */
   'curve-animate': {
     type: 'curve-animate',
@@ -965,7 +988,10 @@ export const visionNodes = {
     labelKey: 'npCurveAnimate',
     icon: 'Play',
     color: 'cyan',
-    inputs: [{ id: 'animation', labelKey: 'npPortAnimation', type: 'animation' }],
+    inputs: [
+      { id: 'animation', labelKey: 'npPortAnimation', type: 'animation' },
+      { id: 'frames', labelKey: 'npPortFrames', type: 'animation' },
+    ],
     outputs: [],
     defaultConfig: {
       color: '#a78bfa',
@@ -973,6 +999,12 @@ export const visionNodes = {
       smooth: false,
       minCutoff: 1.0,
       beta: 0.007,
+      // P1-1：frames 输入路径
+      stride: 1,
+      maxFrames: 120,
+      matchDistance: 32,
+      sgWindow: 5,
+      sgOrder: 2,
     },
     configSchema: [
       { key: 'color', label: '颜色 Color', type: 'text', default: '#a78bfa', placeholder: '#a78bfa' },
@@ -980,29 +1012,67 @@ export const visionNodes = {
       { key: 'smooth', label: '控制点平滑 (One Euro)', type: 'boolean', default: false },
       { key: 'minCutoff', label: '平滑截止频率 Min Cutoff', type: 'number', min: 0.1, max: 5, step: 0.1, default: 1.0 },
       { key: 'beta', label: '速度系数 Beta', type: 'number', min: 0.001, max: 0.05, step: 0.001, default: 0.007 },
+      { key: 'stride', label: '帧采样步长 Stride', type: 'number', min: 1, max: 10, step: 1, default: 1 },
+      { key: 'maxFrames', label: '最大帧数 Max Frames', type: 'number', min: 10, max: 600, step: 10, default: 120 },
+      { key: 'matchDistance', label: '关联距离 Match Distance (px)', type: 'number', min: 4, max: 200, step: 4, default: 32 },
+      { key: 'sgWindow', label: '平滑窗口 SG Window', type: 'number', min: 3, max: 15, step: 2, default: 5 },
     ],
-    execute: (inputs, config) => {
-      const anim = inputs.animation as AnimationValue | undefined;
-      if (!anim || !Array.isArray(anim.frames) || anim.frames.length === 0) {
-        throw new Error('输入动画为空（请检查 pose-track 节点是否成功检测）');
-      }
-      const doSmooth = Boolean(config.smooth);
-      const minCutoff = Number(config.minCutoff ?? 1.0);
-      const beta = Number(config.beta ?? 0.007);
+    execute: async (inputs, config) => {
       const color = String(config.color ?? '#a78bfa');
       const strokeWidth = Number(config.width ?? 2);
 
-      const frames = doSmooth
-        ? smoothCurveAnimation(anim.frames, { freq: anim.fps, minCutoff, beta })
-        : anim.frames;
+      // 路径 A：直接喂入原生帧序列 → videoToCurves
+      const framesValue = inputs.frames as FramesValue | undefined;
+      let frames: BezierPath[][];
+      let fps = 30;
+      let width = 0;
+      let height = 0;
+      if (framesValue && Array.isArray(framesValue.frames) && framesValue.frames.length > 0) {
+        // 性能：视频→曲线的逐帧矢量化（边缘检测/轮廓/贝塞尔拟合）是 CPU 密集，
+        // 经 visionWorkerClient 派发到 Web Worker 执行，主线程不阻塞，避免「生成视频卡顿」。
+        const res = await visionWorkerClient.videoToCurves(framesValue, {
+          stride: Math.max(1, Math.floor(Number(config.stride ?? 1))),
+          maxFrames: Math.max(1, Math.floor(Number(config.maxFrames ?? 120))),
+          matchDistance: Math.max(0, Number(config.matchDistance ?? 32)),
+          smooth: true,
+          smoothWindow: Math.max(3, Number(config.sgWindow ?? 5)),
+          smoothOrder: 2,
+        });
+        frames = res.frames as BezierPath[][];
+        fps = res.fps || 30;
+        width = res.width;
+        height = res.height;
+      } else {
+        // 路径 B：使用已生成的逐帧曲线动画（pose-track 等）
+        const anim = inputs.animation as AnimationValue | undefined;
+        if (!anim || !Array.isArray(anim.frames) || anim.frames.length === 0) {
+          throw new Error('输入动画为空（请连接 frame-extract 或 pose-track 节点）');
+        }
+        frames = anim.frames;
+        fps = anim.fps;
+        width = anim.width;
+        height = anim.height;
+      }
+
+      if (frames.length === 0) {
+        throw new Error('未能从输入产出任何曲线帧');
+      }
+
+      // 可选：One Euro Filter 平滑控制点
+      const doSmooth = Boolean(config.smooth);
+      if (doSmooth) {
+        const minCutoff = Number(config.minCutoff ?? 1.0);
+        const beta = Number(config.beta ?? 0.007);
+        frames = smoothCurveAnimation(frames, { freq: fps, minCutoff, beta });
+      }
 
       return {
         animation: {
           frames,
-          fps: anim.fps,
-          frameCount: anim.frameCount,
-          width: anim.width,
-          height: anim.height,
+          fps,
+          frameCount: frames.length,
+          width,
+          height,
           color,
           strokeWidth,
         } satisfies AnimationValue,

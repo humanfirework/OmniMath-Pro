@@ -53,6 +53,7 @@ import {
 } from '@/components/ui/collapsible';
 import {
   chatWithTools,
+  chatWithToolsStream,
   loadAIConfig,
   saveAIConfig,
   DEFAULT_BASE_URL,
@@ -409,6 +410,8 @@ export function AIPanel() {
   const pendingSendTimerRef = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
   const scrollRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
+  // 当前流式请求的 AbortController，供「停止」按钮中断生成。
+  const abortRef = useRef<AbortController | null>(null);
 
   // 上下文指示器数据（只读订阅，切换文件/增删绘图与变量时自动刷新）。
   const plotsCount = useWorkbenchStore((s) => s.plots.length);
@@ -451,56 +454,89 @@ export function AIPanel() {
         ? buildContextMessage(collectWorkspaceSnapshot())
         : undefined;
 
-      // Function Calling：模型返回 tool_calls → 本地执行 → 回填 → 再请求，
-      // 直到拿到最终文本（循环上限与降级逻辑都在 chatWithTools 内部）。
-      const result = await chatWithTools(
+      // 流式输出：先插入一个「流式占位」assistant 气泡，增量文本实时追加到其上。
+      const assistantId = `a-${Date.now()}`;
+      setMessages((m) => [...m, { role: 'assistant', content: '', id: assistantId }]);
+
+      const ac = new AbortController();
+      abortRef.current = ac;
+      const appendDelta = (delta: string) => {
+        setMessages((m) =>
+          m.map((msg) =>
+            msg.id === assistantId ? { ...msg, content: msg.content + delta } : msg,
+          ),
+        );
+      };
+
+      // Function Calling + 流式：模型返回 tool_calls → 本地执行 → 回填 → 再请求，
+      // 文本增量实时渲染；首轮流式失败自动降级为非流式工具对话。
+      const result = await chatWithToolsStream(
         [...history, { role: 'user', content: trimmed }],
         WORKBENCH_TOOLS,
         executeWorkbenchTool,
         {
           context,
+          signal: ac.signal,
+          onToken: appendDelta,
           onToolCall: (record) =>
             setActiveToolCalls((calls) => [...calls, record]),
         },
       );
 
       if (result.ok) {
-        const assistantMsg: ChatMessage = {
-          role: 'assistant',
-          content: result.reply || t('aiEmptyReply'),
-          id: `a-${Date.now()}`,
-          toolCalls: result.toolCalls.length > 0 ? result.toolCalls : undefined,
-        };
-        setMessages((m) => [...m, assistantMsg]);
+        setMessages((m) =>
+          m.map((msg) =>
+            msg.id === assistantId
+              ? {
+                  ...msg,
+                  content: result.reply || tAI('aiEmptyReply', '(空回复)'),
+                  toolCalls: result.toolCalls.length > 0 ? result.toolCalls : undefined,
+                }
+              : msg,
+          ),
+        );
         lastPendingRef.current = null;
       } else if (result.error === 'NO_API_KEY') {
         // Don't crash — surface the config card and remember the message to retry.
         lastPendingRef.current = trimmed;
         setShowConfig(true);
         setConfig(loadAIConfig());
-        // Remove the just-added user bubble so the chat stays clean until configured.
-        setMessages((m) => m.filter((msg) => msg.id !== userMsg.id));
+        // Remove the just-added user + placeholder bubbles so the chat stays clean.
+        setMessages((m) =>
+          m.filter((msg) => msg.id !== userMsg.id && msg.id !== assistantId),
+        );
         setInput(trimmed);
-      } else {
+      } else if (result.error !== 'ABORTED') {
         const friendly = friendlyError(result.error);
         setError(friendly);
-        setMessages((m) => [
-          ...m,
-          {
-            role: 'assistant',
-            content: `⚠️ ${friendly}`,
-            id: `e-${Date.now()}`,
-            toolCalls: result.toolCalls.length > 0 ? result.toolCalls : undefined,
-          },
-        ]);
+        setMessages((m) =>
+          m.map((msg) =>
+            msg.id === assistantId
+              ? {
+                  ...msg,
+                  content: `⚠️ ${friendly}`,
+                  toolCalls: result.toolCalls.length > 0 ? result.toolCalls : undefined,
+                }
+              : msg,
+          ),
+        );
+        lastPendingRef.current = null;
+      } else {
+        // 用户点击「停止」：保留已生成的部分内容。
         lastPendingRef.current = null;
       }
+      abortRef.current = null;
       setActiveToolCalls([]);
       setLoading(false);
       inputRef.current?.focus();
     },
     [loading, messages, attachContext],
   );
+
+  /** 停止当前流式生成。 */
+  const stopStreaming = useCallback(() => {
+    abortRef.current?.abort();
+  }, []);
 
   // 端到端闭环：接收外部「AI 解释」请求（如 PreviewPanel 的结果解释按钮），
   // 自动填充输入并发送，打通「计算 → 绘图 → AI 解释」链路。

@@ -85,10 +85,11 @@ interface SettingsState {
 export const SETTINGS_KEY = 'omnimath-settings-v1';
 
 /** 活动栏图标的默认顺序（同时作为合法 id 白名单用于持久化数据校验；
- *  id 必须与 ActivityBar 中的条目注册表一致）。 */
+ *  id 必须与 ActivityBar 中的条目注册表一致）。
+ *  「文件」置于首页第一个位置；其余按使用频率排列。 */
 export const DEFAULT_ACTIVITY_BAR_ORDER: string[] = [
-  'history', 'variables', 'files', 'formulas', 'stats',
-  'solver', 'pipeline', 'whiteboard', 'linalg',
+  'files', 'history', 'variables', 'formulas', 'stats',
+  'solver', 'control', 'pipeline', 'whiteboard', 'linalg',
   'toggleEditor', 'togglePreview', 'toggleSidebar', 'layoutMenu', 'settings',
 ];
 

@@ -15,6 +15,7 @@ import {
 } from './ai-tools';
 import { useWorkbenchStore } from './store/workbench';
 import { useFileSystemStore } from './store/fileSystemStore';
+import { useAIContextStore } from './store/aiContextStore';
 import type { EvalResult } from './engine';
 import type { EquationSolveOutput } from './engine';
 
@@ -107,6 +108,39 @@ describe('buildContextMessage', () => {
     expect(text).toContain('另有 3 条未列出');
     expect(text).toContain(`共 ${CONTEXT_LIMITS.variableCount + 2} 个`);
     expect(text).toContain('另有 2 个未列出');
+  });
+
+  it('模块摘要（pipeline/solver/linalg/control）序列化并注入上下文', () => {
+    const snap: WorkspaceSnapshot = {
+      ...EMPTY_SNAPSHOT,
+      solver: { tab: 'equation', equation: 'x^2-1=0' },
+      pipeline: { nodes: [{ id: 'n1', type: 'edge-detect', config: { lowThreshold: 30 } }], edgeCount: 1 },
+      linalg: { matrices: [{ name: 'A', data: [[1, 0], [0, 1]] }], selectedName: 'A' },
+      control: { pid: { kp: 1, ki: 0, kd: 0 } },
+    };
+    const text = buildContextMessage(snap);
+    expect(text).toContain('求解器');
+    expect(text).toContain('x^2-1=0');
+    expect(text).toContain('蓝图节点图');
+    expect(text).toContain('edge-detect');
+    expect(text).toContain('线性代数矩阵');
+    expect(text).toContain('selectedName');
+    expect(text).toContain('控制理论');
+  });
+
+  it('超长模块摘要按预算截断并标注', () => {
+    const snap: WorkspaceSnapshot = {
+      ...EMPTY_SNAPSHOT,
+      solver: { equation: 'x'.repeat(CONTEXT_LIMITS.moduleSummaryChars + 200) },
+    };
+    const text = buildContextMessage(snap);
+    expect(text).toContain('已截断');
+    expect(text).not.toContain('x'.repeat(CONTEXT_LIMITS.moduleSummaryChars + 200));
+  });
+
+  it('缺失模块摘要时上下文不报错', () => {
+    const text = buildContextMessage(EMPTY_SNAPSHOT);
+    expect(text).not.toContain('求解器（当前状态');
   });
 });
 
@@ -351,6 +385,219 @@ describe('dispatchTool', () => {
       expect(r.content.length).toBeLessThan(5000);
     });
   });
+
+  describe('configure_node', () => {
+    it('成功：调用 configureNode 并透传消息', async () => {
+      const configureNode = vi.fn().mockReturnValue({ ok: true, message: '已更新节点' });
+      const r = await dispatchTool(
+        'configure_node',
+        JSON.stringify({ nodeId: 'ed-1', configPatch: { lowThreshold: 60, highThreshold: 120 } }),
+        makeDeps({ configureNode }),
+      );
+      expect(configureNode).toHaveBeenCalledWith('ed-1', { lowThreshold: 60, highThreshold: 120 });
+      expect(r).toEqual({ ok: true, content: '已更新节点' });
+    });
+
+    it('清洗补丁：丢弃 NaN/Infinity 与非基础类型字段', async () => {
+      const configureNode = vi.fn().mockReturnValue({ ok: true, message: 'ok' });
+      await dispatchTool(
+        'configure_node',
+        JSON.stringify({
+          nodeId: 'ed-1',
+          configPatch: { lowThreshold: 60, bad: NaN, arr: [1], obj: { x: 1 } },
+        }),
+        makeDeps({ configureNode }),
+      );
+      expect(configureNode).toHaveBeenCalledWith('ed-1', { lowThreshold: 60 });
+    });
+
+    it('configPatch 非对象 → 失败', async () => {
+      const configureNode = vi.fn();
+      const r = await dispatchTool(
+        'configure_node',
+        JSON.stringify({ nodeId: 'ed-1', configPatch: [1, 2] }),
+        makeDeps({ configureNode }),
+      );
+      expect(r.ok).toBe(false);
+      expect(r.content).toContain('configPatch');
+      expect(configureNode).not.toHaveBeenCalled();
+    });
+
+    it('缺少 nodeId → 失败', async () => {
+      const r = await dispatchTool('configure_node', '{}', makeDeps());
+      expect(r.ok).toBe(false);
+      expect(r.content).toContain('nodeId');
+    });
+
+    it('依赖未提供 → 环境不可用', async () => {
+      const r = await dispatchTool(
+        'configure_node',
+        JSON.stringify({ nodeId: 'ed-1', configPatch: { a: 1 } }),
+        makeDeps(),
+      );
+      expect(r.ok).toBe(false);
+      expect(r.content).toContain('该操作当前环境不可用');
+    });
+  });
+
+  describe('apply_matrix', () => {
+    it('成功：调用 applyMatrix 并透传消息', async () => {
+      const applyMatrix = vi.fn().mockReturnValue({ ok: true, message: '已设置矩阵' });
+      const r = await dispatchTool(
+        'apply_matrix',
+        JSON.stringify({ matrix: [[0, -1], [1, 0]], dim: 2 }),
+        makeDeps({ applyMatrix }),
+      );
+      expect(applyMatrix).toHaveBeenCalledWith([[0, -1], [1, 0]], 2);
+      expect(r).toEqual({ ok: true, content: '已设置矩阵' });
+    });
+
+    it('清洗矩阵：NaN/Infinity 归零，非数字转数字', async () => {
+      const applyMatrix = vi.fn().mockReturnValue({ ok: true, message: 'ok' });
+      await dispatchTool(
+        'apply_matrix',
+        JSON.stringify({ matrix: [[NaN, Infinity], ['2', -3]] }),
+        makeDeps({ applyMatrix }),
+      );
+      expect(applyMatrix).toHaveBeenCalledWith([[0, 0], [2, -3]], 2);
+    });
+
+    it('非二维数组 → 失败', async () => {
+      const applyMatrix = vi.fn();
+      const r = await dispatchTool('apply_matrix', JSON.stringify({ matrix: [1, 2, 3] }), makeDeps({ applyMatrix }));
+      expect(r.ok).toBe(false);
+      expect(r.content).toContain('matrix');
+      expect(applyMatrix).not.toHaveBeenCalled();
+    });
+
+    it('依赖未提供 → 环境不可用', async () => {
+      const r = await dispatchTool('apply_matrix', JSON.stringify({ matrix: [[1, 0], [0, 1]] }), makeDeps());
+      expect(r.ok).toBe(false);
+      expect(r.content).toContain('该操作当前环境不可用');
+    });
+  });
+
+  describe('configure_solver', () => {
+    it('成功：调用 configureSolver 并透传消息', async () => {
+      const configureSolver = vi.fn().mockReturnValue({ ok: true, message: '已设置求解器' });
+      const r = await dispatchTool(
+        'configure_solver',
+        JSON.stringify({ tab: 'equation', patch: { equation: 'x^2-1=0' } }),
+        makeDeps({ configureSolver }),
+      );
+      expect(configureSolver).toHaveBeenCalledWith('equation', { equation: 'x^2-1=0' });
+      expect(r).toEqual({ ok: true, content: '已设置求解器' });
+    });
+
+    it('非法 tab → 失败', async () => {
+      const configureSolver = vi.fn();
+      const r = await dispatchTool(
+        'configure_solver',
+        JSON.stringify({ tab: 'bogus', patch: {} }),
+        makeDeps({ configureSolver }),
+      );
+      expect(r.ok).toBe(false);
+      expect(r.content).toContain('tab');
+      expect(configureSolver).not.toHaveBeenCalled();
+    });
+
+    it('patch 非对象 → 失败', async () => {
+      const configureSolver = vi.fn();
+      const r = await dispatchTool(
+        'configure_solver',
+        JSON.stringify({ tab: 'equation', patch: 'x' }),
+        makeDeps({ configureSolver }),
+      );
+      expect(r.ok).toBe(false);
+      expect(r.content).toContain('patch');
+    });
+
+    it('依赖未提供 → 环境不可用', async () => {
+      const r = await dispatchTool('configure_solver', JSON.stringify({ tab: 'limit', patch: {} }), makeDeps());
+      expect(r.ok).toBe(false);
+      expect(r.content).toContain('该操作当前环境不可用');
+    });
+  });
+
+  describe('set_editor_content', () => {
+    it('replace 模式：调用 setEditorContent(content, "replace")', async () => {
+      const setEditorContent = vi.fn().mockReturnValue({ ok: true, message: '已覆写' });
+      const r = await dispatchTool(
+        'set_editor_content',
+        JSON.stringify({ content: 'a = 1', mode: 'replace' }),
+        makeDeps({ setEditorContent }),
+      );
+      expect(setEditorContent).toHaveBeenCalledWith('a = 1', 'replace');
+      expect(r).toEqual({ ok: true, content: '已覆写' });
+    });
+
+    it('append 模式：调用 setEditorContent(content, "append")', async () => {
+      const setEditorContent = vi.fn().mockReturnValue({ ok: true, message: '已追加' });
+      await dispatchTool('set_editor_content', JSON.stringify({ content: 'b = 2', mode: 'append' }), makeDeps({ setEditorContent }));
+      expect(setEditorContent).toHaveBeenCalledWith('b = 2', 'append');
+    });
+
+    it('缺省 mode 默认 replace', async () => {
+      const setEditorContent = vi.fn().mockReturnValue({ ok: true, message: 'ok' });
+      await dispatchTool('set_editor_content', JSON.stringify({ content: 'c = 3' }), makeDeps({ setEditorContent }));
+      expect(setEditorContent).toHaveBeenCalledWith('c = 3', 'replace');
+    });
+
+    it('content 非字符串 → 失败', async () => {
+      const setEditorContent = vi.fn();
+      const r = await dispatchTool('set_editor_content', JSON.stringify({ content: 42 }), makeDeps({ setEditorContent }));
+      expect(r.ok).toBe(false);
+      expect(r.content).toContain('content');
+      expect(setEditorContent).not.toHaveBeenCalled();
+    });
+
+    it('依赖未提供 → 环境不可用', async () => {
+      const r = await dispatchTool('set_editor_content', JSON.stringify({ content: 'x' }), makeDeps());
+      expect(r.ok).toBe(false);
+      expect(r.content).toContain('该操作当前环境不可用');
+    });
+  });
+
+  describe('build_pipeline', () => {
+    it('调用 buildPipeline 并把节点规格透传', async () => {
+      const buildPipeline = vi.fn().mockReturnValue({ ok: true, message: '已搭建 3 个节点' });
+      const spec = {
+        nodes: [{ type: 'image-input' }, { type: 'edge-detect', config: { lowThreshold: 60 } }, { type: 'plot-curves' }],
+        edges: [{ from: 0, to: 1 }],
+        clearExisting: false,
+      };
+      const r = await dispatchTool('build_pipeline', JSON.stringify(spec), makeDeps({ buildPipeline }));
+      expect(buildPipeline).toHaveBeenCalledTimes(1);
+      expect(buildPipeline.mock.calls[0][0]).toEqual(spec);
+      expect(r).toEqual({ ok: true, content: '已搭建 3 个节点' });
+    });
+
+    it('缺省 clearExisting → true，缺省 edges → undefined', async () => {
+      const buildPipeline = vi.fn().mockReturnValue({ ok: true, message: 'ok' });
+      await dispatchTool(
+        'build_pipeline',
+        JSON.stringify({ nodes: [{ type: 'number-input' }] }),
+        makeDeps({ buildPipeline }),
+      );
+      const arg = buildPipeline.mock.calls[0][0];
+      expect(arg.clearExisting).toBe(true);
+      expect(arg.edges).toBeUndefined();
+    });
+
+    it('nodes 为空/缺失 → 失败', async () => {
+      const buildPipeline = vi.fn();
+      const r = await dispatchTool('build_pipeline', JSON.stringify({ nodes: [] }), makeDeps({ buildPipeline }));
+      expect(r.ok).toBe(false);
+      expect(r.content).toContain('nodes');
+      expect(buildPipeline).not.toHaveBeenCalled();
+    });
+
+    it('依赖未提供 → 环境不可用', async () => {
+      const r = await dispatchTool('build_pipeline', JSON.stringify({ nodes: [{ type: 'number-input' }] }), makeDeps());
+      expect(r.ok).toBe(false);
+      expect(r.content).toContain('该操作当前环境不可用');
+    });
+  });
 });
 
 /* ------------------------------------------------------------------ */
@@ -419,13 +666,32 @@ describe('collectWorkspaceSnapshot', () => {
     expect(collectWorkspaceSnapshot().activeFile).toBeNull();
   });
 
-  it('工具清单包含四个工作台工具', () => {
+  it('集成 aiContextStore：pipeline/solver/linalg/control 摘要并入快照', () => {
+    useAIContextStore.setState({
+      solver: { tab: 'equation', equation: 'x^2=4' },
+      linalg: { matrices: [{ name: 'A', data: [[1, 0], [0, 1]] }], selectedName: 'A' },
+      pipeline: { nodes: [{ id: 'n1', type: 'edge-detect', config: {} }], edgeCount: 0 },
+      control: { pid: { kp: 1 } },
+    });
+    const snap = collectWorkspaceSnapshot();
+    expect(snap.solver).toEqual({ tab: 'equation', equation: 'x^2=4' });
+    expect((snap.linalg as { matrices?: unknown[] } | undefined)?.matrices).toHaveLength(1);
+    expect(snap.pipeline).toHaveProperty('nodes');
+    expect(snap.control).toEqual({ pid: { kp: 1 } });
+  });
+
+  it('工具清单包含全部工作台工具（4 基础 + 5 深度集成）', () => {
     const names = WORKBENCH_TOOLS.map((t) => t.function.name);
     expect(names).toEqual([
       'evaluate_expression',
       'solve_equation',
       'plot_function',
       'get_workspace_state',
+      'configure_node',
+      'apply_matrix',
+      'configure_solver',
+      'set_editor_content',
+      'build_pipeline',
     ]);
     for (const tool of WORKBENCH_TOOLS) {
       expect(tool.type).toBe('function');

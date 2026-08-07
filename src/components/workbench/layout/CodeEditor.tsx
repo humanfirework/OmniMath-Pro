@@ -179,6 +179,9 @@ export function CodeEditor({
       fontVariantNumeric: 'tabular-nums',
       fontFeatureSettings: '"tnum"',
       boxSizing: 'border-box',
+      // 代码行用 line-height 1.5（半行距使字形比几何中心略高），而行号是被
+      // flex 精确居中的。为让行号字形与代码基线对齐，把行号微移 1px 上浮。
+      transform: 'translateY(-1px)',
     },
     // Active-line gutter highlight. We want the gutter cell to look like a
     // continuation of the content active-line band. The gutter element's
@@ -186,9 +189,9 @@ export function CodeEditor({
     // the background will align as long as we do not add vertical padding or
     // border-radius that changes its visible extent.
     '.cm-activeLineGutter': {
-      backgroundColor: 'rgba(45, 212, 191, 0.18)',
+      backgroundColor: 'rgba(45, 212, 191, 0.26)',
       color: 'var(--primary, #2dd4bf)',
-      fontWeight: '600',
+      fontWeight: '700',
       // Ensure the highlight fills the full cell, not just the content box,
       // so it never looks shorter than the active content line.
       boxSizing: 'border-box',
@@ -198,7 +201,7 @@ export function CodeEditor({
     // (the line/gutter element height) and no border-radius so the two
     // bands line up perfectly.
     '.cm-activeLine': {
-      backgroundColor: 'rgba(45, 212, 191, 0.14)',
+      backgroundColor: 'rgba(45, 212, 191, 0.16)',
     },
     '.cm-foldPlaceholder': {
       backgroundColor: 'rgba(45, 212, 191, 0.1)',

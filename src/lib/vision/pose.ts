@@ -16,6 +16,8 @@
  */
 import type { BezierPath, BezierSegment, Point } from './types';
 import type { FrameSequence } from './video';
+import { downsampleVideoFrame } from './video';
+import { throttleFrames } from './videoToCurves';
 
 /* ------------------------------------------------------------------ *
  * 类型
@@ -223,18 +225,33 @@ export function resetPoseLandmarker(): void {
  * MediaPipe PoseLandmarker IMAGE 模式接受单张图像；这里逐帧调用
  * `detect()`，收集 33 个关键点。
  *
+ * 性能保护（避免每帧全分辨率逐帧重算拖垮主线程）：
+ *   - `maxFrames`：先对帧序列节流到至多该帧数（等间距采样），
+ *     超长视频不再逐帧跑姿态检测。
+ *   - `maxDimension`：对每帧先降采样到长边 ≤ 该值再送入模型。
+ *     姿态关键点是归一化坐标 [0,1]，降采样不改变输出定位，仅降低
+ *     MediaPipe 的输入计算量。
+ *
  * 失败处理：若 getPoseLandmarker 抛错，本函数直接 re-throw（调用方降级）。
  */
-export async function detectPoses(frames: FrameSequence): Promise<PoseSequence> {
+export async function detectPoses(
+  frames: FrameSequence,
+  options?: { maxFrames?: number; maxDimension?: number },
+): Promise<PoseSequence> {
   const landmarker = (await getPoseLandmarker()) as {
     detect: (image: { data: Uint8ClampedArray; width: number; height: number }) => {
       landmarks?: PoseLandmark[][];
     };
   };
 
+  const maxFrames = Math.max(1, Math.floor(options?.maxFrames ?? Infinity));
+  const maxDimension = Math.max(0, Math.floor(options?.maxDimension ?? 0));
+  const frameList = throttleFrames(frames.frames, maxFrames);
+
   const poseFrames: PoseFrame[] = [];
-  for (const f of frames.frames) {
-    const result = landmarker.detect(f.imageData);
+  for (const f of frameList) {
+    const input = maxDimension > 0 ? downsampleVideoFrame(f.imageData, maxDimension) : f.imageData;
+    const result = landmarker.detect(input);
     const lms = result?.landmarks?.[0] ?? [];
     poseFrames.push({
       landmarks: lms,

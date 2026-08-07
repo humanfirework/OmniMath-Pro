@@ -25,7 +25,7 @@
  * 步骤渲染复用 SolverStepsView（法则标签 + 步骤编号）。
  */
 
-import { useState, type ReactNode } from 'react';
+import { useState, useEffect, type ReactNode } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
   FunctionSquare,
@@ -64,6 +64,8 @@ import {
 import { FormulaRenderer } from '@/components/workbench/FormulaRenderer';
 import { SolverStepsView } from '@/components/workbench/panels/SolverStepsView';
 import { GaussianEliminationView } from '@/components/workbench/panels/GaussianEliminationView';
+import { AiPromptInput } from '@/components/workbench/ai/AiPromptInput';
+import { useAIContextStore } from '@/lib/store/aiContextStore';
 import { useWorkbenchStore } from '@/lib/store/workbench';
 import {
   solveEquation,
@@ -303,6 +305,37 @@ function EquationSection() {
   const [error, setError] = useState<string | null>(null);
   const [working, setWorking] = useState(false);
 
+  // M2 — 把当前求解器输入同步到 AI 读取上下文 store。
+  useEffect(() => {
+    useAIContextStore.getState().setSolver({
+      tab: 'equation',
+      equation,
+      varName,
+      rangeA,
+      rangeB,
+      solveMode,
+      resultSummary: result ? `${result.kind}: ${result.latex}` : null,
+    });
+  }, [equation, varName, rangeA, rangeB, solveMode, result]);
+
+  // M2 — 接收 configure_solver(tab=equation) 指令，白名单过滤后写入本地 setter。
+  useEffect(() => {
+    const handler = (e: Event) => {
+      const d = (e as CustomEvent<{ tab?: unknown; patch?: unknown }>).detail;
+      if (!d || d.tab !== 'equation') return;
+      const p = d.patch;
+      if (!p || typeof p !== 'object' || Array.isArray(p)) return;
+      const patch = p as Record<string, unknown>;
+      if (typeof patch.equation === 'string') setEquation(patch.equation.slice(0, 500));
+      if (typeof patch.varName === 'string' && patch.varName.trim()) setVarName(patch.varName.trim().slice(0, 8));
+      if (typeof patch.rangeA === 'number' && Number.isFinite(patch.rangeA)) setRangeA(patch.rangeA);
+      if (typeof patch.rangeB === 'number' && Number.isFinite(patch.rangeB)) setRangeB(patch.rangeB);
+      if (patch.solveMode === 'numeric' || patch.solveMode === 'symbolic') setSolveMode(patch.solveMode);
+    };
+    window.addEventListener('omnimath:solver-config', handler);
+    return () => window.removeEventListener('omnimath:solver-config', handler);
+  }, []);
+
   const handleSolve = async () => {
     setWorking(true);
     setError(null);
@@ -411,6 +444,12 @@ function EquationSection() {
           <div className="text-[11px] text-muted-foreground mb-1">{t('solverExamples')}</div>
           <ExamplesDropdown groups={equationExamples} displayValue={equation} onPick={setEquation} />
         </div>
+        {/* M2 — 求解器就地 AI 输入：把当前方程与范围打包发给 AI。 */}
+        <AiPromptInput
+          module="solver"
+          context={`tab=equation\n方程:${equation}\n变量:${varName}\n范围:[${rangeA}, ${rangeB}]\n模式:${solveMode}`}
+          placeholder="设方程、调范围或解释求解…"
+        />
       </div>
 
       {/* 结果区 */}
@@ -502,6 +541,28 @@ function SystemSection() {
   const [nonlinearSteps, setNonlinearSteps] = useState<string[] | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [working, setWorking] = useState(false);
+
+  // M2 — 同步方程组摘要 + 接收 configure_solver(tab=system)。
+  useEffect(() => {
+    useAIContextStore.getState().setSolver({
+      tab: 'system',
+      text,
+      solutionSummary: solution ? solution.latex.slice(0, 200) : null,
+    });
+  }, [text, solution]);
+
+  useEffect(() => {
+    const handler = (e: Event) => {
+      const d = (e as CustomEvent<{ tab?: unknown; patch?: unknown }>).detail;
+      if (!d || d.tab !== 'system') return;
+      const p = d.patch;
+      if (!p || typeof p !== 'object' || Array.isArray(p)) return;
+      const patch = p as Record<string, unknown>;
+      if (typeof patch.text === 'string') setText(patch.text.slice(0, 2000));
+    };
+    window.addEventListener('omnimath:solver-config', handler);
+    return () => window.removeEventListener('omnimath:solver-config', handler);
+  }, []);
 
   const handleSolve = async () => {
     setWorking(true);
@@ -655,6 +716,32 @@ function DerivativeSection() {
   } | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [working, setWorking] = useState(false);
+
+  // M2 — 同步求导摘要 + 接收 configure_solver(tab=derivative)。
+  useEffect(() => {
+    useAIContextStore.getState().setSolver({
+      tab: 'derivative',
+      expr,
+      varName,
+      order,
+      resultSummary: result ? result.resultString.slice(0, 200) : null,
+    });
+  }, [expr, varName, order, result]);
+
+  useEffect(() => {
+    const handler = (e: Event) => {
+      const d = (e as CustomEvent<{ tab?: unknown; patch?: unknown }>).detail;
+      if (!d || d.tab !== 'derivative') return;
+      const p = d.patch;
+      if (!p || typeof p !== 'object' || Array.isArray(p)) return;
+      const patch = p as Record<string, unknown>;
+      if (typeof patch.expr === 'string') setExpr(patch.expr.slice(0, 500));
+      if (typeof patch.varName === 'string' && patch.varName.trim()) setVarName(patch.varName.trim().slice(0, 8));
+      if (patch.order === 1 || patch.order === 2 || patch.order === 3) setOrder(patch.order);
+    };
+    window.addEventListener('omnimath:solver-config', handler);
+    return () => window.removeEventListener('omnimath:solver-config', handler);
+  }, []);
 
   const handleSolve = () => {
     setWorking(true);
@@ -818,6 +905,36 @@ function IntegralSection() {
   const [result, setResult] = useState<(SymbolicResult & { numerical?: number }) | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [working, setWorking] = useState(false);
+
+  // M2 — 同步积分摘要 + 接收 configure_solver(tab=integral)。
+  useEffect(() => {
+    useAIContextStore.getState().setSolver({
+      tab: 'integral',
+      expr,
+      varName,
+      definite,
+      lower,
+      upper,
+      resultSummary: result ? result.latex.slice(0, 200) : null,
+    });
+  }, [expr, varName, definite, lower, upper, result]);
+
+  useEffect(() => {
+    const handler = (e: Event) => {
+      const d = (e as CustomEvent<{ tab?: unknown; patch?: unknown }>).detail;
+      if (!d || d.tab !== 'integral') return;
+      const p = d.patch;
+      if (!p || typeof p !== 'object' || Array.isArray(p)) return;
+      const patch = p as Record<string, unknown>;
+      if (typeof patch.expr === 'string') setExpr(patch.expr.slice(0, 500));
+      if (typeof patch.varName === 'string' && patch.varName.trim()) setVarName(patch.varName.trim().slice(0, 8));
+      if (typeof patch.definite === 'boolean') setDefinite(patch.definite);
+      if (typeof patch.lower === 'number' && Number.isFinite(patch.lower)) setLower(patch.lower);
+      if (typeof patch.upper === 'number' && Number.isFinite(patch.upper)) setUpper(patch.upper);
+    };
+    window.addEventListener('omnimath:solver-config', handler);
+    return () => window.removeEventListener('omnimath:solver-config', handler);
+  }, []);
 
   const handleSolve = async () => {
     setWorking(true);
@@ -1004,6 +1121,34 @@ function LimitSection() {
   const [result, setResult] = useState<(SymbolicResult & { numerical?: number }) | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [working, setWorking] = useState(false);
+
+  // M2 — 同步极限摘要 + 接收 configure_solver(tab=limit)。
+  useEffect(() => {
+    useAIContextStore.getState().setSolver({
+      tab: 'limit',
+      expr,
+      varName,
+      point: pointText,
+      resultSummary: result ? result.latex.slice(0, 200) : null,
+    });
+  }, [expr, varName, pointText, result]);
+
+  useEffect(() => {
+    const handler = (e: Event) => {
+      const d = (e as CustomEvent<{ tab?: unknown; patch?: unknown }>).detail;
+      if (!d || d.tab !== 'limit') return;
+      const p = d.patch;
+      if (!p || typeof p !== 'object' || Array.isArray(p)) return;
+      const patch = p as Record<string, unknown>;
+      if (typeof patch.expr === 'string') setExpr(patch.expr.slice(0, 500));
+      if (typeof patch.varName === 'string' && patch.varName.trim()) setVarName(patch.varName.trim().slice(0, 8));
+      if (typeof patch.point === 'string') setPointText(patch.point.slice(0, 16));
+      else if (typeof patch.point === 'number' && Number.isFinite(patch.point)) setPointText(String(patch.point));
+      else if (patch.approach === 'string') setPointText(patch.approach.slice(0, 16));
+    };
+    window.addEventListener('omnimath:solver-config', handler);
+    return () => window.removeEventListener('omnimath:solver-config', handler);
+  }, []);
 
   const handleSolve = async () => {
     setWorking(true);

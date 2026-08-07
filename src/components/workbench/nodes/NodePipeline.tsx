@@ -104,6 +104,20 @@ import {
   Clock3,
   FastForward,
   Bug,
+  ChevronDown,
+  ChevronRight,
+  Loader2,
+  Volume2,
+  VolumeX,
+  Boxes,
+  Ungroup,
+  Map as MapIcon,
+  CircleDot,
+  GitBranch,
+  GitFork,
+  Crosshair,
+  Zap,
+  SquareRadical,
   type LucideIcon,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
@@ -134,6 +148,11 @@ import { t } from '@/lib/i18n';
 import type { TranslationDict } from '@/lib/i18n';
 import { toast } from 'sonner';
 import { useWorkbenchStore, type PreviewTab } from '@/lib/store/workbench';
+import { useRunResultsStore, type RunCurve } from '@/lib/store/runResultsStore';
+import { useAIContextStore } from '@/lib/store/aiContextStore';
+import { AiPromptInput } from '@/components/workbench/ai/AiPromptInput';
+import { RunResultsHost } from '../runresults/RunResultsHost';
+import type { BezierPathData, BezierSegmentData } from '../plots/Plot2DCanvas';
 import {
   NODE_TYPES,
   NODE_WIDTH,
@@ -154,9 +173,14 @@ import {
   type PortDef,
   type PortDataType,
   type NodeConfigField,
+  type NodeTypeDef,
 } from './pipelineEngine';
 import { runSimulation, isSimulationNode, type SimSeries } from './simulationEngine';
 import { PIPELINE_TEMPLATES, loadTemplate } from './pipelineTemplates';
+import { PALETTE_GROUPS, DEFAULT_EXPANDED_CATEGORIES } from './paletteGroups';
+import { normalizeRect, selectNodesInBox } from './nodeSelection';
+import { Minimap } from './Minimap';
+import { GroupFrameLayer } from './GroupFrameLayer';
 import {
   PortPositionsProvider,
   usePortPositions,
@@ -165,6 +189,131 @@ import {
 } from './DomMeasuredNode';
 import { EdgeRenderer } from './EdgeRenderer';
 import { MathRender } from './MathRender';
+
+/* ------------------------------------------------------------------ *
+ * 动画帧归一化：把 curve-animate 输出的逐帧 BezierPath[] 拍平成
+ * [x, y] 折线（像素坐标，应用 Y 翻转以便数学坐标显示）。
+ * ------------------------------------------------------------------ */
+function normalizeFramePoints(frame: unknown, height: number): Array<[number, number]> {
+  if (!Array.isArray(frame)) return [];
+  const out: Array<[number, number]> = [];
+  for (const item of frame) {
+    if (!item || typeof item !== 'object') continue;
+    const p = item as { segments?: BezierSegmentData[] };
+    if (Array.isArray(p.segments)) {
+      for (const pt of flattenSegmentsSafe(p.segments)) {
+        out.push([pt[0], height > 0 ? height - pt[1] : pt[1]]);
+      }
+    }
+  }
+  return out;
+}
+
+function flattenSegmentsSafe(segments: BezierSegmentData[]): Array<[number, number]> {
+  const out: Array<[number, number]> = [];
+  let last: [number, number] | null = null;
+  for (const seg of segments) {
+    if ('cmd' in seg) {
+      if (seg.cmd === 'moveTo') { if (seg.pts[0]) { out.push(seg.pts[0]); last = seg.pts[0]; } }
+      else if (seg.cmd === 'lineTo') { for (const p of seg.pts) { out.push(p); last = p; } }
+      else if (seg.cmd === 'quadTo' && seg.pts.length >= 2) {
+        const [c, end] = seg.pts;
+        if (last) out.push(...sampleQuadPts(last, c, end));
+        last = end;
+      } else if (seg.cmd === 'cubicTo' && seg.pts.length >= 3) {
+        const [c1, c2, end] = seg.pts;
+        if (last) out.push(...sampleCubicPts(last, c1, c2, end));
+        last = end;
+      }
+    } else {
+      const p0 = toXY2(seg.p0), c1 = toXY2(seg.c1), c2 = toXY2(seg.c2), p1 = toXY2(seg.p1);
+      out.push(...sampleCubicPts(p0, c1, c2, p1));
+      last = p1;
+    }
+  }
+  return out;
+}
+
+function toXY2(p: { x: number; y: number } | [number, number]): [number, number] {
+  return Array.isArray(p) ? [p[0], p[1]] : [p.x, p.y];
+}
+function sampleQuadPts(p0: [number, number], c: [number, number], p1: [number, number], steps = 8): Array<[number, number]> {
+  const o: Array<[number, number]> = [];
+  for (let i = 1; i <= steps; i++) { const t = i / steps, mt = 1 - t; o.push([mt * mt * p0[0] + 2 * mt * t * c[0] + t * t * p1[0], mt * mt * p0[1] + 2 * mt * t * c[1] + t * t * p1[1]]); }
+  return o;
+}
+function sampleCubicPts(p0: [number, number], c1: [number, number], c2: [number, number], p1: [number, number], steps = 12): Array<[number, number]> {
+  const o: Array<[number, number]> = [];
+  for (let i = 1; i <= steps; i++) {
+    const t = i / steps, mt = 1 - t;
+    const a = mt * mt * mt, b = 3 * mt * mt * t, c = 3 * mt * t * t, d = t * t * t;
+    o.push([a * p0[0] + b * c1[0] + c * c2[0] + d * p1[0], a * p0[1] + b * c1[1] + c * c2[1] + d * p1[1]]);
+  }
+  return o;
+}
+
+/** 节点显示名（取自节点类型注册表的多语言 label）。 */
+function nodeTitle(n: PipelineNode): string {
+  const def = NODE_TYPES[n.type];
+  return def?.labelKey ? t(def.labelKey) : n.type;
+}
+
+/**
+ * 把「传递函数分析」节点（sim-transfer-fn）的分析结果推送到独立结果面板：
+ *  - 阶跃响应 → 一个 plot 面板（y(t) vs t）
+ *  - 伯德图   → 一个 plot 面板（幅值 dB + 相位°，频率轴为对数刻度值）
+ * `add` 是 runResultsStore 的 addRunResult。
+ */
+function pushTransferResults(
+  nodes: PipelineNode[],
+  add: (panel: Omit<import('@/lib/store/runResultsStore').RunResultPanel, 'id' | 'createdAt'>) => unknown,
+): void {
+  for (const n of nodes) {
+    if (n.type !== 'sim-transfer-fn') continue;
+    const analysis = n.outputs?.analysis as
+      | { step?: { t: number; y: number }[]; bode?: { f: number; db: number; phaseDeg: number }[] }
+      | undefined;
+    if (!analysis) continue;
+    const title = nodeTitle(n);
+
+    if (Array.isArray(analysis.step) && analysis.step.length >= 2) {
+      add({
+        title: `${title} · 阶跃响应`,
+        kind: 'plot',
+        curves: [{
+          id: `${n.id}_step`,
+          label: 'y(t)',
+          color: '#4ade80',
+          width: 2,
+          points: analysis.step.map((p) => [p.t, p.y] as [number, number]),
+        }],
+      });
+    }
+
+    if (Array.isArray(analysis.bode) && analysis.bode.length >= 2) {
+      add({
+        title: `${title} · 伯德图`,
+        kind: 'plot',
+        curves: [
+          {
+            id: `${n.id}_mag`,
+            label: '幅值 (dB)',
+            color: '#a78bfa',
+            width: 2,
+            points: analysis.bode.map((p) => [p.f, p.db] as [number, number]),
+          },
+          {
+            id: `${n.id}_phase`,
+            label: '相位 (°)',
+            color: '#f59e0b',
+            width: 2,
+            points: analysis.bode.map((p) => [p.f, p.phaseDeg] as [number, number]),
+          },
+        ],
+      });
+    }
+  }
+}
 
 /* ------------------------------------------------------------------ *
  * Icon map — node type → lucide component
@@ -183,6 +332,7 @@ const ICONS: Record<string, LucideIcon> = {
   Scale, ScanLine, Shrink, Spline, ToggleLeft, TrendingUp,
   Triangle, Video, Waves,
   Timer, TimerReset, ArrowUpRight,
+  CircleDot, GitBranch, GitFork, Crosshair, Zap, SquareRadical,
 };
 
 /* ------------------------------------------------------------------ *
@@ -203,6 +353,7 @@ const CATEGORY_COLOR: Record<NodeCategory, { stripe: string; text: string; bg: s
   logic:      { stripe: 'bg-slate-500',    text: 'text-slate-500',    bg: 'bg-slate-500/10' },
   vision:     { stripe: 'bg-fuchsia-600',  text: 'text-fuchsia-600',  bg: 'bg-fuchsia-600/10' },
   simulation: { stripe: 'bg-violet-600',   text: 'text-violet-600',   bg: 'bg-violet-600/10' },
+  control:    { stripe: 'bg-rose-600',     text: 'text-rose-600',     bg: 'bg-rose-600/10' },
 };
 
 const CATEGORY_LABEL_KEY: Record<NodeCategory, keyof TranslationDict> = {
@@ -220,6 +371,7 @@ const CATEGORY_LABEL_KEY: Record<NodeCategory, keyof TranslationDict> = {
   logic:      'npCategoryLogic',
   vision:     'npCategoryVision',
   simulation: 'npCategorySimulation',
+  control:    'npCategoryControl',
 };
 
 /* ------------------------------------------------------------------ *
@@ -239,6 +391,20 @@ const PORT_TYPE_STYLE: Record<PortDataType, { border: string; bg: string }> = {
   animation:  { border: 'oklch(0.72 0.13 195)', bg: 'oklch(0.72 0.13 195 / 0.35)' },
   plot:       { border: 'oklch(0.7 0.15 220)',  bg: 'oklch(0.7 0.15 220 / 0.35)' },
   any:        { border: 'oklch(0.65 0 0)',      bg: 'oklch(0.65 0 0 / 0.35)' },
+};
+
+// 端口类型图标 —— 让「数据是什么」不只靠颜色，还靠形状（类 Unreal 数据线/执行线）。
+// 与 PORT_TYPE_STYLE 一一对应。
+const PORT_TYPE_ICON: Record<PortDataType, LucideIcon> = {
+  number:     Hash,
+  expression: FunctionSquare,
+  matrix:     Grid3x3,
+  curve:      Spline,
+  curves:     Spline,
+  image:      Image,
+  animation:  Film,
+  plot:       LineChart,
+  any:        Dot,
 };
 
 /* ------------------------------------------------------------------ *
@@ -386,6 +552,13 @@ function createNode(type: NodeType, x: number, y: number): PipelineNode {
  */
 const APPROX_NODE_H = 130;
 
+/** 模板分组顺序与标签（category 缺省视为 math）。 */
+const TEMPLATE_GROUPS: { key: string; label: string }[] = [
+  { key: 'math', label: '数学 / 计算' },
+  { key: 'vision', label: '视觉 / 曲线' },
+  { key: 'simulation', label: '仿真 / 控制' },
+];
+
 /**
  * Compute a viewport transform that fits all given nodes inside the
  * canvas (with padding). Returns null if there are no nodes.
@@ -409,6 +582,50 @@ function fitViewFor(
   const x = (canvasSize.w - bboxW * scale) / 2 - minX * scale;
   const y = (canvasSize.h - bboxH * scale) / 2 - minY * scale;
   return { x, y, scale };
+}
+
+/**
+ * 节点去重叠：把发生重叠（矩形相交）的节点依次横向推开，直到互不重叠。
+ * 解决「节点挤在一块看不清」的问题。返回新的位置映射；无重叠时不改动任何节点。
+ * 迭代有限次（最多 8 轮），保证 O(n²) 内收敛，绝不死循环。
+ */
+function spreadOverlappingNodes(
+  nodes: PipelineNode[],
+  opts?: { gap?: number },
+): Record<string, { x: number; y: number }> {
+  const gap = opts?.gap ?? 24;
+  const positions: Record<string, { x: number; y: number }> = {};
+  for (const n of nodes) positions[n.id] = { x: n.position.x, y: n.position.y };
+
+  const rect = (p: { x: number; y: number }) => ({
+    left: p.x,
+    top: p.y,
+    right: p.x + NODE_WIDTH,
+    bottom: p.y + APPROX_NODE_H,
+  });
+  const overlaps = (a: { x: number; y: number }, b: { x: number; y: number }) => {
+    const ra = rect(a);
+    const rb = rect(b);
+    return ra.left < rb.right + gap && rb.left < ra.right + gap && ra.top < rb.bottom + gap && rb.top < ra.bottom + gap;
+  };
+
+  for (let round = 0; round < 8; round++) {
+    let moved = false;
+    for (let i = 0; i < nodes.length; i++) {
+      for (let j = i + 1; j < nodes.length; j++) {
+        const a = positions[nodes[i].id];
+        const b = positions[nodes[j].id];
+        if (!overlaps(a, b)) continue;
+        // 把靠右的节点往右推，给左侧节点留出空间。
+        const pushRight = a.x <= b.x ? b : a;
+        const other = a.x <= b.x ? a : b;
+        pushRight.x = other.x + NODE_WIDTH + gap;
+        moved = true;
+      }
+    }
+    if (!moved) break;
+  }
+  return positions;
 }
 
 /**
@@ -474,11 +691,6 @@ function NodePipelineInner() {
   // DOM-measured port offsets (populated by PortLabel via usePortReporter).
   // Falls back to fixed-constant estimates before measurements arrive.
   const portPositions = usePortPositions();
-  // Mirror to a ref so event-handler callbacks (which only need the value
-  // at event time, not reactively) don't have to list portPositions in
-  // their deps — that would invalidate them on every measurement update.
-  const portPositionsRef = useRef(portPositions);
-  useEffect(() => { portPositionsRef.current = portPositions; }, [portPositions]);
 
   // Pipeline state — lazy-init from localStorage (safe on client).
   // P9: 用 useMemo 把 loadState() 的结果缓存一次，再交给两个 useState
@@ -509,6 +721,26 @@ function NodePipelineInner() {
     scale: 1,
   });
 
+  // ── 关键修复：对齐「测得的屏幕坐标」与「内容坐标」──────────────
+  // usePortReporter 用 getBoundingClientRect() 测量端口相对卡片左上角的偏移，
+  // 该偏移是**屏幕像素**（已受 transform 层的 scale(view.scale) 影响）。
+  // 而节点卡片用 node.position（内容坐标）定位，边线也画在内容坐标里。
+  // 若直接把屏幕像素偏移加进内容坐标，再被 transform 层缩放一次，就会多乘
+  // 一个 view.scale —— 当用户缩放（scale≠1）时连线便与端口「断层」错位。
+  // 因此这里把屏幕偏移换算回内容坐标（偏移 / view.scale），供边与吸附使用。
+  const contentPortPositions = useMemo(() => {
+    if (!portPositions || portPositions.size === 0) return portPositions;
+    const scale = view.scale;
+    if (scale === 1) return portPositions;
+    const m = new Map<string, { x: number; y: number }>();
+    for (const [k, v] of portPositions) {
+      m.set(k, { x: v.x / scale, y: v.y / scale });
+    }
+    return m;
+  }, [portPositions, view.scale]);
+  const contentPortPositionsRef = useRef(contentPortPositions);
+  useEffect(() => { contentPortPositionsRef.current = contentPortPositions; }, [contentPortPositions]);
+
   // Connection drag state.
   const [connecting, setConnecting] = useState<{
     fromNode: string;
@@ -519,6 +751,14 @@ function NodePipelineInner() {
   // Port snapping — when the cursor is near an input port while dragging a
   // connection, we snap the endpoint to the port center and highlight it.
   const [snapTarget, setSnapTarget] = useState<{ nodeId: string; portId: string } | null>(null);
+
+  // P1-4: 边重连拖拽状态。end='from' 表示正在重连源端，'to' 表示目标端。
+  // cursor 为当前拖柄位置（局部坐标），用于绘制 pending 路径。
+  const [reconnect, setReconnect] = useState<{
+    edgeId: string;
+    end: 'from' | 'to';
+    cursor: { x: number; y: number };
+  } | null>(null);
 
   // Marquee box selection — Shift+drag on empty canvas draws a rectangle
   // and selects all nodes whose bbox intersects it. Always additive
@@ -562,8 +802,17 @@ function NodePipelineInner() {
   // 操作提示折叠状态（默认折叠，仅显示图标，点击展开文字）
   const [hintsOpen, setHintsOpen] = useState(false);
 
+  // 小地图显隐（默认显示）。
+  const [minimapOpen, setMinimapOpen] = useState(true);
+
   // Computing pulse — bumps on every execute to trigger node glow.
   const [computeTick, setComputeTick] = useState(0);
+
+  // P2-5: 流水线「运行中」状态 + 逐节点进度（供浮层进度条显示）。
+  const [pipelineRunning, setPipelineRunning] = useState(false);
+  const [runProgress, setRunProgress] = useState<{ done: number; total: number } | null>(null);
+  const runProgressRef = useRef(runProgress);
+  useEffect(() => { runProgressRef.current = runProgress; }, [runProgress]);
 
   // Refs for canvas + content (transform layer).
   const canvasRef = useRef<HTMLDivElement>(null);
@@ -713,14 +962,16 @@ function NodePipelineInner() {
       const originalPolylines = Array.isArray((o as any).originalPolylines)
         ? (o as any).originalPolylines
         : undefined;
+      // P0-3：curve-fit 输出已是「像素→数学」翻转后的数学坐标（数据层单次翻转）。
+      // 2D 画布不得再按 plot-curves 的 flip 配置翻一次，否则点上下颠倒（double flip）。
       store.addCurveSet({
         curves,
         width,
         height,
         color,
         strokeWidth,
-        flipX: !!node.config.flipX,
-        flipY: !!node.config.flipY,
+        flipX: false,
+        flipY: false,
         candidates,
         originalPolylines,
         presetId: 'balanced',
@@ -754,7 +1005,117 @@ function NodePipelineInner() {
     }
   }, []);
 
+  /* ── 独立运行结果面板：把 plot/curve/animation 输出归一化后送入 runResults store ── */
+  const pushRunResults = useCallback((nodes: PipelineNode[], graphEdges: PipelineEdge[] = []) => {
+    const add = useRunResultsStore.getState().addRunResult;
+    // P0-4 图像+轮廓窗：收集 image-input 节点的原图，供 plot-curves 结果叠加背景。
+    const imageInputs = new Map<string, { src: string; width: number; height: number }>();
+    for (const n of nodes) {
+      if (n.type !== 'image-input') continue;
+      const img = n.outputs?.image as { src?: string; width?: number; height?: number } | undefined;
+      const src = n.config?.src as string | undefined;
+      const finalSrc = typeof img?.src === 'string' && img.src ? img.src : src;
+      const width = typeof img?.width === 'number' ? img.width : 0;
+      const height = typeof img?.height === 'number' ? img.height : 0;
+      if (finalSrc && width > 0 && height > 0) imageInputs.set(n.id, { src: finalSrc, width, height });
+    }
+    // 反向 BFS：从目标节点沿边向上游找到最近的 image-input 原图。
+    const findSourceImage = (nodeId: string): { src: string; width: number; height: number } | undefined => {
+      if (imageInputs.has(nodeId)) return imageInputs.get(nodeId);
+      const visited = new Set<string>([nodeId]);
+      const queue = graphEdges.filter((e) => e.to === nodeId).map((e) => e.from);
+      while (queue.length > 0) {
+        const cur = queue.shift()!;
+        if (visited.has(cur)) continue;
+        visited.add(cur);
+        if (imageInputs.has(cur)) return imageInputs.get(cur);
+        const upstream = graphEdges.filter((e) => e.to === cur).map((e) => e.from);
+        queue.push(...upstream);
+      }
+      return undefined;
+    };
+    for (const n of nodes) {
+      if (n.type === 'plot-output' && n.outputs?.plot) {
+        const plot = n.outputs.plot as {
+          expr: string;
+          xMin: number;
+          xMax: number;
+          samples: Array<[number, number]>;
+        };
+        const curves: RunCurve[] = [{
+          id: n.id,
+          label: plot.expr || nodeTitle(n),
+          color: '#a78bfa',
+          width: 2,
+          points: plot.samples ?? [],
+        }];
+        add({ title: plot.expr || nodeTitle(n), kind: 'plot', curves });
+      } else if (n.type === 'plot-curves' && n.outputs?.curves) {
+        const o = n.outputs.curves as Record<string, unknown>;
+        const paths = Array.isArray(o.curves) ? (o.curves as BezierPathData[]) : [];
+        const width = typeof o.width === 'number' ? o.width : 0;
+        const height = typeof o.height === 'number' ? o.height : 0;
+        if (paths.length <= 0 || width <= 0 || height <= 0) continue;
+        const color = typeof n.config.color === 'string' ? n.config.color : '#a78bfa';
+        const strokeWidth = typeof n.config.width === 'number' ? n.config.width : 2;
+        const curves: RunCurve[] = paths
+          .filter((p) => Array.isArray(p.segments) && p.segments.length > 0)
+          .map((p, i) => ({
+            id: `${n.id}_${i}`,
+            color,
+            width: strokeWidth,
+            segments: p.segments,
+            imageW: width,
+            imageH: height,
+            // P0-3：curve-fit 已把控制点翻转为数学坐标，RunCurve 不得再翻一次
+            // （否则渲染层 curveToWorldPoints 二次翻转 → 点颠倒）。此处理为 false。
+            flipX: false,
+            flipY: false,
+          }));
+        if (curves.length > 0) {
+          // P0-4 图像+轮廓窗：把上游 image-input 的原图作为背景叠加到曲线结果上。
+          const srcImage = findSourceImage(n.id);
+          add({
+            title: nodeTitle(n),
+            kind: 'curves',
+            curves,
+            ...(srcImage ? { image: { ...srcImage } } : {}),
+          });
+        }
+      } else if (n.type === 'curve-animate' && n.outputs?.animation) {
+        const anim = n.outputs.animation as
+          | { frames?: unknown[]; width?: number; height?: number; color?: string; strokeWidth?: number; fps?: number }
+          | undefined;
+        if (!anim || !Array.isArray(anim.frames) || anim.frames.length === 0) continue;
+        const frames = anim.frames.filter((f): f is unknown[] => Array.isArray(f));
+        if (frames.length === 0) continue;
+        const width = typeof anim.width === 'number' ? anim.width : 0;
+        const height = typeof anim.height === 'number' ? anim.height : 0;
+        const firstFrame = frames[0];
+        if (firstFrame.length <= 0 || width <= 0 || height <= 0) continue;
+        const curves: RunCurve[] = [{
+          id: n.id,
+          color: anim.color ?? '#a78bfa',
+          width: anim.strokeWidth ?? 2,
+          points: normalizeFramePoints(firstFrame, height),
+        }];
+        const animationFrames = frames.map((f) => normalizeFramePoints(f, height));
+        add({
+          title: nodeTitle(n),
+          kind: 'animation',
+          curves,
+          animation: { frames: animationFrames, fps: typeof anim.fps === 'number' ? anim.fps : 30 },
+        });
+      }
+    }
+    // 自控：把传递函数分析（sim-transfer-fn）结果也送入独立结果面板。
+    pushTransferResults(nodes, add);
+  }, []);
+
   const runPipeline = useCallback(async () => {
+    if (pipelineRunning) return;
+    setPipelineRunning(true);
+    setRunProgress(null);
     try {
       const ctx = {
         variables: Object.fromEntries(
@@ -770,37 +1131,44 @@ function NodePipelineInner() {
         executed = runSimulationPipeline(nodes, edges, simConfig);
         setNodes(executed);
         setComputeTick((n) => n + 1);
-        // 把 scope 时序以曲线集形式发送到 2D 绘图面板。
+        // 把 scope 时序发送到「独立运行结果面板」（不再切回 2D 绘图）。
         const scopes = executed.filter((n) => n.type === 'sim-scope' && n.outputs?.series);
         if (scopes.length > 0) {
-          const store = useWorkbenchStore.getState();
-          store.clearCurveSets();
           scopes.forEach((n) => {
             const series = n.outputs?.series as { t: number[]; y: number[] } | undefined;
             if (!series || series.t.length < 2) return;
-            const pts = series.t.map((t, i) => ({ x: t, y: series.y[i] ?? 0 }));
-            store.addCurveSet({
-              curves: [{ segments: [{ points: pts }], color: '#a78bfa', width: 2 }],
-              width: 1,
-              height: 1,
-              color: '#a78bfa',
-              strokeWidth: 2,
-              flipX: false,
-              flipY: false,
-            } as any);
+            const curves: RunCurve[] = [{
+              id: n.id,
+              label: nodeTitle(n),
+              color: '#4ade80',
+              width: 2,
+              points: series.t.map((t, i) => [t, series.y[i] ?? 0] as [number, number]),
+            }];
+            useRunResultsStore.getState().addRunResult({ title: nodeTitle(n), kind: 'plot', curves });
           });
-          setViewMode('workbench');
-          setActivePreviewTab('plot2d');
+        }
+        // 自控：sim-transfer-fn 是批量分析节点（非仿真逐步块），此路径不经过
+        // executePipeline，故手动补齐分析输出并推送独立结果面板。
+        const tfDef = NODE_TYPES['sim-transfer-fn'];
+        const tfNodes: PipelineNode[] = [];
+        for (const n of executed) {
+          if (n.type !== 'sim-transfer-fn') continue;
+          const out = await tfDef.execute({}, n.config, ctx);
+          tfNodes.push({ ...n, outputs: out });
+        }
+        if (tfNodes.length > 0) {
+          pushTransferResults(tfNodes, useRunResultsStore.getState().addRunResult);
         }
         return;
       }
 
-      executed = await executePipeline(nodes, edges, ctx);
+      executed = await executePipeline(nodes, edges, ctx, {
+        onProgress: (done, total) => setRunProgress({ done, total }),
+      });
 
-      // Side-effects: plot-output nodes push plots to the workbench store;
-      // display nodes push results to history.
-      const plotsPushed = pushPlotsToWorkbench(executed);
-      pushCurvesToWorkbench(executed);
+      // Side-effects: plot / curve / animation 输出统统进入独立运行结果面板，
+      // 不再 push 到 2D 绘图工作台 store（彻底解耦）、不再自动切回 plot2d tab。
+      pushRunResults(executed, edges);
       for (const n of executed) {
         if (n.type === 'display' && n.result !== undefined && n.result !== null) {
           const r = n.result;
@@ -832,21 +1200,17 @@ function NodePipelineInner() {
           });
         }
       }
-
-      // P2: 若有 plot 输出，自动切回 workbench 视图并选中 plot2d tab，
-      // 让用户立刻看到结果，而不用手动找预览面板。
-      if (plotsPushed > 0) {
-        setViewMode('workbench');
-        setActivePreviewTab('plot2d');
-      }
     } catch (err) {
       console.error('[NodePipeline] runPipeline error:', err);
       toast.error('流水线执行失败', {
         description: (err as Error).message,
         duration: 4000,
       });
+    } finally {
+      setPipelineRunning(false);
+      setRunProgress(null);
     }
-  }, [nodes, edges, variables, simConfig, pushPlotsToWorkbench, pushCurvesToWorkbench, addResult, setViewMode, setActivePreviewTab]);
+  }, [nodes, edges, variables, simConfig, pushRunResults, addResult, pipelineRunning]);
 
   /* ── P3 执行到选中节点 ─────────────────────────────────────── */
   const runToSelected = useCallback(async () => {
@@ -854,13 +1218,18 @@ function NodePipelineInner() {
       toast.warning('请先选中一个节点', { duration: 2500 });
       return;
     }
+    setPipelineRunning(true);
+    setRunProgress(null);
     try {
       const ctx = {
         variables: Object.fromEntries(
           Object.entries(variables).map(([k, v]) => [k, v.value]),
         ),
       };
-      const executed = await executePipeline(nodes, edges, ctx, { stopAt: selectedId });
+      const executed = await executePipeline(nodes, edges, ctx, {
+        stopAt: selectedId,
+        onProgress: (done, total) => setRunProgress({ done, total }),
+      });
       setNodes(executed);
       setComputeTick((n) => n + 1);
       pushCurvesToWorkbench(executed);
@@ -870,8 +1239,11 @@ function NodePipelineInner() {
       });
     } catch (err) {
       toast.error('执行到节点失败', { description: (err as Error).message, duration: 4000 });
+    } finally {
+      setPipelineRunning(false);
+      setRunProgress(null);
     }
-  }, [selectedId, nodes, edges, variables, pushCurvesToWorkbench]);
+  }, [selectedId, nodes, edges, variables, pushCurvesToWorkbench, pipelineRunning]);
 
   /* ── Auto-execute on graph / config change (debounced) ───────── */
   useEffect(() => {
@@ -883,7 +1255,15 @@ function NodePipelineInner() {
               Object.entries(variables).map(([k, v]) => [k, v.value]),
             ),
           };
-          const executed = await executePipeline(nodes, edges, ctx);
+          // 关键修复：自动执行必须与手动「运行」走同一判别逻辑。
+          // 之前这里无条件调用 executePipeline（常规数据流 + Kahn 拓扑排序），
+          // 导致一阶反馈仿真等含「故意成环」的模板在加载后被标成 'Cycle detected'，
+          // 诊断面板因此一直报错。现在：只要存在仿真节点就走仿真求解器，
+          // 仿真求解器通过状态块（积分器）断环 + 代数环不动点迭代，能正确处理反馈环。
+          const hasSim = nodes.some(isSimulationNode);
+          const executed = hasSim
+            ? runSimulationPipeline(nodes, edges, simConfig)
+            : await executePipeline(nodes, edges, ctx);
           // Only update if results actually changed — otherwise the
           // feedback loop (setNodes → effect → setNodes …) prevents the
           // debounced localStorage save from ever firing.
@@ -918,7 +1298,7 @@ function NodePipelineInner() {
       });
     }, 180);
     return () => clearTimeout(id);
-  }, [nodes, edges, variables, pushCurvesToWorkbench]);
+  }, [nodes, edges, variables, simConfig, pushCurvesToWorkbench]);
 
   /* ── Helper: pan viewport so a node becomes visible ─────────── */
   const ensureNodeVisible = useCallback(
@@ -1158,12 +1538,15 @@ function NodePipelineInner() {
   const loadTemplateById = useCallback((id: string) => {
     const loaded = loadTemplate(id);
     if (!loaded) return;
-    setNodes(loaded.nodes);
+    // 去重叠：模板节点若发生重叠则先推开，避免「节点挤在一块看不清」。
+    const spread = spreadOverlappingNodes(loaded.nodes);
+    const laid = loaded.nodes.map((n) => (spread[n.id] ? { ...n, position: spread[n.id] } : n));
+    setNodes(laid);
     setEdges(loaded.edges);
     setSelectedId(null);
     setSelectedIds(new Set());
     // Frame the freshly-loaded graph so it lands in view.
-    const next = fitViewFor(loaded.nodes, canvasSize);
+    const next = fitViewFor(laid, canvasSize);
     if (next) setView(next);
     // 模板的 onLoad 声明了加载后应切到的预览标签（如 plot2d 曲线集）。
     const tpl = PIPELINE_TEMPLATES.find((t) => t.id === id);
@@ -1215,8 +1598,8 @@ function NodePipelineInner() {
       if (!layers.has(d)) layers.set(d, []);
       layers.get(d)!.push(id);
     }
-    const COL_GAP = 56;
-    const ROW_GAP = 40;
+    const COL_GAP = 48;
+    const ROW_GAP = 56;
     const START_X = 40;
     const START_Y = 60;
     const positions: Record<string, { x: number; y: number }> = {};
@@ -1232,6 +1615,11 @@ function NodePipelineInner() {
         y += APPROX_NODE_H + ROW_GAP;
       });
     });
+    // 去重叠兜底：极端情况下（如同层节点过多）仍可能重叠，再推开一次。
+    const spread = spreadOverlappingNodes(nodes.map((n) => ({ ...n, position: positions[n.id] ?? n.position })));
+    for (const id of Object.keys(positions)) {
+      if (spread[id]) positions[id] = spread[id];
+    }
     setNodes((prev) => prev.map((n) => positions[n.id] ? { ...n, position: positions[n.id] } : n));
     // 排好后自动居中到视野。
     const next = fitViewFor(nodes.map((n) => ({ ...n, position: positions[n.id] ?? n.position })), canvasSize);
@@ -1257,13 +1645,183 @@ function NodePipelineInner() {
     [],
   );
 
+  /* M1 — AI 调节点参数：接收 configure_node 指令，白名单过滤后写回 config。
+     只保留该节点 config 已有的键，避免 AI 引入任意字段；随后靠既有 180ms
+     自动重算 debounce 触发 recompute。 */
+  useEffect(() => {
+    const handler = (e: Event) => {
+      const detail = (e as CustomEvent<{ nodeId?: unknown; patch?: unknown }>).detail;
+      if (!detail || typeof detail.nodeId !== 'string') return;
+      const patchRaw = detail.patch;
+      if (!patchRaw || typeof patchRaw !== 'object' || Array.isArray(patchRaw)) return;
+      const node = nodes.find((n) => n.id === detail.nodeId);
+      if (!node) return;
+      const patch: Record<string, unknown> = {};
+      for (const [k, v] of Object.entries(patchRaw as Record<string, unknown>)) {
+        if (!(k in node.config)) continue; // 白名单：仅允许已存在的键
+        if (typeof v === 'number' && Number.isFinite(v)) patch[k] = v;
+        else if (typeof v === 'string' || typeof v === 'boolean') patch[k] = v;
+      }
+      if (Object.keys(patch).length === 0) return;
+      updateConfig(detail.nodeId, patch);
+    };
+    window.addEventListener('omnimath:node-config', handler);
+    return () => window.removeEventListener('omnimath:node-config', handler);
+  }, [nodes, updateConfig]);
+
+  /* M4 — AI 整图搭建：接收 build_pipeline 指令，创建节点 + 连线 + 居中 + 触发重算。
+     指令格式 { nodes: [{type, config?}], edges?: [{from,to}], clearExisting? }。
+     节点 config 按该类型 defaultConfig 白名单合并；边优先用序号，缺省自动首尾相连。 */
+  useEffect(() => {
+    const handler = (e: Event) => {
+      const detail = (e as CustomEvent<{ nodes?: unknown[]; edges?: unknown[]; clearExisting?: boolean }>).detail;
+      if (!detail || !Array.isArray(detail.nodes) || detail.nodes.length === 0) return;
+
+      // 1) 建节点：白名单合并 config；无效 type 跳过。
+      const created: PipelineNode[] = [];
+      for (const raw of detail.nodes) {
+        if (!raw || typeof raw !== 'object') continue;
+        const o = raw as Record<string, unknown>;
+        const type = typeof o.type === 'string' ? o.type : '';
+        const def = NODE_TYPES[type];
+        if (!def) continue;
+        const node = createNode(type, 0, 0);
+        const cfg = o.config;
+        if (cfg && typeof cfg === 'object' && !Array.isArray(cfg)) {
+          const patch: Record<string, unknown> = {};
+          for (const [k, v] of Object.entries(cfg as Record<string, unknown>)) {
+            if (!(k in def.defaultConfig)) continue; // 白名单：只写该类型已有字段
+            if (typeof v === 'number' && Number.isFinite(v)) patch[k] = v;
+            else if (typeof v === 'string' || typeof v === 'boolean') patch[k] = v;
+          }
+          node.config = { ...def.defaultConfig, ...patch };
+        }
+        created.push(node);
+      }
+      if (created.length === 0) return;
+
+      // 2) 连线：优先用 edges（序号），否则按 nodes 顺序自动首尾相连（找兼容端口）。
+      const newEdges: PipelineEdge[] = [];
+      const tryConnect = (fromIdx: number, toIdx: number) => {
+        if (fromIdx < 0 || fromIdx >= created.length || toIdx < 0 || toIdx >= created.length || fromIdx === toIdx) return;
+        const fromDef = NODE_TYPES[created[fromIdx].type];
+        const toDef = NODE_TYPES[created[toIdx].type];
+        if (!fromDef || !toDef) return;
+        for (const out of fromDef.outputs) {
+          for (const inp of toDef.inputs) {
+            if (canConnect(out.type, inp.type)) {
+              newEdges.push({
+                id: makeEdgeId(),
+                from: created[fromIdx].id,
+                fromPort: out.id,
+                to: created[toIdx].id,
+                toPort: inp.id,
+              });
+              return;
+            }
+          }
+        }
+      };
+      if (Array.isArray(detail.edges) && detail.edges.length > 0) {
+        for (const e of detail.edges) {
+          if (!e || typeof e !== 'object') continue;
+          const o = e as Record<string, unknown>;
+          const f = typeof o.from === 'number' ? Math.round(o.from) : NaN;
+          const t = typeof o.to === 'number' ? Math.round(o.to) : NaN;
+          if (Number.isFinite(f) && Number.isFinite(t)) tryConnect(f, t);
+        }
+      } else {
+        for (let i = 0; i < created.length - 1; i++) tryConnect(i, i + 1);
+      }
+
+      // 3) 位置：先横向错开铺开，再推开重叠，最后 fit view 居中。
+      let laid: PipelineNode[] = created.map((n, i) => ({
+        ...n,
+        position: { x: 60 + (i % 6) * (NODE_WIDTH + 44), y: 80 + Math.floor(i / 6) * 230 },
+      }));
+      const spread = spreadOverlappingNodes(laid);
+      laid = laid.map((n) => (spread[n.id] ? { ...n, position: spread[n.id] } : n));
+
+      if (detail.clearExisting !== false) {
+        setNodes(laid);
+        setEdges(newEdges);
+      } else {
+        setNodes((prev) => [...prev, ...laid]);
+        setEdges((prev) => [...prev, ...newEdges]);
+      }
+      setSelectedId(null);
+      setSelectedIds(new Set());
+      const next = fitViewFor(laid, canvasSize);
+      if (next) setView(next);
+    };
+    window.addEventListener('omnimath:pipeline-build', handler);
+    return () => window.removeEventListener('omnimath:pipeline-build', handler);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [canvasSize]);
+
+  /* M1 — 把蓝图节点图摘要同步到 AI 读取上下文 store（只读镜像）。 */
+  useEffect(() => {
+    useAIContextStore.getState().setPipeline({
+      nodes: nodes.map((n) => ({ id: n.id, type: n.type, config: n.config })).slice(0, 40),
+      edgeCount: edges.length,
+    });
+  }, [nodes, edges]);
+
+  /* 节点静音切换：翻转 muted 位，auto-execute 会自动重新计算。 */
+  const toggleMute = useCallback((id: string) => {
+    setNodes((prev) =>
+      prev.map((n) => (n.id === id ? { ...n, muted: !n.muted } : n)),
+    );
+  }, []);
+
+  /* 小地图：把世界坐标居中到画布中心（保持当前缩放）。 */
+  const centerOnWorld = useCallback((world: { x: number; y: number }) => {
+    setView((v) => ({
+      ...v,
+      x: canvasSize.w / 2 - world.x * v.scale,
+      y: canvasSize.h / 2 - world.y * v.scale,
+    }));
+  }, [canvasSize]);
+
+  /* 分组（Blender Group Frame）：把当前选中的节点归入一个新 Frame。 */
+  const createGroupFromSelection = useCallback(() => {
+    const ids = selectedIds.size > 0 ? selectedIds : selectedId ? new Set([selectedId]) : new Set<string>();
+    if (ids.size === 0) return;
+    const gid = `grp-${Date.now()}`;
+    const title = window.prompt('分组名称', 'Group');
+    const finalTitle = title != null && title.trim() ? title.trim() : 'Group';
+    setNodes((prev) =>
+      prev.map((n) => (ids.has(n.id) ? { ...n, group: { id: gid, title: finalTitle } } : n)),
+    );
+  }, [selectedIds, selectedId]);
+
+  /* 取消分组：移除选中节点的 group 归属。 */
+  const ungroupSelection = useCallback(() => {
+    const ids = selectedIds.size > 0 ? selectedIds : selectedId ? new Set([selectedId]) : new Set<string>();
+    if (ids.size === 0) return;
+    setNodes((prev) =>
+      prev.map((n) => {
+        if (!ids.has(n.id)) return n;
+        const { group: _g, ...rest } = n;
+        return rest;
+      }),
+    );
+  }, [selectedIds, selectedId]);
+
+  /* 重命名分组：同步到所有同组节点。 */
+  const renameGroup = useCallback((groupId: string, title: string) => {
+    setNodes((prev) =>
+      prev.map((n) => (n.group && n.group.id === groupId ? { ...n, group: { id: groupId, title } } : n)),
+    );
+  }, []);
+
   /* ── Connection drag handlers ────────────────────────────────── */
   const startConnection = useCallback(
     (nodeId: string, portId: string, e: React.PointerEvent) => {
       e.stopPropagation();
       const node = nodes.find((n) => n.id === nodeId);
       if (!node) return;
-      const pos = getPortPosition(node, portId, true, portPositionsRef.current);
+      const pos = getPortPosition(node, portId, true, contentPortPositionsRef.current);
       if (!pos) return;
       setConnecting({ fromNode: nodeId, fromPort: portId, cursor: pos });
     },
@@ -1385,14 +1943,20 @@ function NodePipelineInner() {
       // Only handle clicks on the background (not a node/port).
       if (e.target !== e.currentTarget) return;
 
-      // ── Marquee selection: Shift+drag on empty canvas ──────────
-      // Draws a rectangle and selects all nodes whose bbox intersects.
-      // Always additive (Shift = "add to selection", ComfyUI/Blender style).
-      if (e.shiftKey && !connecting) {
+      // ── 平移：仅中键拖拽。右键交给 onContextMenu 打开「添加节点」菜单 ──
+      // Blender 式：左键框选、右键添加节点、中键平移。
+      if (e.button === 1) {
+        e.preventDefault();
+        startCanvasPan(e.clientX, e.clientY);
+        return;
+      }
+
+      // ── 左键：框选（marquee），无需 Shift ──────────────────────
+      // 空白处左键拖拽即框选（始终追加/累加，符合 Figma/Blender/ComfyUI 习惯）。
+      if (e.button === 0 && !connecting) {
         const rect = canvasRef.current?.getBoundingClientRect();
         if (!rect) return;
         const v = viewRef.current;
-        // Convert screen → world coords (account for pan + zoom).
         const wx = (e.clientX - rect.left - v.x) / v.scale;
         const wy = (e.clientY - rect.top - v.y) / v.scale;
         setMarquee({ start: { x: wx, y: wy }, current: { x: wx, y: wy } });
@@ -1410,31 +1974,25 @@ function NodePipelineInner() {
           document.body.classList.remove('dragging');
           window.removeEventListener('pointermove', onMove);
           window.removeEventListener('pointerup', onUp);
-          // Collision detection: select nodes intersecting the marquee rect.
           const m = marqueeRef.current;
           if (m) {
-            const x1 = Math.min(m.start.x, m.current.x);
-            const y1 = Math.min(m.start.y, m.current.y);
-            const x2 = Math.max(m.start.x, m.current.x);
-            const y2 = Math.max(m.start.y, m.current.y);
-            // Only count as a click (not a drag) if the rect is larger than
-            // a few pixels — otherwise it's just a Shift+click on empty.
-            const isRealDrag = Math.abs(x2 - x1) > 3 || Math.abs(y2 - y1) > 3;
+            const rect = normalizeRect(m.start, m.current);
+            const isRealDrag = Math.abs(rect.x2 - rect.x1) > 3 || Math.abs(rect.y2 - rect.y1) > 3;
             if (isRealDrag) {
+              // 框选：累加选中（Shift 保持追加；否则替换为框内节点）。
+              const hit = selectNodesInBox(nodesRef.current, m.start, m.current);
               setSelectedIds((prev) => {
-                const next = new Set(prev);
-                for (const n of nodesRef.current) {
-                  const nx1 = n.position.x;
-                  const ny1 = n.position.y;
-                  const nx2 = nx1 + NODE_WIDTH;
-                  const ny2 = ny1 + APPROX_NODE_H;
-                  // AABB intersection test.
-                  if (!(nx1 > x2 || nx2 < x1 || ny1 > y2 || ny2 < y1)) {
-                    next.add(n.id);
-                  }
-                }
+                const next = new Set(e.shiftKey ? prev : []);
+                for (const id of hit) next.add(id);
                 return next;
               });
+            } else {
+              // 纯点击（非拖拽）：取消多选。
+              if (!e.shiftKey) {
+                setSelectedId(null);
+                setSelectedIds(new Set());
+                setSelectedEdgeId(null);
+              }
             }
           }
           setMarquee(null);
@@ -1444,13 +2002,7 @@ function NodePipelineInner() {
         return;
       }
 
-      // ── Middle mouse button always pans the canvas ──────────────
-      if (e.button === 1) {
-        startCanvasPan(e.clientX, e.clientY);
-        return;
-      }
-
-      // ── Default: pan the canvas ─────────────────────────────────
+      // ── 其余情况（如正在连线时的左键）：取消连线并清空选中 ──────
       setSelectedId(null);
       setSelectedIds(new Set());
       setSelectedEdgeId(null);
@@ -1458,12 +2010,11 @@ function NodePipelineInner() {
         setConnecting(null);
         return;
       }
-      startCanvasPan(e.clientX, e.clientY);
     },
     [connecting],
   );
 
-  /* ── Wheel zoom + vertical pan ───────────────────────────────── */
+  /* ── Wheel zoom + touchpad two-finger pan ────────────────────── */
   useEffect(() => {
     const el = canvasRef.current;
     if (!el) return;
@@ -1472,16 +2023,40 @@ function NodePipelineInner() {
       const rect = el.getBoundingClientRect();
       const cx = e.clientX - rect.left;
       const cy = e.clientY - rect.top;
+
+      // 触控板捏合（ctrlKey）→ 缩放；触摸板/鼠标都支持。
+      if (e.ctrlKey) {
+        setView((v) => {
+          const delta = -e.deltaY * 0.0015;
+          const next = Math.min(2, Math.max(0.4, v.scale * (1 + delta)));
+          const wx = (cx - v.x) / v.scale;
+          const wy = (cy - v.y) / v.scale;
+          return { scale: next, x: cx - wx * next, y: cy - wy * next };
+        });
+        return;
+      }
+
+      // 区分「物理鼠标滚轮」与「触控板双指滚动」：
+      //   - 鼠标滚轮：line 模式（Firefox）或 大而"顿"的 delta（Chrome/Edge，通常 ≥40/格）→ 缩放
+      //   - 触控板双指：pixel 模式 + 平滑小 delta（通常 1–30/帧）→ 平移（Blender 式）
+      const smoothPan = e.deltaMode === 0 && Math.abs(e.deltaY) < 40 && !e.shiftKey;
+
+      if (smoothPan) {
+        // 触控板双指：平移（跟随双指方向）
+        const panFactor = 1;
+        setView((v) => ({ ...v, x: v.x - e.deltaX * panFactor, y: v.y - e.deltaY * panFactor }));
+        return;
+      }
+
+      // 鼠标滚轮（或 Shift+wheel）：缩放
+      if (e.shiftKey) {
+        const panSpeed = 1.2;
+        setView((v) => ({ ...v, y: v.y - e.deltaY * panSpeed }));
+        return;
+      }
+      const delta = -e.deltaY * 0.0015;
       setView((v) => {
-        if (e.shiftKey) {
-          // Shift + wheel: pan vertically (up/down view control).
-          const panSpeed = 1.2;
-          return { ...v, y: v.y - e.deltaY * panSpeed };
-        }
-        const delta = -e.deltaY * 0.0015;
         const next = Math.min(2, Math.max(0.4, v.scale * (1 + delta)));
-        // Zoom toward cursor: adjust translate so the world point under
-        // the cursor stays fixed.
         const wx = (cx - v.x) / v.scale;
         const wy = (cy - v.y) / v.scale;
         return { scale: next, x: cx - wx * next, y: cy - wy * next };
@@ -1499,12 +2074,12 @@ function NodePipelineInner() {
       if (n.id === connecting.fromNode) continue;
       const def = NODE_TYPES[n.type];
       for (const port of def.inputs) {
-        const pos = getPortPosition(n, port.id, false, portPositions);
+        const pos = getPortPosition(n, port.id, false, contentPortPositions);
         if (pos) ports.push({ nodeId: n.id, portId: port.id, x: pos.x, y: pos.y, type: port.type });
       }
     }
     return ports;
-  }, [nodes, connecting, portPositions]);
+  }, [nodes, connecting, contentPortPositions]);
 
   const allInputPortsRef = useRef(allInputPorts);
   useEffect(() => { allInputPortsRef.current = allInputPorts; }, [allInputPorts]);
@@ -1568,6 +2143,124 @@ function NodePipelineInner() {
     }
   }, [connecting]);
 
+  /* ── P1-4: 边重连（拖柄 → 端口吸附 → 更新边端点）────────────── */
+  const startReconnect = useCallback(
+    (edgeId: string, end: 'from' | 'to') => {
+      const edge = edges.find((e) => e.id === edgeId);
+      const from = nodes.find((n) => n.id === edge?.from);
+      const to = nodes.find((n) => n.id === edge?.to);
+      if (!edge || !from || !to) return;
+      // 起始拖柄位置 = 被拖动端当前端口位置（局部坐标）。
+      const pos =
+        end === 'from'
+          ? getPortPosition(from, edge.fromPort, true, contentPortPositionsRef.current)
+          : getPortPosition(to, edge.toPort, false, contentPortPositionsRef.current);
+      if (!pos) return;
+      setSelectedEdgeId(edgeId);
+      setReconnect({ edgeId, end, cursor: pos });
+    },
+    [edges, nodes],
+  );
+
+  // 重连拖拽：跟随光标 + 吸附到「另一端类型兼容」的端口，松开更新边。
+  useEffect(() => {
+    if (!reconnect) return;
+    const SNAP_DIST = 20;
+    const edge = edges.find((e) => e.id === reconnect.edgeId);
+    const fromNode = nodes.find((n) => n.id === edge?.from);
+    const toNode = nodes.find((n) => n.id === edge?.to);
+    if (!edge || !fromNode || !toNode) {
+      setReconnect(null);
+      return;
+    }
+    const fromDef = NODE_TYPES[fromNode.type];
+    const toDef = NODE_TYPES[toNode.type];
+    const fromPort = fromDef.outputs.find((p) => p.id === edge.fromPort);
+    const toPort = toDef.inputs.find((p) => p.id === edge.toPort);
+    if (!fromPort || !toPort) {
+      setReconnect(null);
+      return;
+    }
+
+    // 固定端位置 + 需匹配的端口类型。
+    //   - 重连源端('from')：固定目标端，需找兼容其输入类型的输出端口。
+    //   - 重连目标端('to')：固定源端，需找兼容其输出类型的输入端口。
+    const fixedPos =
+      reconnect.end === 'from'
+        ? getPortPosition(toNode, edge.toPort, false, contentPortPositionsRef.current)
+        : getPortPosition(fromNode, edge.fromPort, true, contentPortPositionsRef.current);
+    const fixedType = reconnect.end === 'from' ? toPort.type : fromPort.type;
+    if (!fixedPos) {
+      setReconnect(null);
+      return;
+    }
+
+    // 候选端口：源端→扫描输出端口；目标端→扫描输入端口。
+    const candidates: Array<{ nodeId: string; portId: string; x: number; y: number; type: PortDataType }> = [];
+    for (const n of nodes) {
+      const def = NODE_TYPES[n.type];
+      const ports = reconnect.end === 'from' ? def.outputs : def.inputs;
+      for (const port of ports) {
+        if (!canConnect(port.type, fixedType)) continue;
+        const pos = getPortPosition(n, port.id, reconnect.end === 'from', contentPortPositionsRef.current);
+        if (pos) candidates.push({ nodeId: n.id, portId: port.id, x: pos.x, y: pos.y, type: port.type });
+      }
+    }
+
+    const moveHandler = (e: PointerEvent) => {
+      const local = screenToLocal(e.clientX, e.clientY);
+      let nearest: { nodeId: string; portId: string; x: number; y: number; type: PortDataType } | null = null;
+      let minDist = SNAP_DIST;
+      for (const p of candidates) {
+        const d = Math.hypot(p.x - local.x, p.y - local.y);
+        if (d < minDist) {
+          minDist = d;
+          nearest = p;
+        }
+      }
+      if (nearest) {
+        setSnapTarget({ nodeId: nearest.nodeId, portId: nearest.portId });
+        setReconnect((r) => (r ? { ...r, cursor: { x: nearest!.x, y: nearest!.y } } : null));
+      } else {
+        setSnapTarget(null);
+        setReconnect((r) => (r ? { ...r, cursor: local } : null));
+      }
+    };
+
+    const upHandler = () => {
+      const snap = snapTargetRef.current;
+      if (snap) {
+        const candidate = candidates.find((c) => c.nodeId === snap.nodeId && c.portId === snap.portId);
+        if (candidate) {
+          // 环预防：新连接不得形成回路。
+          const newFrom = reconnect.end === 'from' ? snap.nodeId : edge.from;
+          const newTo = reconnect.end === 'to' ? snap.nodeId : edge.to;
+          if (newFrom !== newTo && !wouldCreateCycle(edges.filter((ed) => ed.id !== edge.id), newFrom, newTo)) {
+            setEdges((prev) =>
+              prev.map((ed) =>
+                ed.id === edge.id
+                  ? reconnect.end === 'from'
+                    ? { ...ed, from: snap.nodeId, fromPort: snap.portId }
+                    : { ...ed, to: snap.nodeId, toPort: snap.portId }
+                  : ed,
+              ),
+            );
+          }
+        }
+      }
+      setSnapTarget(null);
+      snapTargetRef.current = null;
+      setReconnect(null);
+    };
+
+    window.addEventListener('pointermove', moveHandler);
+    window.addEventListener('pointerup', upHandler);
+    return () => {
+      window.removeEventListener('pointermove', moveHandler);
+      window.removeEventListener('pointerup', upHandler);
+    };
+  }, [reconnect, edges, nodes, screenToLocal]);
+
   /* ── Keyboard: Delete to remove selected ─────────────────────── */
   useEffect(() => {
     const handler = (e: KeyboardEvent) => {
@@ -1593,6 +2286,8 @@ function NodePipelineInner() {
         setSelectedIds(new Set());
         setSelectedEdgeId(null);
         setConnecting(null);
+        setReconnect(null);
+        setSnapTarget(null);
         setPaletteOpen(false);
       }
       // Tab / Shift+Tab 在节点间循环导航
@@ -1675,8 +2370,8 @@ function NodePipelineInner() {
         const from = nodeById.get(e.from);
         const to = nodeById.get(e.to);
         if (!from || !to) return null;
-        const p1 = getPortPosition(from, e.fromPort, true, portPositions);
-        const p2 = getPortPosition(to, e.toPort, false, portPositions);
+        const p1 = getPortPosition(from, e.fromPort, true, contentPortPositions);
+        const p2 = getPortPosition(to, e.toPort, false, contentPortPositions);
         if (!p1 || !p2) return null;
         // 边随源端口数据类型着色（类 Unreal Blueprint）。
         const fromDef = NODE_TYPES[from.type];
@@ -1685,16 +2380,31 @@ function NodePipelineInner() {
         return { edge: e, from: p1, to: p2, color };
       })
       .filter((x): x is NonNullable<typeof x> => x !== null);
-  }, [edges, nodeById, portPositions]);
+  }, [edges, nodeById, contentPortPositions]);
 
   const pendingPath = useMemo(() => {
-    if (!connecting) return null;
-    const from = nodeById.get(connecting.fromNode);
-    if (!from) return null;
-    const p1 = getPortPosition(from, connecting.fromPort, true, portPositions);
-    if (!p1) return null;
-    return { from: p1, to: connecting.cursor };
-  }, [connecting, nodeById, portPositions]);
+    // 新建连线：从源端口 → 光标
+    if (connecting) {
+      const from = nodeById.get(connecting.fromNode);
+      if (!from) return null;
+      const p1 = getPortPosition(from, connecting.fromPort, true, contentPortPositions);
+      if (!p1) return null;
+      return { from: p1, to: connecting.cursor };
+    }
+    // P1-4 重连：固定端（另一端）→ 光标
+    if (reconnect) {
+      const edge = edges.find((e) => e.id === reconnect.edgeId);
+      if (!edge) return null;
+      const fixedNode = nodeById.get(reconnect.end === 'from' ? edge.to : edge.from);
+      if (!fixedNode) return null;
+      const fixedPort = reconnect.end === 'from' ? edge.toPort : edge.fromPort;
+      // 重连源端→固定目标输入端口；重连目标端→固定源输出端口。
+      const fixed = getPortPosition(fixedNode, fixedPort, reconnect.end === 'to', contentPortPositions);
+      if (!fixed) return null;
+      return { from: fixed, to: reconnect.cursor };
+    }
+    return null;
+  }, [connecting, reconnect, edges, nodeById, contentPortPositions]);
 
   /* ── Render ──────────────────────────────────────────────────── */
   return (
@@ -1720,21 +2430,58 @@ function NodePipelineInner() {
         selectedCount={selectedIds.size}
         errorCount={errorNodes.length}
         diagnosticsOpen={diagnosticsOpen}
+        running={pipelineRunning}
+        onGroup={createGroupFromSelection}
+        onUngroup={ungroupSelection}
       />
 
       <div
         ref={canvasRef}
-        className="relative flex-1 min-h-0 overflow-hidden grid-bg"
+        className="relative flex-1 min-h-0 overflow-hidden pipeline-canvas"
         onPointerDown={onCanvasPointerDown}
         onDoubleClick={onCanvasDoubleClick}
         onContextMenu={onCanvasContextMenu}
       >
-        {/* Animated parallax dots overlay */}
-        <div
-          aria-hidden
-          className="absolute inset-0 pointer-events-none grid-bg-dots opacity-40"
-          style={{ animationDuration: '30s' }}
-        />
+        {/* 独立运行结果面板（MATLAB figure 风格浮窗，多开/拖拽/缩放） */}
+        <RunResultsHost />
+
+        {/* P2-5: 流水线运行中浮层 + 逐节点进度 */}
+        <AnimatePresence>
+          {pipelineRunning && (
+            <motion.div
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              className="pointer-events-none absolute inset-0 z-30 flex items-center justify-center"
+            >
+              <div className="flex flex-col items-center gap-3 rounded-xl border border-border/60 bg-background/85 px-6 py-5 shadow-2xl backdrop-blur-md">
+                <Loader2 className="size-6 animate-spin text-primary" />
+                <div className="flex flex-col items-center gap-1">
+                  <span className="text-[12.5px] font-medium text-foreground">
+                    流水线运行中…
+                  </span>
+                  {runProgress && runProgress.total > 0 && (
+                    <span className="font-mono text-[11px] tabular-nums text-muted-foreground">
+                      {runProgress.done} / {runProgress.total} 节点
+                    </span>
+                  )}
+                </div>
+                <div className="h-1.5 w-52 overflow-hidden rounded-full bg-muted">
+                  <motion.div
+                    className="h-full rounded-full bg-gradient-to-r from-primary to-primary/70"
+                    initial={{ width: 0 }}
+                    animate={{
+                      width: runProgress && runProgress.total > 0
+                        ? `${Math.round((runProgress.done / runProgress.total) * 100)}%`
+                        : '30%',
+                    }}
+                    transition={{ ease: 'easeOut', duration: 0.2 }}
+                  />
+                </div>
+              </div>
+            </motion.div>
+          )}
+        </AnimatePresence>
 
         {/* Transform layer — holds SVG edge layer + nodes */}
         <div
@@ -1759,7 +2506,19 @@ function NodePipelineInner() {
               setSelectedEdgeId(null);
             }}
             onSelectEdge={(id) => setSelectedEdgeId(id)}
+            reconnectEdgeId={reconnect?.edgeId ?? null}
+            onStartReconnect={startReconnect}
           />
+
+          {/* 分组 Frame 叠加层（虚线框 + 标题，位于节点下方） */}
+          <svg
+            className="absolute top-0 left-0"
+            style={{ zIndex: 1, overflow: 'visible' }}
+            width="1"
+            height="1"
+          >
+            <GroupFrameLayer nodes={nodes} onRename={renameGroup} />
+          </svg>
 
           {/* Nodes */}
           <div className="absolute top-0 left-0" style={{ zIndex: 2 }}>
@@ -1777,11 +2536,13 @@ function NodePipelineInner() {
                   snapPortId={snapTarget?.nodeId === node.id ? snapTarget.portId : null}
                   onPointerDownHeader={(e) => startNodeDrag(e, node.id)}
                   onDelete={() => deleteNode(node.id)}
+                  onToggleMute={() => toggleMute(node.id)}
                   onSelect={(e) => selectNode(node.id, e)}
                   onConfigChange={(patch) => updateConfig(node.id, patch)}
                   onStartConnection={(portId, e) => startConnection(node.id, portId, e)}
                   onCompleteConnection={(portId, type) => completeConnection(node.id, portId, type)}
                   variables={Object.keys(variables)}
+                  measureScale={view.scale}
                   onPlotOpen={() => {
                     // Ensure the latest curve is pushed to the 2D panel
                     // (covers the auto-execute path which doesn't push).
@@ -1945,6 +2706,27 @@ function NodePipelineInner() {
           <ZoomIn className="size-3" />
           <span className="font-mono">{Math.round(view.scale * 100)}%</span>
         </button>
+
+        {/* 小地图开关（右上角，紧跟缩放指示器） */}
+        <button
+          type="button"
+          onPointerDown={(e) => e.stopPropagation()}
+          onClick={() => setMinimapOpen((v) => !v)}
+          className="absolute bottom-3 right-[78px] flex items-center gap-1 px-2 py-1 rounded-md glass border border-border text-[10px] text-muted-foreground hover:bg-accent hover:text-foreground transition-colors cursor-pointer"
+          title={minimapOpen ? '隐藏小地图' : '显示小地图'}
+        >
+          <MapIcon className="size-3" />
+        </button>
+
+        {/* 小地图 */}
+        {minimapOpen && (
+          <Minimap
+            nodes={nodes}
+            view={view}
+            canvasSize={canvasSize}
+            onCenter={centerOnWorld}
+          />
+        )}
         <div className="absolute bottom-3 left-3 hidden sm:flex items-center gap-1.5 px-2 py-1 rounded-md glass border border-border text-[10px] text-muted-foreground/80">
           <button
             type="button"
@@ -1980,6 +2762,8 @@ interface ToolbarProps {
   onCenter: () => void;
   onAddNode: () => void;
   onDeleteSelected: () => void;
+  onGroup: () => void;
+  onUngroup: () => void;
   onOpenSimConfig: () => void;
   onLoadTemplate: (id: string) => void;
   onAutoLayout: () => void;
@@ -1988,13 +2772,15 @@ interface ToolbarProps {
   selectedCount: number;
   errorCount: number;
   diagnosticsOpen: boolean;
+  /** P2-5: 流水线运行中（禁用运行按钮 + 显示加载态）。 */
+  running?: boolean;
 }
 
 function PipelineToolbar({
   onBack, onRun, onRunToSelected, onToggleDiagnostics, onClear, onExport,
   onZoomIn, onZoomOut, onResetView, onCenter, onOpenSimConfig, onLoadTemplate, onAutoLayout,
-  onAddNode, onDeleteSelected,
-  nodeCount, edgeCount, selectedCount, errorCount, diagnosticsOpen,
+  onAddNode, onDeleteSelected, onGroup, onUngroup,
+  nodeCount, edgeCount, selectedCount, errorCount, diagnosticsOpen, running,
 }: ToolbarProps) {
   return (
     <div className="shrink-0 h-11 flex items-center justify-between px-3 gap-3 glass border-b border-border">
@@ -2039,6 +2825,30 @@ function PipelineToolbar({
             <span className="hidden sm:inline">删除选中 ({selectedCount})</span>
           </Button>
         )}
+        {selectedCount > 0 && (
+          <>
+            <Button
+              variant="outline"
+              size="sm"
+              className="h-8 px-2.5 gap-1.5 text-[12px] border-teal-500/50 text-teal-500 hover:bg-teal-500/10"
+              onClick={onGroup}
+              title="把选中节点归入一个可命名的 Frame"
+            >
+              <Boxes className="size-3.5" />
+              <span className="hidden sm:inline">分组</span>
+            </Button>
+            <Button
+              variant="outline"
+              size="sm"
+              className="h-8 px-2.5 gap-1.5 text-[12px]"
+              onClick={onUngroup}
+              title="移除选中节点的分组"
+            >
+              <Ungroup className="size-3.5" />
+              <span className="hidden sm:inline">取消分组</span>
+            </Button>
+          </>
+        )}
       </div>
 
       <div className="flex items-center gap-1">
@@ -2047,9 +2857,14 @@ function PipelineToolbar({
           size="sm"
           className="h-8 px-3 gap-1.5 text-[12px] bg-primary/90 hover:bg-primary"
           onClick={onRun}
+          disabled={running}
         >
-          <Play className="size-3.5" />
-          {t('npRunAll')}
+          {running ? (
+            <Loader2 className="size-3.5 animate-spin" />
+          ) : (
+            <Play className="size-3.5" />
+          )}
+          {running ? t('npRunning') : t('npRunAll')}
         </Button>
         <Tooltip>
           <TooltipTrigger asChild>
@@ -2101,15 +2916,33 @@ function PipelineToolbar({
               <span className="hidden sm:inline">模板</span>
             </Button>
           </DropdownMenuTrigger>
-          <DropdownMenuContent align="start" className="w-64">
+          <DropdownMenuContent align="start" className="w-72">
             <DropdownMenuLabel>示例工作流</DropdownMenuLabel>
             <DropdownMenuSeparator />
-            {PIPELINE_TEMPLATES.map((tpl) => (
-              <DropdownMenuItem key={tpl.id} onSelect={() => onLoadTemplate(tpl.id)} className="flex flex-col items-start gap-0.5 py-2">
-                <span className="text-[12px] font-medium">{tpl.name}</span>
-                <span className="text-[10px] text-muted-foreground leading-snug">{tpl.description}</span>
-              </DropdownMenuItem>
-            ))}
+            {/* 模板分组：按 category 归类 + 可滚动，避免模板变多后难以浏览。 */}
+            <div className="max-h-[60vh] overflow-y-auto pr-1">
+              {TEMPLATE_GROUPS.map((group) => {
+                const items = PIPELINE_TEMPLATES.filter((t) => (t.category ?? 'math') === group.key);
+                if (items.length === 0) return null;
+                return (
+                  <div key={group.key} className="mb-1">
+                    <div className="px-2 py-1 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground/80">
+                      {group.label}
+                    </div>
+                    {items.map((tpl) => (
+                      <DropdownMenuItem
+                        key={tpl.id}
+                        onSelect={() => onLoadTemplate(tpl.id)}
+                        className="flex flex-col items-start gap-0.5 py-2"
+                      >
+                        <span className="text-[12px] font-medium">{tpl.name}</span>
+                        <span className="text-[10px] text-muted-foreground leading-snug">{tpl.description}</span>
+                      </DropdownMenuItem>
+                    ))}
+                  </div>
+                );
+              })}
+            </div>
           </DropdownMenuContent>
         </DropdownMenu>
         <Tooltip>
@@ -2205,19 +3038,36 @@ interface NodeCardProps {
   snapPortId: string | null;
   onPointerDownHeader: (e: React.PointerEvent) => void;
   onDelete: () => void;
+  onToggleMute: () => void;
   onSelect: (e: React.PointerEvent) => void;
   onConfigChange: (patch: Record<string, unknown>) => void;
   onStartConnection: (portId: string, e: React.PointerEvent) => void;
   onCompleteConnection: (portId: string, type: PortDataType) => void;
   variables: string[];
   onPlotOpen?: () => void;
+  /** 当前视图缩放（用于端口测量重触发，见 contentPortPositions）。 */
+  measureScale?: number;
+}
+
+/**
+ * 判断节点是否包含「可调参」配置（number / select / boolean / text）。
+ * 纯文件/图片/视频输入（type === 'file'）不算调参，不展示就地 AI 输入框，
+ * 避免「我只是输入一张图/一段视频，你也让我用 AI」的无意义提示。
+ */
+function nodeHasTunableParams(def: NodeTypeDef | undefined): boolean {
+  if (!def) return false;
+  if (def.configSchema && def.configSchema.length > 0) {
+    return def.configSchema.some((f) => f.type !== 'file');
+  }
+  // 未迁移到 configSchema、但本身有数值/表达式可调的手写配置节点。
+  return def.type === 'number-input' || def.type === 'expression-input';
 }
 
 function NodeCard({
   node, selected, multiSelected, computeTick, isConnecting, connectingFromType, inErrorChain, snapPortId,
-  onPointerDownHeader, onDelete, onSelect,
+  onPointerDownHeader, onDelete, onSelect, onToggleMute,
   onConfigChange, onStartConnection, onCompleteConnection,
-  variables, onPlotOpen,
+  variables, onPlotOpen, measureScale,
 }: NodeCardProps) {
   const def = NODE_TYPES[node.type];
   // Hooks must run unconditionally — the defensive early return below
@@ -2225,6 +3075,8 @@ function NodeCard({
   // hooks. cardRef stays unattached for error cards, so the glow effect
   // is a no-op there.
   const cardRef = useRef<HTMLDivElement>(null);
+  // P1-3 最小暴露：可折叠配置面板。折叠后仅保留端口与标题，隐藏配置/结果区。
+  const [collapsed, setCollapsed] = useState(false);
 
   // Compute-pulse glow: re-trigger on computeTick bump via direct DOM
   // manipulation (avoids setState-in-effect lint error).
@@ -2290,8 +3142,13 @@ function NodeCard({
   return (
     <motion.div
       ref={cardRef}
-      initial={{ opacity: 0, scale: 0.92, y: -4 }}
-      animate={{ opacity: 1, scale: 1, y: 0 }}
+      // 避免入场动画的 scale/y 位移变换：usePortReporter 在挂载时用
+      // getBoundingClientRect 测量端口位置，若入场动画带 scale/y 变换，
+      // 测量得到的偏移会被「缩放+位移」污染，且 ResizeObserver 不监听
+      // transform 变化，导致错误偏移残留、连线与端口错位。故仅保留
+      // 透明度淡入，不引入任何位置/缩放变换。
+      initial={{ opacity: 0 }}
+      animate={{ opacity: node.muted ? 0.6 : 1 }}
       exit={{ opacity: 0, scale: 0.9 }}
       transition={{ duration: 0.22, ease: [0.2, 0.8, 0.2, 1] }}
       className={cn(
@@ -2299,6 +3156,7 @@ function NodeCard({
         selected && 'selected',
         multiSelected && 'ring-2 ring-blue-500 ring-offset-0',
         inErrorChain && !selected && 'with-error-chain',
+        node.muted && 'saturate-50',
       )}
       style={{
         width: NODE_WIDTH,
@@ -2325,18 +3183,51 @@ function NodeCard({
           <Icon className={cn('size-3.5 shrink-0', cat.text)} strokeWidth={2.2} />
           <span className="text-[12px] truncate">{t(def.labelKey)}</span>
         </div>
-        <button
-          type="button"
-          onPointerDown={(e) => e.stopPropagation()}
-          onClick={(e) => { e.stopPropagation(); onDelete(); }}
-          className={cn(
-            'size-5 grid place-items-center rounded text-muted-foreground hover:text-destructive hover:bg-destructive/10 transition-all',
-            selected ? 'opacity-100' : 'opacity-0 group-hover:opacity-100',
-          )}
-          aria-label={t('pipelineDelete')}
-        >
-          <X className="size-3" />
-        </button>
+        <div className="flex items-center gap-0.5 shrink-0">
+          {/* P2-8 节点静音（Blender 式 Mute）：跳过执行，首输入透传首输出 */}
+          <button
+            type="button"
+            title={node.muted ? t('pipelineUnmute') : t('pipelineMute')}
+            onPointerDown={(e) => e.stopPropagation()}
+            onClick={(e) => { e.stopPropagation(); onToggleMute(); }}
+            className={cn(
+              'size-5 grid place-items-center rounded transition-all',
+              node.muted
+                ? 'text-amber-500 hover:text-amber-400 hover:bg-amber-500/10'
+                : 'text-muted-foreground hover:text-foreground hover:bg-accent',
+              selected ? 'opacity-100' : 'opacity-0 group-hover:opacity-100',
+            )}
+            aria-label={node.muted ? t('pipelineUnmute') : t('pipelineMute')}
+          >
+            {node.muted ? <VolumeX className="size-3" /> : <Volume2 className="size-3" />}
+          </button>
+          {/* P1-3 折叠配置面板（最小暴露，Blender 风格） */}
+          <button
+            type="button"
+            title={collapsed ? t('pipelineExpand') : t('pipelineCollapse')}
+            onPointerDown={(e) => e.stopPropagation()}
+            onClick={(e) => { e.stopPropagation(); setCollapsed((c) => !c); }}
+            className={cn(
+              'size-5 grid place-items-center rounded text-muted-foreground hover:text-foreground hover:bg-accent transition-all',
+              selected ? 'opacity-100' : 'opacity-0 group-hover:opacity-100',
+            )}
+            aria-label={collapsed ? t('pipelineExpand') : t('pipelineCollapse')}
+          >
+            {collapsed ? <ChevronRight className="size-3" /> : <ChevronDown className="size-3" />}
+          </button>
+          <button
+            type="button"
+            onPointerDown={(e) => e.stopPropagation()}
+            onClick={(e) => { e.stopPropagation(); onDelete(); }}
+            className={cn(
+              'size-5 grid place-items-center rounded text-muted-foreground hover:text-destructive hover:bg-destructive/10 transition-all',
+              selected ? 'opacity-100' : 'opacity-0 group-hover:opacity-100',
+            )}
+            aria-label={t('pipelineDelete')}
+          >
+            <X className="size-3" />
+          </button>
+        </div>
       </div>
 
       {/* Ports section */}
@@ -2354,6 +3245,7 @@ function NodeCard({
             snapped={snapPortId === port.id}
             onStartConnection={onStartConnection}
             onCompleteConnection={onCompleteConnection}
+            measureScale={measureScale}
           />
         ))}
         {def.outputs.map((port, i) => (
@@ -2369,30 +3261,48 @@ function NodeCard({
             snapped={false}
             onStartConnection={onStartConnection}
             onCompleteConnection={onCompleteConnection}
+            measureScale={measureScale}
           />
         ))}
       </div>
 
-      {/* Config section */}
-      <div className="px-3 pb-2 pt-1">
-        <NodeConfig node={node} onConfigChange={onConfigChange} variables={variables} />
-      </div>
+      {/* Config section (P1-3 可折叠：最小暴露) */}
+      {!collapsed && (
+        <div className="px-3 pb-2 pt-1">
+          <NodeConfig node={node} onConfigChange={onConfigChange} variables={variables} />
+        </div>
+      )}
+
+      {/* M1 — 节点下「✨ AI 需求」就地输入（ComfyUI 风格）：把节点类型 + 当前配置
+          打包成上下文发送给 AI，AI 通过 configure_node 回传参数改动。
+          仅在含「可调参」配置的节点展示；纯图片/视频输入节点不展示，避免无意义提示。 */}
+      {!collapsed && nodeHasTunableParams(def) && (
+        <div className="px-3 pb-2">
+          <AiPromptInput
+            module="pipeline"
+            context={`节点 ${node.id}（类型 ${node.type}）\n当前配置:${JSON.stringify(node.config ?? {}).slice(0, 800)}`}
+            placeholder="调参或描述需求…"
+          />
+        </div>
+      )}
 
       {/* Variable dependency badge (N1 integration)
           仅当节点表达式引用了用户变量时才显示。
           例如 expression-input 写了 "a*x+b"，且 a/b 是用户变量，
           这里显示 "依赖: a, b"。让用户直观看到节点和变量的联动关系。 */}
-      <NodeDependencyBadge node={node} variables={variables} />
+      {!collapsed && <NodeDependencyBadge node={node} variables={variables} />}
 
       {/* Result footer */}
-      <div
-        className={cn(
-          'border-t border-border/60 px-3 py-2 grid place-items-center min-h-[58px]',
-          node.error ? 'bg-destructive/8' : 'bg-primary/5',
-        )}
-      >
-        <NodeResultFooter node={node} onPlotOpen={onPlotOpen} />
-      </div>
+      {!collapsed && (
+        <div
+          className={cn(
+            'border-t border-border/60 px-3 py-2 grid place-items-center min-h-[58px]',
+            node.error ? 'bg-destructive/8' : 'bg-primary/5',
+          )}
+        >
+          <NodeResultFooter node={node} onPlotOpen={onPlotOpen} />
+        </div>
+      )}
     </motion.div>
   );
 }
@@ -2412,11 +3322,13 @@ interface PortLabelProps {
   snapped: boolean;
   onStartConnection: (portId: string, e: React.PointerEvent) => void;
   onCompleteConnection: (portId: string, type: PortDataType) => void;
+  /** 当前视图缩放（端口测量重触发，保持测得偏移与当前缩放一致）。 */
+  measureScale?: number;
 }
 
 function PortLabel({
   nodeId, port, isOutput, y, connected, isConnecting, connectingFromType, snapped,
-  onStartConnection, onCompleteConnection,
+  onStartConnection, onCompleteConnection, measureScale,
 }: PortLabelProps) {
   const [hover, setHover] = useState(false);
   // P2: 拖线时，输入端口按源类型兼容性判断是否可连。
@@ -2429,7 +3341,8 @@ function PortLabel({
   // .node-card, and report it to the PortPositionsProvider context so
   // edge routing + snap detection use real DOM positions (not estimates).
   const dotRef = useRef<HTMLDivElement>(null);
-  usePortReporter(nodeId, port.id, isOutput, dotRef);
+  usePortReporter(nodeId, port.id, isOutput, dotRef, measureScale);
+  const TypeIcon = PORT_TYPE_ICON[port.type] ?? Dot;
   return (
     <div
       className={cn(
@@ -2472,6 +3385,14 @@ function PortLabel({
               ? (PORT_TYPE_STYLE[port.type]?.border ?? 'oklch(0.7 0.15 165)')
               : 'var(--node-bg)',
         }}
+      />
+      <TypeIcon
+        className={cn(
+          'size-3 shrink-0',
+          isConnecting && !isOutput && !compatible ? 'opacity-30' : 'opacity-60',
+        )}
+        style={{ color: PORT_TYPE_STYLE[port.type]?.border }}
+        strokeWidth={2}
       />
       <span className="text-muted-foreground/80 select-none truncate max-w-[140px]">
         {t(port.labelKey)}
@@ -3636,23 +4557,6 @@ function runSimulationPipeline(
 /* ================================================================== *
  * Node palette (add-node drawer)
  * ================================================================== */
-const PALETTE_GROUPS: Array<{ category: NodeCategory; types: NodeType[] }> = [
-  { category: 'input', types: ['number-input', 'expression-input', 'variable', 'constant'] },
-  { category: 'operation', types: ['arithmetic'] },
-  { category: 'function', types: ['function-apply', 'log-base', 'hypotenuse', 'sign', 'degrees-radians'] },
-  { category: 'plot', types: ['plot-output'] },
-  { category: 'matrix', types: ['matrix-input', 'matrix-op', 'matrix-multiply', 'matrix-decompose'] },
-  { category: 'calculus', types: ['derivative', 'integrate', 'symbolic-integrate', 'simplify', 'solve-equation', 'evaluate', 'taylor-series', 'ode-solve', 'limit'] },
-  { category: 'mapping', types: ['negate', 'reciprocal', 'clamp', 'map-range', 'lerp', 'min-max', 'compare'] },
-  { category: 'vector', types: ['vec2-compose', 'vec2-decompose', 'dot-product', 'cross-product', 'vec-magnitude', 'vec-normalize', 'vec-rotate'] },
-  { category: 'curve', types: ['parametric-curve', 'curve-resample', 'curve-transform', 'curve-merge', 'curve-length'] },
-  { category: 'statistics', types: ['random-sample', 'mean-variance', 'histogram', 'data-input'] },
-  { category: 'logic', types: ['switch', 'threshold-gate'] },
-  { category: 'output', types: ['display', 'svg-export'] },
-  { category: 'vision', types: ['image-input', 'grayscale-threshold', 'edge-detect', 'contour-trace', 'fine-outline', 'curve-fit', 'plot-curves', 'video-input', 'frame-extract', 'pose-track', 'curve-animate'] },
-  { category: 'simulation', types: ['sim-clock', 'sim-constant', 'sim-sine', 'sim-step', 'sim-ramp', 'sim-pulse', 'sim-noise', 'sim-sum', 'sim-gain', 'sim-product', 'sim-saturation', 'sim-first-order', 'sim-integrator', 'sim-derivative', 'sim-delay', 'sim-scope'] },
-];
-
 function NodePalette({
   position, canvasSize, onClose, onPick,
 }: {
@@ -3692,6 +4596,16 @@ function NodePalette({
   };
   const [favs, setFavs] = useState<NodeType[]>(() => loadList(FAV_KEY));
   const [recent, setRecent] = useState<NodeType[]>(() => loadList(RECENT_KEY));
+
+  // ── 分组折叠：默认展开视觉/仿真/曲线等高频分类，其余折叠，避免长列表淹没。
+  //    搜索时忽略折叠（下面渲染层判断）。
+  const [collapsed, setCollapsed] = useState<Record<string, boolean>>(() => {
+    const init: Record<string, boolean> = {};
+    for (const g of PALETTE_GROUPS) init[g.category] = !DEFAULT_EXPANDED_CATEGORIES.has(g.category);
+    return init;
+  });
+  const isCollapsed = (key: string): boolean => (query ? false : !!collapsed[key]);
+  const toggleGroup = (key: string) => setCollapsed((c) => ({ ...c, [key]: !c[key] }));
   const persistFavs = (list: NodeType[]) => {
     setFavs(list);
     try { localStorage.setItem(FAV_KEY, JSON.stringify(list)); } catch { /* ignore */ }
@@ -3747,10 +4661,11 @@ function NodePalette({
         transition={{ duration: 0.18, ease: [0.2, 0.8, 0.2, 1] }}
         className={cn(
           'absolute z-40 glass-strong border border-border rounded-xl shadow-2xl',
-          'w-64',
+          'w-64 flex flex-col max-h-[70vh] overflow-hidden',
         )}
         style={style}
         onPointerDown={(e) => e.stopPropagation()}
+        onWheel={(e) => e.stopPropagation()}
       >
         <div className="flex items-center justify-between px-3 h-9 border-b border-border/60">
           <div className="flex items-center gap-1.5">
@@ -3776,67 +4691,89 @@ function NodePalette({
             autoFocus
           />
         </div>
-        <div className="overflow-y-auto max-h-[60vh] p-2 space-y-2.5 scrollbar-none">
+        {/* 滚动区：外层容器为 auto 高度（仅 max-h 封顶），flex-1 无法在 auto 高度
+            容器内收缩，导致内容超出后被 overflow-hidden 裁剪而无法滚动。改为给滚动区
+            自身一个确定的最大高度（70vh − 顶部标题栏/搜索框约 90px），使 overflow-y-auto
+            可靠生效，同时保留"节点少时自适应收缩"的行为。
+            注：刻意保留可见滚动条（不再用 scrollbar-none），让用户能明确看到并可拖拽，
+            滚动查看下方节点，避免"看不到下面的节点"的困惑。 */}
+        <div className="flex-1 min-h-0 overflow-y-auto p-2 space-y-2.5 max-h-[calc(70vh-90px)]">
           {filteredGroups.length === 0 && (
             <div className="text-center text-[11px] text-muted-foreground/70 py-6">
               无匹配节点
             </div>
           )}
-          {filteredGroups.map((group) => (
-            <div key={group.pinned ?? group.category}>
-              <div className={cn(
-                'text-[10px] font-semibold uppercase tracking-wider mb-1 px-1 flex items-center gap-1.5',
-                CATEGORY_COLOR[group.category].text,
-              )}>
-                <span className={cn('size-1.5 rounded-full', CATEGORY_COLOR[group.category].stripe)} />
-                {group.pinned === 'fav' ? (
-                  <span className="inline-flex items-center gap-1">
-                    <Star className="size-2.5" /> 收藏
+          {filteredGroups.map((group) => {
+            const groupKey = group.pinned ?? group.category;
+            const _collapsed = isCollapsed(groupKey);
+            return (
+              <div key={groupKey}>
+                <button
+                  type="button"
+                  onClick={() => toggleGroup(groupKey)}
+                  className="w-full flex items-center gap-1.5 text-[10px] font-semibold uppercase tracking-wider mb-1 px-1 py-0.5 rounded hover:bg-accent/60 text-left"
+                  style={{ color: CATEGORY_COLOR[group.category].text }}
+                >
+                  <span className={cn('size-1.5 rounded-full', CATEGORY_COLOR[group.category].stripe)} />
+                  {group.pinned === 'fav' ? (
+                    <span className="inline-flex items-center gap-1">
+                      <Star className="size-2.5" /> 收藏
+                    </span>
+                  ) : group.pinned === 'recent' ? (
+                    <span className="inline-flex items-center gap-1">
+                      <Clock3 className="size-2.5" /> 最近使用
+                    </span>
+                  ) : (
+                    t(CATEGORY_LABEL_KEY[group.category])
+                  )}
+                  <ChevronDown
+                    className={cn('size-3 ml-auto transition-transform', _collapsed && 'rotate-180')}
+                  />
+                </button>
+                {!group.pinned && (
+                  <span className="text-[9px] text-muted-foreground/60 -mt-1 mb-1 px-1 block">
+                    {group.types.length} 项
                   </span>
-                ) : group.pinned === 'recent' ? (
-                  <span className="inline-flex items-center gap-1">
-                    <Clock3 className="size-2.5" /> 最近使用
-                  </span>
-                ) : (
-                  t(CATEGORY_LABEL_KEY[group.category])
+                )}
+                {!_collapsed && (
+                  <div className="space-y-0.5">
+                    {group.types.map((type) => {
+                      const def = NODE_TYPES[type];
+                      const Icon = ICONS[def.icon] ?? Hash;
+                      const cat = CATEGORY_COLOR[def.category];
+                      const isFav = favs.includes(type);
+                      return (
+                        <button
+                          key={type}
+                          type="button"
+                          onClick={() => { recordRecent(type); onPick(type); }}
+                          className="group/row w-full flex items-center gap-2 px-2 py-1.5 rounded-md text-[12px] text-left transition-all hover:bg-accent hover:translate-x-0.5 interactive-card"
+                        >
+                          <div className={cn('size-6 grid place-items-center rounded-md shrink-0', cat.bg)}>
+                            <Icon className={cn('size-3.5', cat.text)} />
+                          </div>
+                          <span className="flex-1 truncate">{t(def.labelKey)}</span>
+                          <span
+                            role="button"
+                            tabIndex={-1}
+                            title={isFav ? '取消收藏' : '收藏'}
+                            onClick={(e) => { e.stopPropagation(); toggleFav(type); }}
+                            onPointerDown={(e) => e.stopPropagation()}
+                            className={cn(
+                              'size-5 grid place-items-center rounded opacity-0 transition-opacity group-hover/row:opacity-100',
+                              isFav ? 'opacity-100 text-amber-400' : 'text-muted-foreground hover:text-amber-400 hover:bg-accent',
+                            )}
+                          >
+                            <Star className={cn('size-3', isFav && 'fill-amber-400')} />
+                          </span>
+                        </button>
+                      );
+                    })}
+                  </div>
                 )}
               </div>
-              <div className="space-y-0.5">
-                {group.types.map((type) => {
-                  const def = NODE_TYPES[type];
-                  const Icon = ICONS[def.icon] ?? Hash;
-                  const cat = CATEGORY_COLOR[def.category];
-                  const isFav = favs.includes(type);
-                  return (
-                    <button
-                      key={type}
-                      type="button"
-                      onClick={() => { recordRecent(type); onPick(type); }}
-                      className="group/row w-full flex items-center gap-2 px-2 py-1.5 rounded-md text-[12px] text-left transition-all hover:bg-accent hover:translate-x-0.5 interactive-card"
-                    >
-                      <div className={cn('size-6 grid place-items-center rounded-md shrink-0', cat.bg)}>
-                        <Icon className={cn('size-3.5', cat.text)} />
-                      </div>
-                      <span className="flex-1 truncate">{t(def.labelKey)}</span>
-                      <span
-                        role="button"
-                        tabIndex={-1}
-                        title={isFav ? '取消收藏' : '收藏'}
-                        onClick={(e) => { e.stopPropagation(); toggleFav(type); }}
-                        onPointerDown={(e) => e.stopPropagation()}
-                        className={cn(
-                          'size-5 grid place-items-center rounded opacity-0 transition-opacity group-hover/row:opacity-100',
-                          isFav ? 'opacity-100 text-amber-400' : 'text-muted-foreground hover:text-amber-400 hover:bg-accent',
-                        )}
-                      >
-                        <Star className={cn('size-3', isFav && 'fill-amber-400')} />
-                      </span>
-                    </button>
-                  );
-                })}
-              </div>
-            </div>
-          ))}
+            );
+          })}
         </div>
       </motion.div>
     </>

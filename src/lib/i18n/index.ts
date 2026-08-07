@@ -45,6 +45,8 @@ export interface TranslationDict {
   editorTitle: string;
   editorPlaceholder: string;
   editorRun: string;
+  editorRunToPanel: string;
+  editorRunToPanelHint: string;
   editorReset: string;
   editorClear: string;
   editorModeSimple: string;
@@ -162,6 +164,7 @@ export interface TranslationDict {
   abSymbols: string;
   abTemplates: string;
   abSolver: string;
+  abControl: string;
   abUnits: string;
   abBases: string;
   abHistory: string;
@@ -645,6 +648,8 @@ export interface TranslationDict {
   solverNavIntegralDesc: string;
   solverNavLimit: string;
   solverNavLimitDesc: string;
+  solverNavControl: string;
+  solverNavControlDesc: string;
   solverSendToPlot2D: string;
   solverSentToPlot2D: string;
   solverSelectExample: string;
@@ -733,6 +738,10 @@ export interface TranslationDict {
   pipelineConnect: string;
   pipelineDisconnect: string;
   pipelineDelete: string;
+  pipelineMute: string;
+  pipelineUnmute: string;
+  pipelineExpand: string;
+  pipelineCollapse: string;
   pipelineDuplicate: string;
   pipelineAutoLayout: string;
   pipelineExport: string;
@@ -744,6 +753,7 @@ export interface TranslationDict {
   npConnecting: string;
   npInvalidConnection: string;
   npRunAll: string;
+  npRunning: string;
   npClearAll: string;
   npExportScript: string;
   npResetView: string;
@@ -1254,6 +1264,28 @@ export interface TranslationDict {
   npSimIn1: string;
   npSimIn2: string;
   npSimOut: string;
+  npSimTransferFn: string;
+
+  /* control — MATLAB 风格自动控制节点 */
+  npCategoryControl: string;
+  npControlTf: string;
+  npControlSerial: string;
+  npControlFeedback: string;
+  npControlStep: string;
+  npControlImpulse: string;
+  npControlBode: string;
+  npControlNyquist: string;
+  npControlRlocus: string;
+  npControlPole: string;
+  npControlZero: string;
+  npControlRoots: string;
+  npControlClosedStep: string;
+  npPortTf: string;
+  npPortForward: string;
+  npPortFb: string;
+  npPortPoles: string;
+  npPortZeros: string;
+  npPortRoots: string;
 
   templates: {
     imageVectorization: {
@@ -1302,6 +1334,8 @@ const zhCN: TranslationDict = {
   editorPlaceholder:
     "# 输入数学表达式，按 Enter 求值\n# 示例：\n2 + 3 * 4\nsin(pi/4)\nx = 42\nplot(sin(x))",
   editorRun: "运行",
+  editorRunToPanel: "运行到独立面板",
+  editorRunToPanelHint: "运行脚本并把绘图结果送入可拖拽的独立结果面板",
   editorReset: "重置",
   editorClear: "清空",
   editorModeSimple: "简单",
@@ -1419,6 +1453,7 @@ const zhCN: TranslationDict = {
   abSymbols: "符号",
   abTemplates: "模板",
   abSolver: "求解器",
+  abControl: "控制理论",
   abUnits: "单位转换",
   abBases: "进制转换",
   abHistory: "历史",
@@ -1900,6 +1935,8 @@ const zhCN: TranslationDict = {
   solverNavIntegralDesc: "不定 / 定积分 · 数值回退",
   solverNavLimit: "极限",
   solverNavLimitDesc: "符号极限 · 数值回退",
+  solverNavControl: "控制理论",
+  solverNavControlDesc: "根轨迹 / 奈奎斯特 / Bode / PID 整定",
   solverSendToPlot2D: "发送到 2D 绘图",
   solverSentToPlot2D: "已发送到 2D 绘图",
   solverSelectExample: "选择示例…",
@@ -1988,6 +2025,10 @@ const zhCN: TranslationDict = {
   pipelineConnect: "连接",
   pipelineDisconnect: "断开",
   pipelineDelete: "删除",
+  pipelineMute: "静音 (Mute)",
+  pipelineUnmute: "取消静音",
+  pipelineExpand: "展开",
+  pipelineCollapse: "折叠",
   pipelineDuplicate: "复制",
   pipelineAutoLayout: "自动布局",
   pipelineExport: "导出",
@@ -1999,6 +2040,7 @@ const zhCN: TranslationDict = {
   npConnecting: "连接中…",
   npInvalidConnection: "端口类型不兼容",
   npRunAll: "运行",
+  npRunning: "运行中…",
   npClearAll: "清空",
   npExportScript: "导出脚本",
   npResetView: "重置视图",
@@ -2422,6 +2464,27 @@ const zhCN: TranslationDict = {
   npSimIn1: "输入 1",
   npSimIn2: "输入 2",
   npSimOut: "输出",
+  npSimTransferFn: "传递函数（伯德/阶跃）",
+  /* control */
+  npCategoryControl: "控制理论",
+  npControlTf: "传递函数 tf",
+  npControlSerial: "串联",
+  npControlFeedback: "反馈闭环",
+  npControlStep: "阶跃响应",
+  npControlImpulse: "冲激响应",
+  npControlBode: "伯德图",
+  npControlNyquist: "奈奎斯特图",
+  npControlRlocus: "根轨迹",
+  npControlPole: "极点",
+  npControlZero: "零点",
+  npControlRoots: "多项式求根",
+  npControlClosedStep: "单位反馈阶跃",
+  npPortTf: "传递函数",
+  npPortForward: "前向通道",
+  npPortFb: "反馈通道",
+  npPortPoles: "极点",
+  npPortZeros: "零点",
+  npPortRoots: "根",
   npTaylorSeries: "泰勒级数",
   npOdeSolve: "常微分方程",
   npPortX0: "X₀",
@@ -2548,6 +2611,8 @@ const en: TranslationDict = {
   editorPlaceholder:
     "# Type a math expression and press Enter to evaluate\n# Examples:\n2 + 3 * 4\nsin(pi/4)\nx = 42\nplot(sin(x))",
   editorRun: "Run",
+  editorRunToPanel: "Run to panel",
+  editorRunToPanelHint: "Run the script and send plot results to the draggable independent result panel",
   editorReset: "Reset",
   editorClear: "Clear",
   editorModeSimple: "Simple",
@@ -2665,6 +2730,7 @@ const en: TranslationDict = {
   abSymbols: "Symbols",
   abTemplates: "Templates",
   abSolver: "Equation Solver",
+  abControl: "Control Theory",
   abUnits: "Unit Converter",
   abBases: "Base Converter",
   abHistory: "History",
@@ -3147,6 +3213,8 @@ const en: TranslationDict = {
   solverNavIntegralDesc: "Indefinite / definite · numeric fallback",
   solverNavLimit: "Limit",
   solverNavLimitDesc: "Symbolic limit · numeric fallback",
+  solverNavControl: "Control Theory",
+  solverNavControlDesc: "Root locus / Nyquist / Bode / PID tuning",
   solverSendToPlot2D: "Send to 2D Plot",
   solverSentToPlot2D: "Sent to 2D plot",
   solverSelectExample: "Select example…",
@@ -3235,6 +3303,10 @@ const en: TranslationDict = {
   pipelineConnect: "Connect",
   pipelineDisconnect: "Disconnect",
   pipelineDelete: "Delete",
+  pipelineMute: "Mute",
+  pipelineUnmute: "Unmute",
+  pipelineExpand: "Expand",
+  pipelineCollapse: "Collapse",
   pipelineDuplicate: "Duplicate",
   pipelineAutoLayout: "Auto Layout",
   pipelineExport: "Export",
@@ -3246,6 +3318,7 @@ const en: TranslationDict = {
   npConnecting: "Connecting…",
   npInvalidConnection: "Incompatible port types",
   npRunAll: "Run",
+  npRunning: "Running…",
   npClearAll: "Clear",
   npExportScript: "Export script",
   npResetView: "Reset view",
@@ -3669,6 +3742,27 @@ const en: TranslationDict = {
   npSimIn1: "Input 1",
   npSimIn2: "Input 2",
   npSimOut: "Output",
+  npSimTransferFn: "Transfer Fn (Bode/Step)",
+  /* control */
+  npCategoryControl: "Control Theory",
+  npControlTf: "Transfer Function tf",
+  npControlSerial: "Series",
+  npControlFeedback: "Feedback Loop",
+  npControlStep: "Step Response",
+  npControlImpulse: "Impulse Response",
+  npControlBode: "Bode Plot",
+  npControlNyquist: "Nyquist Plot",
+  npControlRlocus: "Root Locus",
+  npControlPole: "Poles",
+  npControlZero: "Zeros",
+  npControlRoots: "Polynomial Roots",
+  npControlClosedStep: "Unity-Feedback Step",
+  npPortTf: "Transfer Fn",
+  npPortForward: "Forward Path",
+  npPortFb: "Feedback Path",
+  npPortPoles: "Poles",
+  npPortZeros: "Zeros",
+  npPortRoots: "Roots",
   npTaylorSeries: "Taylor Series",
   npOdeSolve: "ODE Solver",
   npPortX0: "X₀",

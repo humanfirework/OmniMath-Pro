@@ -109,12 +109,17 @@ export function usePortPositions(): PortPositionsMap {
  * @param portId     Port id
  * @param isOutput   Input or output port
  * @param dotRef     Ref to the port dot div
+ * @param trigger    Optional value that forces a re-measure when it changes
+ *                   (e.g. the pipeline view scale). The measured offset is
+ *                   in screen pixels (getBoundingClientRect), which scales
+ *                   with the viewport transform; re-measuring keeps it fresh.
  */
 export function usePortReporter(
   nodeId: string,
   portId: string,
   isOutput: boolean,
   dotRef: RefObject<HTMLDivElement | null>,
+  trigger?: unknown,
 ) {
   const ctx = useContext(PortPositionsContext);
   const key = portKey(nodeId, portId, isOutput);
@@ -152,13 +157,13 @@ export function usePortReporter(
     ctxRef.current?.update(keyRef.current, { x, y });
   }, [dotRef]);
 
-  // Measure on mount + key change.
+  // Measure on mount + key change (+ trigger change, e.g. view scale).
   useLayoutEffect(() => {
     measure();
     return () => {
       ctxRef.current?.remove(keyRef.current);
     };
-  }, [measure]);
+  }, [measure, trigger]);
 
   // Re-measure when the node card resizes (config changes, long content).
   useLayoutEffect(() => {

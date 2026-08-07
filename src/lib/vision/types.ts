@@ -113,6 +113,22 @@ export interface VisionOptions {
   skeletonize?: boolean;
   /** 边缘检测方法 */
   edgeMethod?: EdgeMethod;
+  /** Canny 低阈值（edgeMethod='canny' 时有效），默认 40 */
+  cannyLow?: number;
+  /** Canny 高阈值（edgeMethod='canny' 时有效），默认 100 */
+  cannyHigh?: number;
+  /** 形态学开运算半径：对每层二值图先开运算去噪去毛刺（默认 0=关） */
+  denoiseRadius?: number;
+  /** 是否用边缘检测（edgeMethod）作为轮廓来源（默认 false，保持多阈值分层） */
+  useEdgeDetection?: boolean;
+  /** 是否用灰度亚像素 marching squares 等值线追踪（默认 false；true 时替代多阈值分层路径） */
+  useMarchingSquares?: boolean;
+  /** marching squares 等值线层级数（默认 4） */
+  marchLevels?: number;
+  /** marching squares 先高斯平滑半径（默认 1） */
+  marchSmoothRadius?: number;
+  /** marching squares 过滤周长 < 该值的碎轮廓（默认 0=不过滤） */
+  marchMinPerimeter?: number;
 }
 
 /**

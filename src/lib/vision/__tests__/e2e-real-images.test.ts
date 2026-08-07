@@ -128,7 +128,7 @@ describe('vision e2e: real images', () => {
     const firstF = flipped[0]?.segments?.[0]?.p0;
     let flipYVerified = false;
     if (first && firstF) {
-      const expected = Math.abs((out.height - first.y) - firstF.y) < 1e-6;
+      const expected = Math.abs((out.height - 1 - first.y) - firstF.y) < 1e-6;
       expect(expected).toBe(true);
       expect(firstF.x).toBeCloseTo(first.x, 6);
       flipYVerified = expected;

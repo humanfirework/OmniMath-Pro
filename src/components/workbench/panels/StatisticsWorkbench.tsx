@@ -9,13 +9,14 @@
  * 逻辑完全一致，同时获得更宽裕的全屏排版空间。
  */
 
-import { useState } from 'react';
+import { useRef, useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
   BarChart3,
   Sigma,
   FlaskConical,
   TrendingUp,
+  PanelTopOpen,
 } from 'lucide-react';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import {
@@ -24,6 +25,7 @@ import {
   HypothesisTab,
   RegressionTab,
 } from './StatisticsPanel';
+import { FigureWindow } from '@/components/figure/FigureWindow';
 import { cn } from '@/lib/utils';
 
 type StatNavId = 'descriptive' | 'distribution' | 'hypothesis' | 'regression';
@@ -42,6 +44,8 @@ const NAV_ITEMS: {
 
 export function StatisticsWorkbench() {
   const [nav, setNav] = useState<StatNavId>('descriptive');
+  const [popupOpen, setPopupOpen] = useState(false);
+  const contentRef = useRef<HTMLDivElement | null>(null);
   const active = NAV_ITEMS.find((n) => n.id === nav) ?? NAV_ITEMS[0];
   const ActiveIcon = active.icon;
 
@@ -99,6 +103,20 @@ export function StatisticsWorkbench() {
           <ActiveIcon className="size-4 text-primary" />
           <span className="text-[13px] font-semibold tracking-tight">{active.label}</span>
           <span className="text-[11px] text-muted-foreground">{active.desc}</span>
+          <div className="flex-1" />
+          <button
+            onClick={() => setPopupOpen((v) => !v)}
+            className={cn(
+              'flex items-center gap-1.5 px-2.5 h-7 rounded-md border text-[11px] transition-colors',
+              popupOpen
+                ? 'bg-primary/15 text-primary border-primary/30'
+                : 'border-border/60 text-muted-foreground hover:text-foreground hover:bg-accent',
+            )}
+            title="在独立 Figure 窗口中打开（共享标题栏 / 工具栏 / 导出）"
+          >
+            <PanelTopOpen className="size-3.5" />
+            <span className="hidden sm:inline">{popupOpen ? '关闭 Figure' : '独立 Figure'}</span>
+          </button>
         </div>
 
         <ScrollArea className="flex-1 min-h-0">
@@ -109,7 +127,8 @@ export function StatisticsWorkbench() {
               animate={{ opacity: 1, y: 0 }}
               exit={{ opacity: 0, y: -6 }}
               transition={{ duration: 0.18, ease: 'easeOut' }}
-              className="p-4 max-w-6xl"
+              className="p-4"
+              ref={contentRef}
             >
               {nav === 'descriptive' && <DescriptiveStatsTab fullscreen />}
               {nav === 'distribution' && <DistributionTab fullscreen />}
@@ -119,6 +138,30 @@ export function StatisticsWorkbench() {
           </AnimatePresence>
         </ScrollArea>
       </main>
+
+      {/* ─── G4：独立 Figure 窗口（共享标题栏 / 工具栏 / 导出） ── */}
+      <AnimatePresence>
+        {popupOpen && (
+          <FigureWindow
+            id="statistics-figure"
+            title={`${active.label} · 独立 Figure`}
+            icon={<BarChart3 className="size-3 text-primary" />}
+            onClose={() => setPopupOpen(false)}
+            getSources={() => ({
+              node: contentRef.current,
+              defaultName: `omnimath-stats-${nav}`,
+            })}
+            initial={{ x: 60, y: 60, w: 560, h: 440 }}
+          >
+            <div className="h-full w-full overflow-auto p-3">
+              {nav === 'descriptive' && <DescriptiveStatsTab fullscreen />}
+              {nav === 'distribution' && <DistributionTab fullscreen />}
+              {nav === 'hypothesis' && <HypothesisTab />}
+              {nav === 'regression' && <RegressionTab />}
+            </div>
+          </FigureWindow>
+        )}
+      </AnimatePresence>
     </div>
   );
 }

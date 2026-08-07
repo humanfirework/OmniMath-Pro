@@ -42,8 +42,9 @@ export function toGrayscale(imageData: ImageDataLike): Uint8ClampedArray {
 }
 
 /**
- * 可分离高斯模糊（radius 默认 1，3x3 近似核）。
- * 核权重 [1,2,1]/4，做两次一维卷积（先 x 后 y），边界采用 clamp。
+ * 可分离高斯模糊（支持任意 radius）。
+ * 核由一维高斯 G(x)=exp(-x²/(2σ²)) 生成，σ = radius/3（保证 radius 处衰减到 ~0.01），
+ * 做两次一维卷积（先 x 后 y），边界采用 clamp。radius<=0 返回原副本。
  */
 export function gaussianBlur(
   gray: Uint8ClampedArray,
@@ -52,9 +53,16 @@ export function gaussianBlur(
   radius = 1,
 ): Uint8ClampedArray {
   if (radius <= 0) return gray.slice();
-  // 仅实现 radius=1 的 3x3 近似；其它 radius 退化为 radius=1。
-  const kernel = new Float64Array([1, 2, 1]);
-  const kSum = 4;
+  const r = Math.floor(radius);
+  const sigma = Math.max(0.5, radius / 3);
+  // 构建一维高斯核（长度为 2r+1）
+  const kernel = new Float64Array(2 * r + 1);
+  let kSum = 0;
+  for (let k = -r; k <= r; k++) {
+    const v = Math.exp(-(k * k) / (2 * sigma * sigma));
+    kernel[k + r] = v;
+    kSum += v;
+  }
 
   const tmp = new Float64Array(w * h);
   // 水平 pass
@@ -62,9 +70,9 @@ export function gaussianBlur(
     const row = y * w;
     for (let x = 0; x < w; x++) {
       let acc = 0;
-      for (let k = -1; k <= 1; k++) {
+      for (let k = -r; k <= r; k++) {
         const xx = x + k < 0 ? 0 : x + k >= w ? w - 1 : x + k;
-        acc += gray[row + xx] * kernel[k + 1];
+        acc += gray[row + xx] * kernel[k + r];
       }
       tmp[row + x] = acc / kSum;
     }
@@ -74,9 +82,9 @@ export function gaussianBlur(
   for (let y = 0; y < h; y++) {
     for (let x = 0; x < w; x++) {
       let acc = 0;
-      for (let k = -1; k <= 1; k++) {
+      for (let k = -r; k <= r; k++) {
         const yy = y + k < 0 ? 0 : y + k >= h ? h - 1 : y + k;
-        acc += tmp[yy * w + x] * kernel[k + 1];
+        acc += tmp[yy * w + x] * kernel[k + r];
       }
       out[y * w + x] = acc / kSum + 0.5;
     }
@@ -235,4 +243,92 @@ export function removeSmallRegions(
     curLabel++;
   }
   return out;
+}
+
+/**
+ * 二值腐蚀：r×r 方形结构元，0/1 数组。
+ * 输出中，仅当 src 的 r 邻域内全部为 1 时该像素保留。
+ */
+export function binaryErode(
+  src: Uint8Array,
+  w: number,
+  h: number,
+  r = 1,
+): Uint8Array {
+  const n = w * h;
+  const dst = new Uint8Array(n);
+  if (r <= 0) {
+    dst.set(src);
+    return dst;
+  }
+  for (let y = 0; y < h; y++) {
+    const y0 = y - r < 0 ? 0 : y - r;
+    const y1 = y + r >= h ? h - 1 : y + r;
+    for (let x = 0; x < w; x++) {
+      const p = y * w + x;
+      if (src[p] !== 1) continue;
+      const x0 = x - r < 0 ? 0 : x - r;
+      const x1 = x + r >= w ? w - 1 : x + r;
+      let all = true;
+      outer: for (let yy = y0; yy <= y1; yy++) {
+        const row = yy * w;
+        for (let xx = x0; xx <= x1; xx++) {
+          if (src[row + xx] !== 1) {
+            all = false;
+            break outer;
+          }
+        }
+      }
+      if (all) dst[p] = 1;
+    }
+  }
+  return dst;
+}
+
+/** 二值膨胀：r×r 方形结构元（与 fineOutline.binaryDilation 等价，供 preprocess 独立使用）。 */
+export function binaryDilate(
+  src: Uint8Array,
+  w: number,
+  h: number,
+  r = 1,
+): Uint8Array {
+  const n = w * h;
+  const dst = new Uint8Array(n);
+  if (r <= 0) {
+    dst.set(src);
+    return dst;
+  }
+  for (let y = 0; y < h; y++) {
+    for (let x = 0; x < w; x++) {
+      const p = y * w + x;
+      if (src[p] !== 1) continue;
+      const y0 = y - r < 0 ? 0 : y - r;
+      const y1 = y + r >= h ? h - 1 : y + r;
+      const x0 = x - r < 0 ? 0 : x - r;
+      const x1 = x + r >= w ? w - 1 : x + r;
+      for (let yy = y0; yy <= y1; yy++) {
+        const row = yy * w;
+        for (let xx = x0; xx <= x1; xx++) dst[row + xx] = 1;
+      }
+    }
+  }
+  return dst;
+}
+
+/**
+ * 形态学开运算：先腐蚀后膨胀。去除细小毛刺/孤立点，保持对象整体形状。
+ * op='open' → 先 erode 后 dilate；op='close' → 先 dilate 后 erode（填充小孔）。
+ */
+export function binaryMorphology(
+  src: Uint8Array,
+  w: number,
+  h: number,
+  op: 'open' | 'close',
+  r = 1,
+): Uint8Array {
+  if (r <= 0) return src.slice();
+  if (op === 'open') {
+    return binaryDilate(binaryErode(src, w, h, r), w, h, r);
+  }
+  return binaryErode(binaryDilate(src, w, h, r), w, h, r);
 }

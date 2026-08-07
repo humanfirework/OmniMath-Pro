@@ -22,6 +22,7 @@ import { logicNodes } from './logic';
 import { outputExtraNodes } from './output-extra';
 import { visionNodes } from './vision';
 import { simulationNodes } from './simulation';
+import { controlNodes } from './control';
 
 export type NodeType =
   /* input */
@@ -114,7 +115,21 @@ export type NodeType =
   | 'sim-integrator'
   | 'sim-derivative'
   | 'sim-delay'
-  | 'sim-scope';
+  | 'sim-scope'
+  | 'sim-transfer-fn'
+  /* control — MATLAB 风格自动控制（tf/feedback/step/impulse/bode/pole/roots/rlocus/nyquist） */
+  | 'control-tf'
+  | 'control-serial'
+  | 'control-feedback'
+  | 'control-step'
+  | 'control-impulse'
+  | 'control-bode'
+  | 'control-nyquist'
+  | 'control-rlocus'
+  | 'control-pole'
+  | 'control-zero'
+  | 'control-roots'
+  | 'control-closed-step';
 
 export const NODE_TYPES: Record<NodeType, NodeTypeDef> = {
   ...inputNodes,
@@ -132,4 +147,5 @@ export const NODE_TYPES: Record<NodeType, NodeTypeDef> = {
   ...outputExtraNodes,
   ...visionNodes,
   ...simulationNodes,
+  ...controlNodes,
 };

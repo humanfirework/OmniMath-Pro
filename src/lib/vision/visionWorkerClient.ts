@@ -39,6 +39,7 @@ import {
   zhangSuenThin,
   skeletonToPolylines,
   imageToCurves,
+  videoToCurves,
 } from './index';
 import { decodeGif } from './video';
 import type {
@@ -49,6 +50,7 @@ import type {
   CurveSet,
 } from './types';
 import type { FrameSequence } from './video';
+import type { VideoToCurvesOptions, VideoToCurvesResult } from './videoToCurves';
 import type { VisionWorkerOp, VisionWorkerRequest, VisionWorkerResponse } from './visionWorker';
 
 interface PendingRequest {
@@ -140,6 +142,8 @@ async function runInThread<T>(op: VisionWorkerOp, args: unknown[]): Promise<T> {
   switch (op) {
     case 'imageToCurves':
       return imageToCurves(args[0] as ImageDataLike, args[1] as VisionOptions | undefined) as T;
+    case 'videoToCurves':
+      return videoToCurves(args[0] as FrameSequence, args[1] as VideoToCurvesOptions | undefined) as T;
     case 'toGrayscale':
       return toGrayscale(args[0] as ImageDataLike) as T;
     case 'binarize':
@@ -187,6 +191,9 @@ async function runInThread<T>(op: VisionWorkerOp, args: unknown[]): Promise<T> {
 export const visionWorkerClient = {
   imageToCurves(imageData: ImageDataLike, options?: VisionOptions): Promise<CurveSet> {
     return callWorker<CurveSet>('imageToCurves', [imageData, options]);
+  },
+  videoToCurves(seq: FrameSequence, options?: VideoToCurvesOptions): Promise<VideoToCurvesResult> {
+    return callWorker<VideoToCurvesResult>('videoToCurves', [seq, options]);
   },
   toGrayscale(imageData: ImageDataLike): Promise<Uint8ClampedArray> {
     return callWorker<Uint8ClampedArray>('toGrayscale', [imageData]);

@@ -114,6 +114,11 @@ export interface AIChatOptions {
    * 内置 SYSTEM_PROMPT 之后、对话历史之前，且不受历史截断影响。
    */
   context?: string;
+  /**
+   * 流式输出回调：每收到一段模型增量文本即触发（用于实时渲染）。
+   * 仅由 `chatCompleteStream` 使用。
+   */
+  onToken?: (delta: string) => void;
 }
 
 /* ----------------------------- System prompt ----------------------------- */
@@ -214,6 +219,329 @@ export async function chatComplete(
   const reply = typeof res.message.content === 'string' ? res.message.content : '';
   if (!reply) return { ok: false, error: 'EMPTY_REPLY' };
   return { ok: true, reply };
+}
+
+/**
+ * 流式对话：POST 到 chat/completions 并开启 `stream: true`，逐段读取 SSE
+ * 增量文本，通过 `opts.onToken` 实时回调，最终返回完整回复或结构化错误。
+ *
+ * 错误码与 `chatComplete` 一致（另增 'STREAM_ERROR' 表示流解析失败）。
+ * 支持 `opts.signal` 中途取消（AbortController）。
+ */
+export async function chatCompleteStream(
+  messages: AIMessage[],
+  opts: AIChatOptions = {},
+): Promise<AIResult> {
+  const cfg = loadAIConfig();
+  if (!cfg.apiKey.trim()) return { ok: false, error: 'NO_API_KEY' };
+
+  const baseURL = cfg.baseURL.replace(/\/+$/, '');
+  const url = `${baseURL}/chat/completions`;
+
+  const payload: Record<string, unknown> = {
+    model: opts.model ?? cfg.model,
+    temperature: opts.temperature ?? 0.7,
+    stream: true,
+    messages: buildApiMessages(messages, opts),
+  };
+
+  let res: Response;
+  try {
+    res = await fetch(url, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${cfg.apiKey.trim()}`,
+      },
+      body: JSON.stringify(payload),
+      signal: opts.signal,
+    });
+  } catch (err) {
+    if (err instanceof DOMException && err.name === 'AbortError') {
+      return { ok: false, error: 'ABORTED' };
+    }
+    return { ok: false, error: 'NETWORK_ERROR' };
+  }
+
+  if (!res.ok) return { ok: false, error: `HTTP_${res.status}` };
+  if (!res.body) return { ok: false, error: 'STREAM_ERROR' };
+
+  const reader = res.body.getReader();
+  const decoder = new TextDecoder();
+  let buffer = '';
+  let reply = '';
+
+  try {
+    for (;;) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      buffer += decoder.decode(value, { stream: true });
+
+      // 按行切分 SSE 事件（行以 \n 结尾）：
+      //  - `data: [DONE]` 结束
+      //  - `data: {json}` 中取 choices[0].delta.content 累加
+      let nl = buffer.indexOf('\n');
+      while (nl >= 0) {
+        const line = buffer.slice(0, nl).trim();
+        buffer = buffer.slice(nl + 1);
+        if (line.startsWith('data:')) {
+          const data = line.slice(5).trim();
+          if (!data) continue;
+          if (data === '[DONE]') {
+            buffer = '';
+            break;
+          }
+          const delta = extractStreamDelta(data);
+          if (delta) {
+            reply += delta;
+            opts.onToken?.(delta);
+          }
+        }
+        nl = buffer.indexOf('\n');
+      }
+    }
+  } catch (err) {
+    if (err instanceof DOMException && err.name === 'AbortError') {
+      return { ok: false, error: 'ABORTED' };
+    }
+    return { ok: false, error: 'STREAM_ERROR' };
+  }
+
+  if (!reply) return { ok: false, error: 'EMPTY_REPLY' };
+  return { ok: true, reply };
+}
+
+/** 从一条 SSE `data:` JSON 中提取首个 choice 的增量文本。 */
+function extractStreamDelta(data: string): string {
+  try {
+    const parsed = JSON.parse(data) as {
+      choices?: Array<{ delta?: { content?: string | null } }>;
+    };
+    const content = parsed?.choices?.[0]?.delta?.content;
+    return typeof content === 'string' ? content : '';
+  } catch {
+    return '';
+  }
+}
+
+/** 从一条 SSE `data:` JSON 中累积抽取增量 tool_calls（按 index 归类）。 */
+function extractStreamToolCalls(
+  data: string,
+  acc: AIToolCall[],
+): void {
+  try {
+    const parsed = JSON.parse(data) as {
+      choices?: Array<{
+        delta?: {
+          tool_calls?: Array<{
+            index?: number;
+            id?: string;
+            type?: string;
+            function?: { name?: string; arguments?: string };
+          }>;
+        };
+      }>;
+    };
+    const deltas = parsed?.choices?.[0]?.delta?.tool_calls;
+    if (!Array.isArray(deltas)) return;
+    for (const d of deltas) {
+      let idx = typeof d.index === 'number' ? d.index : acc.length;
+      let slot = acc[idx];
+      if (!slot) {
+        slot = { id: d.id ?? `call_${idx}`, type: 'function', function: { name: '', arguments: '' } };
+        acc[idx] = slot;
+      }
+      if (d.id) slot.id = d.id;
+      if (d.type === 'function') slot.type = d.type;
+      if (d.function?.name) slot.function.name += d.function.name;
+      if (d.function?.arguments) slot.function.arguments += d.function.arguments;
+    }
+  } catch {
+    /* 忽略无法解析的碎片 */
+  }
+}
+
+/** 流式请求的结果：完整文本 + 累积的 tool_calls。 */
+interface StreamRoundResult {
+  content: string;
+  toolCalls: AIToolCall[];
+}
+
+/**
+ * 单次流式 POST（可带 tools）。逐段读取 SSE，通过 `opts.onToken` 实时回调
+ * 文本增量，同时按 index 累积 tool_calls 增量。返回完整文本与工具调用。
+ * 错误码与 `requestCompletion` 一致。
+ */
+async function requestStream(
+  messages: AIAgentMessage[],
+  opts: AIChatOptions,
+  tools?: AIToolDef[],
+): Promise<{ ok: true; result: StreamRoundResult } | { ok: false; error: string }> {
+  const cfg = loadAIConfig();
+  if (!cfg.apiKey.trim()) return { ok: false, error: 'NO_API_KEY' };
+
+  const baseURL = cfg.baseURL.replace(/\/+$/, '');
+  const url = `${baseURL}/chat/completions`;
+
+  const payload: Record<string, unknown> = {
+    model: opts.model ?? cfg.model,
+    temperature: opts.temperature ?? 0.7,
+    stream: true,
+    messages,
+  };
+  if (tools && tools.length > 0) {
+    payload.tools = tools;
+    payload.tool_choice = 'auto';
+  }
+
+  let res: Response;
+  try {
+    res = await fetch(url, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${cfg.apiKey.trim()}`,
+      },
+      body: JSON.stringify(payload),
+      signal: opts.signal,
+    });
+  } catch (err) {
+    if (err instanceof DOMException && err.name === 'AbortError') {
+      return { ok: false, error: 'ABORTED' };
+    }
+    return { ok: false, error: 'NETWORK_ERROR' };
+  }
+
+  if (!res.ok) return { ok: false, error: `HTTP_${res.status}` };
+  if (!res.body) return { ok: false, error: 'STREAM_ERROR' };
+
+  const reader = res.body.getReader();
+  const decoder = new TextDecoder();
+  let buffer = '';
+  let content = '';
+  const toolCalls: AIToolCall[] = [];
+
+  try {
+    for (;;) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      buffer += decoder.decode(value, { stream: true });
+
+      let nl = buffer.indexOf('\n');
+      while (nl >= 0) {
+        const line = buffer.slice(0, nl).trim();
+        buffer = buffer.slice(nl + 1);
+        if (line.startsWith('data:')) {
+          const data = line.slice(5).trim();
+          if (!data) continue;
+          if (data === '[DONE]') {
+            buffer = '';
+            break;
+          }
+          const delta = extractStreamDelta(data);
+          if (delta) {
+            content += delta;
+            opts.onToken?.(delta);
+          }
+          extractStreamToolCalls(data, toolCalls);
+        }
+        nl = buffer.indexOf('\n');
+      }
+    }
+  } catch (err) {
+    if (err instanceof DOMException && err.name === 'AbortError') {
+      return { ok: false, error: 'ABORTED' };
+    }
+    return { ok: false, error: 'STREAM_ERROR' };
+  }
+
+  return { ok: true, result: { content, toolCalls } };
+}
+
+/**
+ * 流式 + 工具调用：与 `chatWithTools` 语义一致，但每轮请求都走 SSE 流，
+ * 最终文本增量经 `opts.onToken` 实时回调。工具调用仍可靠执行并回填。
+ *
+ * 若首轮流式请求失败（端点/模型不支持流式或 tools），自动降级为
+ * 非流式的 `chatWithTools`，保证功能不丢失。
+ */
+export async function chatWithToolsStream(
+  messages: AIMessage[],
+  tools: AIToolDef[],
+  executor: AIToolExecutor,
+  opts: AIAgentOptions = {},
+): Promise<AIAgentResult> {
+  const toolCalls: AIToolCallRecord[] = [];
+  const maxRounds = opts.maxRounds ?? MAX_TOOL_ROUNDS;
+  const transcript: AIAgentMessage[] = buildApiMessages(messages, opts);
+
+  for (let round = 0; round <= maxRounds; round++) {
+    const isFinalRound = round === maxRounds;
+    const streamRes = await requestStream(
+      transcript,
+      opts,
+      isFinalRound || tools.length === 0 ? undefined : tools,
+    );
+
+    if (!streamRes.ok) {
+      if (round === 0 && toolCalls.length === 0 && streamRes.error !== 'ABORTED') {
+        const fallback = await chatWithTools(messages, tools, executor, opts);
+        return fallback;
+      }
+      return { ok: false, error: streamRes.error, toolCalls };
+    }
+
+    const { content, toolCalls: calls } = streamRes.result;
+
+    // 无工具调用 → 最终文本回答
+    if (calls.length === 0) {
+      if (!content) return { ok: false, error: 'EMPTY_REPLY', toolCalls };
+      return { ok: true, reply: content, toolCalls, usedTools: toolCalls.length > 0 };
+    }
+
+    // 回填 assistant（含 tool_calls），执行每个工具并把结果作为 tool 消息追回
+    transcript.push({
+      role: 'assistant',
+      content: content || null,
+      tool_calls: calls,
+    });
+
+    for (const call of calls) {
+      const name = call.function?.name ?? '';
+      const argsJson = call.function?.arguments ?? '{}';
+      let parsedArgs: Record<string, unknown> = {};
+      try {
+        const p = JSON.parse(argsJson);
+        if (p && typeof p === 'object' && !Array.isArray(p)) parsedArgs = p;
+      } catch {
+        /* 模型偶发输出非法 JSON — 以空参数交给 executor，不崩溃 */
+      }
+
+      let outcome: { ok: boolean; content: string };
+      try {
+        outcome = await executor(name, argsJson);
+      } catch (err) {
+        outcome = {
+          ok: false,
+          content: `工具执行异常: ${err instanceof Error ? err.message : String(err)}`,
+        };
+      }
+
+      const record: AIToolCallRecord = {
+        id: call.id,
+        name,
+        args: parsedArgs,
+        result: outcome.content,
+        ok: outcome.ok,
+      };
+      toolCalls.push(record);
+      opts.onToolCall?.(record);
+
+      transcript.push({ role: 'tool', tool_call_id: call.id, name, content: outcome.content });
+    }
+  }
+
+  return { ok: false, error: 'EMPTY_REPLY', toolCalls };
 }
 
 /* ----------------------------- Tool-calling loop ----------------------------- */

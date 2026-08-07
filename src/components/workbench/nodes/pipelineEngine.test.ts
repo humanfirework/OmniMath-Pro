@@ -383,6 +383,30 @@ describe('pipelineEngine', () => {
       expect(out.every((n) => n.error === undefined)).toBe(true);
     });
 
+    it('静音节点跳过执行，把首个输入透传到首个输出（Blender Mute）', async () => {
+      const sum = makeNode('sum', 'arithmetic', { op: '+' });
+      sum.muted = true;
+      const nodes = [
+        makeNode('n1', 'number-input', { value: 2 }),
+        makeNode('n2', 'number-input', { value: 3 }),
+        sum,
+        makeNode('disp', 'display'),
+      ];
+      const edges = [
+        makeEdge('n1', 'value', 'sum', 'a'),
+        makeEdge('n2', 'value', 'sum', 'b'),
+        makeEdge('sum', 'result', 'disp', 'value'),
+      ];
+      const out = await executePipeline(nodes, edges, emptyCtx);
+      const byId = new Map(out.map((n) => [n.id, n]));
+      // 静音节点不执行加法，结果 = 首个输入 a 的值（2），且无错误。
+      expect(byId.get('sum')!.result).toBe(2);
+      expect(byId.get('sum')!.error).toBeUndefined();
+      // 下游 display 透传得到 2，整条链无错误。
+      expect(byId.get('disp')!.result).toBe(2);
+      expect(out.every((n) => n.error === undefined)).toBe(true);
+    });
+
     it('返回新节点数组，不修改入参节点', async () => {
       const nodes = [makeNode('n1', 'number-input', { value: 2 })];
       const out = await executePipeline(nodes, [], emptyCtx);

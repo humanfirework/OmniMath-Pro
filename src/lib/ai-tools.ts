@@ -29,6 +29,7 @@ import {
   type VariableEntry,
 } from '@/lib/store/workbench';
 import { useFileSystemStore } from '@/lib/store/fileSystemStore';
+import { useAIContextStore } from '@/lib/store/aiContextStore';
 import type { AIToolDef } from './ai-client';
 
 /* ================================================================== *
@@ -54,6 +55,14 @@ export interface WorkspaceSnapshot {
   variables: Array<{ name: string; type: string; value: string }>;
   /** 最近一次计算错误（无则 null）。 */
   recentError: string | null;
+  /** 蓝图节点图摘要（可选，来自 aiContextStore）。 */
+  pipeline?: unknown;
+  /** 求解器摘要（可选）。 */
+  solver?: unknown;
+  /** 线性代数矩阵摘要（可选）。 */
+  linalg?: unknown;
+  /** 控制理论摘要（可选，预留）。 */
+  control?: unknown;
 }
 
 /** 上下文预算 — 防止超长文件/变量表把请求体撑爆。 */
@@ -68,6 +77,8 @@ export const CONTEXT_LIMITS = {
   variableValueChars: 120,
   /** 最近错误信息的最大长度。 */
   errorChars: 500,
+  /** 单个模块摘要（pipeline/solver/linalg/control）注入 JSON 的最大长度。 */
+  moduleSummaryChars: 1500,
 } as const;
 
 /** 把任意变量值安全地压缩成一行短字符串（绝不抛出）。 */
@@ -143,7 +154,22 @@ export function collectWorkspaceSnapshot(): WorkspaceSnapshot {
     // 同上，静默降级
   }
 
-  return { activeFile, plots, variables, recentError };
+  // ── AI 读取上下文：求解器 / 线代 / 蓝图节点 / 控制（只读镜像） ──
+  let pipeline: unknown;
+  let solver: unknown;
+  let linalg: unknown;
+  let control: unknown;
+  try {
+    const aiCtx = useAIContextStore.getState();
+    pipeline = aiCtx.pipeline;
+    solver = aiCtx.solver;
+    linalg = aiCtx.linalg;
+    control = aiCtx.control;
+  } catch {
+    // store 不可用（如测试环境）时静默降级
+  }
+
+  return { activeFile, plots, variables, recentError, pipeline, solver, linalg, control };
 }
 
 /**
@@ -204,6 +230,25 @@ export function buildContextMessage(snapshot: WorkspaceSnapshot): string {
       ? `${snapshot.recentError.slice(0, CONTEXT_LIMITS.errorChars)}…`
       : snapshot.recentError;
     L.push(`\n■ 最近的错误: ${err}`);
+  }
+
+  // ── 模块摘要（求解器 / 线代 / 蓝图节点 / 控制）────────────
+  const moduleLabels: Array<[string, unknown]> = [
+    ['求解器', snapshot.solver],
+    ['线性代数矩阵', snapshot.linalg],
+    ['蓝图节点图', snapshot.pipeline],
+    ['控制理论', snapshot.control],
+  ];
+  for (const [label, value] of moduleLabels) {
+    if (value === undefined || value === null) continue;
+    try {
+      const json = JSON.stringify(value) ?? '';
+      const truncated = json.length > CONTEXT_LIMITS.moduleSummaryChars;
+      const body = truncated ? json.slice(0, CONTEXT_LIMITS.moduleSummaryChars) : json;
+      L.push(`\n■ ${label}（当前状态，只读参考）: ${body}${truncated ? '…（已截断）' : ''}`);
+    } catch {
+      // 无法序列化的值跳过，避免撑爆上下文
+    }
   }
 
   return L.join('\n');
@@ -268,8 +313,133 @@ export const WORKBENCH_TOOLS: AIToolDef[] = [
     function: {
       name: 'get_workspace_state',
       description:
-        '获取当前工作台状态摘要（JSON）：编辑器激活文件及内容、绘图表达式列表、变量表、最近的错误。',
+        '获取当前工作台状态摘要（JSON）：编辑器激活文件及内容、绘图表达式列表、变量表、最近的错误，以及求解器/线代/蓝图节点/控制等模块的当前状态。',
       parameters: { type: 'object', properties: {} },
+    },
+  },
+  {
+    type: 'function',
+    function: {
+      name: 'configure_node',
+      description:
+        'AI 调蓝图节点参数（如 edge-detect 的 lowThreshold/highThreshold）。只设置该节点 config 中已存在的键，不会新增字段。调用后节点会自动重算。',
+      parameters: {
+        type: 'object',
+        properties: {
+          nodeId: { type: 'string', description: '目标节点 id，如 "ed-1"' },
+          configPatch: {
+            type: 'object',
+            description: '要写入的节点参数补丁，如 {"lowThreshold": 60, "highThreshold": 120}',
+          },
+        },
+        required: ['nodeId', 'configPatch'],
+      },
+    },
+  },
+  {
+    type: 'function',
+    function: {
+      name: 'apply_matrix',
+      description:
+        '设置线性代数矩阵编辑器当前选中矩阵的数据。矩阵为二维数字数组，非法值（NaN/Infinity）会被归零。',
+      parameters: {
+        type: 'object',
+        properties: {
+          matrix: {
+            type: 'array',
+            description: '二维数字数组，如 [[0,-1],[1,0]]（2×2）或 3×3 旋转矩阵',
+            items: { type: 'array', items: { type: 'number' } },
+          },
+          dim: { type: 'number', description: '矩阵维数（2 或 3）' },
+        },
+        required: ['matrix'],
+      },
+    },
+  },
+  {
+    type: 'function',
+    function: {
+      name: 'configure_solver',
+      description:
+        '设置求解器输入（tab ∈ equation/system/derivative/integral/limit）。例如 tab=equation 时 patch 可含 equation/varName/rangeA/rangeB/solveMode。',
+      parameters: {
+        type: 'object',
+        properties: {
+          tab: {
+            type: 'string',
+            enum: ['equation', 'system', 'derivative', 'integral', 'limit'],
+            description: '求解器子面板',
+          },
+          patch: {
+            type: 'object',
+            description: '要写入该面板的输入参数补丁',
+          },
+        },
+        required: ['tab', 'patch'],
+      },
+    },
+  },
+  {
+    type: 'function',
+    function: {
+      name: 'set_editor_content',
+      description:
+        '覆写或追加编辑器内容。mode=replace 时用参数内容整体替换编辑器；mode=append 时把内容追加到编辑器末尾。',
+      parameters: {
+        type: 'object',
+        properties: {
+          content: { type: 'string', description: '要写入编辑器的新内容' },
+          mode: {
+            type: 'string',
+            enum: ['replace', 'append'],
+            description: 'replace=覆写，append=追加（默认 replace）',
+          },
+        },
+        required: ['content'],
+      },
+    },
+  },
+  {
+    type: 'function',
+    function: {
+      name: 'build_pipeline',
+      description:
+        'AI 整图搭建（M4）：根据用户描述在蓝图画布上搭建一条节点管线。nodes 传要创建的节点列表（按执行顺序），每项 {type, config?}；edges 可选，用节点在 nodes 里的序号描述连线 {from, to}，缺省时按 nodes 顺序自动首尾相连。搭建后会自动重算并居中显示。',
+      parameters: {
+        type: 'object',
+        properties: {
+          nodes: {
+            type: 'array',
+            description:
+              '要创建的节点列表（按执行顺序）。每项: {type, config?}。type 为蓝图节点类型，如 "number-input"/"image-input"/"edge-detect"/"curve-fit"/"plot-curves"/"sim-transfer-fn" 等；config 为该节点参数（可选），如 {"lowThreshold":60}。',
+            items: {
+              type: 'object',
+              properties: {
+                type: { type: 'string', description: '蓝图节点类型' },
+                config: { type: 'object', description: '该节点参数（可选，只写该类型已有字段）' },
+              },
+              required: ['type'],
+            },
+          },
+          edges: {
+            type: 'array',
+            description: '可选连线列表，用节点在 nodes 中的序号: {from: 序号, to: 序号}。缺省时按 nodes 顺序自动首尾相连。',
+            items: {
+              type: 'object',
+              properties: {
+                from: { type: 'number', description: '起点节点在 nodes 中的序号' },
+                to: { type: 'number', description: '终点节点在 nodes 中的序号' },
+              },
+              required: ['from', 'to'],
+            },
+          },
+          clearExisting: {
+            type: 'boolean',
+            description: '是否先清空画布再搭建（默认 true）',
+          },
+        },
+        required: ['nodes'],
+      },
     },
   },
 ];
@@ -291,6 +461,18 @@ export interface WorkbenchToolDeps {
   /** 当前绘图条数（用于给新曲线挑颜色）。 */
   getPlotCount: () => number;
   getSnapshot: () => WorkspaceSnapshot;
+  /** 配置蓝图节点参数（M1）。返回 { ok, message }。 */
+  configureNode?: (nodeId: string, patch: Record<string, unknown>) => { ok: boolean; message: string };
+  /** 设置线代矩阵（M2）。 */
+  applyMatrix?: (matrix: number[][], dim: number) => { ok: boolean; message: string };
+  /** 设置求解器输入（M2）。 */
+  configureSolver?: (tab: string, patch: Record<string, unknown>) => { ok: boolean; message: string };
+  /** 覆写/追加编辑器内容（M3）。 */
+  setEditorContent?: (content: string, mode: string) => { ok: boolean; message: string };
+  /** 整图搭建（M4）：根据节点/边规格在蓝图画布创建节点并连线。 */
+  buildPipeline?: (
+    spec: { nodes: unknown[]; edges?: unknown[]; clearExisting?: boolean },
+  ) => { ok: boolean; message: string };
 }
 
 /** 2D 曲线配色（与 EditorPanel / SolverWorkbench 的调色板一致）。 */
@@ -402,6 +584,64 @@ export async function dispatchTool(
       }
     }
 
+    case 'configure_node': {
+      const nodeId = typeof args.nodeId === 'string' ? args.nodeId.trim() : '';
+      if (!nodeId) return { ok: false, content: '缺少必需参数 nodeId（节点 id）' };
+      if (!isPlainObject(args.configPatch)) {
+        return { ok: false, content: 'configPatch 必须是参数对象' };
+      }
+      if (!deps.configureNode) return { ok: false, content: '该操作当前环境不可用' };
+      const patch = sanitizeConfigPatch(args.configPatch as Record<string, unknown>);
+      const r = deps.configureNode(nodeId, patch);
+      return { ok: r.ok, content: r.message };
+    }
+
+    case 'apply_matrix': {
+      const matrix = sanitizeMatrix(args.matrix);
+      if (!matrix) return { ok: false, content: 'matrix 必须是二维有限数字数组，如 [[0,-1],[1,0]]' };
+      if (!deps.applyMatrix) return { ok: false, content: '该操作当前环境不可用' };
+      const dim = typeof args.dim === 'number' && Number.isFinite(args.dim) ? Math.round(args.dim) : matrix.length;
+      const r = deps.applyMatrix(matrix, dim);
+      return { ok: r.ok, content: r.message };
+    }
+
+    case 'configure_solver': {
+      const tab = typeof args.tab === 'string' ? args.tab.trim() : '';
+      const allowed: string[] = ['equation', 'system', 'derivative', 'integral', 'limit'];
+      if (!allowed.includes(tab)) {
+        return { ok: false, content: `tab 必须是 ${allowed.join('/')} 之一` };
+      }
+      if (!isPlainObject(args.patch)) return { ok: false, content: 'patch 必须是参数对象' };
+      if (!deps.configureSolver) return { ok: false, content: '该操作当前环境不可用' };
+      const r = deps.configureSolver(tab, args.patch as Record<string, unknown>);
+      return { ok: r.ok, content: r.message };
+    }
+
+    case 'set_editor_content': {
+      const content = typeof args.content === 'string' ? args.content : '';
+      if (!content.trim() && typeof args.content !== 'string') {
+        return { ok: false, content: '缺少必需参数 content（字符串）' };
+      }
+      const mode = typeof args.mode === 'string' && args.mode === 'append' ? 'append' : 'replace';
+      if (!deps.setEditorContent) return { ok: false, content: '该操作当前环境不可用' };
+      const r = deps.setEditorContent(content, mode);
+      return { ok: r.ok, content: r.message };
+    }
+
+    case 'build_pipeline': {
+      if (!Array.isArray(args.nodes) || args.nodes.length === 0) {
+        return { ok: false, content: '缺少必需参数 nodes（至少一个节点，形如 [{type:"number-input"}]）' };
+      }
+      if (!deps.buildPipeline) return { ok: false, content: '该操作当前环境不可用' };
+      const spec = {
+        nodes: args.nodes,
+        edges: Array.isArray(args.edges) ? args.edges : undefined,
+        clearExisting: typeof args.clearExisting === 'boolean' ? args.clearExisting : true,
+      };
+      const r = deps.buildPipeline(spec);
+      return { ok: r.ok, content: r.message };
+    }
+
     default:
       return {
         ok: false,
@@ -412,6 +652,48 @@ export async function dispatchTool(
 
 function errMessage(err: unknown): string {
   return err instanceof Error ? err.message : String(err);
+}
+
+/** 判断是否为普通对象（非数组 / 非 null / 非 Date 等）。 */
+function isPlainObject(v: unknown): v is Record<string, unknown> {
+  return !!v && typeof v === 'object' && !Array.isArray(v);
+}
+
+/**
+ * 把节点配置补丁中的每个值清洗为 number/string/boolean，拒绝 NaN/Infinity。
+ * 只保留可安全写回节点 config 的基础类型值。
+ */
+function sanitizeConfigPatch(patch: Record<string, unknown>): Record<string, unknown> {
+  const out: Record<string, unknown> = {};
+  for (const [k, v] of Object.entries(patch)) {
+    if (typeof v === 'number') {
+      if (!Number.isFinite(v)) continue; // 拒绝 NaN/Infinity
+      out[k] = v;
+    } else if (typeof v === 'string' || typeof v === 'boolean') {
+      out[k] = v;
+    }
+    // 其它类型（对象/数组/函数）一律丢弃，避免 AI 引入非法字段
+  }
+  return out;
+}
+
+/**
+ * 把任意值清洗为合法的二维数字矩阵；非法（NaN/Infinity/非数组/非数字）
+ * 一律归零。返回 null 表示不是二维数字数组（无法恢复）。
+ */
+function sanitizeMatrix(value: unknown): number[][] | null {
+  if (!Array.isArray(value) || value.length === 0) return null;
+  const out: number[][] = [];
+  for (const row of value) {
+    if (!Array.isArray(row)) return null;
+    const cleanRow: number[] = [];
+    for (const cell of row) {
+      const n = typeof cell === 'number' ? cell : Number(cell);
+      cleanRow.push(Number.isFinite(n) ? n : 0);
+    }
+    out.push(cleanRow);
+  }
+  return out;
 }
 
 /* ================================================================== *
@@ -427,6 +709,31 @@ export function createWorkbenchToolDeps(): WorkbenchToolDeps {
     addPlot: (plot) => useWorkbenchStore.getState().addPlot(plot),
     getPlotCount: () => useWorkbenchStore.getState().plots.length,
     getSnapshot: () => collectWorkspaceSnapshot(),
+    configureNode: (nodeId, patch) => {
+      if (typeof window === 'undefined') return { ok: false, message: '该操作当前环境不可用' };
+      window.dispatchEvent(new CustomEvent('omnimath:node-config', { detail: { nodeId, patch } }));
+      return { ok: true, message: '已下发指令' };
+    },
+    applyMatrix: (matrix, dim) => {
+      if (typeof window === 'undefined') return { ok: false, message: '该操作当前环境不可用' };
+      window.dispatchEvent(new CustomEvent('omnimath:linalg-apply', { detail: { matrix, dim } }));
+      return { ok: true, message: '已下发指令' };
+    },
+    configureSolver: (tab, patch) => {
+      if (typeof window === 'undefined') return { ok: false, message: '该操作当前环境不可用' };
+      window.dispatchEvent(new CustomEvent('omnimath:solver-config', { detail: { tab, patch } }));
+      return { ok: true, message: '已下发指令' };
+    },
+    setEditorContent: (content, mode) => {
+      if (typeof window === 'undefined') return { ok: false, message: '该操作当前环境不可用' };
+      window.dispatchEvent(new CustomEvent('omnimath:editor-content', { detail: { content, mode } }));
+      return { ok: true, message: '已下发指令' };
+    },
+    buildPipeline: (spec) => {
+      if (typeof window === 'undefined') return { ok: false, message: '该操作当前环境不可用' };
+      window.dispatchEvent(new CustomEvent('omnimath:pipeline-build', { detail: spec }));
+      return { ok: true, message: '已下发指令' };
+    },
   };
 }
 

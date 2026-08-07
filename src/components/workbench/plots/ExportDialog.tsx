@@ -39,12 +39,14 @@ import {
   Download,
   FileImage,
   FileCode,
+  FileSpreadsheet,
   Loader2,
 } from 'lucide-react';
 import { toSvg } from 'html-to-image';
 import { saveCanvasToFile, saveTextToFile } from '@/lib/nativeExport';
 import { useSettingsStore } from '@/lib/store/settingsStore';
 import { toast } from 'sonner';
+import { seriesToCSV, type SeriesData } from '@/lib/plots/csvExport';
 
 export interface ExportDialogProps {
   open: boolean;
@@ -57,10 +59,15 @@ export interface ExportDialogProps {
   title?: string;
   /** 描述文字 */
   description?: string;
+  /**
+   * 曲线数据（可选）。提供后才显示「CSV」格式选项，把曲线数据导出为
+   * 每序列两列的表格（`{name}_x`, `{name}_y`）。某一行缺失/非有限值留空。
+   */
+  seriesData?: SeriesData[];
 }
 
 type DpiOption = 1 | 2 | 4;
-type ExportFormat = 'png' | 'svg';
+type ExportFormat = 'png' | 'svg' | 'csv';
 
 const DPI_OPTIONS: { value: DpiOption; label: string; hint: string }[] = [
   { value: 1, label: '标准', hint: '1× — 体积最小' },
@@ -71,6 +78,7 @@ const DPI_OPTIONS: { value: DpiOption; label: string; hint: string }[] = [
 const FORMAT_OPTIONS: { value: ExportFormat; label: string; hint: string }[] = [
   { value: 'png', label: 'PNG', hint: '位图 · 体积小' },
   { value: 'svg', label: 'SVG', hint: '矢量 · 可缩放' },
+  { value: 'csv', label: 'CSV', hint: '数据表 · 可编辑' },
 ];
 
 export function ExportDialog({
@@ -80,6 +88,7 @@ export function ExportDialog({
   defaultName = `omnimath-${Date.now()}`,
   title = '导出图像',
   description = '选择格式与分辨率后导出',
+  seriesData,
 }: ExportDialogProps) {
   // DPI 默认值来自全局设置（defaultExportDpi），用户在导出对话框中
   // 切换 DPI 时同步回写设置，实现"上次选择的分辨率"持久化。
@@ -100,6 +109,26 @@ export function ExportDialog({
   const handleExport = useCallback(async () => {
     const node = canvasRef.current;
     const trimmed = fileName.trim() || defaultName;
+
+    // CSV：把曲线数据序列化为表格文本（不依赖画布）
+    if (format === 'csv') {
+      if (!seriesData || seriesData.length === 0) {
+        toast.error('暂无曲线数据可导出');
+        return;
+      }
+      setExporting(true);
+      try {
+        const csv = seriesToCSV(seriesData);
+        const ok = await saveTextToFile(csv, {
+          defaultName: trimmed,
+          extensions: ['csv'],
+        });
+        if (ok) onOpenChange(false);
+      } finally {
+        setExporting(false);
+      }
+      return;
+    }
 
     // SVG：把画布容器整个序列化为矢量 SVG 文本
     if (format === 'svg') {
@@ -152,7 +181,7 @@ export function ExportDialog({
     } finally {
       setExporting(false);
     }
-  }, [canvasRef, fileName, defaultName, dpi, format, onOpenChange]);
+  }, [canvasRef, fileName, defaultName, dpi, format, onOpenChange, seriesData]);
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -161,6 +190,8 @@ export function ExportDialog({
           <DialogTitle className="flex items-center gap-2">
             {format === 'svg' ? (
               <FileCode className="size-4 text-primary" />
+            ) : format === 'csv' ? (
+              <FileSpreadsheet className="size-4 text-primary" />
             ) : (
               <FileImage className="size-4 text-primary" />
             )}
@@ -180,7 +211,9 @@ export function ExportDialog({
               onValueChange={(v) => setFormat(v as ExportFormat)}
               className="grid grid-cols-2 gap-2"
             >
-              {FORMAT_OPTIONS.map((opt) => (
+              {FORMAT_OPTIONS.filter(
+                (opt) => opt.value !== 'csv' || (seriesData && seriesData.length > 0),
+              ).map((opt) => (
                 <label
                   key={opt.value}
                   htmlFor={`export-format-${opt.value}`}

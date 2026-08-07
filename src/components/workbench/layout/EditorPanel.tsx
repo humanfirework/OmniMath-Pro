@@ -41,6 +41,7 @@ import {
   Settings2,
   Sigma,
   X,
+  PanelTop,
 } from 'lucide-react';
 import {
   Tooltip,
@@ -62,6 +63,8 @@ import { t } from '@/lib/i18n';
 import { cn } from '@/lib/utils';
 import { toast } from 'sonner';
 import type { CalculationResult, PlotConfig } from '@/lib/store/workbench';
+import { useRunResultsStore } from '@/lib/store/runResultsStore';
+import { sampleFunction, type Plot2DType } from '@/lib/plots/plot2d';
 import { CodeEditor } from '@/components/workbench/layout/CodeEditor';
 import { SymbolPalette } from '@/components/workbench/SymbolPalette';
 import { FormulaRenderer } from '@/components/workbench/FormulaRenderer';
@@ -122,6 +125,7 @@ export function EditorPanel() {
   const clearVariables = useWorkbenchStore((s) => s.clearVariables);
   const clearPlots = useWorkbenchStore((s) => s.clearPlots);
   const setActivePreviewTab = useWorkbenchStore((s) => s.setActivePreviewTab);
+  const setActiveSidePanel = useWorkbenchStore((s) => s.setActiveSidePanel);
   const variables = useWorkbenchStore((s) => s.variables);
 
   const [cursor, setCursor] = useState({ line: 1, col: 1 });
@@ -235,6 +239,24 @@ export function EditorPanel() {
     };
   }, []);
 
+  // M3 — 接收 set_editor_content 指令：mode=replace 覆写 / mode=append 追加。
+  useEffect(() => {
+    const handler = (e: Event) => {
+      const d = (e as CustomEvent<{ content?: unknown; mode?: unknown }>).detail;
+      if (!d || typeof d.content !== 'string') return;
+      const mode = d.mode === 'append' ? 'append' : 'replace';
+      if (mode === 'append') {
+        setEditorContent(
+          editorContent.trim() ? `${editorContent.trimEnd()}\n${d.content}` : d.content,
+        );
+      } else {
+        setEditorContent(d.content);
+      }
+    };
+    window.addEventListener('omnimath:editor-content', handler);
+    return () => window.removeEventListener('omnimath:editor-content', handler);
+  }, [editorContent, setEditorContent]);
+
   // When editor content changes AND there's an active file, auto-save to
   // the file system store (debounced). Skip if this change was triggered
   // by loading the active file (skipNextSaveRef).
@@ -296,7 +318,9 @@ export function EditorPanel() {
 
   /* ─── Run script ───────────────────────────────────────────────── */
   const runScriptTimerRef = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
-  const runScript = useCallback(() => {
+  // P2-1: target='independent' 时，把绘图结果额外送入「独立运行结果面板」
+  //（可拖拽/缩放/多开的 MATLAB figure 风格浮窗），而非仅预览面板。
+  const runScript = useCallback((target: 'preview' | 'independent' = 'preview') => {
     if (isRunning) return;
     setIsRunning(true);
     // Defer to allow UI to show running state.
@@ -309,6 +333,8 @@ export function EditorPanel() {
         let surface3dAdded = false;
         let matrixSeen = false;
         let resultCount = 0;
+        // 收集本次运行的 2D 绘图（供 target='independent' 时送入独立面板）。
+        const runPlots: Array<{ expression: string; xRange: [number, number]; plotType: Plot2DType; color: string }> = [];
         const PLOT_COLORS = ['#2dd4bf', '#fbbf24', '#fb7185', '#34d399', '#a78bfa', '#fb923c'];
         let plotColorIdx = 0;
 
@@ -370,6 +396,15 @@ export function EditorPanel() {
               visible: true,
             };
             addPlot(newPlot);
+            // 收集 2D 绘图供独立面板使用（3D 曲面暂不入独立面板）。
+            if (result.plotType !== 'surface3d') {
+              runPlots.push({
+                expression: result.plotExpression,
+                xRange: result.plotRange ?? DEFAULT_CARTESIAN_RANGE,
+                plotType: result.plotType,
+                color,
+              });
+            }
             if (result.plotType === 'surface3d') surface3dAdded = true;
             else plotAdded = true;
           }
@@ -388,6 +423,29 @@ export function EditorPanel() {
           setActivePreviewTab('log');
         } else if (matrixSeen) {
           setActivePreviewTab('formula');
+        }
+
+        // ── P2-1: 运行到独立面板 ─────────────────────────────────────
+        // 把本次 2D 绘图采样成点集，归一化为 RunCurve 送入独立结果面板。
+        if (target === 'independent' && runPlots.length > 0) {
+          const add = useRunResultsStore.getState().addRunResult;
+          for (const p of runPlots) {
+            const samples = sampleFunction(p.expression, p.xRange, p.plotType)
+              .filter((s) => Number.isFinite(s.x) && Number.isFinite(s.y))
+              .map((s) => [s.x, s.y] as [number, number]);
+            if (samples.length === 0) continue;
+            add({
+              title: p.expression,
+              kind: 'plot',
+              curves: [{
+                id: `${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
+                label: p.expression,
+                color: p.color,
+                width: 2,
+                points: samples,
+              }],
+            });
+          }
         }
 
         toast.success(`运行完成 · ${resultCount} 个结果`, { duration: 1200 });
@@ -534,9 +592,48 @@ export function EditorPanel() {
             </TooltipTrigger>
             <TooltipContent side="bottom">{t('editorClear')}</TooltipContent>
           </Tooltip>
+          {/* P2-1: 显式「运行到独立面板」按钮 —— 把绘图送入可拖拽浮窗 */}
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <button
+                type="button"
+                onClick={() => runScript('independent')}
+                disabled={isRunning}
+                aria-label={t('editorRunToPanel')}
+                className={cn(
+                  'flex items-center gap-1.5 h-7 px-2.5 ml-1 rounded-md text-[11.5px] font-medium transition-all',
+                  'text-primary border border-primary/30 hover:bg-primary/10',
+                )}
+              >
+                <PanelTop className="size-3.5" />
+                <span className="hidden sm:inline">{t('editorRunToPanel')}</span>
+              </button>
+            </TooltipTrigger>
+            <TooltipContent side="bottom">{t('editorRunToPanelHint')}</TooltipContent>
+          </Tooltip>
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <button
+                type="button"
+                onClick={() => {
+                  const content = editorContent.slice(0, 4000);
+                  const prompt = `模块:editor\n请优化或解释当前代码（可改动，mode=replace）。\n\n当前代码:\n\`\`\`\n${content}\n\`\`\``;
+                  if (typeof window !== 'undefined') {
+                    window.dispatchEvent(new CustomEvent('omnimath:ai-explain', { detail: prompt }));
+                  }
+                }}
+                aria-label="优化/解释代码"
+                className="flex items-center gap-1 h-7 px-2 ml-1 rounded-md text-[12px] text-muted-foreground hover:text-foreground hover:bg-accent transition-colors"
+              >
+                <span className="text-base leading-none">✨</span>
+                <span className="hidden sm:inline">优化/解释</span>
+              </button>
+            </TooltipTrigger>
+            <TooltipContent side="bottom">把当前代码交给 AI 优化或解释</TooltipContent>
+          </Tooltip>
           <motion.button
             type="button"
-            onClick={runScript}
+            onClick={() => runScript()}
             disabled={isRunning}
             whileTap={{ scale: 0.95 }}
             whileHover={{ scale: 1.02 }}
@@ -633,13 +730,28 @@ export function EditorPanel() {
 
       {fsLoaded && openTabs.length === 0 ? (
         /* Empty state — no open tabs */
-        <div className="flex-1 min-h-0 flex flex-col items-center justify-center gap-2 px-6 text-center">
-          <FileCode2 className="size-9 text-muted-foreground/30" />
-          <p className="text-[12.5px] font-medium text-muted-foreground">
-            {tPending('editorTabsEmptyTitle')}
-          </p>
-          <p className="text-[11px] text-muted-foreground/70">
-            {tPending('editorTabsEmptyHint')}
+        <div className="flex-1 min-h-0 flex flex-col items-center justify-center gap-3 px-6 text-center">
+          <div className="grid place-items-center size-12 rounded-2xl bg-primary/10 text-primary">
+            <FileCode2 className="size-6" />
+          </div>
+          <div className="space-y-1">
+            <p className="text-[13px] font-semibold text-foreground">
+              {tPending('editorTabsEmptyTitle')}
+            </p>
+            <p className="text-[11.5px] text-muted-foreground/80 max-w-[300px] leading-relaxed">
+              {tPending('editorTabsEmptyHint')}
+            </p>
+          </div>
+          <button
+            type="button"
+            onClick={() => setActiveSidePanel('files')}
+            className="mt-1 flex items-center gap-1.5 h-8 px-3.5 rounded-lg text-[12px] font-medium text-primary-foreground bg-gradient-to-r from-primary to-primary/80 hover:brightness-110 transition-all"
+          >
+            <PanelTop className="size-3.5" />
+            打开文件浏览器
+          </button>
+          <p className="text-[10.5px] text-muted-foreground/60">
+            也可以在左侧活动栏点击「文件」图标浏览并打开脚本
           </p>
         </div>
       ) : (

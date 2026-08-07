@@ -16,7 +16,7 @@
 
 import { useState, useCallback, useMemo } from 'react';
 import { motion } from 'framer-motion';
-import { RotateCcw, Boxes, Box, Variable, Spline } from 'lucide-react';
+import { RotateCcw, Boxes, Box, Variable, Spline, Move3d } from 'lucide-react';
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs';
 import { Button } from '@/components/ui/button';
 import {
@@ -29,6 +29,7 @@ import { Transform2D } from './Transform2D';
 import { Transform3D } from './Transform3D';
 import { EigenVisualizer } from './EigenVisualizer';
 import { QuadraticFormViz } from './QuadraticFormViz';
+import { AffineTransform2D } from './AffineTransform2D';
 import { cn } from '@/lib/utils';
 
 /* ------------------------------------------------------------------ *
@@ -186,6 +187,10 @@ export function MatrixTransformViz() {
             <Spline className="size-3.5" />
             二次型
           </TabsTrigger>
+          <TabsTrigger value="affine" className="gap-1.5 text-xs">
+            <Move3d className="size-3.5" />
+            平移/仿射/透视
+          </TabsTrigger>
         </TabsList>
 
         <TabsContent value="2d" className="min-h-0 flex-1 overflow-auto">
@@ -229,6 +234,17 @@ export function MatrixTransformViz() {
             className="h-full"
           >
             <QuadraticFormViz matrix={matrix2D} onMatrixChange={handleMatrix2DChange} />
+          </motion.div>
+        </TabsContent>
+
+        <TabsContent value="affine" className="min-h-0 flex-1 overflow-auto">
+          <motion.div
+            initial={{ opacity: 0, y: 8 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.25 }}
+            className="h-full"
+          >
+            <AffineTransform2D />
           </motion.div>
         </TabsContent>
       </Tabs>

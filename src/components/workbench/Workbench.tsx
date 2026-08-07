@@ -53,6 +53,8 @@ import { SettingsPanel } from '@/components/workbench/panels/SettingsPanel';
 import { ErrorBoundary } from '@/components/ErrorBoundary';
 import { useShortcutsStore, SHORTCUTS_KEY } from '@/lib/store/shortcutsStore';
 import { useGlobalShortcuts, registerShortcutHandler } from '@/lib/hooks/useGlobalShortcuts';
+import { cn } from '@/lib/utils';
+import type { ViewMode } from '@/lib/store/workbench';
 
 // 全屏视图（pipeline / whiteboard / linalg / solver / stats）体积较大，静态导入
 // 会在应用启动时就把它们全部加载，导致侧边栏切换视图时卡顿。这里改为懒加载，
@@ -72,6 +74,9 @@ const SolverWorkbench = lazy(() =>
 const StatisticsWorkbench = lazy(() =>
   import('@/components/workbench/panels/StatisticsWorkbench').then((m) => ({ default: m.StatisticsWorkbench })),
 );
+const ControlTheoryWorkbench = lazy(() =>
+  import('@/components/workbench/panels/ControlTheoryWorkbench').then((m) => ({ default: m.ControlTheoryWorkbench })),
+);
 
 /** 懒加载视图切换时的轻量占位图，避免白屏闪烁。 */
 function ViewLoading() {
@@ -81,6 +86,67 @@ function ViewLoading() {
         <div className="size-5 animate-spin rounded-full border-2 border-primary/20 border-t-primary" />
         <span className="text-[11px] text-muted-foreground">加载中…</span>
       </div>
+    </div>
+  );
+}
+
+/** 全屏视图列表（按 ActivityBar 中「全屏视图」的生命周期保持一致）。 */
+const FULLSCREEN_VIEWS: ViewMode[] = ['pipeline', 'whiteboard', 'linalg', 'solver', 'stats', 'control'];
+
+/**
+ * 全屏视图容器 —— 保持挂载策略（防止切换视图时数据丢失）。
+ *
+ * 之前 Workbench 用「条件渲染」切换全屏视图，切换时 React 会卸载上一视图并挂载
+ * 新视图，导致视图内部的本地 useState（线性代数的矩阵、求解器的方程/结果等）在
+ * 来回切换后全部丢失、归零。这里改为：访问过的视图始终保持挂载，仅用 CSS 隐藏
+ * 非激活视图。首次访问某视图才加载代码块（保留懒加载性能优势），一旦访问过即可
+ * 瞬时切回且状态驻留。
+ */
+function FullScreenViews({ activeViewMode }: { activeViewMode: ViewMode }) {
+  const [visited, setVisited] = useState<Set<ViewMode>>(() => new Set([activeViewMode]));
+  useEffect(() => {
+    setVisited((prev) => {
+      if (prev.has(activeViewMode)) return prev;
+      const next = new Set(prev);
+      next.add(activeViewMode);
+      return next;
+    });
+  }, [activeViewMode]);
+
+  const renderView = (vm: ViewMode) => {
+    switch (vm) {
+      case 'pipeline':
+        return <NodePipeline />;
+      case 'whiteboard':
+        return <WhiteboardCanvas />;
+      case 'linalg':
+        return <LinearAlgebraWorkbench />;
+      case 'solver':
+        return <SolverWorkbench />;
+      case 'stats':
+        return <StatisticsWorkbench />;
+      case 'control':
+        return <ControlTheoryWorkbench />;
+      default:
+        return null;
+    }
+  };
+
+  return (
+    <div className="flex-1 min-w-0 min-h-0 relative overflow-hidden">
+      {FULLSCREEN_VIEWS.map((vm) => (
+        <div
+          key={vm}
+          className={cn('absolute inset-0', vm === activeViewMode ? 'block' : 'hidden')}
+          aria-hidden={vm !== activeViewMode}
+        >
+          {visited.has(vm) && (
+            <ErrorBoundary>
+              <Suspense fallback={<ViewLoading />}>{renderView(vm)}</Suspense>
+            </ErrorBoundary>
+          )}
+        </div>
+      ))}
     </div>
   );
 }
@@ -297,51 +363,11 @@ export function Workbench() {
       <div className="flex-1 flex min-h-0">
         {activityBarPosition === 'left' && <ActivityBar />}
 
-        {viewMode === 'pipeline' ? (
-          /* Pipeline view takes over the main area (Task 6). */
-          <div className="flex-1 min-w-0 min-h-0">
-            <ErrorBoundary>
-              <Suspense fallback={<ViewLoading />}>
-                <NodePipeline />
-              </Suspense>
-            </ErrorBoundary>
-          </div>
-        ) : viewMode === 'whiteboard' ? (
-          /* Whiteboard view — full-canvas sketch surface */
-          <div className="flex-1 min-w-0 min-h-0">
-            <ErrorBoundary>
-              <Suspense fallback={<ViewLoading />}>
-                <WhiteboardCanvas />
-              </Suspense>
-            </ErrorBoundary>
-          </div>
-        ) : viewMode === 'linalg' ? (
-          /* Linear algebra full-screen view (Task 1 — P2) */
-          <div className="flex-1 min-w-0 min-h-0">
-            <ErrorBoundary>
-              <Suspense fallback={<ViewLoading />}>
-                <LinearAlgebraWorkbench />
-              </Suspense>
-            </ErrorBoundary>
-          </div>
-        ) : viewMode === 'solver' ? (
-          /* Solver full-screen view (Task 3 — 方程/方程组/求导/积分/极限统一入口) */
-          <div className="flex-1 min-w-0 min-h-0">
-            <ErrorBoundary>
-              <Suspense fallback={<ViewLoading />}>
-                <SolverWorkbench />
-              </Suspense>
-            </ErrorBoundary>
-          </div>
-        ) : viewMode === 'stats' ? (
-          /* Statistics (概率统计) full-screen view — 独立窗口，对齐 solver/linalg */
-          <div className="flex-1 min-w-0 min-h-0">
-            <ErrorBoundary>
-              <Suspense fallback={<ViewLoading />}>
-                <StatisticsWorkbench />
-              </Suspense>
-            </ErrorBoundary>
-          </div>
+        {viewMode === 'pipeline' || viewMode === 'whiteboard' || viewMode === 'linalg' || viewMode === 'solver' || viewMode === 'stats' || viewMode === 'control' ? (
+          /* 全屏视图（pipeline / whiteboard / linalg / solver / stats）。
+             关键修复：与 SidePanel 相同，访问过的全屏视图始终保持挂载，仅用 CSS
+             隐藏非激活视图，避免切换时组件卸载导致用户数据（矩阵/方程/结果等）丢失归零。 */
+          <FullScreenViews activeViewMode={viewMode} />
         ) : !editorVisible && !previewVisible ? (
           /* Plain layout when both main panels are hidden — avoids empty resizable group. */
           <ResizablePanelGroup direction="horizontal" autoSaveId="omnimath-side-only" className="flex-1 min-w-0">

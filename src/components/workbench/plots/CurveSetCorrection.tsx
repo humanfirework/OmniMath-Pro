@@ -18,17 +18,22 @@
 import { useMemo, useState } from 'react';
 import { useWorkbenchStore } from '@/lib/store/workbench';
 import { refitCurveCandidate, type Polyline, type Point } from '@/lib/vision';
-import type { CurveSetData, CurveCorrectionCandidate, Pt2 } from './Plot2DCanvas';
+import type { CurveSetData, CurveCorrectionCandidate, Pt2, BezierPathData } from './Plot2DCanvas';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Slider } from '@/components/ui/slider';
-import { SlidersHorizontal, Trash2, Wand2, X, ChevronDown, ChevronUp, Check } from 'lucide-react';
+import { SlidersHorizontal, Trash2, Wand2, X, ChevronDown, ChevronUp, Check, Download } from 'lucide-react';
 import { toast } from 'sonner';
 
 /** 把 2D 通用顶点（[x,y] 或 {x,y}）归一化为 vision 的 {x,y} 点。 */
 function toPoint(p: Pt2): Point {
   if (Array.isArray(p)) return { x: p[0], y: p[1] };
   return { x: p.x, y: p.y };
+}
+
+/** 把 2D 通用顶点解包为 [x, y] 元组。 */
+function toXY(p: Pt2): [number, number] {
+  return Array.isArray(p) ? [p[0], p[1]] : [p.x, p.y];
 }
 
 /** 把 CurveSetData.originalPolylines 归一化为 vision Polyline[]。 */
@@ -42,6 +47,117 @@ function toVisionPolylines(cs: CurveSetData): Polyline[] {
       closed: Boolean(p.closed),
       area: typeof p.area === 'number' ? p.area : undefined,
     }));
+}
+
+/** 把贝塞尔路径折线化，返回像素坐标点列（用于 CSV / SVG 导出）。 */
+function flattenPathToPts(path: BezierPathData): Array<[number, number]> {
+  const out: Array<[number, number]> = [];
+  const segs = Array.isArray(path.segments) ? path.segments : [];
+  for (const seg of segs) {
+    if (!seg) continue;
+    // Schneider 三次贝塞尔段 { p0, c1, c2, p1 }（vision 拟合结果）
+    if (!('cmd' in seg)) {
+      const s = seg as { p0: Pt2; c1: Pt2; c2: Pt2; p1: Pt2 };
+      const [p0x, p0y] = toXY(s.p0);
+      const [c1x, c1y] = toXY(s.c1);
+      const [c2x, c2y] = toXY(s.c2);
+      const [p1x, p1y] = toXY(s.p1);
+      const N = 24;
+      for (let i = 0; i <= N; i++) {
+        const t = i / N;
+        const mt = 1 - t;
+        const x = mt * mt * mt * p0x + 3 * mt * mt * t * c1x + 3 * mt * t * t * c2x + t * t * t * p1x;
+        const y = mt * mt * mt * p0y + 3 * mt * mt * t * c1y + 3 * mt * t * t * c2y + t * t * t * p1y;
+        out.push([x, y]);
+      }
+      continue;
+    }
+    const pts = Array.isArray(seg.pts) ? seg.pts : [];
+    if (seg.cmd === 'moveTo' || seg.cmd === 'lineTo') {
+      pts.forEach((p) => out.push([p[0], p[1]]));
+    } else if (seg.cmd === 'quadTo' && pts.length >= 2) {
+      const [cp, end] = pts as [[number, number], [number, number]];
+      const start = out.length ? out[out.length - 1] : cp;
+      const N = 24;
+      for (let i = 0; i <= N; i++) {
+        const t = i / N;
+        const mt = 1 - t;
+        out.push([mt * mt * start[0] + 2 * mt * t * cp[0] + t * t * end[0], mt * mt * start[1] + 2 * mt * t * cp[1] + t * t * end[1]]);
+      }
+    } else if (seg.cmd === 'cubicTo' && pts.length >= 3) {
+      const [c1, c2, end] = pts as [[number, number], [number, number], [number, number]];
+      const start = out.length ? out[out.length - 1] : c1;
+      const N = 24;
+      for (let i = 0; i <= N; i++) {
+        const t = i / N;
+        const mt = 1 - t;
+        out.push([
+          mt * mt * mt * start[0] + 3 * mt * mt * t * c1[0] + 3 * mt * t * t * c2[0] + t * t * t * end[0],
+          mt * mt * mt * start[1] + 3 * mt * mt * t * c1[1] + 3 * mt * t * t * c2[1] + t * t * t * end[1],
+        ]);
+      }
+    }
+  }
+  return out;
+}
+
+/** 触发浏览器下载。 */
+function downloadFile(filename: string, content: string, mime: string) {
+  const blob = new Blob([content], { type: mime });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = filename;
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  URL.revokeObjectURL(url);
+}
+
+/** 导出为 JSON：保留完整贝塞尔段结构，可被蓝图 plot-curves 节点重新消费。 */
+function exportJSON(curves: BezierPathData[]) {
+  const payload = { version: 1, curves, count: curves.length };
+  downloadFile('curves.json', JSON.stringify(payload, null, 2), 'application/json');
+}
+
+/** 导出为 SVG：把每条曲线渲染成 <path>，便于在矢量工具中继续编辑。 */
+function exportSVG(curves: BezierPathData[], width: number, height: number) {
+  const paths = curves
+    .map((path) => {
+      const d = (Array.isArray(path.segments) ? path.segments : [])
+        .map((seg) => {
+          if (!('cmd' in seg)) {
+            const s = seg as { p0: Pt2; c1: Pt2; c2: Pt2; p1: Pt2 };
+            const [x0, y0] = toXY(s.p0);
+            const [x1, y1] = toXY(s.c1);
+            const [x2, y2] = toXY(s.c2);
+            const [x3, y3] = toXY(s.p1);
+            return `C ${x1} ${y1} ${x2} ${y2} ${x3} ${y3}`;
+          }
+          const pts = Array.isArray(seg.pts) ? seg.pts : [];
+          if (seg.cmd === 'moveTo') return pts.length ? `M ${pts[0][0]} ${pts[0][1]}` : '';
+          if (seg.cmd === 'lineTo') return pts.map((p) => `L ${p[0]} ${p[1]}`).join(' ');
+          if (seg.cmd === 'quadTo' && pts.length >= 2) return `Q ${pts[0][0]} ${pts[0][1]} ${pts[1][0]} ${pts[1][1]}`;
+          if (seg.cmd === 'cubicTo' && pts.length >= 3) return `C ${pts[0][0]} ${pts[0][1]} ${pts[1][0]} ${pts[1][1]} ${pts[2][0]} ${pts[2][1]}`;
+          return '';
+        })
+        .join(' ');
+      return `<path d="${d}" fill="none" stroke="#1565c0" stroke-width="1.5" ${path.closed ? 'stroke-linejoin="round"' : ''}/>`;
+    })
+    .join('\n  ');
+  const svg = `<?xml version="1.0" encoding="UTF-8"?>\n<svg xmlns="http://www.w3.org/2000/svg" width="${width}" height="${height}" viewBox="0 0 ${width} ${height}">\n  ${paths}\n</svg>`;
+  downloadFile('curves.svg', svg, 'image/svg+xml');
+}
+
+/** 导出为 CSV：每条曲线折线化后的采样点，列为 curve, x, y。 */
+function exportCSV(curves: BezierPathData[]) {
+  const rows: string[] = ['curve,x,y'];
+  curves.forEach((path, idx) => {
+    flattenPathToPts(path).forEach(([x, y]) => {
+      rows.push(`${idx + 1},${x},${y}`);
+    });
+  });
+  downloadFile('curves.csv', rows.join('\n'), 'text/csv');
 }
 
 interface CurveSetCorrectionProps {
@@ -267,6 +383,50 @@ export function CurveSetCorrection({ curveSet }: CurveSetCorrectionProps) {
               <Wand2 className="size-3.5" />
               {refitting ? '拟合中…' : '按当前参数重新拟合'}
             </Button>
+          </section>
+
+          {/* 4) 导出曲线 */}
+          <section className="space-y-1.5">
+            <p className="flex items-center gap-1 text-[11px] font-medium uppercase tracking-wide text-muted-foreground">
+              <Download className="size-3" />
+              导出曲线
+            </p>
+            {curveCount === 0 ? (
+              <p className="text-xs text-muted-foreground">当前无曲线可导出。</p>
+            ) : (
+              <div className="grid grid-cols-3 gap-1.5">
+                <Button
+                  type="button"
+                  size="sm"
+                  variant="outline"
+                  className="h-7 gap-1 px-1 text-[11px]"
+                  onClick={() => exportJSON(curveSet.curves)}
+                >
+                  <Download className="size-3" />
+                  JSON
+                </Button>
+                <Button
+                  type="button"
+                  size="sm"
+                  variant="outline"
+                  className="h-7 gap-1 px-1 text-[11px]"
+                  onClick={() => exportSVG(curveSet.curves, curveSet.width ?? 800, curveSet.height ?? 600)}
+                >
+                  <Download className="size-3" />
+                  SVG
+                </Button>
+                <Button
+                  type="button"
+                  size="sm"
+                  variant="outline"
+                  className="h-7 gap-1 px-1 text-[11px]"
+                  onClick={() => exportCSV(curveSet.curves)}
+                >
+                  <Download className="size-3" />
+                  CSV
+                </Button>
+              </div>
+            )}
           </section>
         </div>
       )}

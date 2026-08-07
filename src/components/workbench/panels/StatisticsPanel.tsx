@@ -36,7 +36,18 @@ import {
   Upload,
   X,
   ZoomIn,
+  LayoutGrid,
+  PieChart,
 } from 'lucide-react';
+import { StatisticsCharts, DistributionExplorer, DistributionFitter, GroupedHistogramChart } from './stats';
+import {
+  shapiroWilk,
+  andersonDarling,
+  lilliefors,
+  kolmogorovSmirnov,
+  bootstrapCI,
+} from '@/lib/probability/conftest';
+import { normCdf } from '@/lib/probability/distributions';
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -362,7 +373,7 @@ function parseCSVNumbers(text: string): number[] {
 /* ================================================================== *
  * StatChart — SVG-based mini charts (Task 9)
  * ================================================================== */
-type ChartType = 'histogram' | 'boxplot' | 'scatter' | 'qq';
+type ChartType = 'histogram' | 'boxplot' | 'scatter' | 'qq' | 'charts';
 
 interface StatChartProps {
   type: ChartType;
@@ -377,7 +388,7 @@ interface StatChartProps {
 
 const CHART_W = 280;
 const CHART_H = 200;
-const CHART_PAD = { l: 34, r: 12, t: 12, b: 26 };
+const CHART_PAD = { l: 34, r: 12, t: 32, b: 26 };
 
 function ChartEmpty({ label }: { label: string }) {
   return (
@@ -537,12 +548,32 @@ function HistogramChart({ data, zoomed = false, binRule = 'sturges', density = f
   const plotH = ch - CHART_PAD.t - CHART_PAD.b;
   const barW = plotW / k;
   const yScale = (f: number) => CHART_PAD.t + plotH - (f / yCeil) * plotH;
-  const showTopLabels = k <= 15;
+  // 仅当柱宽足够宽时才显示柱顶数值标签，避免多柱窄排时标签互相重叠。
+  const showTopLabels = k <= 15 && barW >= 40;
+  // 顶部预留专用于「均值/中位数」标签的横向条带（0..topBand）。
+  // 柱状图从 CHART_PAD.t 开始，永不侵入该条带，因此标签与柱体/另一标签**永不相交**。
+  const topBand = CHART_PAD.t; // = 32
+  const row1Y = 8; // 均值/中位数共用第一行
+  const row2Y = 21; // 两标签横向过近时，中位数下移到第二行
   const dataSpan = max - min || 1;
   const sx = (v: number) => CHART_PAD.l + ((v - min) / dataSpan) * plotW;
 
-  const marker = (v: number, label: string, color: string) => {
+  const marker = (v: number, label: string, color: string, top: number) => {
     const x = sx(v);
+    // 估算标签渲染宽度：8px 字体约 4.6px/字符 + 两端内边距。
+    const labelW = label.length * 4.6 + 8;
+    // 边缘感知锚点：靠近左/右边缘时分别改为 start/end，避免文字溢出被裁剪。
+    let anchor: 'start' | 'middle' | 'end' = 'middle';
+    let tx = x;
+    if (x - labelW / 2 < CHART_PAD.l) {
+      anchor = 'start';
+      tx = Math.max(CHART_PAD.l, x);
+    } else if (x + labelW / 2 > contentW - CHART_PAD.r) {
+      anchor = 'end';
+      tx = Math.min(contentW - CHART_PAD.r, x);
+    }
+    const ty = top;
+    const pillX = anchor === 'middle' ? tx - labelW / 2 : anchor === 'start' ? tx - 2 : tx - labelW + 2;
     return (
       <g key={label}>
         <line
@@ -555,7 +586,17 @@ function HistogramChart({ data, zoomed = false, binRule = 'sturges', density = f
           strokeDasharray="4 3"
           opacity={0.9}
         />
-        <text x={x} y={CHART_PAD.t - 3} textAnchor="middle" fontSize={8} fontWeight={600} fill={color}>
+        {/* 半透明背景 pill：即使标签与柱顶/另一标签重叠，文字仍清晰可读 */}
+        <rect
+          x={pillX}
+          y={ty - 8}
+          width={labelW}
+          height={12}
+          rx={3}
+          fill="var(--background, #0b1220)"
+          opacity={0.88}
+        />
+        <text x={tx} y={ty} textAnchor={anchor} fontSize={8} fontWeight={600} fill={color}>
           {label}
         </text>
       </g>
@@ -630,7 +671,7 @@ function HistogramChart({ data, zoomed = false, binRule = 'sturges', density = f
                 fillOpacity={hover === i ? 0.95 : 0.65}
                 rx={1}
               />
-              {showTopLabels && f > 0 && (
+              {showTopLabels && f > 0 && y >= topBand + 3 && (
                 <text
                   x={x + barW / 2}
                   y={y - 3}
@@ -642,7 +683,8 @@ function HistogramChart({ data, zoomed = false, binRule = 'sturges', density = f
                   {`${f} (${pct}%)`}
                 </text>
               )}
-              {i % Math.ceil(k / 6) === 0 && (
+              {/* x 轴刻度：按实际柱宽决定步长，保证相邻标签不重叠（标签约 24px 宽） */}
+              {i % Math.max(1, Math.ceil(24 / Math.max(barW, 1))) === 0 && (
                 <text x={x + barW / 2} y={ch - CHART_PAD.b + 12} textAnchor="middle" fontSize={8} fill="currentColor" opacity={0.55}>
                   {fmt(lo, 3)}
                 </text>
@@ -678,9 +720,10 @@ function HistogramChart({ data, zoomed = false, binRule = 'sturges', density = f
             strokeLinejoin="round"
           />
         )}
-        {/* 均值 / 中位数标记线 */}
-        {marker(mean, `均值 ${fmt(mean, 3)}`, '#f59e0b')}
-        {marker(median, `中位 ${fmt(median, 3)}`, '#0ea5e9')}
+        {/* 均值 / 中位数标记线：两标签 x 距离过近时把中位下移到第二行错开，避免文字重叠。
+            两行都位于顶部专用条带（0..topBand）内，柱体从 CHART_PAD.t 起，永不相交。 */}
+        {marker(mean, `均值 ${fmt(mean, 3)}`, '#f59e0b', row1Y)}
+        {marker(median, `中位 ${fmt(median, 3)}`, '#0ea5e9', Math.abs(sx(mean) - sx(median)) < 72 ? row2Y : row1Y)}
         {/* 数据点 rug 条带：在底部绘制每个观测值，便于观察个体分布与稀疏区 */}
         {showPoints && (
           <g>
@@ -1802,6 +1845,7 @@ export function DescriptiveStatsTab({ fullscreen = false }: { fullscreen?: boole
             ['histogram', '直方图', BarChart3],
             ['boxplot', '箱线图', Box],
             ['scatter', '散点图', ChartScatter],
+            ['charts', '交互画布', LayoutGrid],
           ] as const
         ).map(([t, label, Icon]) => (
           <Button
@@ -1996,6 +2040,25 @@ export function DescriptiveStatsTab({ fullscreen = false }: { fullscreen?: boole
             {chartType === 'scatter' && (
               <StatChart type="scatter" points={scatterPoints} />
             )}
+
+            {chartType === 'charts' && (
+              <StatisticsCharts data={data} binRule={binRule} density={density} />
+            )}
+
+            {/* G1-S2：分组直方图 — 多数据集在同一轴上并排比较分布 */}
+            {chartType === 'charts' && datasets.length >= 2 && (
+              <div className="rounded-lg border border-border/40 bg-card/50 p-2 space-y-1.5 min-w-0">
+                <div className="flex items-center justify-between gap-1">
+                  <span className="text-[11px] font-semibold text-muted-foreground px-1">分组直方图（{datasets.length} 个数据集并排比较）</span>
+                  <span className="text-[10px] text-muted-foreground">密度模式可跨样本量比较</span>
+                </div>
+                <GroupedHistogramChart
+                  series={datasets.map((d) => ({ name: d.name, data: d.data }))}
+                  density={true}
+                  minHeight={200}
+                />
+              </div>
+            )}
           </motion.div>
         )}
       </AnimatePresence>
@@ -2003,7 +2066,7 @@ export function DescriptiveStatsTab({ fullscreen = false }: { fullscreen?: boole
   ) : null;
 
   return (
-    <div className={cn('space-y-3', fullscreen ? 'grid grid-cols-1 xl:grid-cols-[1fr_400px] gap-4 p-3' : 'p-3')}>
+    <div className={cn('space-y-3', fullscreen ? 'grid grid-cols-1 lg:grid-cols-[minmax(0,420px)_minmax(0,1fr)] gap-4 p-3' : 'p-3')}>
       <div className="space-y-3 min-w-0">
       {/* ===== Task 10a: 实时预览徽章 ===== */}
       <div className="flex flex-wrap gap-1.5 items-center">
@@ -2209,6 +2272,10 @@ export function DescriptiveStatsTab({ fullscreen = false }: { fullscreen?: boole
 
       {/* ===== Task 10c: Excel 风格数据预览 ===== */}
       {data.length > 0 && <DataPreviewTable data={data} />}
+      </div>
+
+      {/* 右侧主列：统计结果 + 图表（全屏时占 1fr 宽列，非全屏时自然堆叠） */}
+      <div className="space-y-3 min-w-0">
 
       <AnimatePresence mode="wait">
         {result ? (
@@ -2295,12 +2362,9 @@ export function DescriptiveStatsTab({ fullscreen = false }: { fullscreen?: boole
         )}
       </AnimatePresence>
 
-      {/* 图表区 — 侧边栏模式内嵌在底部 */}
-      {!fullscreen && chartSection}
+      {/* 图表区（全屏时在右侧主列，非全屏时随右列堆叠显示） */}
+      {chartSection}
       </div>
-
-      {/* 图表区 — 全屏模式独立右侧栏，填满空白 */}
-      {fullscreen && chartSection}
     </div>
   );
 }
@@ -2911,7 +2975,7 @@ export function DistributionTab({ fullscreen = false }: { fullscreen?: boolean }
   };
 
   return (
-    <div className={cn('space-y-3', fullscreen ? 'grid grid-cols-1 xl:grid-cols-[1fr_400px] gap-4 p-3' : 'p-3')}>
+    <div className="grid grid-cols-1 lg:grid-cols-[minmax(0,460px)_minmax(0,1fr)] gap-4 p-3">
       <div className="space-y-3 min-w-0">
       {/* Distribution selector */}
       <div>
@@ -3065,20 +3129,57 @@ export function DistributionTab({ fullscreen = false }: { fullscreen?: boolean }
           </motion.div>
         )}
       </AnimatePresence>
+
+      {/* 分布预览（放在左列下方） */}
+      <div className={cn('rounded-md border border-border/40 bg-background/30 p-3', fullscreen && 'sticky top-0')}>
+        <div className="flex items-center justify-between mb-2">
+          <div className="text-[10.5px] font-medium text-muted-foreground">分布预览</div>
+          <div className="text-[10px] text-primary/70">{distTypeLabel[distType]}</div>
+        </div>
+        <DistributionPreview distType={distType} params={paramValues} />
+      </div>
       </div>
 
-      {/* 全屏模式右侧栏 — 实时分布曲线预览 */}
-      {fullscreen && (
-        <div className="space-y-3 min-w-0">
-          <div className="sticky top-0 rounded-md border border-border/40 bg-background/30 p-3">
-            <div className="flex items-center justify-between mb-2">
-              <div className="text-[10.5px] font-medium text-muted-foreground">分布预览</div>
-              <div className="text-[10px] text-primary/70">{distTypeLabel[distType]}</div>
-            </div>
-            <DistributionPreview distType={distType} params={paramValues} />
+      {/* 右侧栏 — 交互式探索器 + 分布拟合 */}
+      <div className="space-y-3 min-w-0">
+        <div className="rounded-md border border-border/40 bg-background/30 p-2">
+          <div className="flex items-center gap-1 text-[10.5px] font-medium text-muted-foreground mb-1.5 px-0.5">
+            <Sparkles className="size-3" />
+            交互式分布探索器（滑块实时重绘 PDF/CDF）
           </div>
+          <DistributionExplorer />
         </div>
-      )}
+        <div className="rounded-md border border-border/40 bg-background/30 p-2">
+          <div className="flex items-center gap-1 text-[10.5px] font-medium text-muted-foreground mb-1.5 px-0.5">
+            <PieChart className="size-3" />
+            分布拟合（多候选 MLE · AIC/BIC 对比）
+          </div>
+          <DistributionFitterBlock />
+        </div>
+      </div>
+    </div>
+  );
+}
+
+/** 分布拟合块：数据输入 + 拟合优度表 + 多分布 PDF 叠加。 */
+function DistributionFitterBlock() {
+  const [dataInput, setDataInput] = useState('5.1, 4.8, 6.2, 5.5, 4.9, 5.3, 6.0, 5.7, 5.2, 5.8');
+  const data = useMemo(() => parseData(dataInput), [dataInput]);
+
+  return (
+    <div className="space-y-2">
+      <div className="flex items-center gap-1.5">
+        <Textarea
+          value={dataInput}
+          onChange={(e) => setDataInput(e.target.value)}
+          placeholder="样本数据，逗号/空格/换行分隔，例如：5.1, 4.8, 6.2, 5.5"
+          className="h-14 min-h-0 flex-1 text-[11px] font-mono"
+        />
+      </div>
+      <div className="text-[10px] text-muted-foreground px-0.5">
+        解析到 {data.length} 个数值点，按 AIC 升序对比候选分布。
+      </div>
+      <DistributionFitter data={data} minHeight={220} />
     </div>
   );
 }
@@ -3086,7 +3187,14 @@ export function DistributionTab({ fullscreen = false }: { fullscreen?: boolean }
 /* ================================================================== *
  * TAB 3 — Hypothesis Testing
  * ================================================================== */
-type TestType = 'ttest' | 'chisquare';
+type TestType =
+  | 'ttest'
+  | 'chisquare'
+  | 'shapiro'
+  | 'ad'
+  | 'lilliefors'
+  | 'ks'
+  | 'bootstrap';
 
 export function HypothesisTab() {
   const [testType, setTestType] = useState<TestType>('ttest');
@@ -3102,11 +3210,22 @@ export function HypothesisTab() {
           <SelectContent>
             <SelectItem value="ttest" className="text-[12px]">单样本 t 检验</SelectItem>
             <SelectItem value="chisquare" className="text-[12px]">卡方拟合优度检验</SelectItem>
+            <SelectItem value="shapiro" className="text-[12px]">Shapiro-Wilk 正态性检验</SelectItem>
+            <SelectItem value="ad" className="text-[12px]">Anderson-Darling 正态性检验</SelectItem>
+            <SelectItem value="lilliefors" className="text-[12px]">Lilliefors 正态性检验</SelectItem>
+            <SelectItem value="ks" className="text-[12px]">单样本 Kolmogorov-Smirnov 检验</SelectItem>
+            <SelectItem value="bootstrap" className="text-[12px]">Bootstrap 置信区间</SelectItem>
           </SelectContent>
         </Select>
       </div>
 
-      {testType === 'ttest' ? <TTestForm /> : <ChiSquareForm />}
+      {testType === 'ttest' && <TTestForm />}
+      {testType === 'chisquare' && <ChiSquareForm />}
+      {testType === 'shapiro' && <ShapiroWilkForm />}
+      {testType === 'ad' && <ADForm />}
+      {testType === 'lilliefors' && <LillieforsForm />}
+      {testType === 'ks' && <KSForm />}
+      {testType === 'bootstrap' && <BootstrapForm />}
     </div>
   );
 }
@@ -3442,6 +3561,451 @@ function ChiSquareForm() {
               {result.reject
                 ? `拒绝 H₀ (p = ${fmt(result.pValue, 4)} < α = ${result.alpha})`
                 : `不能拒绝 H₀ (p = ${fmt(result.pValue, 4)} ≥ α = ${result.alpha})`}
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+    </>
+  );
+}
+
+/* ================================================================== *
+ * 假设检验 — 正态性检验系列（Shapiro-Wilk / Anderson-Darling / Lilliefors）
+ * ================================================================== */
+
+/** 数据输入 + α 选择的公共片段。 */
+function NormalityTestInputs({
+  data,
+  onData,
+  alpha,
+  onAlpha,
+  placeholder,
+}: {
+  data: string;
+  onData: (v: string) => void;
+  alpha: number;
+  onAlpha: (v: number) => void;
+  placeholder?: string;
+}) {
+  return (
+    <>
+      <div>
+        <label className="text-[11px] text-muted-foreground mb-1 block">
+          样本数据（逗号/空格分隔）
+        </label>
+        <Textarea
+          value={data}
+          onChange={(e) => onData(e.target.value)}
+          placeholder={placeholder ?? '例如: 5.1, 4.8, 6.2, ...'}
+          className="min-h-[50px] text-[12px] font-mono resize-y"
+        />
+      </div>
+      <div>
+        <label className="text-[11px] text-muted-foreground mb-1 block">α (显著性水平)</label>
+        <Select value={String(alpha)} onValueChange={(v) => onAlpha(parseFloat(v))}>
+          <SelectTrigger className="h-8 text-[12px] font-mono">
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="0.1" className="text-[12px]">0.10</SelectItem>
+            <SelectItem value="0.05" className="text-[12px]">0.05</SelectItem>
+            <SelectItem value="0.01" className="text-[12px]">0.01</SelectItem>
+          </SelectContent>
+        </Select>
+      </div>
+    </>
+  );
+}
+
+/** 检验结论横幅。 */
+function VerdictBanner({
+  reject,
+  alpha,
+  p,
+  label,
+}: {
+  reject: boolean;
+  alpha: number;
+  p: number;
+  label?: string;
+}) {
+  return (
+    <div
+      className={cn(
+        'rounded-md border px-3 py-2 text-[11.5px] font-medium',
+        reject
+          ? 'border-rose-500/40 bg-rose-500/10 text-rose-700 dark:text-rose-300'
+          : 'border-emerald-500/30 bg-emerald-500/10 text-emerald-700 dark:text-emerald-300',
+      )}
+    >
+      {reject
+        ? `拒绝 H₀ (p = ${fmt(p, 4)} < α = ${alpha})${label ? ` — 数据不服从${label}` : ''}`
+        : `不能拒绝 H₀ (p = ${fmt(p, 4)} ≥ α = ${alpha})${label ? ` — 数据服从${label}` : ''}`}
+    </div>
+  );
+}
+
+function ShapiroWilkForm() {
+  const [dataInput, setDataInput] = useState('5.1, 4.8, 6.2, 5.5, 4.9, 5.3, 6.0, 5.7, 5.2, 5.8');
+  const [alpha, setAlpha] = useState(0.05);
+  const [result, setResult] = useState<{ W: number; p: number } | null>(null);
+  const [error, setError] = useState<string | null>(null);
+
+  const handle = () => {
+    setError(null);
+    setResult(null);
+    const data = parseData(dataInput);
+    if (data.length < 3) {
+      setError('Shapiro-Wilk 需要至少 3 个数据点');
+      return;
+    }
+    try {
+      setResult(shapiroWilk(data));
+    } catch (e) {
+      setError((e as Error).message);
+    }
+  };
+
+  return (
+    <>
+      <NormalityTestInputs
+        data={dataInput}
+        onData={setDataInput}
+        alpha={alpha}
+        onAlpha={setAlpha}
+      />
+      <Button onClick={handle} size="sm" className="w-full h-8 text-[12px] gap-1.5">
+        <FlaskConical className="size-3.5" />
+        运行 Shapiro-Wilk 检验
+      </Button>
+      <AnimatePresence mode="wait">
+        {error && (
+          <motion.div key="err" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
+            className="rounded-md border border-rose-500/40 bg-rose-500/10 p-2.5 text-[11.5px] text-rose-600 dark:text-rose-300">
+            <div className="flex items-start gap-1.5"><X className="size-3.5 mt-0.5 shrink-0" /><span>{error}</span></div>
+          </motion.div>
+        )}
+        {result && !error && (
+          <motion.div key="res" initial={{ opacity: 0, y: 4 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0 }} className="space-y-2">
+            <div className="rounded-md border border-primary/30 bg-primary/5 p-2.5 formula-card-glow min-w-[260px]">
+              <div className="text-[10.5px] text-muted-foreground mb-1.5">检验统计量 W</div>
+              <div className="flex justify-between text-[11px]">
+                <span className="text-muted-foreground">W</span>
+                <span className="font-mono font-semibold tabular-nums">{fmt(result.W, 5)}</span>
+              </div>
+              <div className="flex justify-between text-[11px]">
+                <span className="text-muted-foreground">p 值</span>
+                <span className="font-mono font-semibold tabular-nums text-primary">{fmt(result.p, 4)}</span>
+              </div>
+            </div>
+            <VerdictBanner reject={result.p < alpha} alpha={alpha} p={result.p} label="正态分布" />
+          </motion.div>
+        )}
+      </AnimatePresence>
+    </>
+  );
+}
+
+function ADForm() {
+  const [dataInput, setDataInput] = useState('5.1, 4.8, 6.2, 5.5, 4.9, 5.3, 6.0, 5.7, 5.2, 5.8');
+  const [alpha, setAlpha] = useState(0.05);
+  const [result, setResult] = useState<{ A2: number; p: number } | null>(null);
+  const [error, setError] = useState<string | null>(null);
+
+  const handle = () => {
+    setError(null);
+    setResult(null);
+    const data = parseData(dataInput);
+    if (data.length < 2) {
+      setError('Anderson-Darling 需要至少 2 个数据点');
+      return;
+    }
+    try {
+      setResult(andersonDarling(data));
+    } catch (e) {
+      setError((e as Error).message);
+    }
+  };
+
+  return (
+    <>
+      <NormalityTestInputs data={dataInput} onData={setDataInput} alpha={alpha} onAlpha={setAlpha} />
+      <Button onClick={handle} size="sm" className="w-full h-8 text-[12px] gap-1.5">
+        <FlaskConical className="size-3.5" />
+        运行 Anderson-Darling 检验
+      </Button>
+      <AnimatePresence mode="wait">
+        {error && (
+          <motion.div key="err" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
+            className="rounded-md border border-rose-500/40 bg-rose-500/10 p-2.5 text-[11.5px] text-rose-600 dark:text-rose-300">
+            <div className="flex items-start gap-1.5"><X className="size-3.5 mt-0.5 shrink-0" /><span>{error}</span></div>
+          </motion.div>
+        )}
+        {result && !error && (
+          <motion.div key="res" initial={{ opacity: 0, y: 4 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0 }} className="space-y-2">
+            <div className="rounded-md border border-primary/30 bg-primary/5 p-2.5 formula-card-glow min-w-[260px]">
+              <div className="text-[10.5px] text-muted-foreground mb-1.5">检验统计量 A²</div>
+              <div className="flex justify-between text-[11px]">
+                <span className="text-muted-foreground">A²</span>
+                <span className="font-mono font-semibold tabular-nums">{fmt(result.A2, 5)}</span>
+              </div>
+              <div className="flex justify-between text-[11px]">
+                <span className="text-muted-foreground">p 值</span>
+                <span className="font-mono font-semibold tabular-nums text-primary">{fmt(result.p, 4)}</span>
+              </div>
+            </div>
+            <VerdictBanner reject={result.p < alpha} alpha={alpha} p={result.p} label="正态分布" />
+          </motion.div>
+        )}
+      </AnimatePresence>
+    </>
+  );
+}
+
+function LillieforsForm() {
+  const [dataInput, setDataInput] = useState('5.1, 4.8, 6.2, 5.5, 4.9, 5.3, 6.0, 5.7, 5.2, 5.8');
+  const [alpha, setAlpha] = useState(0.05);
+  const [result, setResult] = useState<{ D: number; p: number } | null>(null);
+  const [error, setError] = useState<string | null>(null);
+
+  const handle = () => {
+    setError(null);
+    setResult(null);
+    const data = parseData(dataInput);
+    if (data.length < 4) {
+      setError('Lilliefors 需要至少 4 个数据点');
+      return;
+    }
+    try {
+      setResult(lilliefors(data));
+    } catch (e) {
+      setError((e as Error).message);
+    }
+  };
+
+  return (
+    <>
+      <NormalityTestInputs data={dataInput} onData={setDataInput} alpha={alpha} onAlpha={setAlpha} />
+      <Button onClick={handle} size="sm" className="w-full h-8 text-[12px] gap-1.5">
+        <FlaskConical className="size-3.5" />
+        运行 Lilliefors 检验
+      </Button>
+      <AnimatePresence mode="wait">
+        {error && (
+          <motion.div key="err" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
+            className="rounded-md border border-rose-500/40 bg-rose-500/10 p-2.5 text-[11.5px] text-rose-600 dark:text-rose-300">
+            <div className="flex items-start gap-1.5"><X className="size-3.5 mt-0.5 shrink-0" /><span>{error}</span></div>
+          </motion.div>
+        )}
+        {result && !error && (
+          <motion.div key="res" initial={{ opacity: 0, y: 4 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0 }} className="space-y-2">
+            <div className="rounded-md border border-primary/30 bg-primary/5 p-2.5 formula-card-glow min-w-[260px]">
+              <div className="text-[10.5px] text-muted-foreground mb-1.5">检验统计量 D</div>
+              <div className="flex justify-between text-[11px]">
+                <span className="text-muted-foreground">D</span>
+                <span className="font-mono font-semibold tabular-nums">{fmt(result.D, 5)}</span>
+              </div>
+              <div className="flex justify-between text-[11px]">
+                <span className="text-muted-foreground">p 值</span>
+                <span className="font-mono font-semibold tabular-nums text-primary">{fmt(result.p, 4)}</span>
+              </div>
+            </div>
+            <VerdictBanner reject={result.p < alpha} alpha={alpha} p={result.p} label="正态分布" />
+          </motion.div>
+        )}
+      </AnimatePresence>
+    </>
+  );
+}
+
+function KSForm() {
+  const [dataInput, setDataInput] = useState('5.1, 4.8, 6.2, 5.5, 4.9, 5.3, 6.0, 5.7, 5.2, 5.8');
+  const [alpha, setAlpha] = useState(0.05);
+  const [mu0, setMu0] = useState(0);
+  const [sigma0, setSigma0] = useState(1);
+  const [result, setResult] = useState<{ D: number; p: number } | null>(null);
+  const [error, setError] = useState<string | null>(null);
+
+  const handle = () => {
+    setError(null);
+    setResult(null);
+    const data = parseData(dataInput);
+    if (data.length < 1) {
+      setError('KS 需要至少 1 个数据点');
+      return;
+    }
+    if (!(sigma0 > 0)) {
+      setError('理论标准差必须为正');
+      return;
+    }
+    const cdf = (x: number) => normCdf((x - mu0) / sigma0);
+    setResult(kolmogorovSmirnov(data, cdf));
+  };
+
+  return (
+    <>
+      <NormalityTestInputs data={dataInput} onData={setDataInput} alpha={alpha} onAlpha={setAlpha} />
+      <div className="grid grid-cols-2 gap-2">
+        <div>
+          <label className="text-[11px] text-muted-foreground mb-1 block">μ₀ (理论均值)</label>
+          <Input type="number" value={mu0} step="any" onChange={(e) => setMu0(parseFloat(e.target.value) || 0)}
+            className="h-8 text-[12px] font-mono" />
+        </div>
+        <div>
+          <label className="text-[11px] text-muted-foreground mb-1 block">σ₀ (理论标准差)</label>
+          <Input type="number" value={sigma0} step="any" onChange={(e) => setSigma0(parseFloat(e.target.value) || 1)}
+            className="h-8 text-[12px] font-mono" />
+        </div>
+      </div>
+      <Button onClick={handle} size="sm" className="w-full h-8 text-[12px] gap-1.5">
+        <FlaskConical className="size-3.5" />
+        运行单样本 KS 检验 (vs N(μ₀, σ₀²))
+      </Button>
+      <AnimatePresence mode="wait">
+        {error && (
+          <motion.div key="err" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
+            className="rounded-md border border-rose-500/40 bg-rose-500/10 p-2.5 text-[11.5px] text-rose-600 dark:text-rose-300">
+            <div className="flex items-start gap-1.5"><X className="size-3.5 mt-0.5 shrink-0" /><span>{error}</span></div>
+          </motion.div>
+        )}
+        {result && !error && (
+          <motion.div key="res" initial={{ opacity: 0, y: 4 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0 }} className="space-y-2">
+            <div className="rounded-md border border-primary/30 bg-primary/5 p-2.5 formula-card-glow min-w-[260px]">
+              <div className="text-[10.5px] text-muted-foreground mb-1.5">检验统计量 D</div>
+              <div className="flex justify-between text-[11px]">
+                <span className="text-muted-foreground">D</span>
+                <span className="font-mono font-semibold tabular-nums">{fmt(result.D, 5)}</span>
+              </div>
+              <div className="flex justify-between text-[11px]">
+                <span className="text-muted-foreground">p 值</span>
+                <span className="font-mono font-semibold tabular-nums text-primary">{fmt(result.p, 4)}</span>
+              </div>
+            </div>
+            <VerdictBanner reject={result.p < alpha} alpha={alpha} p={result.p} label={`N(${mu0}, ${sigma0}²)`} />
+          </motion.div>
+        )}
+      </AnimatePresence>
+    </>
+  );
+}
+
+function BootstrapForm() {
+  const [dataInput, setDataInput] = useState('5.1, 4.8, 6.2, 5.5, 4.9, 5.3, 6.0, 5.7, 5.2, 5.8');
+  type StatKey = 'mean' | 'median' | 'std';
+  const [statKey, setStatKey] = useState<StatKey>('mean');
+  const [alpha, setAlpha] = useState(0.05);
+  const [iterations, setIterations] = useState(1000);
+  const [result, setResult] = useState<ReturnType<typeof bootstrapCI> | null>(null);
+  const [error, setError] = useState<string | null>(null);
+
+  const statFn = (d: number[]): number => {
+    if (statKey === 'mean') return math.mean(d) as unknown as number;
+    if (statKey === 'std') return math.std(d) as unknown as number;
+    const s = [...d].sort((a, b) => a - b);
+    const mid = Math.floor(s.length / 2);
+    return s.length % 2 ? s[mid] : (s[mid - 1] + s[mid]) / 2;
+  };
+  const statLabel: Record<StatKey, string> = { mean: '均值', median: '中位数', std: '标准差' };
+
+  const handle = () => {
+    setError(null);
+    setResult(null);
+    const data = parseData(dataInput);
+    if (data.length < 2) {
+      setError('Bootstrap 需要至少 2 个数据点');
+      return;
+    }
+    try {
+      setResult(
+        bootstrapCI(data, statFn, { iterations: Math.round(iterations) || 1000, alpha, seed: 1 }),
+      );
+    } catch (e) {
+      setError((e as Error).message);
+    }
+  };
+
+  return (
+    <>
+      <div>
+        <label className="text-[11px] text-muted-foreground mb-1 block">
+          样本数据（逗号/空格分隔）
+        </label>
+        <Textarea value={dataInput} onChange={(e) => setDataInput(e.target.value)}
+          placeholder="例如: 5.1, 4.8, 6.2, ..." className="min-h-[50px] text-[12px] font-mono resize-y" />
+      </div>
+      <div className="grid grid-cols-2 gap-2">
+        <div>
+          <label className="text-[11px] text-muted-foreground mb-1 block">统计量</label>
+          <Select value={statKey} onValueChange={(v) => setStatKey(v as StatKey)}>
+            <SelectTrigger className="h-8 text-[12px]">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="mean" className="text-[12px]">均值</SelectItem>
+              <SelectItem value="median" className="text-[12px]">中位数</SelectItem>
+              <SelectItem value="std" className="text-[12px]">标准差</SelectItem>
+            </SelectContent>
+          </Select>
+        </div>
+        <div>
+          <label className="text-[11px] text-muted-foreground mb-1 block">重采样次数</label>
+          <Input type="number" value={iterations} min={100} max={10000} step={100}
+            onChange={(e) => setIterations(parseInt(e.target.value, 10) || 1000)}
+            className="h-8 text-[12px] font-mono" />
+        </div>
+      </div>
+      <div>
+        <label className="text-[11px] text-muted-foreground mb-1 block">置信水平 1-α</label>
+        <Select value={String(alpha)} onValueChange={(v) => setAlpha(parseFloat(v))}>
+          <SelectTrigger className="h-8 text-[12px] font-mono">
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="0.1" className="text-[12px]">90% (α=0.10)</SelectItem>
+            <SelectItem value="0.05" className="text-[12px]">95% (α=0.05)</SelectItem>
+            <SelectItem value="0.01" className="text-[12px]">99% (α=0.01)</SelectItem>
+          </SelectContent>
+        </Select>
+      </div>
+      <Button onClick={handle} size="sm" className="w-full h-8 text-[12px] gap-1.5">
+        <FlaskConical className="size-3.5" />
+        计算 {statLabel[statKey]} 的自助置信区间
+      </Button>
+      <AnimatePresence mode="wait">
+        {error && (
+          <motion.div key="err" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
+            className="rounded-md border border-rose-500/40 bg-rose-500/10 p-2.5 text-[11.5px] text-rose-600 dark:text-rose-300">
+            <div className="flex items-start gap-1.5"><X className="size-3.5 mt-0.5 shrink-0" /><span>{error}</span></div>
+          </motion.div>
+        )}
+        {result && !error && (
+          <motion.div key="res" initial={{ opacity: 0, y: 4 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0 }} className="space-y-2">
+            <div className="rounded-md border border-primary/30 bg-primary/5 p-2.5 formula-card-glow min-w-[260px]">
+              <div className="text-[10.5px] text-muted-foreground mb-1.5">
+                {statLabel[statKey]} 的 {(result.level * 100).toFixed(0)}% 百分位自助区间
+              </div>
+              <div className="grid grid-cols-3 gap-2 text-[11px] mt-1">
+                <div className="rounded bg-background/60 border border-border/40 p-1.5 text-center">
+                  <div className="text-[10px] text-muted-foreground">下限</div>
+                  <div className="font-mono font-semibold tabular-nums">{fmt(result.lo, 5)}</div>
+                </div>
+                <div className="rounded bg-background/60 border border-border/40 p-1.5 text-center">
+                  <div className="text-[10px] text-muted-foreground">点估计</div>
+                  <div className="font-mono font-semibold tabular-nums text-primary">{fmt(result.point, 5)}</div>
+                </div>
+                <div className="rounded bg-background/60 border border-border/40 p-1.5 text-center">
+                  <div className="text-[10px] text-muted-foreground">上限</div>
+                  <div className="font-mono font-semibold tabular-nums">{fmt(result.hi, 5)}</div>
+                </div>
+              </div>
+              <div className="flex justify-between text-[10.5px] mt-2">
+                <span className="text-muted-foreground">自助均值</span>
+                <span className="font-mono tabular-nums">{fmt(result.mean, 5)}</span>
+              </div>
+              <div className="flex justify-between text-[10.5px]">
+                <span className="text-muted-foreground">标准误</span>
+                <span className="font-mono tabular-nums">{fmt(result.se, 5)}</span>
+              </div>
             </div>
           </motion.div>
         )}

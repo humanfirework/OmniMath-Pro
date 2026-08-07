@@ -3707,6 +3707,9 @@ svg *::after {
   --background: oklch(0.972 0.014 190);
   --foreground: oklch(0.235 0.03 200);   /* tinted slate ink — softer than near-black */
 
+  /* Node editor canvas — slightly recessed so the graph reads as a distinct surface */
+  --canvas: oklch(0.965 0.012 190);
+
   /* Indent guide line color (used by CodeMirror .cm-line) */
   --indent-guide: rgba(0, 0, 0, 0.06);
   --card: oklch(0.992 0.006 190);
@@ -3801,6 +3804,10 @@ svg *::after {
      so the whole UI shares one cohesive atmosphere with the accent) */
   --background: oklch(0.22 0.012 200);
   --foreground: oklch(0.95 0.008 190);    /* soft tinted near-white */
+
+  /* Node editor canvas — Blender-style charcoal, clearly recessed from the
+     surrounding panels so the wire graph sits on its own surface. */
+  --canvas: oklch(0.185 0.012 200);
 
   /* Indent guide line color — lighter for dark theme */
   --indent-guide: rgba(255, 255, 255, 0.06);
@@ -4323,12 +4330,26 @@ html:not(.dark) .ai-panel .focus-within\:border-primary\/40:focus-within {
    Animated grid background — for empty states / canvas
    ------------------------------------------------------------ */
 .grid-bg {
+  background-color: var(--canvas);
   background-image:
     linear-gradient(to right, oklch(0 0 0 / 4%) 1px, transparent 1px),
     linear-gradient(to bottom, oklch(0 0 0 / 4%) 1px, transparent 1px);
   background-size: 24px 24px;
   background-position: center center;
   animation: gridShift 20s linear infinite;
+}
+
+/* Blender-style node editor backdrop — a soft charcoal with a faint
+   secondary dot grid over the primary line grid. */
+.pipeline-canvas {
+  background-color: var(--canvas);
+  background-image:
+    radial-gradient(circle, oklch(1 0 0 / 7%) 1px, transparent 1px),
+    linear-gradient(to right, oklch(1 0 0 / 4%) 1px, transparent 1px),
+    linear-gradient(to bottom, oklch(1 0 0 / 4%) 1px, transparent 1px);
+  background-size: 24px 24px;
+  background-position: center center;
+  animation: gridShift3 22s linear infinite;
 }
 
 .dark .grid-bg {
@@ -4340,6 +4361,11 @@ html:not(.dark) .ai-panel .focus-within\:border-primary\/40:focus-within {
 @keyframes gridShift {
   0% { background-position: 0 0, 0 0; }
   100% { background-position: 24px 24px, 24px 24px; }
+}
+
+@keyframes gridShift3 {
+  0% { background-position: 0 0, 0 0, 0 0; }
+  100% { background-position: 24px 24px, 24px 24px, 24px 24px; }
 }
 
 /* Dotted grid background variant */

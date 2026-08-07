@@ -3,6 +3,7 @@
  * 纯 TypeScript，无 DOM 依赖。
  */
 import type { Point, Polyline, BezierSegment, BezierPath } from './types';
+import { mapPixelY } from './coords';
 
 /** 折线总长（相邻点欧氏距离之和）。 */
 export function polylineLength(points: Point[]): number {
@@ -412,12 +413,12 @@ export function fitBezierPaths(
 }
 
 /**
- * 翻转 BezierPath[] 的 Y 坐标：
- *   image-height 为图像高。把 (x, y) → (x, height - y)，
+ * 翻转 BezierPath[] 的 Y 坐标（像素→数学，收敛到 coords.ts 唯一入口 y' = H-1-y）。
+ *   image-height 为图像高。把 (x, y) → (x, H-1-y)，
  *   用于把图像坐标（上=0，下=height-1）转换为标准数学坐标（下=0，上=height-1）。
  */
 export function flipYBezierPaths(paths: BezierPath[], height: number): BezierPath[] {
-  const flipPoint = (p: Point): Point => ({ x: p.x, y: height - p.y });
+  const flipPoint = (p: Point): Point => ({ x: p.x, y: mapPixelY(p.y, height, true) });
   return paths.map((path) => ({
     segments: path.segments.map((seg) => ({
       p0: flipPoint(seg.p0),

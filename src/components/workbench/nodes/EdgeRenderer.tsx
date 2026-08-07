@@ -16,6 +16,11 @@
  *   - 选中后按 Delete 键、或点击边的垃圾桶图标删除。
  *   - 垃圾桶采用两步确认：第一次点击变红"确认?"，第二次点击才真删。
  *     3 秒不操作自动取消确认态。
+ *
+ * P1-4: 可拖拽重连 ——
+ *   - 每条边在源端/目标端内侧各有一个拖柄（hover/选中时显示）。
+ *   - 按住拖柄拖到另一节点的端口上松手，即可把该端重连到新端口（吸附）。
+ *   - `onStartReconnect(edgeId, end)` 由父级接管拖拽 + 端口吸附。
  */
 
 import { memo, useState, useEffect, useRef } from 'react';
@@ -46,12 +51,32 @@ interface EdgeRendererProps {
   onDeleteEdge: (edgeId: string) => void;
   /** P6: 选中边（传 null 清除）。 */
   onSelectEdge: (edgeId: string | null) => void;
+  /** P1-4: 正在重连的边 id（高亮 + 隐藏该边普通交互）。 */
+  reconnectEdgeId?: string | null;
+  /** P1-4: 开始重连某条边的某端（'from'=源端 / 'to'=目标端）。 */
+  onStartReconnect?: (edgeId: string, end: 'from' | 'to') => void;
 }
 
 /** Cubic bezier path between two points (horizontal flow). */
 export function bezierPath(from: EdgeEndpoint, to: EdgeEndpoint): string {
   const dx = Math.max(Math.abs(to.x - from.x) * 0.5, 30);
   return `M ${from.x} ${from.y} C ${from.x + dx} ${from.y}, ${to.x - dx} ${to.y}, ${to.x} ${to.y}`;
+}
+
+/** Point on the connecting cubic bezier at parameter t (0..1). */
+function bezierPointAt(from: EdgeEndpoint, to: EdgeEndpoint, t: number): EdgeEndpoint {
+  const dx = Math.max(Math.abs(to.x - from.x) * 0.5, 30);
+  const c1 = { x: from.x + dx, y: from.y };
+  const c2 = { x: to.x - dx, y: to.y };
+  const u = 1 - t;
+  const a = u * u * u;
+  const b = 3 * u * u * t;
+  const c = 3 * u * t * t;
+  const d = t * t * t;
+  return {
+    x: a * from.x + b * c1.x + c * c2.x + d * to.x,
+    y: a * from.y + b * c1.y + c * c2.y + d * to.y,
+  };
 }
 
 export const EdgeRenderer = memo(function EdgeRenderer({
@@ -63,6 +88,8 @@ export const EdgeRenderer = memo(function EdgeRenderer({
   marquee,
   onDeleteEdge,
   onSelectEdge,
+  reconnectEdgeId,
+  onStartReconnect,
 }: EdgeRendererProps) {
   return (
     <svg
@@ -90,8 +117,10 @@ export const EdgeRenderer = memo(function EdgeRenderer({
           to={to}
           color={color}
           selected={selectedEdgeId === edge.id || selectedNodeId === edge.from || selectedNodeId === edge.to}
+          reconnecting={reconnectEdgeId === edge.id}
           onDelete={() => onDeleteEdge(edge.id)}
           onSelect={() => onSelectEdge(edge.id)}
+          onStartReconnect={(end) => onStartReconnect?.(edge.id, end)}
         />
       ))}
 
@@ -127,6 +156,7 @@ export const EdgeRenderer = memo(function EdgeRenderer({
 
 /* ------------------------------------------------------------------ *
  * Single edge path — P6/P7: 点击选中 + 两步确认删除
+ *                     P1-4: 源端/目标端拖柄重连
  * ------------------------------------------------------------------ */
 interface EdgePathProps {
   edge: PipelineEdge;
@@ -134,11 +164,13 @@ interface EdgePathProps {
   to: EdgeEndpoint;
   color?: string;
   selected: boolean;
+  reconnecting: boolean;
   onDelete: () => void;
   onSelect: () => void;
+  onStartReconnect: (end: 'from' | 'to') => void;
 }
 
-function EdgePath({ edge, from, to, color, selected, onDelete, onSelect }: EdgePathProps) {
+function EdgePath({ edge, from, to, color, selected, reconnecting, onDelete, onSelect, onStartReconnect }: EdgePathProps) {
   const [hover, setHover] = useState(false);
   // P7: 两步确认。confirming=true 时垃圾桶变红显示对勾，再点一次才真删。
   const [confirming, setConfirming] = useState(false);
@@ -156,6 +188,9 @@ function EdgePath({ edge, from, to, color, selected, onDelete, onSelect }: EdgeP
 
   const d = bezierPath(from, to);
   const mid = { x: (from.x + to.x) / 2, y: (from.y + to.y) / 2 };
+  // P1-4: 拖柄位于源端/目标端内侧（曲线上 t≈0.12 / t≈0.88），不遮挡端口圆点。
+  const fromHandle = bezierPointAt(from, to, 0.12);
+  const toHandle = bezierPointAt(from, to, 0.88);
 
   const handleTrashClick = (e: React.PointerEvent) => {
     e.stopPropagation();
@@ -168,6 +203,11 @@ function EdgePath({ edge, from, to, color, selected, onDelete, onSelect }: EdgeP
       // 第一次点击 → 进入确认态
       setConfirming(true);
     }
+  };
+
+  const startReconnect = (end: 'from' | 'to') => (e: React.PointerEvent) => {
+    e.stopPropagation();
+    onStartReconnect(end);
   };
 
   return (
@@ -188,13 +228,40 @@ function EdgePath({ edge, from, to, color, selected, onDelete, onSelect }: EdgeP
       <path
         d={d}
         fill="none"
-        stroke={color ?? 'url(#edge-gradient)'}
+        stroke={reconnecting ? 'transparent' : (color ?? 'url(#edge-gradient)')}
         strokeWidth={hover || selected ? 2.5 : 2}
         className="node-connector animated"
         style={{ opacity: hover || selected ? 1 : 0.85 }}
       />
+
+      {/* P1-4: 源端/目标端拖柄（hover/选中时显示），按住拖到另一端口松开即重连 */}
+      {(hover || selected) && !reconnecting && (
+        <>
+          <circle
+            cx={fromHandle.x}
+            cy={fromHandle.y}
+            r={5.5}
+            fill="var(--node-bg, oklch(0.2 0.02 250))"
+            stroke={color ?? 'oklch(0.7 0.15 165)'}
+            strokeWidth={1.4}
+            className="cursor-grab"
+            onPointerDown={startReconnect('from')}
+          />
+          <circle
+            cx={toHandle.x}
+            cy={toHandle.y}
+            r={5.5}
+            fill="var(--node-bg, oklch(0.2 0.02 250))"
+            stroke={color ?? 'oklch(0.7 0.15 165)'}
+            strokeWidth={1.4}
+            className="cursor-grab"
+            onPointerDown={startReconnect('to')}
+          />
+        </>
+      )}
+
       {/* Delete affordance — shows on hover or when selected */}
-      {(hover || selected) && (
+      {(hover || selected) && !reconnecting && (
         <g
           transform={`translate(${mid.x}, ${mid.y})`}
           onPointerUp={handleTrashClick}

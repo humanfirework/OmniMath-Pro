@@ -48,6 +48,7 @@ import {
   PencilRuler,
   MoreHorizontal,
   BarChart3,
+  CircleGauge,
 } from 'lucide-react';
 import {
   Tooltip,
@@ -72,6 +73,7 @@ import type { TranslationDict } from '@/lib/i18n';
 type ActivityItemId =
   | SidePanelTab
   | 'solver'
+  | 'control'
   | 'pipeline'
   | 'whiteboard'
   | 'linalg'
@@ -93,6 +95,7 @@ const ACTIVITY_REGISTRY: Record<ActivityItemId, RegistryEntry> = {
   formulas: { icon: BookOpen, labelKey: 'abFormulas' },
   stats: { icon: BarChart3, labelKey: 'abStats' },
   solver: { icon: FunctionSquare, labelKey: 'abSolver' },
+  control: { icon: CircleGauge, labelKey: 'abControl' },
   pipeline: { icon: Workflow, labelKey: 'abPipeline' },
   whiteboard: { icon: PencilRuler, labelKey: 'abWhiteboard' },
   linalg: { icon: Grid3x3, labelKey: 'abLinalg' },
@@ -106,7 +109,7 @@ const ACTIVITY_REGISTRY: Record<ActivityItemId, RegistryEntry> = {
 /** Group 1: data / basic panels */
 const GROUP_1_IDS: ActivityItemId[] = ['files', 'history', 'variables'];
 /** Group 2: theory / core math */
-const GROUP_2_IDS: ActivityItemId[] = ['stats', 'solver', 'linalg', 'formulas'];
+const GROUP_2_IDS: ActivityItemId[] = ['stats', 'solver', 'control', 'linalg', 'formulas'];
 /** Group 3: creative / extensions */
 const GROUP_3_IDS: ActivityItemId[] = ['whiteboard', 'pipeline'];
 /** Bottom utilities */
@@ -317,7 +320,7 @@ export function ActivityBar() {
     }
 
     // ── View-mode switches ──
-    if (['solver', 'pipeline', 'whiteboard', 'linalg', 'stats'].includes(id)) {
+    if (['solver', 'control', 'pipeline', 'whiteboard', 'linalg', 'stats'].includes(id)) {
       const isActive = viewMode === id;
       return wrapper(
         <Tooltip delayDuration={200}>

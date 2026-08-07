@@ -35,12 +35,16 @@ import { rdpSimplify, fitBezierPath } from './fit';
 import { fitFourier, sampleFourierCurve } from './fourier';
 import { zhangSuenThin, skeletonToPolylines } from './skeleton';
 import { imageToCurves } from './index';
+import { videoToCurves } from './videoToCurves';
 import { decodeGif } from './video';
 import type { Polyline, BezierPath, ImageDataLike, VisionOptions } from './types';
+import type { VideoToCurvesOptions } from './videoToCurves';
+import type { FrameSequence } from './video';
 
 /** Operations exposed by this worker. */
 export type VisionWorkerOp =
   | 'imageToCurves'
+  | 'videoToCurves'
   | 'toGrayscale'
   | 'binarize'
   | 'multiLevelThreshold'
@@ -76,6 +80,10 @@ function dispatch(op: VisionWorkerOp, args: unknown[]): unknown {
     case 'imageToCurves': {
       const [imageData, options] = args as [ImageDataLike, VisionOptions | undefined];
       return imageToCurves(imageData, options);
+    }
+    case 'videoToCurves': {
+      const [seq, options] = args as [FrameSequence, VideoToCurvesOptions | undefined];
+      return videoToCurves(seq, options);
     }
     case 'toGrayscale': {
       const [imageData] = args as [ImageDataLike];

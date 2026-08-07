@@ -12,7 +12,7 @@
  * 一次性实例化所有面板导致的卡顿。轻量面板（历史 / 变量 / 文件）保持静态导入。
  */
 
-import { lazy, Suspense, useCallback } from 'react';
+import { lazy, Suspense, useCallback, useEffect, useState } from 'react';
 import { PanelLeftClose, Clock, Variable, BookOpen, Grid3x3, FunctionSquare, FileCode2, BarChart3 } from 'lucide-react';
 import {
   Tooltip,
@@ -70,12 +70,33 @@ function PanelLoading() {
   );
 }
 
+const SIDE_PANEL_TABS: SidePanelTab[] = [
+  'history', 'variables', 'files', 'formulas', 'linalg', 'solver', 'stats',
+];
+
 export function SidePanel() {
   const activeSidePanel = useWorkbenchStore((s) => s.activeSidePanel);
   const toggleSidePanel = useWorkbenchStore((s) => s.toggleSidePanel);
 
-  const renderPanel = useCallback(() => {
-    switch (activeSidePanel) {
+  // 关键修复：面板状态持久化。
+  // 之前这里用 switch 返回单个面板，切换 tab 时 React 会「卸载」旧面板并「挂载」新面板，
+  // 导致面板内部所有本地 useState（矩阵、方程、结果等）在切换后全部丢失、归零。
+  // 现在改为「访问过的面板始终保持挂载」，仅用 CSS 隐藏非激活面板：
+  //   - 首次访问某 tab 才加载对应代码块（懒加载性能优势保留）；
+  //   - 一旦访问过，面板及其本地状态一直驻留，来回切换不再丢数据；
+  //   - 切回已访问面板是瞬时响应，无需重新初始化。
+  const [visited, setVisited] = useState<Set<SidePanelTab>>(() => new Set([activeSidePanel]));
+  useEffect(() => {
+    setVisited((prev) => {
+      if (prev.has(activeSidePanel)) return prev;
+      const next = new Set(prev);
+      next.add(activeSidePanel);
+      return next;
+    });
+  }, [activeSidePanel]);
+
+  const renderPanel = useCallback((tab: SidePanelTab) => {
+    switch (tab) {
       case 'history':
         return <HistoryPanel />;
       case 'variables':
@@ -93,7 +114,8 @@ export function SidePanel() {
       default:
         return null;
     }
-  }, [activeSidePanel]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   return (
     <div className="flex flex-col h-full bg-card/40">
@@ -126,9 +148,19 @@ export function SidePanel() {
         </Tooltip>
       </div>
 
-      {/* Body */}
-      <div className="flex-1 min-h-0">
-        <Suspense fallback={<PanelLoading />}>{renderPanel()}</Suspense>
+      {/* Body — all visited panels stay mounted; only the active one is visible */}
+      <div className="flex-1 min-h-0 relative">
+        {SIDE_PANEL_TABS.map((tab) => (
+          <div
+            key={tab}
+            className={cn('absolute inset-0 h-full', tab === activeSidePanel ? 'block' : 'hidden')}
+            aria-hidden={tab !== activeSidePanel}
+          >
+            {visited.has(tab) && (
+              <Suspense fallback={<PanelLoading />}>{renderPanel(tab)}</Suspense>
+            )}
+          </div>
+        ))}
       </div>
     </div>
   );

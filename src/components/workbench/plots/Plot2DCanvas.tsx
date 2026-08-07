@@ -326,6 +326,33 @@ function plotPolyline(
 }
 
 /* =================================================================== */
+/*  Rendering budget helpers（性能：限制过度绘制导致的卡顿）                    */
+/* =================================================================== */
+
+/**
+ * 视觉模板（边缘检测 / 姿态追踪 / 视频转曲线）可能生成上千条贝塞尔曲线，
+ * 而动画逐帧播放时每条都要 flatten + stroke。全量绘制在主线程上会造成
+ * 明显卡顿。这里用「曲线条数上限 + 单条路径点数上限」两道预算：
+ *   - 曲线数量超过上限时**均匀抽稀**（保留首尾，整体形状仍可辨）；
+ *   - 单条路径 flatten 后点数超过上限时**等距抽稀**，降低 stroke 点开销。
+ * 纯几何抽稀，不改变曲线形状的视觉主体，代价可忽略。
+ */
+const MAX_RENDER_CURVES = 1500;
+const MAX_FLATTEN_POINTS = 500;
+
+/** 从数组中等距抽取至多 n 个元素（保留首尾）。 */
+function pickDistributed<T>(arr: readonly T[], n: number): T[] {
+  if (n <= 0 || arr.length <= n) return arr.slice();
+  if (n === 1) return [arr[0]];
+  const out: T[] = [];
+  const step = (arr.length - 1) / (n - 1);
+  for (let i = 0; i < n; i++) {
+    out.push(arr[Math.round(i * step)]);
+  }
+  return out;
+}
+
+/* =================================================================== */
 /*  Component                                                          */
 /* =================================================================== */
 
@@ -417,6 +444,8 @@ export function Plot2DCanvas({
   const [hoveredPoints, setHoveredPoints] = useState<HoveredPoint[]>([]);
   // Task 8.B: DOM tooltip follows mouse — store client-relative CSS pixel pos.
   const [mousePos, setMousePos] = useState<{ x: number; y: number } | null>(null);
+  /** 连续鼠标世界坐标（用于左下角坐标读出，不依赖吸附）。 */
+  const [mouseWorld, setMouseWorld] = useState<{ wx: number; wy: number } | null>(null);
   // rAF-batched hover update to throttle pointer moves to ≤ ~120fps and
   // keep per-frame work < 0.8ms for 3 curves × ~1200 samples each.
   const hoverDirtyRef = useRef(false);
@@ -602,6 +631,45 @@ export function Plot2DCanvas({
   }, []);
 
   /* ----------------------- Actual draw ------------------------------ */
+  // 曲线集 flatten 缓存：把贝塞尔路径折线化（像素空间）是 CPU 大头（上千条
+  // 曲线 × 多段 × 16 采样）。该结果只依赖曲线几何，与视图无关；平移/缩放时
+  // 若仍重复 flatten 会显著卡顿。这里按 [curveSets, playhead] 缓存，重绘时
+  // 仅需重算廉价的「像素→屏幕」线性映射。动画（frames）按帧缓存，帧切换时
+  // 才重新 flatten 该帧，静态度量平移缩放则完全复用。
+  const flattenedCurveSets = useMemo(() => {
+    const map = new Map<number, Array<Array<[number, number]>>>();
+    curveSets.forEach((cs, csIdx) => {
+      const activeCurves = resolveCurveSetCurves(cs, playhead);
+      const csW = Math.max(1, cs.width);
+      const csH = Math.max(1, cs.height);
+      const capped =
+        activeCurves.length > MAX_RENDER_CURVES
+          ? pickDistributed(activeCurves, MAX_RENDER_CURVES)
+          : activeCurves;
+      const polylines: Array<Array<[number, number]>> = [];
+      for (const path of capped) {
+        let current: [number, number] | null = null;
+        const line: Array<[number, number]> = [];
+        for (const seg of path.segments) {
+          const flatPx = bezierFlatten(seg, current, 0.5);
+          if (flatPx.length === 0) continue;
+          // 在像素空间应用翻转（flipX/flipY），视图无关，可安全缓存。
+          const mapped = flatPx.map(([px, py]) => {
+            const lx = cs.flipX ? csW - 1 - px : px;
+            const ly = cs.flipY ? csH - 1 - py : py;
+            return [lx, ly] as [number, number];
+          });
+          if (line.length === 0) line.push(...mapped);
+          else line.push(...mapped.slice(1));
+          current = mapped[mapped.length - 1];
+        }
+        if (line.length >= 2) polylines.push(pickDistributed(line, MAX_FLATTEN_POINTS));
+      }
+      map.set(csIdx, polylines);
+    });
+    return map;
+  }, [curveSets, playhead]);
+
   const drawNow = useCallback(() => {
     const t0 = performance.now();
     try {
@@ -870,37 +938,60 @@ export function Plot2DCanvas({
         const [yMin, yMax] = viewRef.current.y;
         const plotW = Math.max(1, w - PADDING.left - PADDING.right);
         const plotH = Math.max(1, h - PADDING.top - PADDING.bottom);
+        // 性能：优先把所有曲线段累积进「按颜色+线宽分组的单个 Path2D」，
+        // 最后一次性 stroke，把成千上万次 beginPath/stroke 降为几次，大幅降低
+        // 绘制调用开销（边缘检测/姿态/视频等海量曲线场景收益最明显）。
+        const canBatch = typeof Path2D !== 'undefined';
+        const batches = new Map<string, { path: Path2D; color: string; sw: number }>();
+        const drawPerPath = (pts: Array<[number, number]>, color: string, sw: number, batchColor: string, batchSw: number) => {
+          if (canBatch) {
+            const key = `${batchColor}|${batchSw}`;
+            let batch = batches.get(key);
+            if (!batch) {
+              batch = { path: new Path2D(), color: batchColor, sw: batchSw };
+              batches.set(key, batch);
+            }
+            batch.path.moveTo(pts[0][0], pts[0][1]);
+            for (let i = 1; i < pts.length; i++) batch.path.lineTo(pts[i][0], pts[i][1]);
+          } else {
+            plotPolyline(ctx, pts, color, sw);
+          }
+        };
         for (const cs of curveSets) {
           const csW = Math.max(1, cs.width);
           const csH = Math.max(1, cs.height);
           const color = cs.color ?? '#a78bfa';
           const sw = cs.strokeWidth ?? 2;
-          const activeCurves = resolveCurveSetCurves(cs, playhead);
-          for (const path of activeCurves) {
-            // 对每条路径：每段 flatten → 转屏幕坐标 → 用 plotPolyline 绘制
-            let current: [number, number] | null = null;
-            for (const seg of path.segments) {
-              const flatPx = bezierFlatten(seg, current, 0.5);
-              if (flatPx.length === 0) continue;
-              // 将曲线的像素坐标 → 数学坐标 → 屏幕坐标
-              const screenPts: Array<[number, number]> = flatPx.map(([px, py]) => {
-                // 1) 先在像素空间做 flipX/flipY（如果 curveSet 带局部开关）
-                let lx = cs.flipX ? csW - 1 - px : px;
-                let ly = cs.flipY ? csH - 1 - py : py;
-                // 2) 像素 → 数学坐标（线性映射，数学 y 翻转）
-                const mx = xMin + (lx / (csW - 1 || 1)) * (xMax - xMin);
-                const my = yMin + (1 - ly / (csH - 1 || 1)) * (yMax - yMin);
-                // 3) 数学 → 屏幕像素（带 PADDING 修正）
-                const sx = PADDING.left + ((mx - xMin) / (xMax - xMin || 1)) * plotW;
-                const sy = PADDING.top + (1 - (my - yMin) / (yMax - yMin || 1)) * plotH;
-                return [sx, sy] as [number, number];
-              });
-              if (screenPts.length >= 2) {
-                plotPolyline(ctx, screenPts, color, sw);
-                current = screenPts[screenPts.length - 1];
-              }
+          // 折线已在 flattenedCurveSets 中按 [curveSets, playhead] 缓存（含预算抽稀
+          // 与 flipX/flipY），这里只做廉价的「像素→屏幕」线性映射，避免平移/缩放时
+          // 反复 flatten 上千条贝塞尔路径导致卡顿。
+          const csIdx = curveSets.indexOf(cs);
+          const polylines = flattenedCurveSets.get(csIdx) ?? [];
+          for (const line of polylines) {
+            // 像素 → 数学坐标 → 屏幕坐标（数学 y 翻转 + PADDING 修正）
+            const screenPts: Array<[number, number]> = line.map(([lx, ly]) => {
+              const mx = xMin + (lx / (csW - 1 || 1)) * (xMax - xMin);
+              const my = yMin + (1 - ly / (csH - 1 || 1)) * (yMax - yMin);
+              const sx = PADDING.left + ((mx - xMin) / (xMax - xMin || 1)) * plotW;
+              const sy = PADDING.top + (1 - (my - yMin) / (yMax - yMin || 1)) * plotH;
+              return [sx, sy] as [number, number];
+            });
+            if (screenPts.length >= 2) {
+              drawPerPath(screenPts, color, sw, color, sw);
             }
           }
+        }
+        // 一次性批量 stroke：按颜色/线宽分组，各自设置样式后 stroke 一次。
+        if (canBatch && batches.size > 0) {
+          ctx.save();
+          ctx.lineJoin = 'round';
+          ctx.lineCap = 'round';
+          for (const batch of batches.values()) {
+            ctx.strokeStyle = batch.color;
+            ctx.lineWidth = batch.sw;
+            ctx.stroke(batch.path);
+          }
+          ctx.restore();
         }
       }
 
@@ -1185,7 +1276,7 @@ export function Plot2DCanvas({
       // 记录本帧耗时，供 lowQuality 自适应恢复延时参考（见 lastDrawMsRef）。
       lastDrawMsRef.current = performance.now() - t0;
     }
-  }, [computed, theme, dataToScreen, screenToData, showGrid, showAxes, showMarkers, showLegend, overlays, axisFontSize, curveSets, playhead]);
+  }, [computed, theme, dataToScreen, screenToData, showGrid, showAxes, showMarkers, showLegend, overlays, axisFontSize, curveSets, playhead, flattenedCurveSets]);
 
   // Keep the ref in sync so the rAF callback always uses the latest drawNow.
   // We must do this inside an effect (not during render) per React 19 rules.
@@ -1550,6 +1641,7 @@ export function Plot2DCanvas({
 
         // Hover + snap.
         const [wx, wy] = screenToData(sx, sy);
+        setMouseWorld({ wx, wy });
         // Find nearest visible sample point (snapping).
         let best: PlotSample | undefined;
         let bestColor: string | undefined;
@@ -1657,6 +1749,7 @@ export function Plot2DCanvas({
     hoverPendingRef.current = null;
     setHoveredPoints([]);
     setMousePos(null);
+    setMouseWorld(null);
     scheduleRedraw();
   }, [scheduleRedraw]);
 
@@ -1859,9 +1952,11 @@ export function Plot2DCanvas({
           ))}
         </div>
       )}
-      {/* Tiny range badge bottom-left */}
-      <div className="pointer-events-none absolute bottom-1.5 left-2 rounded bg-muted-foreground/20 px-1.5 py-0.5 font-mono text-[10px] text-foreground/80 backdrop-blur-sm">
-        x ∈ [{xRange[0].toFixed(2)}, {xRange[1].toFixed(2)}] · y ∈ [{yRange[0].toFixed(2)}, {yRange[1].toFixed(2)}]
+      {/* Mouse coordinate readout + range badge bottom-left */}
+      <div className="pointer-events-none absolute bottom-1.5 left-2 flex items-center gap-1.5 rounded bg-muted-foreground/20 px-1.5 py-0.5 font-mono text-[10px] text-foreground/80 backdrop-blur-sm">
+        <span>{mouseWorld ? `(${mouseWorld.wx.toFixed(3)}, ${mouseWorld.wy.toFixed(3)})` : '(x, y)'}</span>
+        <span className="opacity-50">·</span>
+        <span className="opacity-70">x ∈ [{xRange[0].toFixed(2)}, {xRange[1].toFixed(2)}] · y ∈ [{yRange[0].toFixed(2)}, {yRange[1].toFixed(2)}]</span>
       </div>
 
       {/* Task 9: Curve animation timeline — shown only when a curveSet carries frames */}

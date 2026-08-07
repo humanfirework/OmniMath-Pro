@@ -55,7 +55,7 @@ export interface VariableEntry {
 export type SidePanelTab = 'history' | 'variables' | 'formulas' | 'linalg' | 'solver' | 'files' | 'stats';
 export type PreviewTab = 'formula' | 'plot2d' | 'plot3d' | 'log' | 'pipeline' | 'ai';
 export type Theme = 'dark' | 'light';
-export type ViewMode = 'workbench' | 'pipeline' | 'whiteboard' | 'focus' | 'linalg' | 'solver' | 'stats';
+export type ViewMode = 'workbench' | 'pipeline' | 'whiteboard' | 'focus' | 'linalg' | 'solver' | 'stats' | 'control';
 export type ActivityBarPosition = 'left' | 'right';
 
 interface WorkbenchState {
@@ -244,7 +244,7 @@ function loadInitial(): Partial<WorkbenchState> {
     const VALID_INPUT_MODES = ['simple', 'python', 'matlab'] as const;
     const VALID_THEMES = ['dark', 'light'] as const;
     const VALID_LOCALES = ['zh-CN', 'en'] as const;
-    const VALID_VIEW_MODES = ['workbench', 'pipeline', 'whiteboard', 'focus', 'linalg', 'solver', 'stats'] as const;
+    const VALID_VIEW_MODES = ['workbench', 'pipeline', 'whiteboard', 'focus', 'linalg', 'solver', 'stats', 'control'] as const;
     const VALID_AB_POSITIONS = ['left', 'right'] as const;
     const VALID_PREVIEW_TABS = ['formula', 'plot2d', 'plot3d', 'log', 'pipeline', 'ai'] as const;
 

@@ -69,11 +69,17 @@ const ALL_TYPES: NodeType[] = [
   'sim-pulse', 'sim-noise',
   'sim-sum', 'sim-gain', 'sim-product', 'sim-saturation',
   'sim-first-order', 'sim-integrator', 'sim-derivative', 'sim-delay', 'sim-scope',
+  'sim-transfer-fn',
+  /* control — MATLAB 风格自动控制 */
+  'control-tf', 'control-serial', 'control-feedback',
+  'control-step', 'control-impulse', 'control-bode',
+  'control-nyquist', 'control-rlocus', 'control-pole',
+  'control-zero', 'control-roots', 'control-closed-step',
 ];
 
 describe('蓝图节点库扩展 — 注册表完整性', () => {
-  it('NODE_TYPES 恰好包含 82 个节点类型', () => {
-    expect(Object.keys(NODE_TYPES).length).toBe(82);
+  it('NODE_TYPES 恰好包含 95 个节点类型', () => {
+    expect(Object.keys(NODE_TYPES).length).toBe(95);
   });
 
   it('每个 ALL_TYPES 条目都存在于 NODE_TYPES', () => {

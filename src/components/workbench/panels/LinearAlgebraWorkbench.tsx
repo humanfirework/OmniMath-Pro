@@ -56,6 +56,8 @@ import {
 } from '@/components/ui/tooltip';
 import { FormulaRenderer } from '@/components/workbench/FormulaRenderer';
 import { MatrixTransformViz } from '@/components/workbench/linalg/MatrixTransformViz';
+import { AiPromptInput } from '@/components/workbench/ai/AiPromptInput';
+import { useAIContextStore } from '@/lib/store/aiContextStore';
 import { useWorkbenchStore, type VariableEntry } from '@/lib/store/workbench';
 import { setScopeVar } from '@/lib/engine';
 import { t, tf, type TranslationDict } from '@/lib/i18n';
@@ -68,6 +70,29 @@ import { math } from '@/lib/engine/mathInstance';
  * ------------------------------------------------------------------ */
 type Matrix = number[][];
 type DecompKind = 'lu' | 'qr' | 'eigen' | 'cholesky' | 'svd';
+
+/**
+ * 把 AI 下发的矩阵清洗为合法二维数字矩阵：
+ *  - 非数组/空 → null（无法恢复）；
+ *  - 每个单元格 NaN/Infinity → 0；
+ *  - 浮点误差 → 四舍五入到 1e-9，避免 WebGL / 显示层被微尘噪声污染。
+ */
+function sanitizeMatrixForAI(value: unknown): Matrix | null {
+  if (!Array.isArray(value) || value.length === 0) return null;
+  const out: Matrix = [];
+  for (const row of value) {
+    if (!Array.isArray(row)) return null;
+    const cleanRow: number[] = [];
+    for (const cell of row) {
+      const n = typeof cell === 'number' ? cell : Number(cell);
+      if (!Number.isFinite(n)) continue; // 非法值整行平移，保持等长
+      cleanRow.push(Math.abs(n) < 1e-9 ? 0 : n);
+    }
+    if (cleanRow.length === 0) return null;
+    out.push(cleanRow);
+  }
+  return out;
+}
 
 interface MatrixEntry {
   name: string;
@@ -416,6 +441,29 @@ export function LinearAlgebraWorkbench() {
     if (selectedName === oldName) setSelectedName(newName);
   }, [selectedName]);
 
+  // M2 — 把矩阵与选中项同步到 AI 读取上下文 store（只读镜像）。
+  useEffect(() => {
+    useAIContextStore.getState().setLinalg({
+      matrices: matrices.map((m) => ({ name: m.name, data: m.data })),
+      selectedName,
+    });
+  }, [matrices, selectedName]);
+
+  // M2 — 接收 apply_matrix 指令：清洗后写入当前选中矩阵（仅改数据，不动结构）。
+  useEffect(() => {
+    const handler = (e: Event) => {
+      const d = (e as CustomEvent<{ matrix?: unknown }>).detail;
+      if (!d || !Array.isArray(d.matrix) || d.matrix.length === 0) return;
+      const cleaned = sanitizeMatrixForAI(d.matrix);
+      if (!cleaned) return;
+      const target = selectedName || matrices[0]?.name;
+      if (!target) return;
+      handleUpdateMatrix(target, cleaned);
+    };
+    window.addEventListener('omnimath:linalg-apply', handler);
+    return () => window.removeEventListener('omnimath:linalg-apply', handler);
+  }, [selectedName, matrices, handleUpdateMatrix]);
+
   return (
     <div className="h-full w-full flex min-h-0 bg-background/40">
       {/* ─── 左侧矩阵列表 ─────────────────────────────────────── */}
@@ -757,6 +805,13 @@ function MatrixEditorTab({
             <Save className="size-4" />
             {t('linalgSaveToVar')} <span className="font-mono font-semibold">{name}</span>
           </Button>
+
+          {/* M2 — 矩阵编辑器就地 AI 输入：把当前矩阵打包发给 AI。 */}
+          <AiPromptInput
+            module="linalg"
+            context={`当前矩阵 ${name} = ${JSON.stringify(matrix).slice(0, 800)}`}
+            placeholder="设矩阵、解释或求值…"
+          />
         </div>
 
         {/* 预览区 */}

@@ -21,6 +21,7 @@
 import { useCallback, useMemo, useRef, useState } from 'react';
 import { useWorkbenchStore } from '@/lib/store/workbench';
 import { Plot2DCanvas, type Plot2DCanvasProps } from './Plot2DCanvas';
+
 import { PlotToolbar } from './PlotToolbar';
 import { PlotExpandDialog } from './PlotExpandDialog';
 import { ExportDialog } from './ExportDialog';
@@ -35,7 +36,6 @@ import {
 import { FacetGrid } from './FacetGrid';
 import { ParameterSliders } from './ParameterSliders';
 import { PlotCurveEditor } from './PlotCurveEditor';
-import { CurveSetCorrection } from './CurveSetCorrection';
 import { inputToLatex } from '@/lib/engine';
 import { extractFreeParameters } from '@/lib/engine/variableScanner';
 import {
@@ -358,6 +358,23 @@ export function Plot2DPanel() {
   /* ----------------------- Export handlers -------------------------- */
   const canvasWrapperRef = useRef<HTMLDivElement>(null);
 
+  // CSV 导出用的曲线数据：对每条可见曲线按当前 X 视窗采样。
+  const exportSeries = useMemo(() => {
+    void scopeVersion;
+    if (plots.length === 0) return [];
+    return plots
+      .filter((p) => p.visible)
+      .map((p) => {
+        const spec = curveSpecs[p.id] ?? defaultSpecForPlot(p);
+        const samples = sampleCurve(spec, effectiveX, 800);
+        return {
+          name: p.expression || `plot-${p.id}`,
+          x: samples.map((s) => s.x),
+          y: samples.map((s) => s.y),
+        };
+      });
+  }, [plots, curveSpecs, effectiveX, scopeVersion]);
+
   const handleExportPNG = useCallback(() => {
     // 打开导出对话框（统一走 Tauri 原生保存对话框 + DPI 选项）
     setExportOpen(true);
@@ -471,6 +488,8 @@ export function Plot2DPanel() {
         ) : (
           <>
             <Plot2DCanvas {...canvasProps} />
+            {/* 「人工修正曲线」已从 2D 绘图移除 —— 该能力属于蓝图视觉节点
+                （图像转曲线 / 视频转曲线），不应出现在普通 2D 绘图面板中。 */}
             <RegionZoom
               wrapperRef={canvasWrapperRef}
               xRange={effectiveX}
@@ -486,13 +505,6 @@ export function Plot2DPanel() {
             />
           </>
         )}
-        {/* 视觉「图像转曲线」人工修正面板：逐条删除 / 切换候选 / 调参重拟合。
-            仅对携带 candidates 或 originalPolylines 的曲线集渲染（内部自行判断）。 */}
-        {curveSets.map((cs, i) => (
-          <div key={cs.id ?? i} className="pointer-events-none absolute inset-0 z-20">
-            <CurveSetCorrection curveSet={cs} />
-          </div>
-        ))}
       </div>
       <PlotExpandDialog open={expandOpen} onClose={() => setExpandOpen(false)} curveSpecs={curveSpecs} />
 
@@ -502,7 +514,8 @@ export function Plot2DPanel() {
         canvasRef={canvasWrapperRef}
         defaultName={`omnimath-plot-${Date.now()}`}
         title="导出 2D 图像"
-        description="选择格式与分辨率后导出 PNG / SVG"
+        description="选择格式与分辨率后导出 PNG / SVG / CSV"
+        seriesData={exportSeries}
       />
     </div>
   );
