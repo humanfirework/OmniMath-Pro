@@ -1756,7 +1756,6 @@ function NodePipelineInner() {
     };
     window.addEventListener('omnimath:pipeline-build', handler);
     return () => window.removeEventListener('omnimath:pipeline-build', handler);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [canvasSize]);
 
   /* M1 — 把蓝图节点图摘要同步到 AI 读取上下文 store（只读镜像）。 */
