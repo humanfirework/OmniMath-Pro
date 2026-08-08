@@ -22,7 +22,7 @@
  */
 
 import { useCallback, useState } from 'react';
-import { ChevronDown, ChevronRight } from 'lucide-react';
+import { ChevronDown, ChevronRight, Plus } from 'lucide-react';
 import { Collapsible, CollapsibleTrigger, CollapsibleContent } from '@/components/ui/collapsible';
 import { Input } from '@/components/ui/input';
 import { ToggleGroup, ToggleGroupItem } from '@/components/ui/toggle-group';
@@ -241,13 +241,25 @@ function CurveRow({ plot, spec, onChange, tp }: CurveRowProps) {
           <RangeNumberInput value={spec.paramRange[0]} onChange={(v) => setParam(0, v)} ariaLabel="θ min" />
           <span className="text-muted-foreground/60">~</span>
           <RangeNumberInput value={spec.paramRange[1]} onChange={(v) => setParam(1, v)} ariaLabel="θ max" />
-          {/* θ 上限可用表达式（可含变量，如 t / 2*pi），实时求值 */}
-          <ExprInput
-            value={spec.paramMaxExpr ?? ''}
-            onChange={(expr) => onChange({ ...spec, paramMaxExpr: expr.trim() || undefined })}
-            ariaLabel="θ max (变量表达式)"
-            narrow
-          />
+          {/* θ 上限可用表达式（可含变量，如 t / 2*pi），实时求值。为空时
+              隐藏，仅在有值时显示，避免出现一个无意义的空白框。 */}
+          {spec.paramMaxExpr ? (
+            <ExprInput
+              value={spec.paramMaxExpr}
+              onChange={(expr) => onChange({ ...spec, paramMaxExpr: expr.trim() || undefined })}
+              ariaLabel="θ max (变量表达式)"
+              narrow
+            />
+          ) : (
+            <button
+              type="button"
+              onClick={() => onChange({ ...spec, paramMaxExpr: 'theta' })}
+              className="inline-flex h-6 items-center gap-0.5 rounded border border-border/50 px-1 text-[10px] text-muted-foreground transition-colors hover:border-primary/50 hover:text-primary"
+              title="用变量表达式驱动 θ 上限（如 theta / t），可实时变化"
+            >
+              <Plus className="size-3" /> θ上限
+            </button>
+          )}
         </>
       )}
 
@@ -271,13 +283,24 @@ function CurveRow({ plot, spec, onChange, tp }: CurveRowProps) {
           <RangeNumberInput value={spec.paramRange[0]} onChange={(v) => setParam(0, v)} ariaLabel="t min" />
           <span className="text-muted-foreground/60">~</span>
           <RangeNumberInput value={spec.paramRange[1]} onChange={(v) => setParam(1, v)} ariaLabel="t max" />
-          {/* t 上限可用表达式（可含变量），实时求值 */}
-          <ExprInput
-            value={spec.paramMaxExpr ?? ''}
-            onChange={(expr) => onChange({ ...spec, paramMaxExpr: expr.trim() || undefined })}
-            ariaLabel="t max (变量表达式)"
-            narrow
-          />
+          {/* t 上限可用表达式（可含变量），实时求值。为空时隐藏，避免空白框。 */}
+          {spec.paramMaxExpr ? (
+            <ExprInput
+              value={spec.paramMaxExpr}
+              onChange={(expr) => onChange({ ...spec, paramMaxExpr: expr.trim() || undefined })}
+              ariaLabel="t max (变量表达式)"
+              narrow
+            />
+          ) : (
+            <button
+              type="button"
+              onClick={() => onChange({ ...spec, paramMaxExpr: 't' })}
+              className="inline-flex h-6 items-center gap-0.5 rounded border border-border/50 px-1 text-[10px] text-muted-foreground transition-colors hover:border-primary/50 hover:text-primary"
+              title="用变量表达式驱动 t 上限（如变量 t），可实时变化"
+            >
+              <Plus className="size-3" /> t上限
+            </button>
+          )}
         </>
       )}
     </div>

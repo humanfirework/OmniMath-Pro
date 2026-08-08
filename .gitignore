@@ -77,6 +77,10 @@ server.log
 # Trae IDE 内部 spec
 /.trae/
 
+# Next.js 自动生成的 AI 指令文件（本地保留，不入库）
+/AGENTS.md
+/CLAUDE.md
+
 # 开发工作日志 / 内部设计文档（不入库，按需单独维护）
 worklog.md
 架构重构方案.md

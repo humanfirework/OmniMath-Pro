@@ -225,8 +225,13 @@ export function FloatingCalculator() {
   const [justEvaluated, setJustEvaluated] = useState(false);
   const [copied, setCopied] = useState(false);
 
-  // 科学模式函数分区折叠状态（按分类收缩/展开，功能多时更清爽）
-  const [collapsedSci, setCollapsedSci] = useState<Record<string, boolean>>({});
+  // 科学模式函数分区折叠状态（按分类收缩/展开，功能多时更清爽）。
+  // 默认所有分区都是「收起」的 —— 打开即折叠，避免一开始就排满一长屏；
+  // 用户按需点开某一类即可。
+  const SCI_SECTIONS = ['pwr', 'trig', 'hyp', 'log', 'num', 'round', 'const', 'tool'] as const;
+  const [collapsedSci, setCollapsedSci] = useState<Record<string, boolean>>(
+    () => Object.fromEntries(SCI_SECTIONS.map((id) => [id, true])),
+  );
   const toggleSci = useCallback((id: string) => {
     setCollapsedSci((prev) => ({ ...prev, [id]: !prev[id] }));
   }, []);
@@ -1915,7 +1920,28 @@ export function FloatingCalculator() {
                     </div>
                   )}
                   {mode === 'scientific' && (
-                    <div className="space-y-0.5 mb-1">
+                    <div className="mb-1.5 flex items-center justify-between px-0.5">
+                      <span className="text-[10px] text-muted-foreground/70">函数分区</span>
+                      <div className="flex gap-1">
+                        <button
+                          type="button"
+                          onClick={() => setCollapsedSci(Object.fromEntries(SCI_SECTIONS.map((id) => [id, false])))}
+                          className="rounded px-1.5 py-0.5 text-[10px] font-medium text-muted-foreground hover:bg-accent hover:text-foreground transition-colors"
+                        >
+                          全部展开
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setCollapsedSci(Object.fromEntries(SCI_SECTIONS.map((id) => [id, true])))}
+                          className="rounded px-1.5 py-0.5 text-[10px] font-medium text-muted-foreground hover:bg-accent hover:text-foreground transition-colors"
+                        >
+                          全部收起
+                        </button>
+                      </div>
+                    </div>
+                  )}
+                  {mode === 'scientific' && (
+                    <div className="space-y-0.5 mb-1 max-h-[300px] overflow-y-auto pr-1">
                       <SciSection id="pwr" label="幂与根" collapsed={collapsedSci.pwr} onToggle={toggleSci}>
                         <Btn variant="fn" onClick={() => inputOperator('^2')}>x²</Btn>
                         <Btn variant="fn" onClick={() => inputOperator('^3')}>x³</Btn>

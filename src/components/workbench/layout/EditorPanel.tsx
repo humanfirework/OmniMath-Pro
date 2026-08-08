@@ -74,8 +74,9 @@ const DEFAULT_SCRIPT = `# OmniMath Pro — 演示脚本
 # 按 Enter 运行，Shift+Enter 换行；用 --- 分隔独立计算块
 # 自动识别坐标系：r = f(θ) 是极坐标，含 x 的表达式是直角坐标
 
-# ── 曼陀罗 Logo 花环（极坐标）：r = b(1 + 0.55·cos(8θ)) ──
-r = 4*(1 + 0.55*cos(8*theta))
+# ── 曼陀罗 Logo 花环（极坐标玫瑰曲线双层叠加）──
+# r = A|cos(nθ)|^(1/s) + B|cos(n(θ−π/(2n)))|^(1/s)
+r = 2.4*abs(cos(4*theta))^(0.5) + 1.4*abs(cos(4*(theta - pi/8)))^(0.5)
 
 # ── 直角坐标（自动识别为 y = f(x)）──
 sin(x) * cos(x)

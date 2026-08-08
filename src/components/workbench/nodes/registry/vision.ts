@@ -20,6 +20,7 @@
  */
 
 import type { NodeTypeDef } from '../pipelineEngine';
+import { PipelineCancelledError } from '../pipelineEngine';
 import {
   toGrayscale,
   visionWorkerClient,
@@ -130,6 +131,43 @@ function binaryImage(data: Uint8Array, w: number, h: number): ImageValue {
   return { data, width: w, height: h, channels: 1, binary: true };
 }
 
+/**
+ * 运行一个可取消的长任务 Promise。
+ *
+ * 视觉节点的重计算（轮廓追踪 / 贝塞尔拟合 / 精细描边 / 视频矢量化等）经
+ * Web Worker 执行，主线程无法强行中断 worker。这里的方案是：在 Promise 在
+ * 途期间周期性轮询 `shouldCancel`，一旦用户点击「停止」立即抛出
+ * PipelineCancelledError，让流水线立刻停下（worker 的剩余计算会被丢弃，
+ * 其迟到结果不再进入节点输出）。这样停止按钮对图像/视频类长任务也能即时
+ * 生效，而非等到整个节点跑完。
+ *
+ * 不提供 shouldCancel 时原样透传（等价于直接 await，零额外开销）。
+ */
+async function runCancelable<T>(
+  p: Promise<T>,
+  shouldCancel: (() => boolean) | undefined,
+): Promise<T> {
+  if (!shouldCancel) return p;
+  return await new Promise<T>((resolve, reject) => {
+    const iv = setInterval(() => {
+      if (shouldCancel()) {
+        clearInterval(iv);
+        reject(new PipelineCancelledError());
+      }
+    }, 64);
+    p.then(
+      (v) => {
+        clearInterval(iv);
+        resolve(v);
+      },
+      (e) => {
+        clearInterval(iv);
+        reject(e);
+      },
+    );
+  });
+}
+
 /** 从任意输入解析为 ImageValue；容错处理缺省字段。 */
 function toImageValue(v: unknown): ImageValue {
   if (v && typeof v === 'object') {
@@ -222,15 +260,16 @@ async function fitPolyline(
   cornerThreshold: number,
   fourierOrder: number,
   quality?: 'precise' | 'balanced' | 'smooth',
+  shouldCancel?: () => boolean,
 ): Promise<BezierPath> {
   if (mode === 'fourier' && poly.closed && poly.points.length >= 4) {
-    const fc = await visionWorkerClient.fitFourier(poly, fourierOrder);
+    const fc = await runCancelable(visionWorkerClient.fitFourier(poly, fourierOrder), shouldCancel);
     const numSamples = Math.max(200, 4 * fourierOrder);
-    const sampled = await visionWorkerClient.sampleFourierCurve(fc, numSamples);
+    const sampled = await runCancelable(visionWorkerClient.sampleFourierCurve(fc, numSamples), shouldCancel);
     const sampledPoly: Polyline = { points: sampled, closed: true, area: poly.area };
-    return visionWorkerClient.fitBezierPath(sampledPoly, errorThreshold, cornerThreshold);
+    return runCancelable(visionWorkerClient.fitBezierPath(sampledPoly, errorThreshold, cornerThreshold), shouldCancel);
   }
-  return visionWorkerClient.fitBezierPath(poly, errorThreshold, cornerThreshold);
+  return runCancelable(visionWorkerClient.fitBezierPath(poly, errorThreshold, cornerThreshold), shouldCancel);
 }
 
 /**
@@ -248,9 +287,10 @@ async function fitPolyline(
 async function vectorizeFrames(
   seq: FramesValue,
   config: Record<string, unknown>,
-  _ctx: unknown,
+  ctx: { shouldCancel?: () => boolean } | undefined,
 ): Promise<BezierPath[][]> {
-  const result = await visionWorkerClient.videoToCurves(seq, {
+  const result = await runCancelable(
+    visionWorkerClient.videoToCurves(seq, {
     stride: Math.max(1, Math.floor(Number(config.stride ?? 1))),
     maxFrames: Math.max(1, Math.floor(Number(config.maxFrames ?? 60))),
     matchDistance: Math.max(0, Number(config.matchDistance ?? 48)),
@@ -279,7 +319,9 @@ async function vectorizeFrames(
       // 帧间关联更稳定，渲染不再卡顿、不再乱跳。
       maxCurves: 24,
     },
-  });
+  }),
+    ctx?.shouldCancel,
+  );
   return result.frames.map((frame) => frame.filter((c): c is BezierPath => c !== null));
 }
 
@@ -447,7 +489,7 @@ export const visionNodes = {
       { key: 'threshold', label: '阈值 Threshold', type: 'number', min: 0, max: 255, step: 1, default: 128 },
       { key: 'levels', label: '层级 Levels', type: 'number', min: 2, max: 8, step: 1, default: 4 },
     ],
-    execute: async (inputs, config) => {
+    execute: async (inputs, config, ctx) => {
       const img = toImageValue(inputs.image);
       if (img.width === 0 || img.height === 0) {
         throw new Error('输入图像为空（请在 image-input 节点选择图片，或环境不支持图像解码）');
@@ -466,16 +508,16 @@ export const visionNodes = {
       const h = img.height;
 
       if (method === 'simple') {
-        const bin = await visionWorkerClient.binarize(gray, w, h, threshold);
+        const bin = await runCancelable(visionWorkerClient.binarize(gray, w, h, threshold), ctx?.shouldCancel);
         return { binary: binaryImage(bin, w, h) };
       }
       if (method === 'adaptive') {
-        const bin = await visionWorkerClient.adaptiveThreshold(gray, w, h);
+        const bin = await runCancelable(visionWorkerClient.adaptiveThreshold(gray, w, h), ctx?.shouldCancel);
         return { binary: binaryImage(bin, w, h) };
       }
       // 'multi'：多阈值分层后，把除最亮层外的所有层视为前景。
       // 这样能捕获所有非纯白区域，适合线稿 / 多色调图像。
-      const labels = await visionWorkerClient.multiLevelThreshold(gray, w, h, levels);
+      const labels = await runCancelable(visionWorkerClient.multiLevelThreshold(gray, w, h, levels), ctx?.shouldCancel);
       const bin = new Uint8Array(w * h);
       for (let i = 0; i < bin.length; i++) {
         bin[i] = labels[i] < levels - 1 ? 1 : 0;
@@ -505,7 +547,7 @@ export const visionNodes = {
       { key: 'lowThreshold', label: '低阈值 Low', type: 'number', min: 0, max: 255, step: 1, default: 30 },
       { key: 'highThreshold', label: '高阈值 High', type: 'number', min: 0, max: 255, step: 1, default: 80 },
     ],
-    execute: async (inputs, config) => {
+    execute: async (inputs, config, ctx) => {
       const img = toImageValue(inputs.image);
       if (img.width === 0 || img.height === 0) {
         throw new Error('输入图像为空（请在 image-input 节点选择图片，或环境不支持图像解码）');
@@ -518,11 +560,11 @@ export const visionNodes = {
       const gray = toGray(img);
 
       if (method === 'canny') {
-        const edges = await visionWorkerClient.canny(gray, w, h, lowThreshold, highThreshold);
+        const edges = await runCancelable(visionWorkerClient.canny(gray, w, h, lowThreshold, highThreshold), ctx?.shouldCancel);
         return { edges: binaryImage(edges, w, h) };
       }
       // 'sobel'：梯度幅值 → 用 lowThreshold 作为幅值阈值二值化
-      const mag = await visionWorkerClient.sobel(gray, w, h);
+      const mag = await runCancelable(visionWorkerClient.sobel(gray, w, h), ctx?.shouldCancel);
       const edges = new Uint8Array(w * h);
       for (let i = 0; i < edges.length; i++) {
         edges[i] = mag[i] >= lowThreshold ? 1 : 0;
@@ -545,7 +587,7 @@ export const visionNodes = {
       { key: 'turdsize', label: '降噪像素 Turd Size', type: 'number', min: 0, max: 20, step: 1, default: 2 },
       { key: 'skeletonize', label: '骨架化 (Skeletonize)', type: 'boolean', default: false },
     ],
-    execute: async (inputs, config) => {
+    execute: async (inputs, config, ctx) => {
       const img = toImageValue(inputs.image);
       if (img.width === 0 || img.height === 0) {
         throw new Error('输入图像为空（请在 image-input 节点选择图片，或环境不支持图像解码）');
@@ -556,18 +598,18 @@ export const visionNodes = {
       const h = img.height;
 
       // 非 binary 输入先二值化（用默认阈值 128，经 Worker）
-      const bin = await toBinary(img, 128);
+      const bin = await runCancelable(toBinary(img, 128), ctx?.shouldCancel);
       // 移除小区域（降噪，经 Worker）
-      const cleaned = await visionWorkerClient.removeSmallRegions(bin, w, h, turdsize);
+      const cleaned = await runCancelable(visionWorkerClient.removeSmallRegions(bin, w, h, turdsize), ctx?.shouldCancel);
       // skeletonize=true：Zhang-Suen 细化 → 骨架折线（中心线提取，适合线稿）；
       // skeletonize=false：常规轮廓追踪。两条路径输出同一 ContoursValue 结构。
       const polylines = skeletonize
-        ? await visionWorkerClient.skeletonToPolylines(
-            await visionWorkerClient.zhangSuenThin(cleaned, w, h),
+        ? await runCancelable(visionWorkerClient.skeletonToPolylines(
+            await runCancelable(visionWorkerClient.zhangSuenThin(cleaned, w, h), ctx?.shouldCancel),
             w,
             h,
-          )
-        : await visionWorkerClient.traceContours(cleaned, w, h);
+          ), ctx?.shouldCancel)
+        : await runCancelable(visionWorkerClient.traceContours(cleaned, w, h), ctx?.shouldCancel);
 
       const contours: ContoursValue = { polylines, width: w, height: h };
       return { contours };
@@ -616,7 +658,7 @@ export const visionNodes = {
       { key: 'flipX', label: '翻转 X 轴', type: 'boolean', default: false },
       { key: 'scale', label: '缩放 Scale', type: 'number', min: 0.1, max: 4, step: 0.05, default: 1 },
     ],
-    execute: async (inputs, config) => {
+    execute: async (inputs, config, ctx) => {
       const input = normalizeCurveInput(inputs.contours);
       const fitMode = String(config.fitMode ?? 'bezier') as 'bezier' | 'fourier';
       const quality = String(config.quality ?? 'balanced') as 'precise' | 'balanced' | 'smooth';
@@ -667,7 +709,7 @@ export const visionNodes = {
           area: bp.area,
         }));
         const fitted = await Promise.all(
-          polys.map((p) => fitPolyline(p, fitMode, baseError, baseCorner, fourierOrder, quality)),
+          polys.map((p) => fitPolyline(p, fitMode, baseError, baseCorner, fourierOrder, quality, ctx?.shouldCancel)),
         );
         const curves = fitted.filter((bp) => bp.segments.length > 0);
         const transformed = applyTransforms(curves);
@@ -684,7 +726,7 @@ export const visionNodes = {
 
       // 输入是 Polyline[]：逐条拟合（并行 await，每条经 Worker）
       const fitted = await Promise.all(
-        input.polylines.map((p) => fitPolyline(p, fitMode, baseError, baseCorner, fourierOrder, quality)),
+        input.polylines.map((p) => fitPolyline(p, fitMode, baseError, baseCorner, fourierOrder, quality, ctx?.shouldCancel)),
       );
       const curves = fitted.filter((bp) => bp.segments.length > 0);
       const transformed = applyTransforms(curves);
@@ -829,7 +871,7 @@ export const visionNodes = {
       { key: 'strokeWidth', label: '描边宽度 Stroke', type: 'number', min: 0.8, max: 4, step: 0.1, default: 1.6 },
       { key: 'enableForegroundMask', label: '前景遮罩增强', type: 'boolean', default: true },
     ],
-    execute: async (inputs, config) => {
+    execute: async (inputs, config, ctx) => {
       const img = toImageValue(inputs.image);
       if (img.width === 0 || img.height === 0) {
         throw new Error('输入图像为空（请在 image-input 节点选择图片，或环境不支持图像解码）');
@@ -874,23 +916,26 @@ export const visionNodes = {
 
       // 计算（纯 TS 函数；经 Web Worker 执行，避免大图在主线程阻塞造成卡顿，
       // Worker 不可用时 client 自动降级到同线程，行为完全等价）
-      const result = await visionWorkerClient.fineOutline(
-        img.data,
-        img.width,
-        img.height,
-        img.channels,
-        {
-          imageType,
-          low,
-          high,
-          threshold,
-          minStrand,
-          eps,
-          maxPaths,
-          enableForegroundMask: Boolean(config.enableForegroundMask),
-          fgMaskDilation: Math.max(0, Math.floor(Number(config.fgMaskDilation ?? 2))),
-          fgMaskMinAreaRatio: Math.max(0, Math.min(0.5, Number(config.fgMaskMinAreaRatio ?? 0.01))),
-        },
+      const result = await runCancelable(
+        visionWorkerClient.fineOutline(
+          img.data,
+          img.width,
+          img.height,
+          img.channels,
+          {
+            imageType,
+            low,
+            high,
+            threshold,
+            minStrand,
+            eps,
+            maxPaths,
+            enableForegroundMask: Boolean(config.enableForegroundMask),
+            fgMaskDilation: Math.max(0, Math.floor(Number(config.fgMaskDilation ?? 2))),
+            fgMaskMinAreaRatio: Math.max(0, Math.min(0.5, Number(config.fgMaskMinAreaRatio ?? 0.01))),
+          },
+        ),
+        ctx?.shouldCancel,
       );
 
       // 输出 1: edges（二值边缘图 → ImageValue）
@@ -956,7 +1001,7 @@ export const visionNodes = {
       { key: 'fps', label: '采样帧率 FPS', type: 'number', min: 1, max: 60, step: 1, default: 30 },
       { key: 'maxDimension', label: '帧长边上限 Max Dim', type: 'number', min: 128, max: 2048, step: 64, default: 512 },
     ],
-    execute: async (inputs, config) => {
+    execute: async (inputs, config, ctx) => {
       const video = inputs.video as VideoValue | undefined;
       const src = String(video?.src ?? '');
       if (!src) {
@@ -973,7 +1018,7 @@ export const visionNodes = {
       let seq: FrameSequence;
       if (isGif) {
         const bytes = await (await fetch(src)).arrayBuffer();
-        seq = await visionWorkerClient.decodeGif(bytes);
+        seq = await runCancelable(visionWorkerClient.decodeGif(bytes), ctx?.shouldCancel);
       } else {
         // MP4 / WebM：浏览器 HTMLVideoElement seek 抽帧
         seq = await extractVideoFrames(src, { maxFrames, fps: targetFps, maxDimension });

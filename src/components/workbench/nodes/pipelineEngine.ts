@@ -597,6 +597,10 @@ export async function executePipeline(
       const firstOutId = def.outputs[0]?.id;
       node.result = firstOutId ? out[firstOutId] : (out as any).value ?? ins.value;
     } catch (err) {
+      // 用户手动终止：节点内部（如长任务视觉节点）检测到取消后抛出的
+      // PipelineCancelledError 必须向上传播为「终止」，而不是被当作普通
+      // 节点错误吞掉（否则停止按钮只会在下一个节点检查时才生效）。
+      if (err instanceof PipelineCancelledError) throw err;
       node.result = null;
       node.outputs = {};
       node.error = (err as Error).message || 'Evaluation failed';

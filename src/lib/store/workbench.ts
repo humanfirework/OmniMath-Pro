@@ -32,6 +32,11 @@ export interface PlotConfig {
   plotType: 'cartesian' | 'polar' | 'parametric' | 'surface3d';
   visible: boolean;
   width?: number;
+  /** 极坐标 θ 范围的下限/上限覆盖表达式（可含变量，如 `t`、`2*pi`）。
+   *  采样时对实时 scope 求值，供「θ 范围滑块」实时改变曲线（绽放动画）。
+   *  未提供时回退到 Plot2DPanel 派生的默认范围。 */
+  polarMinExpr?: string;
+  polarMaxExpr?: string;
 }
 
 /** 2D 自由参数滑块配置（Desmos 式参数滑块的持久化状态）。 */
@@ -214,6 +219,8 @@ function sanitizePlot(p: unknown): PlotConfig | null {
       ? o.plotType : 'cartesian',
     visible: typeof o.visible === 'boolean' ? o.visible : true,
     width: typeof o.width === 'number' ? o.width : 2,
+    polarMinExpr: typeof o.polarMinExpr === 'string' && o.polarMinExpr.trim() ? o.polarMinExpr : undefined,
+    polarMaxExpr: typeof o.polarMaxExpr === 'string' && o.polarMaxExpr.trim() ? o.polarMaxExpr : undefined,
   };
 }
 

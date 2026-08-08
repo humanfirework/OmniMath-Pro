@@ -244,9 +244,10 @@ export function CodeEditor({
     const syntaxLinter = linter((view) => {
       const lang = langRef.current;
       const syntax = checkSyntax(view, lang);
-      // Python 用其自身的括号检查；Simple/MATLAB 再叠加「语义纠错」：
-      // 未定义函数 / 未定义变量（工作台变量作为已知符号注入，避免误报）。
-      if (lang === 'python') return syntax;
+      // Python 用其自身的括号检查；Simple 模式语法宽松（如 `ax + b`、`2x`
+      // 等简写会被宽松识别），不做「未定义变量/函数」的严格判定，避免把这类
+      // 宽松写法误报成错误。仅 MATLAB 模式叠加「语义纠错」。
+      if (lang === 'python' || lang === 'simple') return syntax;
       const known = { variables: Object.keys(useWorkbenchStore.getState().variables ?? {}) };
       return [...syntax, ...semanticDiagnostics(view, known)];
     });

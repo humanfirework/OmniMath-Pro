@@ -511,6 +511,7 @@ export interface TranslationDict {
 
   /* Vector operations tab */
   linalgTabVector: string;
+  linalgTabGramSchmidt: string;
   linalgVectorA: string;
   linalgVectorB: string;
   linalgVectorInputHint: string;
@@ -1806,6 +1807,7 @@ const zhCN: TranslationDict = {
 
   /* Vector operations tab */
   linalgTabVector: "向量运算",
+  linalgTabGramSchmidt: "正交化",
   linalgVectorA: "向量 A",
   linalgVectorB: "向量 B",
   linalgVectorInputHint: "逗号或空格分隔的数字",
@@ -3092,6 +3094,7 @@ const en: TranslationDict = {
 
   /* Vector operations tab */
   linalgTabVector: "Vector Ops",
+  linalgTabGramSchmidt: "Orthogonalize",
   linalgVectorA: "Vector A",
   linalgVectorB: "Vector B",
   linalgVectorInputHint: "comma or space separated numbers",

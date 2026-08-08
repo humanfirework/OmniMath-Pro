@@ -56,6 +56,15 @@ function formatParamValue(v: number): string {
 /** 播放动画的周期（秒/周期，速度 1× 时）。 */
 const PLAY_CYCLE_SECONDS = 3;
 
+/**
+ * 「单向重复 / 反向重复」中前进（描画）段占一个周期的比例。
+ *
+ * 旧实现里 forward 在到达 max 后是「瞬间跳回 min」，折返点会出现视觉上的
+ * 硬切（角度突变）。这里把前进段设为周期的一部分，剩余部分用作**快速折返
+ * 过渡**：到达极值后用一段平滑快速动画返回起点，而不是瞬间跳变，观感更自然。
+ */
+const STROKE_FRACTION = 0.8;
+
 /** 播放动画模式的中文标签（用于模式选择器）。 */
 const PLAY_MODE_LABELS: Record<ParamPlayMode, string> = {
   bounce: '往复循环',
@@ -68,6 +77,10 @@ const PLAY_MODE_LABELS: Record<ParamPlayMode, string> = {
  * 依据播放模式计算时刻 `elapsed`（秒）对应的 [min,max] 内的归一化进度。
  * 所有模式都采用均匀（线性）变化 —— 速度恒定，不忽快忽慢（区别于旧的
  * 正弦波，避免在端点处明显减速）。
+ *
+ * forward / reverse 的折返段：前进段占周期 STROKE_FRACTION，折返过渡段占
+ * 剩余 (1−STROKE_FRACTION)，因此折返速度约为前进速度的 STROKE_FRACTION 倍
+ * —— 快速、平滑，而非瞬间跳变。
  */
 function paramPlayFraction(
   mode: ParamPlayMode,
@@ -79,10 +92,14 @@ function paramPlayFraction(
   switch (mode) {
     case 'bounce': // 0→1→0 三角波（前向再回转，匀速）
       return { frac: p < 0.5 ? p * 2 : 2 - p * 2, done: false };
-    case 'forward': // 0→1 后瞬间跳回 0，重复（单向）
-      return { frac: p, done: false };
-    case 'reverse': // 1→0 后瞬间跳回 1，重复
-      return { frac: 1 - p, done: false };
+    case 'forward': // 0→1 慢速前进 → 快速过渡折返回 0，重复（单向描画）
+      return p < STROKE_FRACTION
+        ? { frac: p / STROKE_FRACTION, done: false }
+        : { frac: 1 - (p - STROKE_FRACTION) / (1 - STROKE_FRACTION), done: false };
+    case 'reverse': // 1→0 慢速后退 → 快速过渡折返回 1，重复
+      return p < STROKE_FRACTION
+        ? { frac: 1 - p / STROKE_FRACTION, done: false }
+        : { frac: (p - STROKE_FRACTION) / (1 - STROKE_FRACTION), done: false };
     case 'once': // 0→1 播放一次后停止
       return { frac: Math.min(elapsed / cycle, 1), done: elapsed >= cycle };
   }

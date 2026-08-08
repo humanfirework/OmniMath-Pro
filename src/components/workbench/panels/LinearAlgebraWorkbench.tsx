@@ -560,7 +560,7 @@ export function LinearAlgebraWorkbench() {
           onValueChange={setActiveTab}
           className="flex-1 min-h-0 flex flex-col gap-3 p-4"
         >
-          <TabsList className="h-9 grid grid-cols-6 w-full max-w-2xl text-[11.5px]">
+          <TabsList className="h-9 grid grid-cols-7 w-full max-w-2xl text-[11.5px]">
             <TabsTrigger value="edit" className="text-[11.5px] gap-1.5">
               <Grid3x3 className="size-3.5" />
               {t('linalgTabEdit')}
@@ -580,6 +580,10 @@ export function LinearAlgebraWorkbench() {
             <TabsTrigger value="vector" className="text-[11.5px] gap-1.5">
               <ArrowRight className="size-3.5" />
               {t('linalgTabVector')}
+            </TabsTrigger>
+            <TabsTrigger value="gram" className="text-[11.5px] gap-1.5">
+              <Ruler className="size-3.5" />
+              {t('linalgTabGramSchmidt')}
             </TabsTrigger>
             <TabsTrigger value="transform" className="text-[11.5px] gap-1.5">
               <Activity className="size-3.5" />
@@ -631,6 +635,14 @@ export function LinearAlgebraWorkbench() {
             className={cn('min-h-0 overflow-hidden', activeTab === 'vector' ? 'flex-1' : 'hidden')}
           >
             <VectorOpsTab />
+          </TabsContent>
+
+          <TabsContent
+            value="gram"
+            forceMount
+            className={cn('min-h-0 overflow-hidden', activeTab === 'gram' ? 'flex-1' : 'hidden')}
+          >
+            <GramSchmidtTab />
           </TabsContent>
 
           <TabsContent
@@ -1515,14 +1527,6 @@ function VectorOpsTab() {
   const [error, setError] = useState<string | null>(null);
   const [working, setWorking] = useState(false);
 
-  // Gram-Schmidt state
-  const [gsText, setGsText] = useState('1, 1, 0\n1, 0, 1\n0, 1, 1');
-  const [gsResult, setGsResult] = useState<{
-    vectors: number[][];
-    steps: string[];
-  } | null>(null);
-  const [gsError, setGsError] = useState<string | null>(null);
-
   const needsB = op === 'dot' || op === 'cross' || op === 'angle' || op === 'projection';
 
   // 实时解析输入，用于操作前预览向量内容。
@@ -1530,16 +1534,6 @@ function VectorOpsTab() {
   const parsedB = useMemo(
     () => (needsB ? parseVectorInput(vecBText) : null),
     [needsB, vecBText],
-  );
-
-  // 实时解析 Gram-Schmidt 输入，用于结果/预览前显示原始向量组。
-  const parsedGsVectors = useMemo(
-    () =>
-      gsText
-        .split(/\r?\n/)
-        .map((l) => parseVectorInput(l))
-        .filter((v): v is number[] => v !== null),
-    [gsText],
   );
 
   const handleCompute = () => {
@@ -1669,37 +1663,6 @@ function VectorOpsTab() {
     }
   };
 
-  const handleGramSchmidt = () => {
-    setGsError(null);
-    setGsResult(null);
-    try {
-      const lines = gsText.split(/\r?\n/).map((l) => l.trim()).filter(Boolean);
-      if (lines.length === 0) {
-        setGsError(t('linalgVectorDimMismatch'));
-        return;
-      }
-      const vectors: number[][] = [];
-      let dim = -1;
-      for (const line of lines) {
-        const v = parseVectorInput(line);
-        if (!v) {
-          setGsError(t('linalgVectorDimMismatch'));
-          return;
-        }
-        if (dim === -1) dim = v.length;
-        else if (v.length !== dim) {
-          setGsError(t('linalgVectorDimMismatch'));
-          return;
-        }
-        vectors.push(v);
-      }
-      const { orthogonal, steps } = gramSchmidt(vectors);
-      setGsResult({ vectors: orthogonal, steps });
-    } catch (err) {
-      setGsError((err as Error).message || t('linalgError'));
-    }
-  };
-
   // —— 可视化预览用向量 ——
   // 向量运算：A / B / 结果（结果为向量时）。
   const vectorPreviewVectors: { v: number[]; color?: string; label?: string }[] = [];
@@ -1709,26 +1672,12 @@ function VectorOpsTab() {
     vectorPreviewVectors.push({ v: result.matrix[0], color: '#a78bfa', label: '结果' });
   }
 
-  // Gram-Schmidt：原始向量组（青色系）+ 正交化基（红色系）。
-  const gsOriginColors = ['#2dd4bf', '#f59e0b', '#a78bfa', '#22c55e'];
-  const gsOrthColors = ['#ef4444', '#3b82f6', '#10b981', '#f43f5e'];
-  const gsPreviewVectors: { v: number[]; color?: string; label?: string }[] = [];
-  parsedGsVectors.forEach((v, i) => {
-    gsPreviewVectors.push({ v, color: gsOriginColors[i % gsOriginColors.length], label: `v${i + 1}` });
-  });
-  gsResult?.vectors.forEach((v, i) => {
-    gsPreviewVectors.push({
-      v,
-      color: gsOrthColors[i % gsOrthColors.length],
-      label: `q${i + 1}${'\u2020'}`,
-    });
-  });
-  const gsDim: 2 | 3 = parsedGsVectors.some((v) => v.length >= 3) ? 3 : 2;
-
   return (
     <div className="h-full overflow-auto">
-      <div className="grid grid-cols-[minmax(0,340px)_minmax(0,1fr)] gap-5 p-2">
-        {/* Left: vector ops（收窄向量组输入区） */}
+      <div className="space-y-5 p-2">
+      {/* 行1：向量运算 —— 控件与可视化同排并排对齐 */}
+      <div className="grid grid-cols-[minmax(0,340px)_minmax(0,1fr)] gap-5">
+        {/* 向量运算 控件列 */}
         <div className="space-y-3">
           <div className="text-[12px] font-semibold text-foreground/80 flex items-center gap-1.5">
             <ArrowRight className="size-3.5 text-primary" />
@@ -1859,123 +1808,20 @@ function VectorOpsTab() {
           </AnimatePresence>
         </div>
 
-        {/* Right: 可视化预览 + Gram-Schmidt */}
+        {/* 向量运算 可视化列（与上方控件同排并排） */}
         <div className="space-y-3">
-          {/* 向量运算可视化 */}
-          <div>
-            <div className="text-[11px] text-muted-foreground mb-1.5 flex items-center gap-1.5">
-              <Activity className="size-3.5" /> {t('linalgVectorVisual')}
-            </div>
-            <VectorPreviewCanvas
-              vectors={vectorPreviewVectors}
-              dim={parsedA && parsedA.length >= 3 ? 3 : needsB && parsedB && parsedB.length >= 3 ? 3 : 2}
-              height={220}
-              emptyText={t('linalgVectorVisualEmpty')}
-            />
+          <div className="text-[11px] text-muted-foreground mb-1.5 flex items-center gap-1.5">
+            <Activity className="size-3.5" /> {t('linalgVectorVisual')}
           </div>
-
-          {/* Gram-Schmidt */}
-          <div className="space-y-3">
-            <div className="text-[12px] font-semibold text-foreground/80 flex items-center gap-1.5">
-              <Ruler className="size-3.5 text-primary" />
-              {t('linalgGramSchmidt')}
-            </div>
-
-            <div>
-              <label className="text-[11px] text-muted-foreground">
-                {t('linalgGramSchmidtHint')}
-              </label>
-              <textarea
-                value={gsText}
-                onChange={(e) => setGsText(e.target.value)}
-                className={cn(
-                  'min-h-[88px] w-full p-2.5 text-[12px] font-mono mt-1',
-                  'bg-muted/40 border border-border/60 rounded-md',
-                  'focus:outline-none focus:border-primary focus:ring-2 focus:ring-primary/40',
-                  'resize-y',
-                )}
-                placeholder={'1, 1, 0\n1, 0, 1\n0, 1, 1'}
-              />
-            </div>
-
-            <Button
-              onClick={handleGramSchmidt}
-              className="w-full h-9 text-[12px] gap-1.5"
-              size="sm"
-            >
-              <Ruler className="size-4" />
-              {t('linalgGramSchmidt')}
-            </Button>
-
-            {/* Gram-Schmidt 可视化：原始向量组 + 正交化基 */}
-            {parsedGsVectors.length > 0 && (
-              <div>
-                <div className="text-[11px] text-muted-foreground mb-1.5 flex items-center gap-1.5">
-                  <Ruler className="size-3.5" /> {t('linalgOrthogonalizedVisual')}
-                </div>
-                <VectorPreviewCanvas
-                  vectors={gsPreviewVectors}
-                  dim={gsDim}
-                  height={220}
-                  emptyText={t('linalgVectorVisualEmpty')}
-                />
-              </div>
-            )}
-
-            <AnimatePresence mode="wait">
-              {gsError && (
-                <motion.div
-                  key="gs-err"
-                  initial={{ opacity: 0, y: -4 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  exit={{ opacity: 0 }}
-                  className="rounded-md border border-rose-500/40 bg-rose-500/10 p-3 text-[12px] text-rose-600 dark:text-rose-300"
-                >
-                  <div className="flex items-start gap-1.5">
-                    <X className="size-4 mt-0.5 shrink-0" />
-                    <span>{gsError}</span>
-                  </div>
-                </motion.div>
-              )}
-
-              {gsResult && !gsError && (
-                <motion.div
-                  key="gs-res"
-                  initial={{ opacity: 0, y: 4 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  exit={{ opacity: 0 }}
-                  className="rounded-md border border-primary/30 bg-primary/5 p-3 glow-card-teal space-y-2"
-                >
-                  <div className="text-[11px] text-muted-foreground">{t('linalgOrthogonalized')}</div>
-                  {gsResult.vectors.map((v, i) => (
-                    <div key={i} className="overflow-x-auto">
-                      <FormulaRenderer
-                        latex={`q_{${i + 1}} = ${vectorToLatex(v)}`}
-                        displayMode
-                        fitToContainer={true}
-                      />
-                    </div>
-                  ))}
-                  {gsResult.steps.length > 0 && (
-                    <details className="mt-2 group">
-                      <summary className="cursor-pointer text-[11px] text-muted-foreground hover:text-foreground select-none">
-                        {t('linalgGramSchmidtSteps')} ({gsResult.steps.length})
-                      </summary>
-                      <div className="mt-2 space-y-1.5 overflow-x-auto">
-                        {gsResult.steps.map((s, i) => (
-                          <div key={i} className="text-[11.5px] text-foreground/80">
-                            <FormulaRenderer latex={s} displayMode fitToContainer={true} />
-                          </div>
-                        ))}
-                      </div>
-                    </details>
-                  )}
-                </motion.div>
-              )}
-            </AnimatePresence>
-          </div>
+          <VectorPreviewCanvas
+            vectors={vectorPreviewVectors}
+            dim={parsedA && parsedA.length >= 3 ? 3 : needsB && parsedB && parsedB.length >= 3 ? 3 : 2}
+            height={220}
+            emptyText={t('linalgVectorVisualEmpty')}
+          />
         </div>
       </div>
+    </div>
     </div>
   );
 }
@@ -2012,6 +1858,198 @@ function gramSchmidt(vectors: number[][]): { orthogonal: number[][]; steps: stri
     orthogonal.push(unit);
   }
   return { orthogonal, steps };
+}
+
+/* ================================================================== *
+ * Gram-Schmidt 正交化 —— 独立 Tab（与向量运算分开，各占一个界面）
+ * ================================================================== */
+function GramSchmidtTab() {
+  const [gsText, setGsText] = useState('1, 1, 0\n1, 0, 1\n0, 1, 1');
+  const [gsResult, setGsResult] = useState<{
+    vectors: number[][];
+    steps: string[];
+  } | null>(null);
+  const [gsError, setGsError] = useState<string | null>(null);
+
+  // 实时解析 Gram-Schmidt 输入，用于结果/预览前显示原始向量组。
+  const parsedGsVectors = useMemo(
+    () =>
+      gsText
+        .split(/\r?\n/)
+        .map((l) => parseVectorInput(l))
+        .filter((v): v is number[] => v !== null),
+    [gsText],
+  );
+
+  const handleGramSchmidt = () => {
+    setGsError(null);
+    setGsResult(null);
+    try {
+      const lines = gsText.split(/\r?\n/).map((l) => l.trim()).filter(Boolean);
+      if (lines.length === 0) {
+        setGsError(t('linalgVectorDimMismatch'));
+        return;
+      }
+      const vectors: number[][] = [];
+      let dim = -1;
+      for (const line of lines) {
+        const v = parseVectorInput(line);
+        if (!v) {
+          setGsError(t('linalgVectorDimMismatch'));
+          return;
+        }
+        if (dim === -1) dim = v.length;
+        else if (v.length !== dim) {
+          setGsError(t('linalgVectorDimMismatch'));
+          return;
+        }
+        vectors.push(v);
+      }
+      const { orthogonal, steps } = gramSchmidt(vectors);
+      setGsResult({ vectors: orthogonal, steps });
+    } catch (err) {
+      setGsError((err as Error).message || t('linalgError'));
+    }
+  };
+
+  // Gram-Schmidt：原始向量组（青色系）+ 正交化基（红色系）。
+  const gsOriginColors = ['#2dd4bf', '#f59e0b', '#a78bfa', '#22c55e'];
+  const gsOrthColors = ['#ef4444', '#3b82f6', '#10b981', '#f43f5e'];
+  const gsPreviewVectors: { v: number[]; color?: string; label?: string }[] = [];
+  parsedGsVectors.forEach((v, i) => {
+    gsPreviewVectors.push({ v, color: gsOriginColors[i % gsOriginColors.length], label: `v${i + 1}` });
+  });
+  gsResult?.vectors.forEach((v, i) => {
+    gsPreviewVectors.push({
+      v,
+      color: gsOrthColors[i % gsOrthColors.length],
+      label: `q${i + 1}${'\u2020'}`,
+    });
+  });
+  const gsDim: 2 | 3 = parsedGsVectors.some((v) => v.length >= 3) ? 3 : 2;
+
+  return (
+    <div className="h-full overflow-auto">
+      <div className="space-y-5 p-2">
+        <div className="text-[12px] font-semibold text-foreground/80 flex items-center gap-1.5">
+          <Ruler className="size-3.5 text-primary" />
+          {t('linalgGramSchmidt')}
+        </div>
+        <div className="grid grid-cols-[minmax(0,340px)_minmax(0,1fr)] gap-5">
+          {/* Gram-Schmidt 控件列 */}
+          <div className="space-y-3">
+            <div>
+              <label className="text-[11px] text-muted-foreground">
+                {t('linalgGramSchmidtHint')}
+              </label>
+              <textarea
+                value={gsText}
+                onChange={(e) => setGsText(e.target.value)}
+                className={cn(
+                  'min-h-[88px] w-full p-2.5 text-[12px] font-mono mt-1',
+                  'bg-muted/40 border border-border/60 rounded-md',
+                  'focus:outline-none focus:border-primary focus:ring-2 focus:ring-primary/40',
+                  'resize-y',
+                )}
+                placeholder={'1, 1, 0\n1, 0, 1\n0, 1, 1'}
+              />
+            </div>
+
+            {/* 输入向量组实时矩阵预览（每行 = 一个输入向量） */}
+            {parsedGsVectors.length > 0 ? (
+              <div className="rounded-md border border-border/40 bg-muted/20 p-2">
+                <div className="text-[11px] text-muted-foreground mb-1.5 font-mono">V =</div>
+                <MatrixPreview matrix={parsedGsVectors} />
+              </div>
+            ) : (
+              <div className="rounded-md border border-dashed border-border/40 bg-transparent p-2 text-[11px] text-muted-foreground">
+                {t('linalgVectorEmpty')}
+              </div>
+            )}
+
+            <Button
+              onClick={handleGramSchmidt}
+              className="w-full h-9 text-[12px] gap-1.5"
+              size="sm"
+            >
+              <Ruler className="size-4" />
+              {t('linalgGramSchmidt')}
+            </Button>
+
+            <AnimatePresence mode="wait">
+              {gsError && (
+                <motion.div
+                  key="gs-err"
+                  initial={{ opacity: 0, y: -4 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  exit={{ opacity: 0 }}
+                  className="rounded-md border border-rose-500/40 bg-rose-500/10 p-3 text-[12px] text-rose-600 dark:text-rose-300"
+                >
+                  <div className="flex items-start gap-1.5">
+                    <X className="size-4 mt-0.5 shrink-0" />
+                    <span>{gsError}</span>
+                  </div>
+                </motion.div>
+              )}
+
+              {gsResult && !gsError && (
+                <motion.div
+                  key="gs-res"
+                  initial={{ opacity: 0, y: 4 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  exit={{ opacity: 0 }}
+                  className="rounded-md border border-primary/30 bg-primary/5 p-3 glow-card-teal space-y-2"
+                >
+                  <div className="text-[11px] text-muted-foreground">{t('linalgOrthogonalized')}</div>
+                  {/* 正交化结果矩阵预览（每行 = 一个正交基向量 q） */}
+                  <div className="rounded-md border border-primary/20 bg-background/40 p-2">
+                    <div className="text-[11px] text-muted-foreground mb-1.5 font-mono">Q =</div>
+                    <MatrixPreview matrix={gsResult.vectors} />
+                  </div>
+                  {gsResult.vectors.map((v, i) => (
+                    <div key={i} className="overflow-x-auto">
+                      <FormulaRenderer
+                        latex={`q_{${i + 1}} = ${vectorToLatex(v)}`}
+                        displayMode
+                        fitToContainer={true}
+                      />
+                    </div>
+                  ))}
+                  {gsResult.steps.length > 0 && (
+                    <details className="mt-2 group">
+                      <summary className="cursor-pointer text-[11px] text-muted-foreground hover:text-foreground select-none">
+                        {t('linalgGramSchmidtSteps')} ({gsResult.steps.length})
+                      </summary>
+                      <div className="mt-2 space-y-1.5 overflow-x-auto">
+                        {gsResult.steps.map((s, i) => (
+                          <div key={i} className="text-[11.5px] text-foreground/80">
+                            <FormulaRenderer latex={s} displayMode fitToContainer={true} />
+                          </div>
+                        ))}
+                      </div>
+                    </details>
+                  )}
+                </motion.div>
+              )}
+            </AnimatePresence>
+          </div>
+
+          {/* Gram-Schmidt 可视化列（与上方控件同排并排） */}
+          <div className="space-y-3">
+            <div className="text-[11px] text-muted-foreground mb-1.5 flex items-center gap-1.5">
+              <Ruler className="size-3.5" /> {t('linalgOrthogonalizedVisual')}
+            </div>
+            <VectorPreviewCanvas
+              vectors={gsPreviewVectors}
+              dim={gsDim}
+              height={220}
+              emptyText={t('linalgVectorVisualEmpty')}
+            />
+          </div>
+        </div>
+      </div>
+    </div>
+  );
 }
 
 /* ================================================================== *

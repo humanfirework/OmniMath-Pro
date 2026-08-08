@@ -1129,6 +1129,24 @@ function NodePipelineInner() {
     }
   }, [nodes, edges, variables, simConfig, pushRunResults, addResult, pipelineRunning]);
 
+  // 稳定的 runPipeline 引用：自动执行已禁用后，各处「主动运行一次」都通过它
+  // 触发，避免把 runPipeline 塞进各 useCallback/useEffect 依赖造成依赖抖动。
+  const runPipelineRef = useRef(runPipeline);
+  useEffect(() => {
+    runPipelineRef.current = runPipeline;
+  }, [runPipeline]);
+
+  // 主动运行请求（pendingRun）：自动执行已禁用，但 AI 调参 / AI 搭建 / 模板
+  // 加载 / 静音切换仍应在改动后运行一次。它们都先 setNodes/setEdges 再置
+  // pendingRun；这个 effect 在「下一渲染」时触发运行 —— 此时 state 已更新，
+  // runPipeline 读到的是最新节点图，避免「同步调用读到旧 state」的竞态。
+  const [pendingRun, setPendingRun] = useState(false);
+  useEffect(() => {
+    if (!pendingRun) return;
+    setPendingRun(false);
+    void runPipelineRef.current();
+  }, [pendingRun]);
+
   /* ── P3 执行到选中节点 ─────────────────────────────────────── */
   const runToSelected = useCallback(async () => {
     if (!selectedId) {
@@ -1165,64 +1183,16 @@ function NodePipelineInner() {
     }
   }, [selectedId, nodes, edges, variables, pushRunResults, pipelineRunning]);
 
-  /* ── Auto-execute on graph / config change (debounced) ───────── */
+  /* ── Auto-execute ────────────────────────────────────────────── */
+  // 按用户要求【完全禁用自动执行】：任何节点/连线/变量变化都不再自动重算整条
+  // 流水线，一律由用户手动按「运行」触发。这避免了拖动节点位置、调整参数等
+  // 操作导致无意义的自动运行。原先针对图像 src 的 visionSrcDirty 拦截已随之
+  // 彻底移除 —— 现在是全面关闭，不再需要那张特判（图像与其它改动都需手动运行）。
+  // 明确主动操作（AI 调参 / AI 搭建 / 模板加载 / 静音切换）通过 pendingRun 在
+  // state 更新后运行一次，保证这些功能仍可用。
   useEffect(() => {
-    const id = setTimeout(() => {
-      (async () => {
-        try {
-          const ctx = {
-            variables: Object.fromEntries(
-              Object.entries(variables).map(([k, v]) => [k, v.value]),
-            ),
-            onProgress: handleNodeProgress,
-          };
-          // 关键修复：自动执行必须与手动「运行」走同一判别逻辑。
-          // 之前这里无条件调用 executePipeline（常规数据流 + Kahn 拓扑排序），
-          // 导致一阶反馈仿真等含「故意成环」的模板在加载后被标成 'Cycle detected'，
-          // 诊断面板因此一直报错。现在：只要存在仿真节点就走仿真求解器，
-          // 仿真求解器通过状态块（积分器）断环 + 代数环不动点迭代，能正确处理反馈环。
-          const hasSim = nodes.some(isSimulationNode);
-          const executed = hasSim
-            ? runSimulationPipeline(nodes, edges, simConfig)
-            : await executePipeline(nodes, edges, ctx);
-          // Only update if results actually changed — otherwise the
-          // feedback loop (setNodes → effect → setNodes …) prevents the
-          // debounced localStorage save from ever firing.
-          setNodes((prev) => {
-            let changed = false;
-            const next = prev.map((n) => {
-              const updated = executed.find((e) => e.id === n.id);
-              if (!updated) return n;
-              const oldKey = resultKey(n.result) + '|' + (n.error ?? '');
-              const newKey = resultKey(updated.result) + '|' + (updated.error ?? '');
-              if (oldKey !== newKey) {
-                changed = true;
-                return {
-                  ...n,
-                  result: updated.result,
-                  outputs: updated.outputs,
-                  error: updated.error,
-                };
-              }
-              return n;
-            });
-            return changed ? next : prev;
-          });
-          // 独立运行结果面板（与 2D 绘图彻底解耦），避免蓝图结果污染 2D 绘图。
-          pushRunResults(executed, edges);
-        } catch (err) {
-          // Auto-execute failures should be silent — the user didn't trigger
-          // them, and frequent toasts would be annoying. Log for debugging.
-          console.warn('[NodePipeline] auto-execute error:', err);
-        } finally {
-          setNodeProgress(null);
-        }
-      })().catch((err) => {
-        console.warn('[NodePipeline] auto-execute unhandled promise error:', err);
-      });
-    }, 180);
-    return () => clearTimeout(id);
-  }, [nodes, edges, variables, simConfig, pushRunResults]);
+    // 空 effect —— 自动执行已禁用，无任何自动触发逻辑。
+  }, []);
 
   /* ── Helper: pan viewport so a node becomes visible ─────────── */
   const ensureNodeVisible = useCallback(
@@ -1477,6 +1447,9 @@ function NodePipelineInner() {
     if (tpl?.onLoad?.activePreviewTab) {
       setActivePreviewTab(tpl.onLoad.activePreviewTab as PreviewTab);
     }
+    // 自动执行已禁用；加载模板是明确的主动操作，加载完成后运行一次，让模板
+    // 流水线立即产出结果（否则用户看到的只是空节点）。等 state 更新后触发。
+    setPendingRun(true);
   }, [canvasSize, setActivePreviewTab]);
 
   /* ── 首次启动引导的一键示例：消费 store 中暂存的模板 id ─────── */
@@ -1606,6 +1579,8 @@ function NodePipelineInner() {
   /* ── Update a node's config ──────────────────────────────────── */
   const updateConfig = useCallback(
     (id: string, patch: Record<string, unknown>) => {
+      // 自动执行已完全禁用：任何参数改动（含视觉文件 src 选择/清除）都不会自动
+      // 触发重算，一律由用户手动按「运行」。此处在 updateConfig 无需额外处理。
       setNodes((prev) =>
         prev.map((n) =>
           n.id === id ? { ...n, config: { ...n.config, ...patch } } : n,
@@ -1616,8 +1591,8 @@ function NodePipelineInner() {
   );
 
   /* M1 — AI 调节点参数：接收 configure_node 指令，白名单过滤后写回 config。
-     只保留该节点 config 已有的键，避免 AI 引入任意字段；随后靠既有 180ms
-     自动重算 debounce 触发 recompute。 */
+     只保留该节点 config 已有的键，避免 AI 引入任意字段。自动执行已禁用，
+     故调参完成后主动运行一次，让 AI 调节立即生效。 */
   useEffect(() => {
     const handler = (e: Event) => {
       const detail = (e as CustomEvent<{ nodeId?: unknown; patch?: unknown }>).detail;
@@ -1634,6 +1609,8 @@ function NodePipelineInner() {
       }
       if (Object.keys(patch).length === 0) return;
       updateConfig(detail.nodeId, patch);
+      // 主动运行一次（AI 明确的调参指令，非被动自动执行）；等 state 更新后运行。
+      setPendingRun(true);
     };
     window.addEventListener('omnimath:node-config', handler);
     return () => window.removeEventListener('omnimath:node-config', handler);
@@ -1723,6 +1700,9 @@ function NodePipelineInner() {
       setSelectedIds(new Set());
       const next = fitViewFor(laid, canvasSize);
       if (next) setView(next);
+      // 自动执行已禁用；AI 整图搭建是明确的主动操作，搭建完成后运行一次，
+      // 等 state 更新后触发，让流水线立即产出结果。
+      setPendingRun(true);
     };
     window.addEventListener('omnimath:pipeline-build', handler);
     return () => window.removeEventListener('omnimath:pipeline-build', handler);
@@ -1736,11 +1716,12 @@ function NodePipelineInner() {
     });
   }, [nodes, edges]);
 
-  /* 节点静音切换：翻转 muted 位，auto-execute 会自动重新计算。 */
+  /* 节点静音切换：翻转 muted 位。自动执行已禁用，静音后主动运行一次使生效。 */
   const toggleMute = useCallback((id: string) => {
     setNodes((prev) =>
       prev.map((n) => (n.id === id ? { ...n, muted: !n.muted } : n)),
     );
+    setPendingRun(true);
   }, []);
 
   /* 小地图：把世界坐标居中到画布中心（保持当前缩放）。 */

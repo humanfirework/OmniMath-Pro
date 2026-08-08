@@ -70,10 +70,12 @@ interface ViewBox {
 function defaultSpecForPlot(p: {
   expression: string;
   plotType: 'cartesian' | 'polar' | 'parametric' | 'surface3d';
+  polarMinExpr?: string;
+  polarMaxExpr?: string;
 }): Curve2DSpec {
   const mode = (p.plotType === 'surface3d' ? 'cartesian' : p.plotType ?? 'cartesian') as
     | 'cartesian' | 'polar' | 'parametric';
-  return {
+  const spec: Curve2DSpec = {
     mode,
     exprX: p.expression,
     exprY: '',
@@ -82,6 +84,37 @@ function defaultSpecForPlot(p: {
         ? [...DEFAULT_POLAR_THETA_RANGE]
         : [...DEFAULT_PARAMETRIC_T_RANGE],
   };
+  // 极坐标：把 PlotConfig 携带的 θ 范围覆盖表达式接到 spec，
+  // 使「θ 范围滑块」（如变量 t）能实时改变曲线。
+  if (mode === 'polar') {
+    if (p.polarMinExpr) spec.paramMinExpr = p.polarMinExpr;
+    if (p.polarMaxExpr) spec.paramMaxExpr = p.polarMaxExpr;
+  }
+  return spec;
+}
+
+/**
+ * 极坐标曲线的自适应方形视口范围 [-r, r]。
+ *
+ * 采样极坐标曲线（θ 全范围，含变量表达式端点），取所有采样点半径 |r| 的
+ * P98 上限（排除异常尖峰值），并加 10% 内边距，得到能完整容纳曲线又不
+ * 过度放大的方形范围。相比旧固定的 [-4,4]，可自动适配大半径花朵；对变量
+ * 驱动的 θ 范围（如 theta / t）变化也会实时反映。
+ *
+ * 采样退化（空曲线 / 全 NaN）时回退到 [-4,4]。
+ */
+function polarViewRange(spec: Curve2DSpec): [number, number] {
+  const samples = sampleCurve(spec, [-10, 10], 400);
+  const radii: number[] = [];
+  for (const s of samples) {
+    if (Number.isFinite(s.x) && Number.isFinite(s.y)) {
+      radii.push(Math.hypot(s.x, s.y));
+    }
+  }
+  if (radii.length === 0) return [-4, 4];
+  radii.sort((a, b) => a - b);
+  const r = radii[Math.min(radii.length - 1, Math.floor(radii.length * 0.98))] * 1.1;
+  return [-r, r];
 }
 
 /**
@@ -235,7 +268,17 @@ export function Plot2DPanel() {
     }
     const hasPolar = plots.some((p) => curveSpecs[p.id]?.mode === 'polar');
     if (hasPolar) {
-      const r = 4;
+      // 极坐标：自适应方形视口，半径 = 所有极坐标曲线采样点 |r| 的 P98 上限。
+      // 相比固定 [-4,4]，能自动容纳大半径花朵（如曼陀罗 A+B 叠加可达 ~5），
+      // 且对 θ 范围（如变量 theta / t）变化实时重算，不再截断曲线。
+      let r = 4;
+      for (const p of plots) {
+        const spec = curveSpecs[p.id];
+        if (spec?.mode === 'polar') {
+          const [lo, hi] = polarViewRange(spec);
+          r = Math.max(r, hi);
+        }
+      }
       return { range: [-r, r], outliers: [] };
     }
     return deriveSmartY(plots, sampleX, curveSpecs);
@@ -271,7 +314,7 @@ export function Plot2DPanel() {
     if (compareMode !== 'facet') return [];
     return plots.map((p) => {
       const spec = curveSpecs[p.id] ?? defaultSpecForPlot(p);
-      if (spec.mode === 'polar') return [-4, 4] as [number, number];
+      if (spec.mode === 'polar') return polarViewRange(spec);
       const samples = sampleCurve(spec, effectiveX, 300);
       return smartYRange(samples, {
         lowerQuantile: 0.05,

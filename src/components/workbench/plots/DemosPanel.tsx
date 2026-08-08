@@ -19,7 +19,7 @@ import { FunctionSquare, Play, Trash2, Loader2, Eye, EyeOff, Plus, X, SlidersHor
 import { useWorkbenchStore } from '@/lib/store/workbench';
 import { evaluateExpressionAsync, inputToLatex, type PlotType } from '@/lib/engine';
 import { extractFreeParameters } from '@/lib/engine/variableScanner';
-import { setScopeVar } from '@/lib/engine/mathInstance';
+import { setScopeVar, getScope } from '@/lib/engine/mathInstance';
 import { useScopeVersion } from '@/lib/hooks/useScopeVersion';
 import { FormulaRenderer } from '@/components/workbench/FormulaRenderer';
 import { ParameterSliders } from './ParameterSliders';
@@ -98,41 +98,86 @@ export function DemosPanel() {
   }>({ params: [], latex: '' });
 
   /**
-   * 曼陀罗 Logo 动画示例：以多层极坐标花环近似放射对称的曼陀罗印章。
-   * 参数 b 控制整体缩放（呼吸）——点参数栏里 b 的 ▶ 播放按钮（默认「往复」）
-   * 即可看到曼陀罗缓缓绽放、收缩。
+   * 曼陀罗 Logo 动画示例：极坐标玫瑰曲线双层叠加。
+   *
+   *   r(θ) = A·|cos(n·θ)|^(1/s)               外层大花瓣（浅粉）
+   *        + B·|cos(n·(θ − π/(2n)))|^(1/s)     内层交错花瓣（深玫）
+   *
+   * n 为偶数时每个 cos 项产生 2n 个瓣，^（1/s）控制花瓣肥瘦（s 越大瓣越瘦长）；
+   * 内层旋转 π/(2n) 正好嵌在外层缝隙中，形成交错的 4n 瓣曼陀罗。
+   *
+   * 滑块交互：
+   *   - A / B / n / s —— 花瓣半径与形态（自动识别为自由参数生成滑块）；
+   *   - theta —— θ 扫过范围的上限（0 → t）。把变量 theta 作为极坐标 θ 上限，
+   *           拖动 theta 滑块即可看到花朵逐瓣「描画」出来；
+   *   - t —— theta 滑块的上限（θ ∈ [0, t]）。调 t 可扩展 theta 可描画的最大范围。
    */
   const loadMandalaLogo = useCallback(() => {
-    const PLOT = PLOT_COLORS;
-    // 中心花心：小圆，随参数呼吸。
-    const coreExpr = '0.22*b';
-    // 主花环：8 瓣曼陀罗花瓣，构成放射对称的主体。
-    const ringExpr = 'b*(1 + 0.55*cos(8*theta))';
-    // 外圈放射细瓣：16 道射线，增加曼陀罗的层次与繁复感。
-    const raysExpr = '0.9*b*(0.5 + 0.5*cos(16*theta + 0.4))';
+    // 外层花瓣：浅粉
+    const outerExpr = 'A*abs(cos(n*theta))^(1/s)';
+    // 内层花瓣：深玫（旋转 π/(2n) 交错）
+    const innerExpr = 'B*abs(cos(n*(theta - pi/(2*n))))^(1/s)';
     const defs = [
-      { expression: ringExpr, color: PLOT[0] },
-      { expression: raysExpr, color: PLOT[4] },
-      { expression: coreExpr, color: '#fbbf24' },
+      { expression: outerExpr, color: '#f9a8d4' },
+      { expression: innerExpr, color: '#be185d' },
     ];
-    // 整体缩放动画参数：默认 4，范围 [0, 6]，往复呼吸。
-    setScopeVar('b', 4);
-    setPlotParam('b', { value: 4, min: 0, max: 6, step: 0.02, playMode: 'bounce', speed: 1 });
+    // 花瓣半径与形态参数：默认 A=2.4、B=1.4、n=4（各 8 瓣交错）、s=2。
+    setScopeVar('A', 2.4);
+    setPlotParam('A', { value: 2.4, min: 0, max: 4, step: 0.02 });
+    setScopeVar('B', 1.4);
+    setPlotParam('B', { value: 1.4, min: 0, max: 3, step: 0.02 });
+    setScopeVar('n', 4);
+    setPlotParam('n', { value: 4, min: 1, max: 10, step: 1 });
+    setScopeVar('s', 2);
+    setPlotParam('s', { value: 2, min: 1, max: 6, step: 0.05 });
+    // theta —— θ 扫过范围的上限（0 → t）。拖动它即可看到花朵逐瓣「描画」。
+    // 默认让 theta = t = 2π，即完整画满整朵花。
+    const fullTheta = 2 * Math.PI;
+    setScopeVar('theta', fullTheta);
+    setPlotParam('theta', { value: fullTheta, min: 0, max: fullTheta, step: 0.02, playMode: 'bounce', speed: 1 });
+    addDemosExtraVar('theta');
+    // t —— theta 滑块的上限（θ ∈ [0, t]）。调 t 可扩展 theta 可描画的最大范围。
+    setScopeVar('t', fullTheta);
+    setPlotParam('t', { value: fullTheta, min: Math.PI / 2, max: 2 * Math.PI, step: 0.02 });
+    addDemosExtraVar('t');
     for (const d of defs) {
       addPlot({
         expression: d.expression,
-        xRange: [-10, 10],
-        yRange: [-10, 10],
+        // 视图取对称正方形，避免花朵被压扁/裁切。
+        xRange: [-4, 4],
+        yRange: [-4, 4],
         color: d.color,
         plotType: 'polar',
         visible: true,
+        // 把 θ 上限接到变量 theta（而非固定 t），让滑块/播放实时改变采样范围。
+        polarMaxExpr: 'theta',
       });
       const latest = useWorkbenchStore.getState().plots;
       const id = latest[latest.length - 1].id;
       addDemosPlotId(id);
     }
-    setAnalysis({ params: ['b'], latex: 'r = b\\left(1+0.55\\cos(8\\theta)\\right)' });
-  }, [addPlot, addDemosPlotId, setPlotParam, setAnalysis]);
+    setAnalysis({
+      plotType: 'polar',
+      params: ['A', 'B', 'n', 's', 't', 'theta'],
+      latex: 'r = A\\left|\\cos(n\\theta)\\right|^{1/s} + B\\left|\\cos\\left(n(\\theta-\\frac{\\pi}{2n})\\right)\\right|^{1/s}',
+    });
+  }, [addPlot, addDemosPlotId, setPlotParam, addDemosExtraVar, setAnalysis]);
+
+  // theta 滑块上限跟随变量 t（θ ∈ [0, t]）：拖动 t 时，若 theta 当前值超出
+  // 新上限则自动夹紧到 t，并同步 theta 滑块的 max。这样「theta 的取值范围是
+  // 0 到 t」由 t 滑块实时驱动，而不是一个固定不动的上限。
+  useEffect(() => {
+    const tVal = Number(getScope().t);
+    if (!Number.isFinite(tVal)) return;
+    const state = useWorkbenchStore.getState();
+    const thetaCfg = state.plotParams.theta;
+    if (!thetaCfg) return;
+    const max = tVal;
+    const value = Math.min(thetaCfg.value, max);
+    if (thetaCfg.max !== max || thetaCfg.value !== value) {
+      state.setPlotParam('theta', { ...thetaCfg, value, max });
+    }
+  }, [scopeVersion]);
 
 
 
@@ -209,9 +254,14 @@ export function DemosPanel() {
       }
     }
     clearDemosPlotIds();
+    // 一并清掉为 Demos 显式添加的变量（如曼陀罗的 theta/t）：清空后这些变量不再被
+    // 任何曲线引用，若不清除会残留「没用的滑块」。用户需要时可在清空后重新「＋ 添加变量」。
+    for (const name of demosExtraVars) {
+      removeDemosExtraVar(name);
+    }
     setDemosExpr('');
     setAnalysis({ params: [], latex: '' });
-  }, [removePlot, demosPlotIds, clearDemosPlotIds, setDemosExpr]);
+  }, [removePlot, demosPlotIds, clearDemosPlotIds, removeDemosExtraVar, demosExtraVars, setDemosExpr]);
 
   const handleKeyDown = useCallback(
     (e: React.KeyboardEvent) => {
@@ -247,7 +297,7 @@ export function DemosPanel() {
         <button
           type="button"
           onClick={loadMandalaLogo}
-          title="载入曼陀罗 Logo 动画示例：8 瓣花环 + 16 道射线，播放参数 b 可看到曼陀罗呼吸绽放"
+          title="载入曼陀罗 Logo：极坐标玫瑰曲线双层叠加（A/B/n/s 可调花瓣），变 θ 上限 t 可看花朵绽放动画"
           className="ml-auto shrink-0 rounded-md border border-primary/30 bg-primary/5 px-2 py-0.5 text-[10px] font-medium text-primary hover:bg-primary/15 transition-colors"
         >
           ✿ 曼陀罗 Logo 动画
