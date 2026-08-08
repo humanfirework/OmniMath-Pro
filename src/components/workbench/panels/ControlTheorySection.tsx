@@ -281,28 +281,37 @@ export function ControlTheorySection() {
           </label>
         </div>
 
-        {/* 示例库：一键载入 num + den */}
+        {/* 示例库：一键载入 num + den（下拉整理，不摊开） */}
         <div className="pt-0.5">
           <div className="text-[10px] text-muted-foreground mb-1">示例库</div>
-          <div className="flex flex-wrap gap-1">
-            {PRESETS.map((ex) => (
+          <div className="flex flex-wrap items-center gap-1.5">
+            <select
+              value="-1"
+              onChange={(e) => {
+                const idx = Number(e.target.value);
+                if (idx >= 0 && PRESETS[idx]) {
+                  setNum(PRESETS[idx].num);
+                  setDen(PRESETS[idx].den);
+                }
+              }}
+              className="h-7 flex-1 min-w-[140px] rounded-md border border-border/60 bg-background px-2 text-[11.5px] outline-none"
+            >
+              <option value="-1">选择系统示例…</option>
+              {PRESETS.map((ex, i) => (
+                <option key={ex.name} value={i} title={ex.desc}>
+                  {ex.name} — {ex.desc}
+                </option>
+              ))}
+            </select>
+            {PRESETS.find((ex) => ex.num === num && ex.den === den) && (
               <button
-                key={ex.name}
-                title={ex.desc}
-                onClick={() => {
-                  setNum(ex.num);
-                  setDen(ex.den);
-                }}
-                className={cn(
-                  'h-6 px-2 rounded text-[10px] border transition-colors',
-                  den === ex.den && num === ex.num
-                    ? 'border-primary/50 bg-primary/10 text-primary'
-                    : 'border-border/50 text-muted-foreground hover:bg-accent/60',
-                )}
+                type="button"
+                onClick={() => { setNum(''); setDen(''); }}
+                className="h-7 px-2 rounded text-[10px] border border-border/50 text-muted-foreground hover:bg-accent/60"
               >
-                {ex.name}
+                清除
               </button>
-            ))}
+            )}
           </div>
         </div>
       </div>

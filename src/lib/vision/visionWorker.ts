@@ -34,9 +34,10 @@ import { traceContours } from './trace';
 import { rdpSimplify, fitBezierPath } from './fit';
 import { fitFourier, sampleFourierCurve } from './fourier';
 import { zhangSuenThin, skeletonToPolylines } from './skeleton';
-import { imageToCurves } from './index';
-import { videoToCurves } from './videoToCurves';
+import { imageToCurves } from './imageToCurves';
+import { videoToCurvesWithProgress } from './videoToCurves';
 import { decodeGif } from './video';
+import { fineOutline } from './fineOutline';
 import type { Polyline, BezierPath, ImageDataLike, VisionOptions } from './types';
 import type { VideoToCurvesOptions } from './videoToCurves';
 import type { FrameSequence } from './video';
@@ -45,6 +46,7 @@ import type { FrameSequence } from './video';
 export type VisionWorkerOp =
   | 'imageToCurves'
   | 'videoToCurves'
+  | 'fineOutline'
   | 'toGrayscale'
   | 'binarize'
   | 'multiLevelThreshold'
@@ -74,6 +76,14 @@ export interface VisionWorkerResponse {
   error?: string;
 }
 
+/** 长任务（videoToCurves）的进度消息：`progress` 存在时表示中间进度，非最终结果。 */
+export interface VisionWorkerProgress {
+  id: number;
+  progress: number;
+  done: number;
+  total: number;
+}
+
 /** Dispatch table — each entry runs the corresponding pure function. */
 function dispatch(op: VisionWorkerOp, args: unknown[]): unknown {
   switch (op) {
@@ -82,8 +92,18 @@ function dispatch(op: VisionWorkerOp, args: unknown[]): unknown {
       return imageToCurves(imageData, options);
     }
     case 'videoToCurves': {
-      const [seq, options] = args as [FrameSequence, VideoToCurvesOptions | undefined];
-      return videoToCurves(seq, options);
+      // videoToCurves 是长任务，需逐帧回报进度，必须走 dispatchAsync。
+      throw new Error('videoToCurves must be dispatched via the async path');
+    }
+    case 'fineOutline': {
+      const [data, width, height, channels, options] = args as [
+        Uint8Array | Uint8ClampedArray,
+        number,
+        number,
+        1 | 4,
+        Parameters<typeof fineOutline>[4] | undefined,
+      ];
+      return fineOutline(data, width, height, channels, options);
     }
     case 'toGrayscale': {
       const [imageData] = args as [ImageDataLike];
@@ -157,11 +177,22 @@ function dispatch(op: VisionWorkerOp, args: unknown[]): unknown {
   }
 }
 
-/** Async dispatch — for ops that return Promises (currently only decodeGif). */
-async function dispatchAsync(op: VisionWorkerOp, args: unknown[]): Promise<unknown> {
+/** Async dispatch — for ops that return Promises / need progress (decodeGif, videoToCurves). */
+async function dispatchAsync(
+  id: number,
+  op: VisionWorkerOp,
+  args: unknown[],
+): Promise<unknown> {
   if (op === 'decodeGif') {
     const [data] = args as [ArrayBuffer];
     return decodeGif(data);
+  }
+  if (op === 'videoToCurves') {
+    const [seq, options] = args as [FrameSequence, VideoToCurvesOptions | undefined];
+    return videoToCurvesWithProgress(seq, options, (progress, done, total) => {
+      const msg: VisionWorkerProgress = { id, progress, done, total };
+      ctx.postMessage(msg);
+    });
   }
   return dispatch(op, args);
 }
@@ -171,7 +202,7 @@ const ctx = self as unknown as DedicatedWorkerGlobalScope;
 ctx.onmessage = async (e: MessageEvent<VisionWorkerRequest>) => {
   const { id, op, args } = e.data;
   try {
-    const result = await dispatchAsync(op, args);
+    const result = await dispatchAsync(id, op, args);
     const response: VisionWorkerResponse = { id, result };
     ctx.postMessage(response);
   } catch (err) {

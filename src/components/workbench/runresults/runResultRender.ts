@@ -128,6 +128,53 @@ export function renderPanel(
     if (pts.length === 0) continue;
     drawPolyline(ctx, pts, view, size, curve.color || '#4ade80', curve.width || 2);
   }
+  // 坐标轴标题（带单位），置于最上层避免被曲线/网格遮挡。
+  if (panel.axisX || panel.axisY) drawAxisTitles(ctx, size, { x: panel.axisX, y: panel.axisY });
+  ctx.restore();
+}
+
+/** 安全测量文本宽度：部分无头/桩 context 缺少 measureText，回退到按字符数估算。 */
+function textWidth(ctx: CanvasRenderingContext2D, text: string): number {
+  if (typeof ctx.measureText === 'function') {
+    try {
+      return ctx.measureText(text).width;
+    } catch {
+      /* 忽略并回退 */
+    }
+  }
+  return text.length * 6.5;
+}
+
+/** 绘制坐标轴标题（x 底部居中、y 左侧竖向旋转），带半透明底衬避免与刻度重叠。 */
+function drawAxisTitles(
+  ctx: CanvasRenderingContext2D,
+  size: { w: number; h: number },
+  titles: { x?: string; y?: string },
+) {
+  ctx.save();
+  ctx.font = '10.5px ui-monospace, SFMono-Regular, Menlo, monospace';
+  if (titles.x) {
+    const tw = textWidth(ctx, titles.x);
+    const tx = size.w / 2;
+    const ty = size.h - 1;
+    ctx.fillStyle = 'rgba(11,18,32,0.9)';
+    ctx.fillRect(tx - tw / 2 - 4, ty - 11, tw + 8, 13);
+    ctx.fillStyle = 'rgba(148,163,184,0.98)';
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'alphabetic';
+    ctx.fillText(titles.x, tx, ty);
+  }
+  if (titles.y) {
+    const tw = textWidth(ctx, titles.y);
+    ctx.fillStyle = 'rgba(11,18,32,0.9)';
+    ctx.fillRect(2, size.h / 2 - tw / 2 - 4, 13, tw + 8);
+    ctx.fillStyle = 'rgba(148,163,184,0.98)';
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.translate(8.5, size.h / 2);
+    ctx.rotate(-Math.PI / 2);
+    ctx.fillText(titles.y, 0, 0);
+  }
   ctx.restore();
 }
 
@@ -215,6 +262,39 @@ function drawGrid(ctx: CanvasRenderingContext2D, view: ResultView, size: { w: nu
     ctx.lineTo(size.w, s.y);
   }
   ctx.stroke();
+  // 刻度数字（x 底部 / y 左侧），带半透明底衬避免与曲线混叠看不清。
+  ctx.save();
+  ctx.font = '10px ui-monospace, SFMono-Regular, Menlo, monospace';
+  ctx.textBaseline = 'alphabetic';
+  ctx.textAlign = 'left';
+  ctx.fillStyle = 'rgba(148,163,184,0.95)';
+  const fmt = (v: number): string => {
+    if (!Number.isFinite(v)) return '';
+    const abs = Math.abs(v);
+    if (abs >= 1e5 || (abs < 0.001 && abs > 0)) return v.toExponential(1);
+    return String(Number(v.toPrecision(3)));
+  };
+  for (let x = Math.ceil(view.xMin / stepX) * stepX; x <= view.xMax; x += stepX) {
+    const s = worldToScreen(x, 0, size, view);
+    if (s.x < 8 || s.x > size.w - 24) continue;
+    const label = fmt(x);
+    const tw = textWidth(ctx, label);
+    ctx.fillStyle = 'rgba(11,18,32,0.8)';
+    ctx.fillRect(s.x + 2, size.h - 13, tw + 4, 12);
+    ctx.fillStyle = 'rgba(148,163,184,0.95)';
+    ctx.fillText(label, s.x + 4, size.h - 3);
+  }
+  for (let y = Math.ceil(view.yMin / stepY) * stepY; y <= view.yMax; y += stepY) {
+    const s = worldToScreen(0, y, size, view);
+    if (s.y < 10 || s.y > size.h - 10) continue;
+    const label = fmt(y);
+    const tw = textWidth(ctx, label);
+    ctx.fillStyle = 'rgba(11,18,32,0.8)';
+    ctx.fillRect(1, s.y - 7, tw + 4, 12);
+    ctx.fillStyle = 'rgba(148,163,184,0.95)';
+    ctx.fillText(label, 3, s.y + 3);
+  }
+  ctx.restore();
 }
 
 function drawAxes(ctx: CanvasRenderingContext2D, view: ResultView, size: { w: number; h: number }) {

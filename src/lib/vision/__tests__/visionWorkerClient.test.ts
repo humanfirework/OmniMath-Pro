@@ -55,4 +55,23 @@ describe('visionWorkerClient.videoToCurves (in-thread fallback)', () => {
     expect(viaClient.frames.length).toBe(direct.frames.length);
     expect(viaClient.trackCount).toBe(direct.trackCount);
   });
+
+  it('逐帧处理时通过 onProgress 回报进度（fraction/done/total 单调递增到 1）', async () => {
+    const seq = makeTinyFrames();
+    const calls: Array<{ fraction: number; done: number; total: number }> = [];
+    await visionWorkerClient.videoToCurves(
+      seq,
+      { maxFrames: 120, smooth: true },
+      (fraction, done, total) => calls.push({ fraction, done, total }),
+    );
+    expect(calls.length).toBeGreaterThan(0);
+    // 最后一帧回调：done === total 且 fraction === 1
+    const last = calls[calls.length - 1];
+    expect(last.done).toBe(last.total);
+    expect(last.fraction).toBeCloseTo(1);
+    // 进度单调不减
+    for (let i = 1; i < calls.length; i++) {
+      expect(calls[i].fraction).toBeGreaterThanOrEqual(calls[i - 1].fraction);
+    }
+  });
 });

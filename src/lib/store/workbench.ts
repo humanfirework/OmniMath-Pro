@@ -1,6 +1,7 @@
 import { create } from 'zustand';
 import type { InputMode } from '@/lib/engine/types';
 import type { Locale } from '@/lib/i18n';
+import { setLocale as setI18nLocale } from '@/lib/i18n';
 import type { CurveSetData } from '@/components/workbench/plots/Plot2DCanvas';
 import { deleteScopeVar, resetScope, syncScope, math } from '@/lib/engine/mathInstance';
 import { useSettingsStore } from './settingsStore';
@@ -43,7 +44,14 @@ export interface PlotParamConfig {
   max: number;
   /** 滑块步长。 */
   step: number;
+  /** 播放动画模式（仅播放时生效）。 */
+  playMode?: ParamPlayMode;
+  /** 播放速度倍率（>0，1 = 默认）。 */
+  speed?: number;
 }
+
+/** 滑块播放动画模式。 */
+export type ParamPlayMode = 'bounce' | 'forward' | 'reverse' | 'once';
 
 export interface VariableEntry {
   name: string;
@@ -55,13 +63,24 @@ export interface VariableEntry {
 export type SidePanelTab = 'history' | 'variables' | 'formulas' | 'linalg' | 'solver' | 'files' | 'stats';
 export type PreviewTab = 'formula' | 'plot2d' | 'plot3d' | 'log' | 'pipeline' | 'ai';
 export type Theme = 'dark' | 'light';
-export type ViewMode = 'workbench' | 'pipeline' | 'whiteboard' | 'focus' | 'linalg' | 'solver' | 'stats' | 'control';
+export type ViewMode = 'workbench' | 'pipeline' | 'whiteboard' | 'focus' | 'linalg' | 'solver' | 'stats' | 'control' | 'education';
 export type ActivityBarPosition = 'left' | 'right';
 
 interface WorkbenchState {
   // Editor
   editorContent: string;
   inputMode: InputMode;
+  /** 输入界面：'code'（代码编辑器） | 'demos'（Desmos 式直接输入）。
+   *  提升到 store，供顶栏 TitleBar 与 EditorPanel 共享开关。 */
+  inputView: 'code' | 'demos';
+
+  // ── Demos 面板状态（持久化，切换视图 / 刷新后不丢失）──────────────
+  /** Demos 输入框当前草稿表达式。 */
+  demosExpr: string;
+  /** Demos 显式添加的变量名（如 t），用于 θ/t 范围表达式。 */
+  demosExtraVars: string[];
+  /** 通过 Demos 面板添加的曲线 id（用于「清空」与左侧图像列表识别）。 */
+  demosPlotIds: string[];
   cursorPosition: number;
 
   // Results & history
@@ -96,9 +115,20 @@ interface WorkbenchState {
   activityBarHidden: boolean;
   editorVisible: boolean;
 
+  /** 首次引导的「动手练习」模式：为 true 时，PracticeGuide 浮层出现，
+   *  引导用户输入代码并点击「运行」。瞬态，不持久化。 */
+  onboardingPractice: boolean;
+
   // Actions
   setEditorContent: (content: string) => void;
   setInputMode: (mode: InputMode) => void;
+  setInputView: (view: 'code' | 'demos') => void;
+  setDemosExpr: (v: string) => void;
+  addDemosExtraVar: (name: string) => void;
+  removeDemosExtraVar: (name: string) => void;
+  addDemosPlotId: (id: string) => void;
+  removeDemosPlotId: (id: string) => void;
+  clearDemosPlotIds: () => void;
   setCursorPosition: (pos: number) => void;
 
   addResult: (result: CalculationResult) => void;
@@ -140,6 +170,7 @@ interface WorkbenchState {
   setActivityBarAutoHide: (v: boolean) => void;
   toggleActivityBarHidden: () => void;
   setEditorVisible: (v: boolean) => void;
+  setOnboardingPractice: (v: boolean) => void;
 
   // Persistence
   saveToStorage: () => void;
@@ -244,13 +275,24 @@ function loadInitial(): Partial<WorkbenchState> {
     const VALID_INPUT_MODES = ['simple', 'python', 'matlab'] as const;
     const VALID_THEMES = ['dark', 'light'] as const;
     const VALID_LOCALES = ['zh-CN', 'en'] as const;
-    const VALID_VIEW_MODES = ['workbench', 'pipeline', 'whiteboard', 'focus', 'linalg', 'solver', 'stats', 'control'] as const;
+    const VALID_VIEW_MODES = ['workbench', 'pipeline', 'whiteboard', 'focus', 'linalg', 'solver', 'stats', 'control', 'education'] as const;
     const VALID_AB_POSITIONS = ['left', 'right'] as const;
     const VALID_PREVIEW_TABS = ['formula', 'plot2d', 'plot3d', 'log', 'pipeline', 'ai'] as const;
+
+    const demosExtraVars = Array.isArray(data.demosExtraVars)
+      ? data.demosExtraVars.filter((v): v is string => typeof v === 'string')
+      : [];
+    const demosPlotIds = Array.isArray(data.demosPlotIds)
+      ? data.demosPlotIds.filter((v): v is string => typeof v === 'string')
+      : [];
 
     return {
       editorContent: typeof data.editorContent === 'string' ? data.editorContent : '',
       inputMode: VALID_INPUT_MODES.includes(data.inputMode) ? data.inputMode : 'simple',
+      inputView: data.inputView === 'demos' ? 'demos' : 'code',
+      demosExpr: typeof data.demosExpr === 'string' ? data.demosExpr : '',
+      demosExtraVars,
+      demosPlotIds,
       results: Array.isArray(data.results) ? data.results : [],
       variables: data.variables && typeof data.variables === 'object' ? data.variables : {},
       plots: Array.isArray(data.plots)
@@ -262,7 +304,7 @@ function loadInitial(): Partial<WorkbenchState> {
       plotParams: sanitizePlotParams(data.plotParams),
       theme: VALID_THEMES.includes(data.theme) ? data.theme : 'dark',
       locale: VALID_LOCALES.includes(data.locale) ? data.locale : 'zh-CN',
-      activeSidePanel: VALID_SIDE_PANELS.includes(data.activeSidePanel) ? data.activeSidePanel : 'history',
+      activeSidePanel: VALID_SIDE_PANELS.includes(data.activeSidePanel) ? data.activeSidePanel : 'files',
       sidePanelCollapsed: typeof data.sidePanelCollapsed === 'boolean' ? data.sidePanelCollapsed : false,
       previewVisible: typeof data.previewVisible === 'boolean' ? data.previewVisible : true,
       editorVisible: typeof data.editorVisible === 'boolean' ? data.editorVisible : true,
@@ -304,6 +346,10 @@ function reviveStoredValue(value: unknown): unknown {
 export const useWorkbenchStore = create<WorkbenchState>((set, get) => ({
   editorContent: '',
   inputMode: 'simple',
+  inputView: 'code',
+  demosExpr: '',
+  demosExtraVars: [],
+  demosPlotIds: [],
   cursorPosition: 0,
 
   results: [],
@@ -316,7 +362,7 @@ export const useWorkbenchStore = create<WorkbenchState>((set, get) => ({
 
   theme: 'dark',
   locale: 'zh-CN',
-  activeSidePanel: 'history',
+  activeSidePanel: 'files',
   sidePanelCollapsed: false,
   previewVisible: true,
   activePreviewTab: 'formula',
@@ -329,9 +375,29 @@ export const useWorkbenchStore = create<WorkbenchState>((set, get) => ({
   activityBarAutoHide: false,
   activityBarHidden: false,
   editorVisible: true,
+  onboardingPractice: false,
 
   setEditorContent: (content) => { set({ editorContent: content }); get().saveToStorage(); },
   setInputMode: (mode) => { set({ inputMode: mode }); get().saveToStorage(); },
+  setInputView: (view) => { set({ inputView: view }); get().saveToStorage(); },
+  setDemosExpr: (v) => { set({ demosExpr: v }); get().saveToStorage(); },
+  addDemosExtraVar: (name) => {
+    set((s) => (s.demosExtraVars.includes(name) ? s : { demosExtraVars: [...s.demosExtraVars, name] }));
+    get().saveToStorage();
+  },
+  removeDemosExtraVar: (name) => {
+    set((s) => ({ demosExtraVars: s.demosExtraVars.filter((n) => n !== name) }));
+    get().saveToStorage();
+  },
+  addDemosPlotId: (id) => {
+    set((s) => (s.demosPlotIds.includes(id) ? s : { demosPlotIds: [...s.demosPlotIds, id] }));
+    get().saveToStorage();
+  },
+  removeDemosPlotId: (id) => {
+    set((s) => ({ demosPlotIds: s.demosPlotIds.filter((x) => x !== id) }));
+    get().saveToStorage();
+  },
+  clearDemosPlotIds: () => { set({ demosPlotIds: [] }); get().saveToStorage(); },
   setCursorPosition: (pos) => set({ cursorPosition: pos }),
 
   addResult: (result) => {
@@ -455,7 +521,7 @@ export const useWorkbenchStore = create<WorkbenchState>((set, get) => ({
     get().saveToStorage();
   },
   toggleTheme: () => get().setTheme(get().theme === 'dark' ? 'light' : 'dark'),
-  setLocale: (locale) => { set({ locale }); get().saveToStorage(); },
+  setLocale: (locale) => { set({ locale }); setI18nLocale(locale); get().saveToStorage(); },
   setActiveSidePanel: (tab) => { set({ activeSidePanel: tab, sidePanelCollapsed: false }); get().saveToStorage(); },
   toggleSidePanel: () => { set((s) => ({ sidePanelCollapsed: !s.sidePanelCollapsed })); get().saveToStorage(); },
   setPreviewVisible: (v) => { set({ previewVisible: v }); get().saveToStorage(); },
@@ -469,6 +535,7 @@ export const useWorkbenchStore = create<WorkbenchState>((set, get) => ({
   setActivityBarAutoHide: (v) => { set({ activityBarAutoHide: v }); get().saveToStorage(); },
   toggleActivityBarHidden: () => { set((s) => ({ activityBarHidden: !s.activityBarHidden })); get().saveToStorage(); },
   setEditorVisible: (v) => { set({ editorVisible: v }); get().saveToStorage(); },
+  setOnboardingPractice: (v) => set({ onboardingPractice: v }),
 
   saveToStorage: () => {
     if (typeof window === 'undefined') return;
@@ -481,6 +548,10 @@ export const useWorkbenchStore = create<WorkbenchState>((set, get) => ({
           JSON.stringify({
             editorContent: s.editorContent,
             inputMode: s.inputMode,
+            inputView: s.inputView,
+            demosExpr: s.demosExpr,
+            demosExtraVars: s.demosExtraVars,
+            demosPlotIds: s.demosPlotIds,
             results: s.results,
             variables: s.variables,
             plots: s.plots,
@@ -518,6 +589,8 @@ export const useWorkbenchStore = create<WorkbenchState>((set, get) => ({
           document.documentElement.classList.remove('dark');
         }
       }
+      // 同步 i18n 模块语言，避免「存储里是英文、t() 却仍是中文」的部分切换。
+      if (initial.locale) setI18nLocale(initial.locale);
       // Back-fill the engine scope with the restored variables so plots,
       // the console and blueprint nodes can use them immediately after a
       // page reload (previously the panel showed them but mathjs could

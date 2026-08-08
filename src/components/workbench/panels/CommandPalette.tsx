@@ -53,6 +53,7 @@ import {
   t,
   setLocale as setI18nLocale,
   getLocale,
+  useLocale,
   type Locale,
 } from '@/lib/i18n';
 import type { InputMode } from '@/lib/engine/types';
@@ -67,6 +68,7 @@ const EXAMPLE_SCRIPTS: Array<{ label: string; content: string }> = [
 ];
 
 export function CommandPalette() {
+  useLocale(); // 语言切换时重渲染 t()
   const open = useWorkbenchStore((s) => s.commandPaletteOpen);
   const setOpen = useWorkbenchStore((s) => s.setCommandPaletteOpen);
   const toggleTheme = useWorkbenchStore((s) => s.toggleTheme);

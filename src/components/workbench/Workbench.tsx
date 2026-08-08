@@ -36,7 +36,7 @@ import { setDefaultSampleCount } from '@/lib/plots/plot2d';
 import { setDefault3DResolution } from '@/lib/plots/plot3d';
 import { setResultPrecision } from '@/lib/engine/latex';
 import { inTauri } from '@/lib/tauri';
-import { setLocale as setI18nLocale, getLocale, t } from '@/lib/i18n';
+import { setLocale as setI18nLocale, getLocale, t, useLocale } from '@/lib/i18n';
 import { useIsMobile } from '@/hooks/use-mobile';
 import { TitleBar } from '@/components/workbench/layout/TitleBar';
 import { ActivityBar } from '@/components/workbench/layout/ActivityBar';
@@ -49,6 +49,7 @@ import { GlobalCalcBar } from '@/components/workbench/panels/GlobalCalcBar';
 import { FloatingCalculator } from '@/components/workbench/panels/FloatingCalculator';
 import { MobileWorkbench } from '@/components/workbench/MobileWorkbench';
 import { OnboardingOverlay } from '@/components/workbench/OnboardingOverlay';
+import { PracticeGuide } from '@/components/workbench/PracticeGuide';
 import { SettingsPanel } from '@/components/workbench/panels/SettingsPanel';
 import { ErrorBoundary } from '@/components/ErrorBoundary';
 import { useShortcutsStore, SHORTCUTS_KEY } from '@/lib/store/shortcutsStore';
@@ -77,6 +78,9 @@ const StatisticsWorkbench = lazy(() =>
 const ControlTheoryWorkbench = lazy(() =>
   import('@/components/workbench/panels/ControlTheoryWorkbench').then((m) => ({ default: m.ControlTheoryWorkbench })),
 );
+const EducationModule = lazy(() =>
+  import('@/components/workbench/education/EducationModule').then((m) => ({ default: m.EducationModule })),
+);
 
 /** 懒加载视图切换时的轻量占位图，避免白屏闪烁。 */
 function ViewLoading() {
@@ -91,7 +95,7 @@ function ViewLoading() {
 }
 
 /** 全屏视图列表（按 ActivityBar 中「全屏视图」的生命周期保持一致）。 */
-const FULLSCREEN_VIEWS: ViewMode[] = ['pipeline', 'whiteboard', 'linalg', 'solver', 'stats', 'control'];
+const FULLSCREEN_VIEWS: ViewMode[] = ['pipeline', 'whiteboard', 'linalg', 'solver', 'stats', 'control', 'education'];
 
 /**
  * 全屏视图容器 —— 保持挂载策略（防止切换视图时数据丢失）。
@@ -127,6 +131,8 @@ function FullScreenViews({ activeViewMode }: { activeViewMode: ViewMode }) {
         return <StatisticsWorkbench />;
       case 'control':
         return <ControlTheoryWorkbench />;
+      case 'education':
+        return <EducationModule />;
       default:
         return null;
     }
@@ -152,6 +158,7 @@ function FullScreenViews({ activeViewMode }: { activeViewMode: ViewMode }) {
 }
 
 export function Workbench() {
+  useLocale();
   const loadFromStorage = useWorkbenchStore((s) => s.loadFromStorage);
   const theme = useWorkbenchStore((s) => s.theme);
   const locale = useWorkbenchStore((s) => s.locale);
@@ -363,7 +370,7 @@ export function Workbench() {
       <div className="flex-1 flex min-h-0">
         {activityBarPosition === 'left' && <ActivityBar />}
 
-        {viewMode === 'pipeline' || viewMode === 'whiteboard' || viewMode === 'linalg' || viewMode === 'solver' || viewMode === 'stats' || viewMode === 'control' ? (
+        {viewMode === 'pipeline' || viewMode === 'whiteboard' || viewMode === 'linalg' || viewMode === 'solver' || viewMode === 'stats' || viewMode === 'control' || viewMode === 'education' ? (
           /* 全屏视图（pipeline / whiteboard / linalg / solver / stats）。
              关键修复：与 SidePanel 相同，访问过的全屏视图始终保持挂载，仅用 CSS
              隐藏非激活视图，避免切换时组件卸载导致用户数据（矩阵/方程/结果等）丢失归零。 */
@@ -544,6 +551,7 @@ export function Workbench() {
       <FloatingCalculator />
       <SettingsPanel />
       <OnboardingOverlay />
+      <PracticeGuide />
     </motion.div>
   );
 }

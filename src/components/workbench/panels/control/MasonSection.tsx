@@ -15,6 +15,7 @@ import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
 import { masonGain, type MasonResult } from '@/lib/control/transferFunction';
+import { FormulaRenderer } from '@/components/workbench/FormulaRenderer';
 
 interface Row {
   id: number;
@@ -40,6 +41,14 @@ const EXAMPLES: { label: string; loops: string; paths: string; pairs?: string; t
     paths: '1:0',
   },
 ];
+
+/** 数值转 LaTeX 友好字符串（去掉浮点噪声）。 */
+function fmtNum(v: number): string {
+  if (!Number.isFinite(v)) return '\\infty';
+  const a = Math.abs(v);
+  if (a !== 0 && (a < 1e-6 || a > 1e6)) return v.toExponential(3).replace('e', '\\times 10^{').concat('}');
+  return String(Number(v.toPrecision(6)));
+}
 
 function parsePairs(s: string): [number, number][] {
   if (!s.trim()) return [];
@@ -203,21 +212,34 @@ export function MasonSection() {
       </div>
 
       {result && (
-        <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
-          {[
-            { label: '特征式 Δ', value: result.delta },
-            { label: '分子 ΣPₖΔₖ', value: result.numerator },
-            { label: '总增益 T', value: result.gain },
-            { label: '前向通路数', value: result.pathDeltas.length },
-          ].map((f) => (
-            <div key={f.label} className="rounded-md border border-border/40 bg-muted/30 px-2 py-1.5 text-center">
-              <div className="text-[9.5px] text-muted-foreground">{f.label}</div>
-              <div className="font-mono text-[12px] text-primary tabular-nums">
-                {Number.isFinite(f.value) ? Number(f.value).toPrecision(5) : '∞'}
+        <>
+          {/* 梅逊公式渲染预览 */}
+          <div className="rounded-md border border-border/40 bg-background/30 p-2.5">
+            <div className="text-[10px] text-muted-foreground mb-1">梅逊增益公式（渲染预览）</div>
+            <FormulaRenderer
+              latex={`T = \\dfrac{${fmtNum(result.numerator)}}{${fmtNum(result.delta)}} = ${fmtNum(result.gain)}`}
+              displayMode
+              fitToContainer
+              className="text-sm"
+            />
+          </div>
+
+          <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
+            {[
+              { label: '特征式 Δ', value: result.delta },
+              { label: '分子 ΣPₖΔₖ', value: result.numerator },
+              { label: '总增益 T', value: result.gain },
+              { label: '前向通路数', value: result.pathDeltas.length },
+            ].map((f) => (
+              <div key={f.label} className="rounded-md border border-border/40 bg-muted/30 px-2 py-1.5 text-center">
+                <div className="text-[9.5px] text-muted-foreground">{f.label}</div>
+                <div className="font-mono text-[12px] text-primary tabular-nums">
+                  {Number.isFinite(f.value) ? Number(f.value).toPrecision(5) : '∞'}
+                </div>
               </div>
-            </div>
-          ))}
-        </div>
+            ))}
+          </div>
+        </>
       )}
 
       {result && result.pathDeltas.length > 0 && (

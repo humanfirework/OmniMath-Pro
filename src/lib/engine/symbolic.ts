@@ -16,6 +16,7 @@
  */
 
 import { math } from './mathInstance';
+import { formatNumber } from './latex';
 
 export interface SymbolicResult {
   /** LaTeX-formatted result, suitable for KaTeX rendering. */
@@ -69,7 +70,7 @@ export async function symbolicIntegrate(
       latex: latex || expression,
       expression,
       steps: [
-        `\\int ${latexExpr(normalized)} \\, d${varName}`,
+        `\\int ${toMathLatex(normalized)} \\, d${varName}`,
         ...integrationHints(expr, varName),
         `= ${latex || latexExpr(expression)}`,
         `\\text{(常量 } C \\text{ 省略)}`,
@@ -99,7 +100,7 @@ export async function symbolicDefiniteIntegral(
 
     // Algebrite 未给出闭式结果 → Simpson 数值回退（Task 4.3）
     if (algebriteFailed(expression)) {
-      return simpsonFallback(expr, varName, a, b, latexExpr(normalized));
+      return simpsonFallback(expr, varName, a, b, toMathLatex(normalized));
     }
 
     let numerical: number | undefined;
@@ -116,9 +117,9 @@ export async function symbolicDefiniteIntegral(
       expression,
       numerical,
       steps: [
-        `\\int_{${a}}^{${b}} ${latexExpr(normalized)} \\, d${varName}`,
+        `\\int_{${a}}^{${b}} ${toMathLatex(normalized)} \\, d${varName}`,
         ...integrationHints(expr, varName),
-        `= ${latex || latexExpr(expression)}`,
+        `= ${latex || toMathLatex(expression)}`,
         ...(numerical !== undefined ? [`\\approx ${numerical}`] : []),
       ],
       success: true,
@@ -131,7 +132,11 @@ export async function symbolicDefiniteIntegral(
 
 /**
  * Compute the limit of `expr` as `varName` approaches `point`.
- * Falls back to a numeric approximation if the symbolic form is unavailable.
+ *
+ * IMPORTANT: Algebrite's `limit()` is effectively a no-op in this version —
+ * it echoes back the unevaluated call string (e.g. `limit(sin(x)/x,x,0)`)
+ * for EVERY input. We therefore detect that echo and fall back to a robust
+ * numeric limit. A small numeric approximation is returned when possible.
  */
 export async function symbolicLimit(
   expr: string,
@@ -143,6 +148,12 @@ export async function symbolicLimit(
     const normalized = normalizeExpression(expr);
     const pt = typeof point === 'number' ? point.toString() : point;
     const expression = Algebrite.run(`limit(${normalized}, ${varName}, ${pt})`);
+
+    // Algebrite's limit echoes the call back un-evaluated → use numeric.
+    if (algebriteFailed(expression) || isUnevaluatedLimit(expression, normalized, varName)) {
+      return numericLimitFallback(expr, varName, point);
+    }
+
     const latex = Algebrite.run(`printlatex(limit(${normalized}, ${varName}, ${pt}))`);
 
     let numerical: number | undefined;
@@ -154,35 +165,19 @@ export async function symbolicLimit(
       // ignore
     }
 
-    if (algebriteFailed(expression)) {
-      // Fallback to numeric limit
-      if (numerical !== undefined) {
-        return {
-          latex: numerical.toString(),
-          expression: numerical.toString(),
-          numerical,
-          steps: [
-            `\\lim_{${varName} \\to ${pt}} ${latexExpr(normalized)}`,
-            `\\approx ${numerical}`,
-          ],
-          success: true,
-        };
-      }
-      return fail('Algebrite could not compute this limit.');
-    }
-
     return {
       latex: latex || expression,
       expression,
       numerical,
       steps: [
-        `\\lim_{${varName} \\to ${pt}} ${latexExpr(normalized)}`,
-        `= ${latex || latexExpr(expression)}`,
+        `\\lim_{${varName} \\to ${pt}} ${toMathLatex(normalized)}`,
+        `= ${latex || toMathLatex(expression)}`,
       ],
       success: true,
     };
   } catch (err) {
-    return fail(`符号极限失败：${(err as Error).message}`);
+    // 符号路径抛错 → 数值极限回退
+    return numericLimitFallback(expr, varName, point);
   }
 }
 
@@ -371,6 +366,115 @@ function latexExpr(expr: string): string {
   if (expr.includes('\\')) return expr;
   // Otherwise, wrap math characters in a math environment.
   return `\\text{${expr.replace(/\\/g, '\\\\').replace(/\{/g, '\\{').replace(/\}/g, '\\}')}}`;
+}
+
+/**
+ * Convert a plain mathjs-style expression string into display LaTeX.
+ * This fixes the "乱码" (garbled) first-step in integral / limit output:
+ * previously the code referenced an undefined `toMathLatex`, which threw
+ * `toMathLatex is not defined` at runtime. We parse through the shared
+ * mathjs instance so custom rendering (e.g. `exp(x)` → `e^{x}`) is applied
+ * consistently with the rest of the app.
+ */
+function toMathLatex(expr: string): string {
+  try {
+    const node = math.parse(expr);
+    return node.toTex({ implicit: 'hide' });
+  } catch {
+    return latexExpr(expr);
+  }
+}
+
+/**
+ * Detect whether an Algebrite limit result is an *unevaluated echo*.
+ * When Algebrite cannot (or won't) evaluate a limit it returns the raw
+ * call string, e.g. `limit(sin(x)/x,x,0)`. Such a string must never be
+ * shown to the user as if it were the answer. A real numeric answer will
+ * not contain a `limit(` token.
+ */
+function isUnevaluatedLimit(expression: string, normalized: string, varName: string): boolean {
+  if (!expression) return false;
+  // 结果仍含有 "limit(" 调用 → 未求值
+  if (/\blimit\s*\(/.test(expression)) return true;
+  // 结果与输入几乎相同（只是被原样返回）
+  const normalizedCompact = normalized.replace(/\s+/g, '');
+  const expressionCompact = expression.replace(/\s+/g, '');
+  if (expressionCompact.includes(normalizedCompact) && expressionCompact.includes(varName)) {
+    return true;
+  }
+  return false;
+}
+
+/**
+ * Robust numeric limit fallback (Algebrite can't compute limits here).
+ * Samples the expression near `point` (or at large magnitudes for ±∞)
+ * and reports the value when left/right converge. Returns a failed result
+ * when the (two-sided) limit does not exist.
+ */
+function numericLimitFallback(
+  expr: string,
+  varName: string,
+  point: number | string,
+): SymbolicResult & { numerical?: number } {
+  try {
+    const node = math.parse(expr);
+    const f = (x: number): number => {
+      try {
+        const v = node.evaluate({ [varName]: x });
+        return typeof v === 'number' ? v : NaN;
+      } catch {
+        return NaN;
+      }
+    };
+
+    const isInf =
+      typeof point === 'string' && /inf|∞/i.test(point);
+    const pointLabel = isInf ? '\\infty' : String(point);
+
+    let numerical: number | null = null;
+
+    if (isInf) {
+      // ±∞：采样足够大的自变量方向
+      const sign = typeof point === 'string' && point.trim().startsWith('-') ? -1 : 1;
+      const mags = [1e3, 1e5, 1e7, 1e9];
+      const vals = mags.map((m) => f(sign * m)).filter(Number.isFinite);
+      const last = vals.at(-1);
+      const secondLast = vals.at(-2);
+      if (last !== undefined && secondLast !== undefined && Math.abs(last - secondLast) < 1e-4) {
+        numerical = last;
+      } else if (last !== undefined) {
+        numerical = last;
+      }
+    } else if (typeof point === 'number' && Number.isFinite(point)) {
+      // 有限点：左/右逼近，双侧收敛才给出极限
+      const eps = [1e-3, 1e-5, 1e-7, 1e-9];
+      const left = eps.map((e) => f(point - e)).filter(Number.isFinite);
+      const right = eps.map((e) => f(point + e)).filter(Number.isFinite);
+      const lv = left.at(-1);
+      const rv = right.at(-1);
+      if (lv !== undefined && rv !== undefined && Math.abs(lv - rv) < 1e-4) {
+        numerical = (lv + rv) / 2;
+      }
+    }
+
+    if (numerical === null || !Number.isFinite(numerical)) {
+      return fail(`极限不存在或无法数值逼近：\\lim_{${varName} \\to ${pointLabel}}`);
+    }
+
+    return {
+      latex: `\\lim_{${varName} \\to ${pointLabel}} ${toMathLatex(expr)} = ${formatNumber(numerical)}`,
+      expression: String(numerical),
+      numerical,
+      steps: [
+        `\\lim_{${varName} \\to ${pointLabel}} ${toMathLatex(expr)}`,
+        `\\text{符号求解不可用，改用数值逼近}`,
+        `\\approx ${formatNumber(numerical)}`,
+      ],
+      success: true,
+    };
+  } catch (err) {
+    return fail(`数值极限失败：${(err as Error).message}`);
+  }
 }
 
 function fail(message: string): SymbolicResult {

@@ -112,7 +112,7 @@ export function RunResultsHost() {
       ref={(el) => {
         if (el) sizeRef.current = { w: el.clientWidth, h: el.clientHeight };
       }}
-      className="pointer-events-none absolute inset-0 z-30"
+      className="run-results-host pointer-events-none absolute inset-0 z-30"
     >
       {panels.length > 0 && (
         <button

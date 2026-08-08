@@ -10,7 +10,7 @@
  */
 
 import { useRef, useState } from 'react';
-import { motion, AnimatePresence } from 'framer-motion';
+import { AnimatePresence } from 'framer-motion';
 import {
   BarChart3,
   Sigma,
@@ -120,22 +120,13 @@ export function StatisticsWorkbench() {
         </div>
 
         <ScrollArea className="flex-1 min-h-0">
-          <AnimatePresence mode="wait">
-            <motion.div
-              key={nav}
-              initial={{ opacity: 0, y: 6 }}
-              animate={{ opacity: 1, y: 0 }}
-              exit={{ opacity: 0, y: -6 }}
-              transition={{ duration: 0.18, ease: 'easeOut' }}
-              className="p-4"
-              ref={contentRef}
-            >
-              {nav === 'descriptive' && <DescriptiveStatsTab fullscreen />}
-              {nav === 'distribution' && <DistributionTab fullscreen />}
-              {nav === 'hypothesis' && <HypothesisTab />}
-              {nav === 'regression' && <RegressionTab />}
-            </motion.div>
-          </AnimatePresence>
+          {/* 保持挂载：各统计子模块仅用 CSS 隐藏，切换时保留输入/结果，避免回到默认 */}
+          <div className="p-4">
+            <div className={cn(nav !== 'descriptive' && 'hidden')}><DescriptiveStatsTab fullscreen /></div>
+            <div className={cn(nav !== 'distribution' && 'hidden')}><DistributionTab fullscreen /></div>
+            <div className={cn(nav !== 'hypothesis' && 'hidden')}><HypothesisTab /></div>
+            <div className={cn(nav !== 'regression' && 'hidden')}><RegressionTab /></div>
+          </div>
         </ScrollArea>
       </main>
 

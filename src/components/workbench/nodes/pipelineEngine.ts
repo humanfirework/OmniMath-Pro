@@ -57,6 +57,12 @@ export interface PortDef {
   /** i18n key — resolved by the UI (supports dot-separated nested paths). */
   labelKey: string;
   type: PortDataType;
+  /**
+   * 可选输入端口：为 true 时，即使该端口没有连线/值为 undefined，也不会
+   * 阻止节点执行（用于「二选一」或「可省略」输入，如 curve-animate 的
+   * animation 与 frames 端口，用户连其中一个即可）。默认 false（必须就绪）。
+   */
+  optional?: boolean;
 }
 
 /**
@@ -103,6 +109,17 @@ export interface PipelineEdge {
 export interface PipelineContext {
   /** Variables from the workbench store (for the Variable node). */
   variables: Record<string, unknown>;
+  /**
+   * 节点内长任务的进度回报（如视频→曲线逐帧处理）。
+   * `fraction` ∈ [0,1]；`label` 为可选描述（如「处理第 x/y 帧」），UI 可展示。
+   * 节点 render 期间可多次调用；未提供时保持屏静。
+   */
+  onProgress?: (fraction: number, label?: string) => void;
+  /**
+   * 供长任务节点（如视频→曲线）在逐帧之间检查用户是否手动终止。
+   * 返回 true 时节点应尽快抛出 PipelineCancelledError，让流水线立刻停下。
+   */
+  shouldCancel?: () => boolean;
 }
 
 export interface NodeTypeDef {
@@ -450,11 +467,24 @@ function matrixRank(m: any): number {
  * populated. Nodes involved in cycles are marked with an error and
  * skipped.
  */
+/** 用户手动终止流水线时抛出的错误。调用方据此区分「终止」与「失败」。 */
+export class PipelineCancelledError extends Error {
+  constructor() {
+    super('流水线已终止');
+    this.name = 'PipelineCancelledError';
+  }
+}
+
 export async function executePipeline(
   nodes: PipelineNode[],
   edges: PipelineEdge[],
   ctx: PipelineContext,
-  opts?: { stopAt?: string; onProgress?: (done: number, total: number) => void },
+  opts?: {
+    stopAt?: string;
+    onProgress?: (done: number, total: number) => void;
+    /** 每次执行节点前检查；返回 true 则立即终止并抛 PipelineCancelledError。 */
+    shouldCancel?: () => boolean;
+  },
 ): Promise<PipelineNode[]> {
   const byId = new Map<string, PipelineNode>();
   for (const n of nodes) byId.set(n.id, { ...n });
@@ -497,6 +527,10 @@ export async function executePipeline(
   const total = effectiveOrder.length;
   for (let step = 0; step < effectiveOrder.length; step++) {
     const id = effectiveOrder[step];
+    // 用户手动终止：在逐节点之间检查，抛出可识别错误，UI 据此显示「已终止」。
+    if (opts?.shouldCancel?.()) {
+      throw new PipelineCancelledError();
+    }
     // P2-5: 逐节点上报进度（供 UI 显示「运行中」进度条）。
     opts?.onProgress?.(step + 1, total);
     const node = byId.get(id)!;
@@ -539,13 +573,14 @@ export async function executePipeline(
       node.error = undefined;
       continue;
     }
-    // Also skip if some inputs are connected but not ALL declared inputs
-    // have values yet (e.g. a node with 2 inputs where only 1 is wired).
-    // This prevents partially-connected nodes from throwing on undefined
-    // inputs (e.g. math.inv(undefined), math.derivative(undefined)).
+    // Also skip if some inputs are connected but NOT all REQUIRED (non-optional)
+    // inputs have values yet (e.g. a node with 2 inputs where only 1 is wired).
+    // Optional ports (port.optional === true) never gate execution — this lets
+    // nodes with "either/or" inputs (like curve-animate's animation | frames)
+    // run even when only one of them is connected.
     if (def.inputs.length > 0 && hasAnyInput) {
-      const allInputsReady = def.inputs.every((port) => ins[port.id] !== undefined);
-      if (!allInputsReady) {
+      const requiredReady = def.inputs.every((port) => port.optional || ins[port.id] !== undefined);
+      if (!requiredReady) {
         node.result = null;
         node.outputs = {};
         node.error = undefined;

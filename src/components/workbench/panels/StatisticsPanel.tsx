@@ -384,6 +384,7 @@ interface StatChartProps {
   showPoints?: boolean;
   residuals?: boolean;
   band?: boolean;
+  minHeight?: number;
 }
 
 const CHART_W = 280;
@@ -405,6 +406,7 @@ interface HistogramChartProps {
   density?: boolean;
   cumulative?: boolean;
   showPoints?: boolean;
+  minHeight?: number;
 }
 
 const MIN_BAR_WIDTH = 28;
@@ -483,7 +485,7 @@ function StatStrip({ data }: { data: number[] }) {
   );
 }
 
-function HistogramChart({ data, zoomed = false, binRule = 'sturges', density = false, cumulative = false, showPoints = false }: HistogramChartProps) {
+function HistogramChart({ data, zoomed = false, binRule = 'sturges', density = false, cumulative = false, showPoints = false, minHeight = 200 }: HistogramChartProps) {
   const [hover, setHover] = useState<number | null>(null);
   const { ref, width } = useMeasureWidth<HTMLDivElement>();
   const n = data.length;
@@ -540,7 +542,7 @@ function HistogramChart({ data, zoomed = false, binRule = 'sturges', density = f
   const sigma = Math.sqrt(data.reduce((a, b) => a + (b - mean) ** 2, 0) / n);
   const normalDensity = (x: number) =>
     (1 / (sigma * Math.sqrt(2 * Math.PI))) * Math.exp(-((x - mean) ** 2) / (2 * sigma * sigma));
-  const ch = zoomed ? 280 : 200;
+  const ch = Math.max(zoomed ? 280 : 200, minHeight);
   // 自适应：优先容器宽度，池化最小宽度（避免 null 时跳动）。
   const baseW = Math.max(width, CHART_W);
   const contentW = Math.max(baseW, k * MIN_BAR_WIDTH + CHART_PAD.l + CHART_PAD.r);
@@ -792,7 +794,7 @@ function quantileSorted(sorted: number[], q: number): number {
   return sorted[base];
 }
 
-function BoxPlotChart({ data, vertical = false, showPoints = false }: { data: number[]; vertical?: boolean; showPoints?: boolean }) {
+function BoxPlotChart({ data, vertical = false, showPoints = false, minHeight = 200 }: { data: number[]; vertical?: boolean; showPoints?: boolean; minHeight?: number }) {
   const { ref, width } = useMeasureWidth<HTMLDivElement>();
   if (data.length < 2) return <ChartEmpty label="需要至少 2 个数据点" />;
   const sorted = [...data].sort((a, b) => a - b);
@@ -848,7 +850,7 @@ function BoxPlotChart({ data, vertical = false, showPoints = false }: { data: nu
 
   return (
     <div ref={ref} className="w-full">
-      <svg viewBox={`0 0 ${W} ${H}`} className="w-full" style={{ height: 200 }}>
+      <svg viewBox={`0 0 ${W} ${H}`} className="w-full" style={{ height: minHeight }}>
         {/* 值轴刻度 */}
         {[0, 0.25, 0.5, 0.75, 1].map((t) => {
           const vv = vMin + t * range;
@@ -971,7 +973,7 @@ function BoxPlotChart({ data, vertical = false, showPoints = false }: { data: nu
   );
 }
 
-function ScatterChart({ points, regressionLine, residuals = false, band = false }: { points: Array<{ x: number; y: number }>; regressionLine?: { slope: number; intercept: number }; residuals?: boolean; band?: boolean }) {
+function ScatterChart({ points, regressionLine, residuals = false, band = false, minHeight = 200 }: { points: Array<{ x: number; y: number }>; regressionLine?: { slope: number; intercept: number }; residuals?: boolean; band?: boolean; minHeight?: number }) {
   const { ref, width } = useMeasureWidth<HTMLDivElement>();
   const [hover, setHover] = useState<number | null>(null);
   if (points.length < 1) return <ChartEmpty label="需要 (x, y) 数据对" />;
@@ -1049,7 +1051,7 @@ function ScatterChart({ points, regressionLine, residuals = false, band = false 
 
   return (
     <div ref={ref} className="w-full">
-      <svg viewBox={`0 0 ${W} ${H}`} className="w-full" style={{ height: 200 }}>
+      <svg viewBox={`0 0 ${W} ${H}`} className="w-full" style={{ height: minHeight }}>
         {/* grid + ticks */}
         {[0, 0.25, 0.5, 0.75, 1].map((t) => {
           const xv = loX + t * xRange;
@@ -1275,11 +1277,11 @@ function QQPlotChart({ data }: { data: number[] }) {
   );
 }
 
-function StatChart({ type, data, points, regressionLine, vertical = false, showPoints = false, residuals = false, band = false }: StatChartProps) {
+function StatChart({ type, data, points, regressionLine, vertical = false, showPoints = false, residuals = false, band = false, minHeight = 200 }: StatChartProps) {
   if (type === 'histogram') return <HistogramChart data={data ?? []} />;
-  if (type === 'boxplot') return <BoxPlotChart data={data ?? []} vertical={vertical} showPoints={showPoints} />;
+  if (type === 'boxplot') return <BoxPlotChart data={data ?? []} vertical={vertical} showPoints={showPoints} minHeight={minHeight} />;
   if (type === 'qq') return <QQPlotChart data={data ?? []} />;
-  return <ScatterChart points={points ?? []} regressionLine={regressionLine} residuals={residuals} band={band} />;
+  return <ScatterChart points={points ?? []} regressionLine={regressionLine} residuals={residuals} band={band} minHeight={minHeight} />;
 }
 
 /* ================================================================== *
@@ -1870,7 +1872,7 @@ export function DescriptiveStatsTab({ fullscreen = false }: { fullscreen?: boole
             className="rounded-md border border-border/40 bg-background/30 p-1.5 text-foreground space-y-2"
           >
             {chartType === 'histogram' && (
-              <div className="grid grid-cols-1 lg:grid-cols-[1fr_auto] gap-2">
+              <div className="grid grid-cols-1 lg:grid-cols-[minmax(0,1fr)_auto] gap-2 lg:max-w-[820px]">
                 <div className="relative">
                   <div className="flex items-center justify-between mb-1 px-1">
                     <div className="text-[10.5px] text-muted-foreground">
@@ -1942,6 +1944,7 @@ export function DescriptiveStatsTab({ fullscreen = false }: { fullscreen?: boole
                     density={density}
                     cumulative={cumulative}
                     showPoints={showHistPoints}
+                    minHeight={440}
                   />
                 </div>
                 {distSummary && (
@@ -1993,7 +1996,7 @@ export function DescriptiveStatsTab({ fullscreen = false }: { fullscreen?: boole
                     数据点
                   </button>
                 </div>
-                <StatChart type="boxplot" data={data} vertical={boxVertical} showPoints={showBoxPoints} />
+                <StatChart type="boxplot" data={data} vertical={boxVertical} showPoints={showBoxPoints} minHeight={440} />
                 {five && (
                   <>
                     <div className="grid grid-cols-5 gap-2 text-center text-xs">
@@ -2038,7 +2041,7 @@ export function DescriptiveStatsTab({ fullscreen = false }: { fullscreen?: boole
             )}
 
             {chartType === 'scatter' && (
-              <StatChart type="scatter" points={scatterPoints} />
+              <StatChart type="scatter" points={scatterPoints} minHeight={440} />
             )}
 
             {chartType === 'charts' && (
@@ -2464,9 +2467,10 @@ function distXRange(distType: DistType, p: Record<string, number>): [number, num
 function DistributionPreview({ distType, params }: { distType: DistType; params: Record<string, number> }) {
   const isDiscrete =
     distType === 'poisson' || distType === 'binomial' || distType === 'geometric' || distType === 'negbinomial';
-  const W = 340;
-  const H = 190;
-  const PAD = 12;
+  const W = 360;
+  const H = 220;
+  // 四周留白放大：让分布曲线更舒展，顶部保留约 1/5 空白便于读图。
+  const PAD = 20;
 
   const { poly, stems, baseline } = useMemo(() => {
     const [x0, x1] = distXRange(distType, params);
@@ -2488,7 +2492,8 @@ function DistributionPreview({ distType, params }: { distType: DistType; params:
         if (isFinite(y)) { samples.push({ x, y }); if (y > maxY) maxY = y; }
       }
     }
-    const yScale = maxY > 0 ? maxY * 1.08 : 1;
+    // 顶部留出约 1/5 空白（曲线峰值不贴顶）。
+    const yScale = maxY > 0 ? maxY * 1.25 : 1;
     const px = (x: number) => PAD + ((x - x0) / span) * (W - 2 * PAD);
     const py = (y: number) => H - PAD - (y / yScale) * (H - 2 * PAD);
     const baseline = H - PAD;
@@ -2975,7 +2980,7 @@ export function DistributionTab({ fullscreen = false }: { fullscreen?: boolean }
   };
 
   return (
-    <div className="grid grid-cols-1 lg:grid-cols-[minmax(0,460px)_minmax(0,1fr)] gap-4 p-3">
+    <div className="grid grid-cols-1 lg:grid-cols-[minmax(0,460px)_minmax(0,1fr)] gap-4 p-3 lg:max-w-6xl">
       <div className="space-y-3 min-w-0">
       {/* Distribution selector */}
       <div>
@@ -3141,7 +3146,7 @@ export function DistributionTab({ fullscreen = false }: { fullscreen?: boolean }
       </div>
 
       {/* 右侧栏 — 交互式探索器 + 分布拟合 */}
-      <div className="space-y-3 min-w-0">
+      <div className="space-y-3 min-w-0 max-w-[720px]">
         <div className="rounded-md border border-border/40 bg-background/30 p-2">
           <div className="flex items-center gap-1 text-[10.5px] font-medium text-muted-foreground mb-1.5 px-0.5">
             <Sparkles className="size-3" />
@@ -3200,7 +3205,7 @@ export function HypothesisTab() {
   const [testType, setTestType] = useState<TestType>('ttest');
 
   return (
-    <div className="p-3 space-y-3">
+    <div className="p-3 space-y-3 lg:max-w-lg">
       <div>
         <label className="text-[11px] text-muted-foreground mb-1 block">检验类型</label>
         <Select value={testType} onValueChange={(v) => setTestType(v as TestType)}>
@@ -4114,7 +4119,7 @@ export function RegressionTab() {
     : '';
 
   return (
-    <div className="p-3 space-y-3">
+    <div className="p-3 space-y-3 lg:max-w-2xl">
       <div>
         <label className="text-[11px] text-muted-foreground mb-1 block">X 数据（逗号/空格分隔）</label>
         <Textarea
@@ -4253,6 +4258,7 @@ export function RegressionTab() {
             regressionLine={regressionLine}
             residuals={showResiduals}
             band={showBand}
+            minHeight={320}
           />
           {liveResult && (
             <div className="mt-1 flex flex-wrap items-center gap-3 text-[10px] text-muted-foreground px-1">

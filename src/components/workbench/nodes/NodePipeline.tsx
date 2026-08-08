@@ -34,6 +34,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import {
   ArrowLeft,
   Play,
+  Square,
   Trash2,
   FileCode2,
   Plus,
@@ -144,7 +145,7 @@ import {
   TooltipTrigger,
 } from '@/components/ui/tooltip';
 import { cn } from '@/lib/utils';
-import { t } from '@/lib/i18n';
+import { t, useLocale } from '@/lib/i18n';
 import type { TranslationDict } from '@/lib/i18n';
 import { toast } from 'sonner';
 import { useWorkbenchStore, type PreviewTab } from '@/lib/store/workbench';
@@ -163,6 +164,7 @@ import {
   getPortPosition,
   canConnect,
   executePipeline,
+  PipelineCancelledError,
   exportPipelineToScript,
   getNodeVariableDeps,
   traceErrorChain,
@@ -287,6 +289,8 @@ function pushTransferResults(
           width: 2,
           points: analysis.step.map((p) => [p.t, p.y] as [number, number]),
         }],
+        axisX: '时间 t (s)',
+        axisY: '响应 y(t)',
       });
     }
 
@@ -310,6 +314,8 @@ function pushTransferResults(
             points: analysis.bode.map((p) => [p.f, p.phaseDeg] as [number, number]),
           },
         ],
+        axisX: '频率 f (Hz)',
+        axisY: '幅值 (dB) / 相位 (°)',
       });
     }
   }
@@ -671,6 +677,7 @@ function wouldCreateCycle(
  * Main component
  * ================================================================== */
 export function NodePipeline() {
+  useLocale();
   // PortPositionsProvider lives outside so the inner component can read
   // measured port offsets via usePortPositions() for accurate edge routing.
   return (
@@ -682,7 +689,6 @@ export function NodePipeline() {
 
 function NodePipelineInner() {
   const setEditorContent = useWorkbenchStore((s) => s.setEditorContent);
-  const addPlot = useWorkbenchStore((s) => s.addPlot);
   const addResult = useWorkbenchStore((s) => s.addResult);
   const variables = useWorkbenchStore((s) => s.variables);
   const setViewMode = useWorkbenchStore((s) => s.setViewMode);
@@ -813,6 +819,18 @@ function NodePipelineInner() {
   const [runProgress, setRunProgress] = useState<{ done: number; total: number } | null>(null);
   const runProgressRef = useRef(runProgress);
   useEffect(() => { runProgressRef.current = runProgress; }, [runProgress]);
+  // 用户手动终止：ref 跨渲染保持，供 executePipeline 的 shouldCancel 轮询读取。
+  const cancelRunRef = useRef(false);
+  // 终止当前流水线：置位取消标记，长任务节点与逐节点循环都会尽快退出。
+  const stopPipeline = useCallback(() => { cancelRunRef.current = true; }, []);
+  // 节点内长任务进度（如视频→曲线逐帧处理）。pipeline 运行期间由 ctx.onProgress 写入。
+  const [nodeProgress, setNodeProgress] = useState<{ fraction: number; label?: string } | null>(null);
+  const nodeProgressRef = useRef(nodeProgress);
+  useEffect(() => { nodeProgressRef.current = nodeProgress; }, [nodeProgress]);
+  // 节点内长任务进度回调：写入 state 供浮层展示。
+  const handleNodeProgress = useCallback((fraction: number, label?: string) => {
+    setNodeProgress({ fraction, label });
+  }, []);
 
   // Refs for canvas + content (transform layer).
   const canvasRef = useRef<HTMLDivElement>(null);
@@ -885,125 +903,6 @@ function NodePipelineInner() {
     },
     [],
   );
-
-  /* ── Execution ───────────────────────────────────────────────── */
-  // Compute a sensible y-range from a sampled plot so the 2D panel can
-  // show the curve without clipping (previously hard-coded to [-5, 5]).
-  const computeYRange = useCallback(
-    (samples: Array<[number, number]>): [number, number] => {
-      let min = Infinity;
-      let max = -Infinity;
-      for (const [, y] of samples) {
-        if (Number.isFinite(y)) {
-          if (y < min) min = y;
-          if (y > max) max = y;
-        }
-      }
-      if (!Number.isFinite(min) || !Number.isFinite(max)) return [-5, 5];
-      if (min === max) {
-        const pad = Math.max(1, Math.abs(min) * 0.1);
-        return [min - pad, max + pad];
-      }
-      const pad = (max - min) * 0.1;
-      return [min - pad, max + pad];
-    },
-    [],
-  );
-
-  // Push every plot-output node's curve to the workbench store so the
-  // 2D panel renders it. Used both by manual run and auto-execute.
-  // Returns the number of plots pushed (P2: 用于判断是否要切到 plot2d tab).
-  const pushPlotsToWorkbench = useCallback(
-    (executed: PipelineNode[]): number => {
-      let pushed = 0;
-      for (const n of executed) {
-        if (n.type === 'plot-output' && n.outputs?.plot) {
-          const plot = n.outputs.plot as {
-            expr: string;
-            xMin: number;
-            xMax: number;
-            samples: Array<[number, number]>;
-          };
-          addPlot({
-            expression: plot.expr,
-            xRange: [plot.xMin, plot.xMax],
-            yRange: computeYRange(plot.samples ?? []),
-            color: '#a78bfa',
-            plotType: 'cartesian',
-            visible: true,
-            width: 2,
-          });
-          pushed++;
-        }
-      }
-      return pushed;
-    },
-    [addPlot, computeYRange],
-  );
-
-  const pushCurvesToWorkbench = useCallback((nodes: PipelineNode[]) => {
-    const store = useWorkbenchStore.getState ? useWorkbenchStore.getState() : null;
-    if (!store?.clearCurveSets) return;
-    store.clearCurveSets();
-    for (const node of nodes) {
-      if (node.type !== 'plot-curves') continue;
-      const out = node.outputs?.curves;
-      if (!out || typeof out !== 'object') continue;
-      const o = out as Record<string, unknown>;
-      const curves = Array.isArray((o as any).curves) ? (o as any).curves : [];
-      const width = typeof (o as any).width === 'number' ? (o as any).width : 0;
-      const height = typeof (o as any).height === 'number' ? (o as any).height : 0;
-      if (curves.length <= 0 || width <= 0 || height <= 0) continue;
-      const color = typeof node.config.color === 'string' ? node.config.color : '#a78bfa';
-      const strokeWidth = typeof node.config.width === 'number' ? node.config.width : 2;
-      // 容错增强：把 curve-fit 产出的候选档位 + 原始折线转发到 2D 画布，
-      // 供「人工修正」面板「切换候选结果 / 调整参数重新拟合」使用。
-      const candidates = Array.isArray((o as any).candidates) ? (o as any).candidates : undefined;
-      const originalPolylines = Array.isArray((o as any).originalPolylines)
-        ? (o as any).originalPolylines
-        : undefined;
-      // P0-3：curve-fit 输出已是「像素→数学」翻转后的数学坐标（数据层单次翻转）。
-      // 2D 画布不得再按 plot-curves 的 flip 配置翻一次，否则点上下颠倒（double flip）。
-      store.addCurveSet({
-        curves,
-        width,
-        height,
-        color,
-        strokeWidth,
-        flipX: false,
-        flipY: false,
-        candidates,
-        originalPolylines,
-        presetId: 'balanced',
-      } as any);
-    }
-    // 视频/姿态 → 曲线动画：把完整逐帧序列推送到 2D 画布，由画布内置的
-    // 时间轴滑块/播放控制逐帧播放（frames + fps）；`curves` 取第 0 帧作为静态回退。
-    for (const node of nodes) {
-      if (node.type !== 'curve-animate') continue;
-      const anim = node.outputs?.animation as
-        | { frames?: unknown[]; width?: number; height?: number; color?: string; strokeWidth?: number; fps?: number }
-        | undefined;
-      if (!anim || !Array.isArray(anim.frames) || anim.frames.length === 0) continue;
-      const firstFrame = anim.frames[0];
-      if (!Array.isArray(firstFrame)) continue;
-      const width = typeof anim.width === 'number' ? anim.width : 0;
-      const height = typeof anim.height === 'number' ? anim.height : 0;
-      if (firstFrame.length <= 0 || width <= 0 || height <= 0) continue;
-      const frames = anim.frames.filter((f): f is unknown[] => Array.isArray(f));
-      store.addCurveSet({
-        curves: firstFrame,
-        frames,
-        fps: typeof anim.fps === 'number' ? anim.fps : 30,
-        width,
-        height,
-        color: anim.color ?? '#a78bfa',
-        strokeWidth: anim.strokeWidth ?? 2,
-        flipY: true,
-        flipX: false,
-      } as any);
-    }
-  }, []);
 
   /* ── 独立运行结果面板：把 plot/curve/animation 输出归一化后送入 runResults store ── */
   const pushRunResults = useCallback((nodes: PipelineNode[], graphEdges: PipelineEdge[] = []) => {
@@ -1114,6 +1013,7 @@ function NodePipelineInner() {
 
   const runPipeline = useCallback(async () => {
     if (pipelineRunning) return;
+    cancelRunRef.current = false;
     setPipelineRunning(true);
     setRunProgress(null);
     try {
@@ -1121,6 +1021,8 @@ function NodePipelineInner() {
         variables: Object.fromEntries(
           Object.entries(variables).map(([k, v]) => [k, v.value]),
         ),
+        onProgress: handleNodeProgress,
+        shouldCancel: () => cancelRunRef.current,
       };
 
       // Simulink-style 仿真：若图中存在仿真节点，走定步长求解器，
@@ -1144,7 +1046,7 @@ function NodePipelineInner() {
               width: 2,
               points: series.t.map((t, i) => [t, series.y[i] ?? 0] as [number, number]),
             }];
-            useRunResultsStore.getState().addRunResult({ title: nodeTitle(n), kind: 'plot', curves });
+            useRunResultsStore.getState().addRunResult({ title: nodeTitle(n), kind: 'plot', curves, axisX: '时间 t (s)', axisY: '输出 y(t)' });
           });
         }
         // 自控：sim-transfer-fn 是批量分析节点（非仿真逐步块），此路径不经过
@@ -1164,11 +1066,20 @@ function NodePipelineInner() {
 
       executed = await executePipeline(nodes, edges, ctx, {
         onProgress: (done, total) => setRunProgress({ done, total }),
+        shouldCancel: () => cancelRunRef.current,
       });
 
       // Side-effects: plot / curve / animation 输出统统进入独立运行结果面板，
       // 不再 push 到 2D 绘图工作台 store（彻底解耦）、不再自动切回 plot2d tab。
       pushRunResults(executed, edges);
+      // 运行结果提示：告知已生成多少个独立浮窗，避免用户「转完不知道结果在哪」。
+      const _count = useRunResultsStore.getState().panels.length;
+      if (_count > 0) {
+        toast.success('流水线执行完成', {
+          description: `已在右侧浮窗生成 ${_count} 个结果面板（可拖拽/缩放，右上角可关闭全部）`,
+          duration: 3200,
+        });
+      }
       for (const n of executed) {
         if (n.type === 'display' && n.result !== undefined && n.result !== null) {
           const r = n.result;
@@ -1201,14 +1112,20 @@ function NodePipelineInner() {
         }
       }
     } catch (err) {
-      console.error('[NodePipeline] runPipeline error:', err);
-      toast.error('流水线执行失败', {
-        description: (err as Error).message,
-        duration: 4000,
-      });
+      if (err instanceof PipelineCancelledError) {
+        // 用户手动终止：不算失败，仅提示。
+        toast.info('流水线已终止', { duration: 2000 });
+      } else {
+        console.error('[NodePipeline] runPipeline error:', err);
+        toast.error('流水线执行失败', {
+          description: (err as Error).message,
+          duration: 4000,
+        });
+      }
     } finally {
       setPipelineRunning(false);
       setRunProgress(null);
+      setNodeProgress(null);
     }
   }, [nodes, edges, variables, simConfig, pushRunResults, addResult, pipelineRunning]);
 
@@ -1225,6 +1142,7 @@ function NodePipelineInner() {
         variables: Object.fromEntries(
           Object.entries(variables).map(([k, v]) => [k, v.value]),
         ),
+        onProgress: handleNodeProgress,
       };
       const executed = await executePipeline(nodes, edges, ctx, {
         stopAt: selectedId,
@@ -1232,7 +1150,8 @@ function NodePipelineInner() {
       });
       setNodes(executed);
       setComputeTick((n) => n + 1);
-      pushCurvesToWorkbench(executed);
+      // 独立运行结果面板（与 2D 绘图彻底解耦）。
+      pushRunResults(executed, edges);
       toast.success('已执行到选中节点', {
         description: '下游节点已暂停，可继续排查',
         duration: 2500,
@@ -1242,8 +1161,9 @@ function NodePipelineInner() {
     } finally {
       setPipelineRunning(false);
       setRunProgress(null);
+      setNodeProgress(null);
     }
-  }, [selectedId, nodes, edges, variables, pushCurvesToWorkbench, pipelineRunning]);
+  }, [selectedId, nodes, edges, variables, pushRunResults, pipelineRunning]);
 
   /* ── Auto-execute on graph / config change (debounced) ───────── */
   useEffect(() => {
@@ -1254,6 +1174,7 @@ function NodePipelineInner() {
             variables: Object.fromEntries(
               Object.entries(variables).map(([k, v]) => [k, v.value]),
             ),
+            onProgress: handleNodeProgress,
           };
           // 关键修复：自动执行必须与手动「运行」走同一判别逻辑。
           // 之前这里无条件调用 executePipeline（常规数据流 + Kahn 拓扑排序），
@@ -1287,18 +1208,21 @@ function NodePipelineInner() {
             });
             return changed ? next : prev;
           });
-          pushCurvesToWorkbench(executed);
+          // 独立运行结果面板（与 2D 绘图彻底解耦），避免蓝图结果污染 2D 绘图。
+          pushRunResults(executed, edges);
         } catch (err) {
           // Auto-execute failures should be silent — the user didn't trigger
           // them, and frequent toasts would be annoying. Log for debugging.
           console.warn('[NodePipeline] auto-execute error:', err);
+        } finally {
+          setNodeProgress(null);
         }
       })().catch((err) => {
         console.warn('[NodePipeline] auto-execute unhandled promise error:', err);
       });
     }, 180);
     return () => clearTimeout(id);
-  }, [nodes, edges, variables, simConfig, pushCurvesToWorkbench]);
+  }, [nodes, edges, variables, simConfig, pushRunResults]);
 
   /* ── Helper: pan viewport so a node becomes visible ─────────── */
   const ensureNodeVisible = useCallback(
@@ -1598,14 +1522,60 @@ function NodePipelineInner() {
       if (!layers.has(d)) layers.set(d, []);
       layers.get(d)!.push(id);
     }
+    const sortedLayers = [...layers.keys()].sort((a, b) => a - b);
+
+    // 层内排序：Sugiyama 式 barycenter 交叉数削减。
+    // 复杂图中同一列常有大量节点，若仅按原始顺序排布会让连线和节点互相缠绕、看不清。
+    // 这里交替「左→右 / 右→左」多趟扫描，把每个节点的横向邻居质心作为其在层内的
+    // 排序依据，显著减少边交叉（边更直、更清晰）。
+    const layerOrder = new Map<number, string[]>();
+    for (const l of sortedLayers) layerOrder.set(l, [...(layers.get(l) ?? [])]);
+    const outEdges = new Map<string, string[]>();
+    for (const n of nodes) outEdges.set(n.id, []);
+    for (const e of edges) outEdges.get(e.from)?.push(e.to);
+    const barycenter = (id: string, other: string[]): number => {
+      if (other.length === 0) return -1;
+      let sum = 0;
+      for (const o of other) {
+        const l = depth.get(o) ?? 0;
+        const idx = (layerOrder.get(l) ?? []).indexOf(o);
+        if (idx >= 0) sum += idx;
+      }
+      return sum / other.length;
+    };
+    for (let pass = 0; pass < 4; pass++) {
+      // 左→右：按入边邻居质心排序
+      for (const l of sortedLayers) {
+        const ids = layerOrder.get(l)!;
+        const keyed = ids.map((id, i) => ({
+          id,
+          orig: i,
+          b: barycenter(id, inEdges.get(id) ?? []),
+        }));
+        keyed.sort((a, b) => (a.b < 0 ? b.b < 0 ? a.orig - b.orig : 1 : b.b < 0 ? -1 : a.b - b.b || a.orig - b.orig));
+        layerOrder.set(l, keyed.map((k) => k.id));
+      }
+      // 右→左：按出边邻居质心排序（反向）
+      for (let i = sortedLayers.length - 1; i >= 0; i--) {
+        const l = sortedLayers[i];
+        const ids = layerOrder.get(l)!;
+        const keyed = ids.map((id, j) => ({
+          id,
+          orig: j,
+          b: barycenter(id, outEdges.get(id) ?? []),
+        }));
+        keyed.sort((a, b) => (a.b < 0 ? b.b < 0 ? a.orig - b.orig : 1 : b.b < 0 ? -1 : a.b - b.b || a.orig - b.orig));
+        layerOrder.set(l, keyed.map((k) => k.id));
+      }
+    }
+
     const COL_GAP = 48;
     const ROW_GAP = 56;
     const START_X = 40;
     const START_Y = 60;
     const positions: Record<string, { x: number; y: number }> = {};
-    const sortedLayers = [...layers.keys()].sort((a, b) => a - b);
     sortedLayers.forEach((layer, col) => {
-      const ids = layers.get(layer)!;
+      const ids = layerOrder.get(layer)!;
       const x = START_X + col * (NODE_WIDTH + COL_GAP);
       // 同层节点垂直居中分布。
       const totalH = ids.length * APPROX_NODE_H + (ids.length - 1) * ROW_GAP;
@@ -2018,6 +1988,13 @@ function NodePipelineInner() {
     const el = canvasRef.current;
     if (!el) return;
     const handler = (e: WheelEvent) => {
+      // 若滚轮落在节点内容区内（图片预览 / 配置面板 / 输入框等），交由内部
+      // 原生滚动或该元素自身处理，避免「在节点窗口里放大/滚动时，整个蓝图也
+      // 跟着缩放/平移」的冲突。node-card 之外的空白画布仍走蓝图缩放/平移。
+      const t = e.target as HTMLElement | null;
+      if (t && (t.closest('.node-card') || t.closest('.run-results-host') || t.closest('input, textarea, select'))) {
+        return;
+      }
       e.preventDefault();
       const rect = el.getBoundingClientRect();
       const cx = e.clientX - rect.left;
@@ -2411,6 +2388,7 @@ function NodePipelineInner() {
       <PipelineToolbar
         onBack={() => setViewMode('workbench')}
         onRun={runPipeline}
+        onStop={stopPipeline}
         onRunToSelected={runToSelected}
         onToggleDiagnostics={() => setDiagnosticsOpen((v) => !v)}
         onClear={clearAll}
@@ -2459,20 +2437,26 @@ function NodePipelineInner() {
                   <span className="text-[12.5px] font-medium text-foreground">
                     流水线运行中…
                   </span>
-                  {runProgress && runProgress.total > 0 && (
+                  {nodeProgress ? (
+                    <span className="font-mono text-[11px] tabular-nums text-muted-foreground">
+                      {nodeProgress.label ?? `${Math.round(nodeProgress.fraction * 100)}%`}
+                    </span>
+                  ) : runProgress && runProgress.total > 0 ? (
                     <span className="font-mono text-[11px] tabular-nums text-muted-foreground">
                       {runProgress.done} / {runProgress.total} 节点
                     </span>
-                  )}
+                  ) : null}
                 </div>
                 <div className="h-1.5 w-52 overflow-hidden rounded-full bg-muted">
                   <motion.div
                     className="h-full rounded-full bg-gradient-to-r from-primary to-primary/70"
                     initial={{ width: 0 }}
                     animate={{
-                      width: runProgress && runProgress.total > 0
-                        ? `${Math.round((runProgress.done / runProgress.total) * 100)}%`
-                        : '30%',
+                      width: nodeProgress
+                        ? `${Math.round(nodeProgress.fraction * 100)}%`
+                        : runProgress && runProgress.total > 0
+                          ? `${Math.round((runProgress.done / runProgress.total) * 100)}%`
+                          : '30%',
                     }}
                     transition={{ ease: 'easeOut', duration: 0.2 }}
                   />
@@ -2543,11 +2527,10 @@ function NodePipelineInner() {
                   variables={Object.keys(variables)}
                   measureScale={view.scale}
                   onPlotOpen={() => {
-                    // Ensure the latest curve is pushed to the 2D panel
-                    // (covers the auto-execute path which doesn't push).
-                    pushPlotsToWorkbench([node]);
-                    setViewMode('workbench');
-                    setActivePreviewTab('plot2d');
+                    // 打开独立运行结果面板（与 2D 绘图彻底解耦）：
+                    // 把该节点的曲线/绘图输出送入 runResults store 浮窗，
+                    // 不再写入 2D 绘图 store，也不强制切到 plot2d tab。
+                    pushRunResults([node], edges);
                   }}
                 />
               ))}
@@ -2751,6 +2734,8 @@ function NodePipelineInner() {
 interface ToolbarProps {
   onBack: () => void;
   onRun: () => void;
+  /** 终止当前运行的流水线。 */
+  onStop: () => void;
   onRunToSelected: () => void;
   onToggleDiagnostics: () => void;
   onClear: () => void;
@@ -2776,7 +2761,7 @@ interface ToolbarProps {
 }
 
 function PipelineToolbar({
-  onBack, onRun, onRunToSelected, onToggleDiagnostics, onClear, onExport,
+  onBack, onRun, onStop, onRunToSelected, onToggleDiagnostics, onClear, onExport,
   onZoomIn, onZoomOut, onResetView, onCenter, onOpenSimConfig, onLoadTemplate, onAutoLayout,
   onAddNode, onDeleteSelected, onGroup, onUngroup,
   nodeCount, edgeCount, selectedCount, errorCount, diagnosticsOpen, running,
@@ -2865,6 +2850,18 @@ function PipelineToolbar({
           )}
           {running ? t('npRunning') : t('npRunAll')}
         </Button>
+        {running && (
+          <Button
+            variant="destructive"
+            size="sm"
+            className="h-8 px-3 gap-1.5 text-[12px]"
+            onClick={onStop}
+            title="终止当前流水线"
+          >
+            <Square className="size-3.5" />
+            停止
+          </Button>
+        )}
         <Tooltip>
           <TooltipTrigger asChild>
             <Button

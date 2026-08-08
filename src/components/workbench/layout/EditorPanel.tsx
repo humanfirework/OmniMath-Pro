@@ -59,7 +59,7 @@ import {
   type InputMode,
 } from '@/lib/engine';
 import { DEFAULT_CARTESIAN_RANGE } from '@/lib/engine/types';
-import { t } from '@/lib/i18n';
+import { t, useLocale } from '@/lib/i18n';
 import { cn } from '@/lib/utils';
 import { toast } from 'sonner';
 import type { CalculationResult, PlotConfig } from '@/lib/store/workbench';
@@ -68,29 +68,35 @@ import { sampleFunction, type Plot2DType } from '@/lib/plots/plot2d';
 import { CodeEditor } from '@/components/workbench/layout/CodeEditor';
 import { SymbolPalette } from '@/components/workbench/SymbolPalette';
 import { FormulaRenderer } from '@/components/workbench/FormulaRenderer';
+import { DemosPanel } from '@/components/workbench/plots/DemosPanel';
 
-const DEFAULT_SCRIPT = `# OmniMath Pro — 示例脚本
-# 按 Enter 运行，Shift+Enter 换行
-# 用 --- 分隔不同计算块（重置变量）
+const DEFAULT_SCRIPT = `# OmniMath Pro — 演示脚本
+# 按 Enter 运行，Shift+Enter 换行；用 --- 分隔独立计算块
+# 自动识别坐标系：r = f(θ) 是极坐标，含 x 的表达式是直角坐标
 
-# 矩阵运算
-A = [1, 2; 3, 4]
-det(A)
+# ── 曼陀罗 Logo 花环（极坐标）：r = b(1 + 0.55·cos(8θ)) ──
+r = 4*(1 + 0.55*cos(8*theta))
 
-# 方程求解
+# ── 直角坐标（自动识别为 y = f(x)）──
+sin(x) * cos(x)
+
+# ── 符号积分与方程求解 ──
+integrate(x^2 * e^x, x)
 solve(x^2 - 5*x + 6, x)
 
-# 符号积分
-integrate(x^2, x)
-
-# 2D 绘图
-plot(sin(x))
+# ── 矩阵运算 ──
+A = [2, 1; 1, 3]
+det(A)
+inv(A)
 
 ---
 
-# 新的计算块（上面的变量已重置）
-# 3D 曲面绘图
-plot3d(sin(x)*cos(y))`;
+# 新的计算块（上方变量已重置）
+# ── 3D 曲面绘图 ──
+plot3d(sin(x)*cos(y))
+
+# ── 心形线（极坐标）：r = 2(1 + cosθ) ──
+r = 2*(1 + cos(theta))`;
 
 const MODES: Array<{ id: InputMode; labelKey: 'editorModeSimple' | 'editorModePython' | 'editorModeMatlab' }> = [
   { id: 'simple', labelKey: 'editorModeSimple' },
@@ -113,10 +119,12 @@ const MODE_DESCRIPTION: Record<InputMode, string> = {
 const tPending = (key: string): string => t(key as Parameters<typeof t>[0]);
 
 export function EditorPanel() {
+  useLocale();
   const editorContent = useWorkbenchStore((s) => s.editorContent);
   const setEditorContent = useWorkbenchStore((s) => s.setEditorContent);
   const inputMode = useWorkbenchStore((s) => s.inputMode);
   const setInputMode = useWorkbenchStore((s) => s.setInputMode);
+  const inputView = useWorkbenchStore((s) => s.inputView);
   const addResult = useWorkbenchStore((s) => s.addResult);
   const setCurrentResult = useWorkbenchStore((s) => s.setCurrentResult);
   const setVariable = useWorkbenchStore((s) => s.setVariable);
@@ -131,6 +139,8 @@ export function EditorPanel() {
   const [cursor, setCursor] = useState({ line: 1, col: 1 });
   const [isRunning, setIsRunning] = useState(false);
   const [previewLine, setPreviewLine] = useState(1);
+  // 输入界面：'code'（代码编辑器） | 'demos'（Desmos 式直接输入）。
+  // 状态已提升到 workbench store，供顶栏 TitleBar 与 EditorPanel 共享。
   const previewTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const defaultScriptSetRef = useRef(false);
   const editorContainerRef = useRef<HTMLDivElement | null>(null);
@@ -446,6 +456,8 @@ export function EditorPanel() {
               }],
             });
           }
+          // 提示用户结果在哪查看：浮窗右上角可拖拽/缩放，「关闭全部」可清空。
+          toast.success('结果已送入独立浮窗', { description: '可拖拽/缩放，右上角关闭全部；如需结构化查看，请前往「流水线 / 蓝图」', duration: 3200 });
         }
 
         toast.success(`运行完成 · ${resultCount} 个结果`, { duration: 1200 });
@@ -507,36 +519,40 @@ export function EditorPanel() {
       <div className="shrink-0 h-9 flex items-center justify-between px-2.5 gap-2 border-b border-border/60 bg-background/40">
         {/* Left: label + mode switch */}
         <div className="flex items-center gap-2 min-w-0">
+          {/* 代码 / Demos 输入界面切换已上移到顶栏 TitleBar，此处不再重复，避免工具栏拥挤 */}
           <div className="flex items-center gap-1.5">
             <FileCode2 className="size-3.5 text-primary" />
             <span className="text-[11.5px] font-semibold tracking-tight hidden sm:inline">
               {t('editorTitle')}
             </span>
           </div>
-          {/* Mode switcher */}
-          <div className="flex items-center gap-0.5 p-0.5 rounded-md bg-muted/60 border border-border/60">
-            {MODES.map((m) => (
-              <Tooltip key={m.id}>
-                <TooltipTrigger asChild>
-                  <button
-                    type="button"
-                    onClick={() => setInputMode(m.id)}
-                    className={cn(
-                      'h-5 px-2 text-[10.5px] rounded transition-all font-medium',
-                      inputMode === m.id
-                        ? 'bg-primary/15 text-primary shadow-sm'
-                        : 'text-muted-foreground hover:text-foreground',
-                    )}
-                  >
-                    {t(m.labelKey)}
-                  </button>
-                </TooltipTrigger>
-                <TooltipContent side="bottom" className="max-w-[200px]">
-                  {MODE_DESCRIPTION[m.id]}
-                </TooltipContent>
-              </Tooltip>
-            ))}
-          </div>
+          {/* Mode switcher —— 仅在代码编辑器模式下显示；
+              Demos 模式下隐藏 简单/Python/MATLAB，界面更简洁。 */}
+          {inputView === 'code' && (
+            <div className="flex items-center gap-0.5 p-0.5 rounded-md bg-muted/60 border border-border/60">
+              {MODES.map((m) => (
+                <Tooltip key={m.id}>
+                  <TooltipTrigger asChild>
+                    <button
+                      type="button"
+                      onClick={() => setInputMode(m.id)}
+                      className={cn(
+                        'h-5 px-2 text-[10.5px] rounded transition-all font-medium',
+                        inputMode === m.id
+                          ? 'bg-primary/15 text-primary shadow-sm'
+                          : 'text-muted-foreground hover:text-foreground',
+                      )}
+                    >
+                      {t(m.labelKey)}
+                    </button>
+                  </TooltipTrigger>
+                  <TooltipContent side="bottom" className="max-w-[200px]">
+                    {MODE_DESCRIPTION[m.id]}
+                  </TooltipContent>
+                </Tooltip>
+              ))}
+            </div>
+          )}
         </div>
 
         {/* Center: stats */}
@@ -546,7 +562,10 @@ export function EditorPanel() {
           <span>{varCount} {t('editorVars')}</span>
         </div>
 
-        {/* Right: actions */}
+        {/* Right: actions —— 仅代码编辑器模式显示；
+            Demos 模式使用 DemosPanel 自己的「绘图/清空」按钮，
+            隐藏符号面板/重置/清空/运行等代码编辑专属按键，避免困惑。 */}
+        {inputView === 'code' && (
         <div className="flex items-center gap-0.5">
           <Tooltip>
             <TooltipTrigger asChild>
@@ -611,26 +630,6 @@ export function EditorPanel() {
             </TooltipTrigger>
             <TooltipContent side="bottom">{t('editorRunToPanelHint')}</TooltipContent>
           </Tooltip>
-          <Tooltip>
-            <TooltipTrigger asChild>
-              <button
-                type="button"
-                onClick={() => {
-                  const content = editorContent.slice(0, 4000);
-                  const prompt = `模块:editor\n请优化或解释当前代码（可改动，mode=replace）。\n\n当前代码:\n\`\`\`\n${content}\n\`\`\``;
-                  if (typeof window !== 'undefined') {
-                    window.dispatchEvent(new CustomEvent('omnimath:ai-explain', { detail: prompt }));
-                  }
-                }}
-                aria-label="优化/解释代码"
-                className="flex items-center gap-1 h-7 px-2 ml-1 rounded-md text-[12px] text-muted-foreground hover:text-foreground hover:bg-accent transition-colors"
-              >
-                <span className="text-base leading-none">✨</span>
-                <span className="hidden sm:inline">优化/解释</span>
-              </button>
-            </TooltipTrigger>
-            <TooltipContent side="bottom">把当前代码交给 AI 优化或解释</TooltipContent>
-          </Tooltip>
           <motion.button
             type="button"
             onClick={() => runScript()}
@@ -673,8 +672,16 @@ export function EditorPanel() {
             <span>{t('editorRun')}</span>
           </motion.button>
         </div>
+        )}
       </div>
 
+      {/* Demos 模式：直接输入数学表达式，隐藏代码编辑器专属 UI */}
+      {inputView === 'demos' ? (
+        <div className="flex-1 min-h-0 flex overflow-hidden">
+          <DemosPanel />
+        </div>
+      ) : (
+        <>
       {/* Tab bar */}
       {openTabs.length > 0 && (
         <div
@@ -811,6 +818,8 @@ export function EditorPanel() {
           <span>{t('editorLn')} {cursor.line}, {t('editorCol')} {cursor.col}</span>
         </div>
       </div>
+        </>
+      )}
     </div>
   );
 }

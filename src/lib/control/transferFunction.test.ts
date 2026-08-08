@@ -29,6 +29,8 @@ import {
   masonFromGraph,
   leadCompensator,
   lagCompensator,
+  leadLagCompensator,
+  pidCompensator,
   type Complex,
 } from './transferFunction';
 
@@ -475,5 +477,43 @@ describe('lagCompensator 滞后校正', () => {
     if ('error' in res) throw new Error(res.error);
     expect(res.cNum).toEqual([1]);
     expect(res.cDen).toEqual([1]);
+  });
+});
+
+describe('leadLagCompensator 超前-滞后校正', () => {
+  it('低 PM + 高 Kv 需求时同时给出超前与滞后级', () => {
+    // G=5/[s(s+1)(s+2)] 原 PM≈4°，且给一个高的 Kv 需求 → 需要超前补 PM + 滞后补 Kv。
+    const res = leadLagCompensator([5], [1, 3, 2, 0], { targetPM: 45, kv: 50, tEnd: 12 });
+    if ('error' in res) throw new Error(res.error);
+    expect(res.kind).toBe('leadlag');
+    expect(res.cNum.length).toBeGreaterThan(1); // 级联后分子阶数>1
+    expect((res.beta ?? 1) >= 1).toBe(true);
+    expect(res.pm).not.toBeNull();
+    expect(res.pm!).toBeGreaterThan(20); // 校正后保持正相位裕度（稳定）
+  });
+
+  it('无 Kv 需求时主要靠超前级提升 PM', () => {
+    const res = leadLagCompensator([5], [1, 3, 2, 0], { targetPM: 45, tEnd: 12 });
+    if ('error' in res) throw new Error(res.error);
+    expect(res.pm).not.toBeNull();
+    expect(res.pm!).toBeGreaterThan(30);
+  });
+});
+
+describe('pidCompensator PID 校正', () => {
+  it('对 I 型对象用 ZN 整定返回 Kp/Ki/Kd 与闭环响应', () => {
+    // G=1/[s(s+1)(s+2)] 相位穿越 -180°，ZN 可整定。
+    const res = pidCompensator([1], [1, 3, 2, 0], { tEnd: 12 });
+    if ('error' in res) throw new Error(res.error);
+    expect(res.kind).toBe('pid');
+    expect(res.kp).toBeGreaterThan(0);
+    expect(res.ki).toBeGreaterThan(0);
+    expect(res.kd).toBeGreaterThan(0);
+    expect(res.step.length).toBeGreaterThan(10);
+  });
+
+  it('无法穿越 -180° 的最小相位系统返回错误', () => {
+    const res = pidCompensator([1], [1, 1], { tEnd: 12 });
+    expect('error' in res).toBe(true);
   });
 });

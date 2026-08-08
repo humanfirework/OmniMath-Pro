@@ -74,19 +74,16 @@ describe('symbolic（Algebrite 封装）', () => {
   });
 
   describe('symbolicLimit', () => {
-    it('lim sin(x)/x → 0 当前返回未求值回显（疑似 bug）', async () => {
-      // 疑似 bug：Algebrite 的 limit 在本环境始终返回未求值的调用串
-      // （如 'limit(sin(x)/x,x,0)'），algebriteFailed 不识别回显，
-      // success=true 但结果无意义；正确结果应为 1。测试锁定当前行为。
+    it('lim sin(x)/x → 0 = 1（Algebrite 不实现 limit，走数值回退）', async () => {
       const r = await symbolicLimit('sin(x)/x', 'x', 0);
       expect(r.success).toBe(true);
-      expect(r.expression).toBe('limit(sin(x)/x,x,0)');
+      expect(r.numerical).toBeCloseTo(1, 4);
     });
 
-    it('多项式极限同样被回显（进一步印证 limit 未求值）', async () => {
+    it('多项式极限 lim x^2 → 2 = 4', async () => {
       const r = await symbolicLimit('x^2', 'x', 2);
       expect(r.success).toBe(true);
-      expect(r.expression).toBe('limit(x^2,x,2)');
+      expect(r.numerical).toBeCloseTo(4, 4);
     });
 
     it('步骤包含极限表达式本身', async () => {

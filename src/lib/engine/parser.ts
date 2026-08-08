@@ -99,11 +99,11 @@ export function lenientPreprocess(input: string, mode: InputMode = 'simple'): st
         identifier chars, run the implicit-multiply passes, then
         swap back. */
   const VERB_GUARDS: Array<[RegExp, string, string]> = [
-    [/\bplot3d\s*\(/g, '\u0001PLOTTHREED(', 'plot3d('],
-    [/\bplot2d\s*\(/g, '\u0001PLOTTWOD(', 'plot2d('],
-    [/\bsurface\s*\(/g, '\u0001SURFACE(', 'surface('],
-    [/\bsurf\s*\(/g, '\u0001SURF(', 'surf('],
-    [/\bpolarplot\s*\(/g, '\u0001POLARPLOT(', 'polarplot('],
+    [/\bplot3d\s*\(/gi, '\u0001PLOTTHREED(', 'plot3d('],
+    [/\bplot2d\s*\(/gi, '\u0001PLOTTWOD(', 'plot2d('],
+    [/\bsurface\s*\(/gi, '\u0001SURFACE(', 'surface('],
+    [/\bsurf\s*\(/gi, '\u0001SURF(', 'surf('],
+    [/\bpolarplot\s*\(/gi, '\u0001POLARPLOT(', 'polarplot('],
   ];
   for (const [re, sentinel] of VERB_GUARDS) {
     s = s.replace(re, sentinel);

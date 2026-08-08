@@ -20,7 +20,7 @@ import { useMemo, useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { ChevronDown, ChevronUp, GitCompareArrows, Scissors, Scale } from 'lucide-react';
 import { FormulaRenderer } from '@/components/workbench/FormulaRenderer';
-import { t } from '@/lib/i18n';
+import { t, useLocale } from '@/lib/i18n';
 import { cn } from '@/lib/utils';
 
 type StepKind = 'initial' | 'swap' | 'scale' | 'eliminate';
@@ -103,6 +103,7 @@ export function GaussianEliminationView({
   defaultExpandedCount,
   className,
 }: GaussianEliminationViewProps) {
+  useLocale();
   const parsed = useMemo(() => steps.map(parseStep), [steps]);
   const [collapsed, setCollapsed] = useState(defaultExpandedCount !== undefined && defaultExpandedCount < steps.length);
 

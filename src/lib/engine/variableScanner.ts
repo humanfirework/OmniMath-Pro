@@ -104,10 +104,11 @@ export function extractSymbols(
 
 /**
  * 绘图自变量保留字：cartesian/polar 用 `x`，parametric 用 `t`（采样时
- * `x` 也会同时传入），`y` 作为惯用因变量名同样排除。这些符号在表达式
- * 里出现时不应被当作"自由参数"生成滑块。
+ * `x` 也会同时传入），`y` 作为惯用因变量名同样排除。极坐标的 `θ`
+ * （unicode）及其拉丁拼写 `theta` 也是自变量，不应生成滑块。这些符号在
+ * 表达式里出现时不应被当作"自由参数"。
  */
-const PLOT_INDEPENDENT_VARS = new Set(['x', 'y', 't']);
+const PLOT_INDEPENDENT_VARS = new Set(['x', 'y', 't', 'θ', 'ϑ', 'Θ', 'theta']);
 
 /**
  * 提取一组（可见 2D）表达式中的"自由参数"名列表。

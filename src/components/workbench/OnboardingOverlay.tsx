@@ -56,6 +56,11 @@ det(A)
 inv(A)
 eig(A)`;
 
+const SCRIPT_PRACTICE = `# 动手练习：改一改，然后点右上角「▶ 运行」
+1 + 2
+2^10
+plot(sin(x))`;
+
 interface ExampleDef {
   id: string;
   icon: LucideIcon;
@@ -109,6 +114,8 @@ interface StepDef {
   desc: string;
   /** 关键要点，渲染为带对勾的列表。 */
   bullets: string[];
+  /** 可选的自定义主按钮（有则替代「下一步 / 开始使用」）。 */
+  primaryAction?: { label: string; run: () => void };
 }
 
 const STEPS: StepDef[] = [
@@ -160,6 +167,19 @@ const STEPS: StepDef[] = [
     desc: '点击下方示例卡片，即可自动填入脚本或加载蓝图，直接体验完整链路。',
     bullets: [],
   },
+  {
+    id: 'practice',
+    icon: PenLine,
+    accent: '#34d399',
+    title: '动手练习：跑通第一个结果',
+    desc: '点击「开始练习」进入工作台，我已在左侧编辑器填好示例代码。你只需找到编辑器右上角绿色的「▶ 运行」按钮并点击，就能在右侧看到结果——这就完成了你的第一次运行！',
+    bullets: [
+      '进入工作台后，左侧编辑器已自动填入几行示例代码',
+      '点击右上角「▶ 运行」按钮（或按 Enter），右侧出现计算结果',
+      '可随意修改算式再次运行；点左侧活动栏「文件」可浏览 / 保存脚本',
+      '运行成功后，本次引导就完成了，你可以自由探索',
+    ],
+  },
 ];
 
 export function OnboardingOverlay() {
@@ -167,9 +187,11 @@ export function OnboardingOverlay() {
   const [step, setStep] = useState(0);
 
   const setEditorContent = useWorkbenchStore((s) => s.setEditorContent);
+  const setInputMode = useWorkbenchStore((s) => s.setInputMode);
   const setActivePreviewTab = useWorkbenchStore((s) => s.setActivePreviewTab);
   const setViewMode = useWorkbenchStore((s) => s.setViewMode);
   const setPendingPipelineTemplate = useWorkbenchStore((s) => s.setPendingPipelineTemplate);
+  const setOnboardingPractice = useWorkbenchStore((s) => s.setOnboardingPractice);
 
   // 首次启动（无 localStorage 标记）才显示。
   useEffect(() => {
@@ -188,6 +210,21 @@ export function OnboardingOverlay() {
   }, []);
 
   const lastStep = STEPS.length - 1;
+  /** 示例卡片所在的步骤下标（该步渲染示例网格）。 */
+  const EXAMPLES_STEP = 3;
+
+  /**
+   * 处理「开始练习」：把示例代码填入编辑器、进入工作台、并激活
+   * PracticeGuide 浮层（onboardingPractice = true），随后关闭引导。
+   * PracticeGuide 会继续引导用户点击「运行」跑出第一个结果。
+   */
+  const runPractice = useCallback(() => {
+    setEditorContent(SCRIPT_PRACTICE);
+    setActivePreviewTab('formula');
+    setViewMode('workbench');
+    setOnboardingPractice(true);
+    dismiss();
+  }, [setEditorContent, setActivePreviewTab, setViewMode, setOnboardingPractice, dismiss]);
 
   /** 处理一次示例点击：执行对应动作并关闭引导。 */
   const handleExample = useCallback(
@@ -226,11 +263,16 @@ export function OnboardingOverlay() {
     return () => window.removeEventListener('keydown', onKeyDown);
   }, [visible, lastStep, dismiss]);
 
-  // 示例步骤：卡片点击即完成，无需「下一步」。
+  // 示例步骤：卡片点击即完成，无需「下一步」；练习步骤：点击「开始练习」。
   const onPrimary = useCallback(() => {
-    if (step < lastStep) setStep((s) => s + 1);
-    else dismiss();
-  }, [step, lastStep, dismiss]);
+    if (step === lastStep) {
+      runPractice();
+    } else if (step < lastStep) {
+      setStep((s) => s + 1);
+    } else {
+      dismiss();
+    }
+  }, [step, lastStep, runPractice, dismiss]);
 
   const stepDef = STEPS[step];
   const StepIcon = stepDef.icon;
@@ -333,8 +375,8 @@ export function OnboardingOverlay() {
               </motion.div>
             </AnimatePresence>
 
-            {/* 要点列表（非示例步骤） */}
-            {step < lastStep && (
+            {/* 要点列表（有要点的步骤渲染；示例步骤用卡片，练习步骤用要点） */}
+            {stepDef.bullets.length > 0 && (
               <motion.ul
                 initial={{ opacity: 0, y: 8 }}
                 animate={{ opacity: 1, y: 0 }}
@@ -353,8 +395,8 @@ export function OnboardingOverlay() {
               </motion.ul>
             )}
 
-            {/* 示例卡片网格（最后一步） */}
-            {step === lastStep && (
+            {/* 示例卡片网格（示例步骤） */}
+            {step === EXAMPLES_STEP && (
               <div className="mt-8 grid grid-cols-1 gap-3 sm:grid-cols-2">
                 {EXAMPLES.map((ex, i) => {
                   const Icon = ex.icon;
@@ -436,7 +478,7 @@ export function OnboardingOverlay() {
                   className="inline-flex items-center gap-2 rounded-xl bg-gradient-to-r from-primary to-primary/85 px-6 py-2.5 text-[13px] font-medium text-primary-foreground shadow-lg shadow-primary/25"
                 >
                   <Play className="size-4" fill="currentColor" />
-                  开始使用
+                  开始练习
                 </motion.button>
               )}
 

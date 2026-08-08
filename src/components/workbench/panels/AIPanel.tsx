@@ -68,6 +68,7 @@ import {
   collectWorkspaceSnapshot,
   executeWorkbenchTool,
 } from '@/lib/ai-tools';
+import { analyzeSemantics } from '@/lib/editor/semanticCheck';
 
 /**
  * 引用尚未合入 i18n 词典的新键：词典中存在时返回译文，
@@ -538,6 +539,37 @@ export function AIPanel() {
     abortRef.current?.abort();
   }, []);
 
+  /** 一键「AI 修复代码」：把当前编辑器内容 + 检测到的语义问题打包发给模型。 */
+  const fixCode = useCallback(() => {
+    const content = editorContent;
+    if (!content || !content.trim()) return;
+    const knownVars = Object.keys(useWorkbenchStore.getState().variables ?? {});
+    const diags = analyzeSemantics(content, { variables: knownVars });
+    const problems = diags.length
+      ? diags.map((d) => `第 ${d.line} 行：${d.message}`).join('\n')
+      : '（未检测到明显的未定义符号，请顺带检查逻辑与语法）';
+    const prompt = [
+      '请帮我审查并修复下面的代码。',
+      '',
+      '【检测到的问题】',
+      problems,
+      '',
+      '【当前代码】',
+      '```',
+      content.length > 6000 ? `${content.slice(0, 6000)}\n…（代码过长已截断）` : content,
+      '```',
+      '',
+      '请：1) 指出每个错误的准确原因；2) 给出修复后的完整可运行代码；',
+      '3) 说明改了什么。若代码本身没问题，请说明判断依据。',
+    ].join('\n');
+    setInput(prompt);
+    clearTimeout(pendingSendTimerRef.current);
+    pendingSendTimerRef.current = setTimeout(() => {
+      setInput('');
+      void send(prompt);
+    }, 60);
+  }, [editorContent, send]);
+
   // 端到端闭环：接收外部「AI 解释」请求（如 PreviewPanel 的结果解释按钮），
   // 自动填充输入并发送，打通「计算 → 绘图 → AI 解释」链路。
   useEffect(() => {
@@ -927,9 +959,21 @@ export function AIPanel() {
             )}
           </Button>
         </div>
-        <p className="text-[9.5px] text-muted-foreground/60 mt-1 px-1">
-          Enter 发送 · Shift+Enter 换行 · AI 回复中的脚本可一键插入编辑器
-        </p>
+        <div className="flex items-center justify-between mt-1 px-1">
+          <button
+            type="button"
+            onClick={fixCode}
+            disabled={!editorContent?.trim() || loading}
+            className="inline-flex items-center gap-1 text-[9.5px] px-2 py-0.5 rounded-full border border-border/60 text-muted-foreground hover:text-primary hover:border-primary/40 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+            title={tAI('aiFixCodeHint', '把当前编辑器代码连同检测到的问题发送给 AI，一键修复')}
+          >
+            <Wrench className="size-2.5" />
+            {tAI('aiFixCode', '用 AI 修复代码')}
+          </button>
+          <span className="text-[9.5px] text-muted-foreground/60">
+            Enter 发送 · Shift+Enter 换行 · 脚本可一键插入编辑器
+          </span>
+        </div>
       </div>
     </div>
   );

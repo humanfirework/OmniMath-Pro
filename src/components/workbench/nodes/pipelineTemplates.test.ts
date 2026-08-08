@@ -20,12 +20,18 @@ import type { PipelineContext } from './pipelineEngine';
 const ctx: PipelineContext = { variables: {} };
 
 /** 仿真模板 id：走 `runSimulation`（而非 `executePipeline`）核对产出。 */
-const SIM_TEMPLATE_IDS = new Set(['ode-feedback-loop', 'first-order-response']);
+const SIM_TEMPLATE_IDS = new Set([
+  'ode-feedback-loop',
+  'first-order-response',
+  'pid-closed-loop',
+  'mass-spring-damper',
+  'saturation-integral-windup',
+]);
 
 /** 需用户外部输入、空输入即按设计抛错的模板：只核对连接合法性。 */
 const EXTERNAL_INPUT_TEMPLATE_IDS = new Set([
   'image-vectorization-quickstart',
-  'edge-detection-pipeline',
+  'line-art-extraction',
   'pose-track-animation',
   'video-to-curves-animation',
 ]);

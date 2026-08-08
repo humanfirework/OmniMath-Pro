@@ -4,7 +4,7 @@
 
 <div align="center">
 
-<img src="./public/logo-master.png" width="120" alt="OmniMath Pro Logo">
+<img src="./public/logo.png" width="120" alt="OmniMath Pro Logo">
 
 # OmniMath Pro
 
@@ -273,8 +273,8 @@ bun run tauri:build
 推送 `v*` 標籤即可觸發 GitHub Actions，自動在 Windows、macOS（Intel + Apple Silicon）、Linux 上構建並發佈到 Release：
 
 ```bash
-git tag v0.1.0
-git push origin v0.1.0
+git tag v0.1.3
+git push origin v0.1.3
 ```
 
 詳見 [`.github/workflows/release.yml`](.github/workflows/release.yml)。

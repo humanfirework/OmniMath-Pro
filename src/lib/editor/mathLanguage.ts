@@ -37,6 +37,8 @@ export const FUNCTIONS = [
   'sum', 'prod', 'cumsum', 'cumprod', 'diff', 'sort',
   'reshape', 'size', 'length', 'numel',
   'simplify', 'rationalize', 'derivative',
+  // 绘图命令（含 3D 曲面；大小写均可，与引擎 preprocess 一致）
+  'plot', 'plot2d', 'plot3d', 'surface', 'surf', 'polar', 'polarplot',
   // MATLAB 常用命令 / 脚本级函数
   'fplot', 'syms', 'disp', 'hold', 'grid', 'xlabel', 'ylabel', 'title',
   'legend', 'axis', 'clc', 'clear', 'whos', 'pause', 'fprintf', 'figure',
@@ -346,11 +348,29 @@ export const math: StreamParser<State> = {
     }
     if (stream.match(/^\.\d+/)) return 'number';
 
+    // Greek / Unicode math symbols (θ π α β Σ Δ ω …). Previously these were
+    // not matched by any rule, so they rendered as uncolored plain text and
+    // "couldn't be recognized". Treat them as variables/constants like the
+    // engine does (θ = theta, π = pi, …).
+    if (stream.match(/^\p{Script=Greek}/u)) {
+      const glyph = stream.current();
+      // Common constants → atom (teal/red) so π/θ read as constants, like pi/theta.
+      if (glyph === 'π' || glyph === 'Π') return 'atom';
+      if (glyph === 'θ' || glyph === 'Θ' || glyph === 'φ' || glyph === 'Φ') return 'atom';
+      return 'variableName';
+    }
+
     // Variable/identifier
     if (stream.match(/^[a-zA-Z_][a-zA-Z0-9_]*/)) {
       const word = stream.current();
       if (KEYWORDS.includes(word)) return 'keyword';
-      if (FUNCTIONS.includes(word)) return 'function';
+      // `function` 在 @lezer/highlight 中是「修饰符」（modifier）而非独立标签。
+      // 若单独返回 'function'，CodeMirror 的 StreamLanguage 解析器会触发
+      // "Modifier function used at start of tag" 告警。必须把修饰符与基础标签
+      // 写在同一个 name 内、用「点」连接：'variableName.function'
+      // （即 t.function(t.variableName)）。注意不能用空格分隔——createTokenType
+      // 会按空格把每个 name 当成独立 token，导致修饰符仍落在起始位置而告警。
+      if (FUNCTIONS.includes(word)) return 'variableName.function';
       // Constants (pi, e, inf, …) → 'atom'，使其在 VSCode Dark+/Light+ 调色板中
       // 拥有专属的 --syntax-constant 颜色（青色 / 红色），与普通变量区分。
       if (['pi', 'e', 'inf', 'infinity', 'nan'].includes(word)) {
@@ -366,6 +386,13 @@ export const math: StreamParser<State> = {
     // Operators
     if (stream.match(/^[+\-*/^%=<>!&|~]/)) {
       stream.match(/^[+\-*/^%=<>!&|~]/); // multi-char operators like ==, <=, &&, etc.
+      return 'operator';
+    }
+
+    // Common Unicode math symbols (∞ ≤ ≥ ≠ ± × ÷ √ ∫ ∑ ∏ ∂ ∇ …). These were
+    // previously unmatched → rendered as uncolored plain text ("无法识别").
+    // Highlight them as operators so they read consistently with + − * /.
+    if (stream.match(/^[∞≤≥≠±∓×÷√∫∑∏∈∉∂∇∝≈≡⋅⊙⊕⊗]/)) {
       return 'operator';
     }
 

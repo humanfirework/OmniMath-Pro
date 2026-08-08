@@ -46,7 +46,7 @@ import { Input } from '@/components/ui/input';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { symbolAliases, type SymbolAliasEntry } from '@/lib/engine';
 import { useSettingsStore } from '@/lib/store/settingsStore';
-import { t, type TranslationDict } from '@/lib/i18n';
+import { t, useLocale, type TranslationDict } from '@/lib/i18n';
 import { cn } from '@/lib/utils';
 
 /** Display order + i18n label key for each symbol category. */
@@ -110,6 +110,7 @@ function CategoryIcon({ id, className }: { id: SymbolAliasEntry['category']; cla
 }
 
 export function SymbolPalette() {
+  useLocale();
   const open = useSettingsStore((s) => s.symbolPaletteOpen);
   const setOpen = useSettingsStore((s) => s.setSymbolPaletteOpen);
   const symbolCategoryOrder = useSettingsStore((s) => s.symbolCategoryOrder);

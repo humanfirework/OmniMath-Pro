@@ -7,7 +7,7 @@
  *  - 「上一步 / 下一步」导航与步骤跳转；
  *  - 点击「图像转函数 / 弹簧振子仿真」会写入 pendingPipelineTemplate 并切到蓝图；
  *  - 点击「三角曲线可视化 / 矩阵与特征值」会填入编辑器脚本并切到对应预览标签；
- *  - 关闭（示例 / 跳过 / 开始使用）后写入 localStorage 标记，二次不弹。
+ *  - 关闭（示例 / 跳过 / 开始练习）后写入 localStorage 标记，二次不弹。
  */
 
 import { describe, it, expect, beforeEach, vi } from 'vitest';
@@ -26,6 +26,7 @@ function resetStore() {
     activePreviewTab: 'formula',
     viewMode: 'workbench',
     pendingPipelineTemplate: null,
+    onboardingPractice: false,
   });
 }
 
@@ -64,33 +65,58 @@ describe('OnboardingOverlay 首次启动分步引导', () => {
     expect(getByText('下一步')).toBeInTheDocument();
   });
 
-  it('「下一步」逐步推进，最后一步转为「开始使用」并出现示例卡片', () => {
+  it('「下一步」逐步推进：第 4 步显示示例卡片，第 5 步转为「开始练习」', () => {
     const { getByText, queryByText } = render(<OnboardingOverlay />);
     for (let i = 0; i < 3; i++) {
       act(() => {
         fireEvent.click(getByText('下一步'));
       });
     }
-    expect(queryByText('下一步')).not.toBeInTheDocument();
-    expect(getByText('开始使用')).toBeInTheDocument();
+    // 第 4 步（示例）：示例卡片出现
     expect(getByText('图像转函数')).toBeInTheDocument();
     expect(getByText('弹簧振子仿真')).toBeInTheDocument();
+    // 示例步骤之后还有练习步骤，因此「下一步」仍在
+    expect(getByText('下一步')).toBeInTheDocument();
+    // 进入第 5 步（动手练习）：按钮转为「开始练习」
+    act(() => {
+      fireEvent.click(getByText('下一步'));
+    });
+    expect(queryByText('下一步')).not.toBeInTheDocument();
+    expect(getByText('开始练习')).toBeInTheDocument();
   });
 
-  it('「上一步」可回退一步，最后一步可回到上一步骤', () => {
+  it('「上一步」可回退一步，练习步骤可回到示例步骤', () => {
     const { getByText, queryByText } = render(<OnboardingOverlay />);
-    // 推进到最后一步
-    for (let i = 0; i < 3; i++) {
+    // 推进到练习步骤（第 5 步）
+    for (let i = 0; i < 4; i++) {
       act(() => {
         fireEvent.click(getByText('下一步'));
       });
     }
-    expect(getByText('开始使用')).toBeInTheDocument();
+    expect(getByText('开始练习')).toBeInTheDocument();
     act(() => {
       fireEvent.click(getByText('上一步'));
     });
-    expect(queryByText('开始使用')).not.toBeInTheDocument();
+    expect(queryByText('开始练习')).not.toBeInTheDocument();
     expect(getByText('下一步')).toBeInTheDocument();
+  });
+
+  it('点击「开始练习」填入练习脚本、激活练习模式并写入标记', async () => {
+    const { getByText, getByLabelText } = render(<OnboardingOverlay />);
+    jumpToExamples({ getByLabelText });
+    await act(async () => {
+      fireEvent.click(getByText('下一步')); // 进入练习步骤
+    });
+    await act(async () => {
+      fireEvent.click(getByText('开始练习'));
+    });
+    await waitFor(() => {
+      const state = useWorkbenchStore.getState();
+      expect(state.onboardingPractice).toBe(true);
+      expect(state.editorContent).toContain('plot(sin(x))');
+      expect(state.viewMode).toBe('workbench');
+      expect(localStorage.getItem(ONBOARDED_KEY)).toBe('1');
+    });
   });
 
   it('点击「图像转函数」写入 pendingPipelineTemplate 并切到蓝图', async () => {

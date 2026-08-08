@@ -53,7 +53,7 @@ import {
 } from '@/components/ui/select';
 import { FormulaRenderer } from '@/components/workbench/FormulaRenderer';
 import { useWorkbenchStore } from '@/lib/store/workbench';
-import { t } from '@/lib/i18n';
+import { t, useLocale } from '@/lib/i18n';
 import type { TranslationDict } from '@/lib/i18n';
 import { cn } from '@/lib/utils';
 
@@ -64,7 +64,8 @@ type CategoryKey =
   | 'calculus'
   | 'statistics'
   | 'physics'
-  | 'finance';
+  | 'finance'
+  | 'control';
 
 interface Formula {
   id: string;
@@ -100,6 +101,7 @@ const CATEGORY_LABEL_KEY: Record<CategoryKey, keyof TranslationDict> = {
   statistics: 'formulasCategoryStatistics',
   physics: 'formulasCategoryPhysics',
   finance: 'formulasCategoryFinance',
+  control: 'formulasCategoryControl',
 };
 
 const CATEGORY_COLOR: Record<CategoryKey, string> = {
@@ -110,6 +112,7 @@ const CATEGORY_COLOR: Record<CategoryKey, string> = {
   statistics: 'text-emerald-600 dark:text-emerald-400 bg-emerald-500/10 border-emerald-500/30',
   physics: 'text-orange-600 dark:text-orange-400 bg-orange-500/10 border-orange-500/30',
   finance: 'text-cyan-600 dark:text-cyan-400 bg-cyan-500/10 border-cyan-500/30',
+  control: 'text-sky-600 dark:text-sky-400 bg-sky-500/10 border-sky-500/30',
 };
 
 const CUSTOM_COLOR =
@@ -189,6 +192,21 @@ const FORMULAS: Formula[] = [
   { id: 'ci', name: '复利公式', category: 'finance', latex: 'A = P \\left(1 + \\frac{r}{n}\\right)^{nt}', description: '复利终值计算公式。', example: '1000 * (1 + 0.05/12)^(12*5)' },
   { id: 'pv', name: '现值', category: 'finance', latex: 'PV = \\frac{FV}{(1+r)^n}', description: '未来值折算为现值。', example: '1000 / (1.05^5)' },
   { id: 'pmt', name: '等额本息', category: 'finance', latex: 'PMT = P \\cdot \\frac{r(1+r)^n}{(1+r)^n - 1}', description: '贷款每期还款额。', example: '100000 * (0.05/12 * (1+0.05/12)^60) / ((1+0.05/12)^60 - 1)' },
+
+  // Control Theory — 自动控制原理核心公式
+  { id: 'ctrl-open-loop', name: '开环传函', category: 'control', latex: 'G(s)H(s)', description: '前向通路与反馈通路传递函数之积。', example: '5 / (s^2 + 2*s + 1)' },
+  { id: 'ctrl-closed-unity', name: '单位反馈闭环传函', category: 'control', latex: '\\Phi(s) = \\frac{G(s)}{1 + G(s)H(s)}', description: '单位反馈系统的闭环传递函数。', example: 'G(s) = 5/(s+1), H(s)=1' },
+  { id: 'ctrl-char', name: '特征方程', category: 'control', latex: '1 + G(s)H(s) = 0', description: '闭环极点由特征方程 1+GH=0 决定。', example: '1 + 5/(s^2+2s+1) = 0' },
+  { id: 'ctrl-ess-step', name: '阶跃输入稳态误差', category: 'control', latex: 'e_{ss} = \\frac{1}{1 + K_p}, \\quad K_p = \\lim_{s \\to 0} G(s)H(s)', description: '单位阶跃输入下的稳态误差（位置误差系数）。', example: 'Kp = lim G(s), s→0' },
+  { id: 'ctrl-ess-ramp', name: '斜坡输入稳态误差', category: 'control', latex: 'e_{ss} = \\frac{1}{K_v}, \\quad K_v = \\lim_{s \\to 0} s\\,G(s)H(s)', description: '单位斜坡输入下的稳态误差（速度误差系数）。', example: 'Kv = lim s·G(s), s→0' },
+  { id: 'ctrl-routh', name: '劳斯判据', category: 'control', latex: '\\text{劳斯表首列符号不变} \\Rightarrow \\text{系统稳定}', description: '由劳斯表首列符号判断特征方程根的实部。', example: 'routh(s^3+6s^2+11s+6)' },
+  { id: 'ctrl-overshoot', name: '超调量', category: 'control', latex: 'M_p = e^{-\\frac{\\zeta \\pi}{\\sqrt{1-\\zeta^2}}} \\times 100\\%', description: '二阶欠阻尼系统的最大超调量。', example: 'exp(-zetapi/sqrt(1-zeta^2))' },
+  { id: 'ctrl-settling', name: '调节时间', category: 'control', latex: 't_s \\approx \\frac{4}{\\zeta \\omega_n} \\quad (2\\%)', description: '进入 ±2% 误差带的调节时间。', example: '4 / (zeta * wn)' },
+  { id: 'ctrl-bandwidth', name: '闭环带宽', category: 'control', latex: '\\omega_b = \\omega_n \\sqrt{1 - 2\\zeta^2 + \\sqrt{2 - 4\\zeta^2 + 4\\zeta^4}}', description: '闭环系统带宽（幅值下降到 0.707 处）。', example: 'wn*sqrt(1-2z^2+sqrt(2-4z^2+4z^4))' },
+  { id: 'ctrl-mason', name: '梅逊公式', category: 'control', latex: 'T = \\frac{\\sum_k P_k \\Delta_k}{\\Delta}', description: '信号流图求总传递函数（前向通路增益×余子式）。', example: 'mason(forwardPaths, loops)' },
+  { id: 'ctrl-pid', name: 'PID 控制器', category: 'control', latex: 'G_c(s) = K_p + \\frac{K_i}{s} + K_d s', description: '比例-积分-微分控制器传递函数。', example: 'Kp + Ki/s + Kd*s' },
+  { id: 'ctrl-lead', name: '超前校正', category: 'control', latex: 'G_c(s) = \\frac{1 + \\alpha T s}{1 + T s}, \\quad \\alpha > 1', description: '超前校正网络，提升相位裕度与带宽。', example: '(1 + a*T*s)/(1 + T*s), a>1' },
+  { id: 'ctrl-lag', name: '滞后校正', category: 'control', latex: 'G_c(s) = \\frac{1 + T s}{1 + \\beta T s}, \\quad \\beta > 1', description: '滞后校正网络，降低稳态误差。', example: '(1 + T*s)/(1 + b*T*s), b>1' },
 ];
 
 const ALL_CATEGORIES: CategoryKey[] = [
@@ -199,6 +217,7 @@ const ALL_CATEGORIES: CategoryKey[] = [
   'statistics',
   'physics',
   'finance',
+  'control',
 ];
 
 // Collapsible group keys: a built-in CategoryKey, a custom category id, or
@@ -328,6 +347,7 @@ function isInCustomCategory(
 }
 
 export function FormulaLibraryPanel() {
+  useLocale();
   const setEditorContent = useWorkbenchStore((s) => s.setEditorContent);
   const [query, setQuery] = useState('');
   const [activeCat, setActiveCat] = useState<ActiveFilter>('all');
@@ -1198,6 +1218,8 @@ function CategoryManageDialog({
   const [newColor, setNewColor] = useState<string>(CATEGORY_COLOR_PRESETS[0].badge);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editName, setEditName] = useState('');
+  // 删除分类确认（应用内对话框，避免原生 window.confirm 在桌面 WebView 行为不稳定）。
+  const [deleteConfirmId, setDeleteConfirmId] = useState<string | null>(null);
 
   // Reset transient form state each time the dialog opens.
   useEffect(() => {
@@ -1219,6 +1241,7 @@ function CategoryManageDialog({
   };
 
   return (
+    <>
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="sm:max-w-md">
         <DialogHeader>
@@ -1342,14 +1365,7 @@ function CategoryManageDialog({
                         <Button
                           variant="ghost"
                           size="sm"
-                          onClick={() => {
-                            if (
-                              typeof window !== 'undefined' &&
-                              window.confirm(t('formulasCategoryDeleteConfirm'))
-                            ) {
-                              onDelete(cc.id);
-                            }
-                          }}
+                          onClick={() => setDeleteConfirmId(cc.id)}
                           className="h-6 px-2 text-[11px] gap-1 text-destructive hover:text-destructive"
                         >
                           <Trash2 className="size-3" />
@@ -1375,5 +1391,40 @@ function CategoryManageDialog({
         </DialogFooter>
       </DialogContent>
     </Dialog>
+
+    {/* 删除分类 · 二次确认 */}
+    <Dialog open={deleteConfirmId !== null} onOpenChange={(o) => !o && setDeleteConfirmId(null)}>
+      <DialogContent className="sm:max-w-sm">
+        <DialogHeader>
+          <DialogTitle className="text-[14px] flex items-center gap-2">
+            <Trash2 className="size-4 text-destructive" />
+            {t('formulasCategoryDeleteConfirm')}
+          </DialogTitle>
+        </DialogHeader>
+        <DialogFooter className="gap-2">
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => setDeleteConfirmId(null)}
+            className="h-8 text-[12px]"
+          >
+            {t('commonCancel')}
+          </Button>
+          <Button
+            variant="destructive"
+            size="sm"
+            onClick={() => {
+              if (deleteConfirmId) onDelete(deleteConfirmId);
+              setDeleteConfirmId(null);
+            }}
+            className="h-8 text-[12px]"
+          >
+            <Trash2 className="size-3.5" />
+            {t('commonDelete')}
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+    </>
   );
 }

@@ -84,7 +84,7 @@ import {
   symbolicLimit,
 } from '@/lib/engine/symbolic';
 import { inputToLatex } from '@/lib/engine/latex';
-import { t } from '@/lib/i18n';
+import { t, useLocale } from '@/lib/i18n';
 import { cn } from '@/lib/utils';
 import { toast } from 'sonner';
 import { ZoomLens, type ZoomStep } from '@/components/workbench/controls/ZoomLens';
@@ -1494,6 +1494,7 @@ function ResultBlock({
  * MAIN PANEL
  * ================================================================== */
 export function SolverPanel() {
+  useLocale();
   const [activeTab, setActiveTab] = useState<string>('equation');
 
   return (

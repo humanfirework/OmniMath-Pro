@@ -33,7 +33,7 @@ import {
 import { Badge } from '@/components/ui/badge';
 import { useWorkbenchStore } from '@/lib/store/workbench';
 import { setScopeVar } from '@/lib/engine';
-import { t } from '@/lib/i18n';
+import { t, useLocale } from '@/lib/i18n';
 import { cn } from '@/lib/utils';
 import type { VariableEntry } from '@/lib/store/workbench';
 
@@ -89,6 +89,7 @@ function formatNum(n: number): string {
 }
 
 export function VariablesPanel() {
+  useLocale();
   const variables = useWorkbenchStore((s) => s.variables);
   const removeVariable = useWorkbenchStore((s) => s.removeVariable);
   const clearVariables = useWorkbenchStore((s) => s.clearVariables);

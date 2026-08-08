@@ -401,14 +401,10 @@ describe('evaluator', () => {
       expect(r.result).toBe('∫ from 0 to 1 of x^2 dx ≈ 0.3333333333');
     });
 
-    it('limit 符号路径当前原样回显未求值表达式（疑似 bug）', async () => {
-      // 疑似 bug：Algebrite.run('limit(...)') 在本环境返回未求值的
-      // 'limit(sin(x)/x,x,0)' 原样字符串，symbolic.ts 的 algebriteFailed
-      // 未识别这种"回显"，导致 success=true 且结果为无意义的调用串，
-      // 数值回退（=1）不会发生。测试锁定当前行为。
+    it('limit 符号路径对 sin(x)/x → 0 给出数值结果 1', async () => {
       const r = await evaluateExpressionAsync('limit(sin(x)/x, x, 0)');
       expect(r.success).toBe(true);
-      expect(r.result).toContain('limit(sin(x)/x,x,0)');
+      expect(r.result).toContain('= 1');
     });
 
     it('taylor 符号路径返回 Algebrite 展开式', async () => {

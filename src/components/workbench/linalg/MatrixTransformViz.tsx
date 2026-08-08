@@ -193,7 +193,18 @@ export function MatrixTransformViz() {
           </TabsTrigger>
         </TabsList>
 
-        <TabsContent value="2d" className="min-h-0 flex-1 overflow-auto">
+        {/* 注意：内部各 tab 使用 forceMount + CSS 隐藏（而非卸载），
+            尤其保证 3D 变换的 <Canvas> 在切换时保持挂载，
+            避免 R3F 在卸载/重挂初始化间隙偶发
+            "Cannot read properties of null (reading 'addEventListener')" 崩溃。 */}
+        <TabsContent
+          value="2d"
+          forceMount
+          className={cn(
+            'min-h-0 overflow-auto',
+            activeTab === '2d' ? 'flex-1' : 'hidden',
+          )}
+        >
           <motion.div
             initial={{ opacity: 0, y: 8 }}
             animate={{ opacity: 1, y: 0 }}
@@ -204,7 +215,14 @@ export function MatrixTransformViz() {
           </motion.div>
         </TabsContent>
 
-        <TabsContent value="3d" className="min-h-0 flex-1 overflow-auto">
+        <TabsContent
+          value="3d"
+          forceMount
+          className={cn(
+            'min-h-0 overflow-auto',
+            activeTab === '3d' ? 'flex-1' : 'hidden',
+          )}
+        >
           <motion.div
             initial={{ opacity: 0, y: 8 }}
             animate={{ opacity: 1, y: 0 }}
@@ -215,7 +233,14 @@ export function MatrixTransformViz() {
           </motion.div>
         </TabsContent>
 
-        <TabsContent value="eigen" className="min-h-0 flex-1 overflow-auto">
+        <TabsContent
+          value="eigen"
+          forceMount
+          className={cn(
+            'min-h-0 overflow-auto',
+            activeTab === 'eigen' ? 'flex-1' : 'hidden',
+          )}
+        >
           <motion.div
             initial={{ opacity: 0, y: 8 }}
             animate={{ opacity: 1, y: 0 }}
@@ -226,7 +251,14 @@ export function MatrixTransformViz() {
           </motion.div>
         </TabsContent>
 
-        <TabsContent value="quadratic" className="min-h-0 flex-1 overflow-auto">
+        <TabsContent
+          value="quadratic"
+          forceMount
+          className={cn(
+            'min-h-0 overflow-auto',
+            activeTab === 'quadratic' ? 'flex-1' : 'hidden',
+          )}
+        >
           <motion.div
             initial={{ opacity: 0, y: 8 }}
             animate={{ opacity: 1, y: 0 }}
@@ -237,7 +269,14 @@ export function MatrixTransformViz() {
           </motion.div>
         </TabsContent>
 
-        <TabsContent value="affine" className="min-h-0 flex-1 overflow-auto">
+        <TabsContent
+          value="affine"
+          forceMount
+          className={cn(
+            'min-h-0 overflow-auto',
+            activeTab === 'affine' ? 'flex-1' : 'hidden',
+          )}
+        >
           <motion.div
             initial={{ opacity: 0, y: 8 }}
             animate={{ opacity: 1, y: 0 }}

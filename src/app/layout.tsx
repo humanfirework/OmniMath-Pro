@@ -32,8 +32,8 @@ export const metadata: Metadata = {
   ],
   authors: [{ name: "OmniMath Team" }],
   icons: {
-    icon: "/logo.svg",
-    apple: "/logo.svg",
+    icon: "/logo.png",
+    apple: "/logo.png",
   },
 };
 

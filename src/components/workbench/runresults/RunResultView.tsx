@@ -102,6 +102,8 @@ export function RunResultView({ panel, className }: RunResultViewProps) {
   }, [panel, frameIndex, showGrid, showAxes, showImage, overlayImg]);
 
   // 初始化 / 数据变化时计算自动视口。
+  // 注意：这里只依赖 `panel`，绝不能依赖 `draw`（draw 随 frameIndex 播放变化，
+  // 若把 setPlaying(false) 放进这里，每次播帧都会把播放状态重置为暂停 → “一点播放就立刻停”）。
   useEffect(() => {
     const v = autoFitView(panel);
     if (v) {
@@ -110,7 +112,7 @@ export function RunResultView({ panel, className }: RunResultViewProps) {
     }
     setFrameIndex(0);
     setPlaying(false);
-  }, [panel, draw]);
+  }, [panel]);
 
   // 逐帧动画播放（帧间隔 = 1s / (基础 fps × 速度倍率)）。
   useEffect(() => {

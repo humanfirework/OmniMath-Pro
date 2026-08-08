@@ -312,23 +312,34 @@ function SizedCanvasMount({ matrix, showOriginal, fallback, onLost }: {
 }) {
   const ref = useRef<HTMLDivElement>(null);
   const [size, setSize] = useState<{ w: number; h: number } | null>(null);
+  // 双保险：先等到有真实尺寸，再等一帧 rAF，确保容器已完全提交到 DOM 后再挂载
+  // <Canvas>，从源头规避 R3F 在容器尚未就绪时调用 addEventListener(null) 的崩溃。
+  const [ready, setReady] = useState(false);
 
   useEffect(() => {
     const el = ref.current;
     if (!el) return;
+    let raf = 0;
     const measure = () => {
       const r = el.getBoundingClientRect();
-      if (r.width > 1 && r.height > 1) setSize({ w: r.width, h: r.height });
+      if (r.width > 1 && r.height > 1) {
+        setSize({ w: r.width, h: r.height });
+        cancelAnimationFrame(raf);
+        raf = requestAnimationFrame(() => setReady(true));
+      }
     };
     measure();
     const ro = new ResizeObserver(measure);
     ro.observe(el);
-    return () => ro.disconnect();
+    return () => {
+      cancelAnimationFrame(raf);
+      ro.disconnect();
+    };
   }, []);
 
   return (
     <div ref={ref} className="h-full w-full">
-      {size ? (
+      {ready && size ? (
         <Canvas camera={{ position: [3, 3, 3], fov: 50 }}>
           <ContextLossWatcher onLost={onLost} />
           <SceneContent matrix={matrix} showOriginal={showOriginal} />
@@ -346,7 +357,9 @@ function SizedCanvasMount({ matrix, showOriginal, fallback, onLost }: {
 function ContextLossWatcher({ onLost }: { onLost: () => void }) {
   const gl = useThree((s) => s.gl);
   useEffect(() => {
-    const canvas = gl.domElement;
+    // R3F v9 首帧渲染时 gl 可能尚未创建，做空值防护避免 addEventListener 崩溃。
+    const canvas = gl?.domElement;
+    if (!canvas) return;
     const handle = (e: Event) => {
       e.preventDefault();
       onLost();
@@ -422,7 +435,7 @@ export function Transform3D({ matrix, onMatrixChange }: Transform3DProps) {
                 return (
                   <input key={idx} type="number" step="0.1" value={matrix[idx]}
                     onChange={(e) => updateCell(idx, e.target.value)}
-                    className="w-10 h-5 px-1 text-[10px] font-mono text-center bg-transparent border border-border/60 rounded focus:outline-none focus:border-primary" />
+                    className="w-16 h-9 px-1 text-base font-mono text-center bg-transparent border border-border/60 rounded focus:outline-none focus:border-primary" />
                 );
               })}
               {rowStart === 0 && <span className="text-[10px] text-muted-foreground font-mono ml-0.5">]</span>}
@@ -479,57 +492,57 @@ export function Transform3D({ matrix, onMatrixChange }: Transform3DProps) {
         </div>
 
         {/* Info panel */}
-        <div className="shrink-0 w-44 flex flex-col gap-1.5 p-2 rounded-md bg-muted/20 border border-border/40 text-[10.5px] overflow-y-auto">
+        <div className="shrink-0 w-72 flex flex-col gap-1.5 p-3 rounded-md bg-muted/20 border border-border/40 text-[13px] overflow-y-auto">
           <div className="font-medium text-foreground/80">3D 变换信息</div>
-          <div className="grid grid-cols-2 gap-1">
-            <div className="rounded bg-background/30 px-1.5 py-1">
-              <div className="text-[8.5px] text-muted-foreground leading-none">det</div>
-              <div className="mt-0.5 font-mono font-medium leading-none" style={{ color: Math.abs(det) < 0.01 ? 'oklch(0.65 0.2 25)' : 'inherit' }}>{det.toFixed(3)}</div>
+          <div className="grid grid-cols-2 gap-1.5">
+            <div className="rounded bg-background/30 px-2 py-1.5">
+              <div className="text-[11px] text-muted-foreground leading-none">det</div>
+              <div className="mt-1 font-mono font-medium text-base leading-none" style={{ color: Math.abs(det) < 0.01 ? 'oklch(0.65 0.2 25)' : 'inherit' }}>{det.toFixed(3)}</div>
             </div>
-            <div className="rounded bg-background/30 px-1.5 py-1">
-              <div className="text-[8.5px] text-muted-foreground leading-none">体积比</div>
-              <div className="mt-0.5 font-mono leading-none">{Math.abs(det).toFixed(3)}×</div>
+            <div className="rounded bg-background/30 px-2 py-1.5">
+              <div className="text-[11px] text-muted-foreground leading-none">体积比</div>
+              <div className="mt-1 font-mono text-base leading-none">{Math.abs(det).toFixed(3)}×</div>
             </div>
-            <div className="rounded bg-background/30 px-1.5 py-1">
-              <div className="text-[8.5px] text-muted-foreground leading-none">秩</div>
-              <div className="mt-0.5 font-mono leading-none">{rank} / 3</div>
+            <div className="rounded bg-background/30 px-2 py-1.5">
+              <div className="text-[11px] text-muted-foreground leading-none">秩</div>
+              <div className="mt-1 font-mono text-base leading-none">{rank} / 3</div>
             </div>
-            <div className="rounded bg-background/30 px-1.5 py-1">
-              <div className="text-[8.5px] text-muted-foreground leading-none">迹</div>
-              <div className="mt-0.5 font-mono leading-none">{trace.toFixed(3)}</div>
+            <div className="rounded bg-background/30 px-2 py-1.5">
+              <div className="text-[11px] text-muted-foreground leading-none">迹</div>
+              <div className="mt-1 font-mono text-base leading-none">{trace.toFixed(3)}</div>
             </div>
-            <div className="rounded bg-background/30 px-1.5 py-1">
-              <div className="text-[8.5px] text-muted-foreground leading-none">|î|</div>
-              <div className="mt-0.5 font-mono leading-none">{Math.hypot(interpolatedMatrix[0], interpolatedMatrix[3], interpolatedMatrix[6]).toFixed(3)}</div>
+            <div className="rounded bg-background/30 px-2 py-1.5">
+              <div className="text-[11px] text-muted-foreground leading-none">|î|</div>
+              <div className="mt-1 font-mono text-base leading-none">{Math.hypot(interpolatedMatrix[0], interpolatedMatrix[3], interpolatedMatrix[6]).toFixed(3)}</div>
             </div>
-            <div className="rounded bg-background/30 px-1.5 py-1">
-              <div className="text-[8.5px] text-muted-foreground leading-none">|ĵ|</div>
-              <div className="mt-0.5 font-mono leading-none">{Math.hypot(interpolatedMatrix[1], interpolatedMatrix[4], interpolatedMatrix[7]).toFixed(3)}</div>
+            <div className="rounded bg-background/30 px-2 py-1.5">
+              <div className="text-[11px] text-muted-foreground leading-none">|ĵ|</div>
+              <div className="mt-1 font-mono text-base leading-none">{Math.hypot(interpolatedMatrix[1], interpolatedMatrix[4], interpolatedMatrix[7]).toFixed(3)}</div>
             </div>
-            <div className="rounded bg-background/30 px-1.5 py-1">
-              <div className="text-[8.5px] text-muted-foreground leading-none">|k̂|</div>
-              <div className="mt-0.5 font-mono leading-none">{Math.hypot(interpolatedMatrix[2], interpolatedMatrix[5], interpolatedMatrix[8]).toFixed(3)}</div>
+            <div className="rounded bg-background/30 px-2 py-1.5">
+              <div className="text-[11px] text-muted-foreground leading-none">|k̂|</div>
+              <div className="mt-1 font-mono text-base leading-none">{Math.hypot(interpolatedMatrix[2], interpolatedMatrix[5], interpolatedMatrix[8]).toFixed(3)}</div>
             </div>
-            <div className="rounded bg-background/30 px-1.5 py-1">
-              <div className="text-[8.5px] text-muted-foreground leading-none">进度</div>
-              <div className="mt-0.5 font-mono leading-none">{Math.round(progress * 100)}%</div>
+            <div className="rounded bg-background/30 px-2 py-1.5">
+              <div className="text-[11px] text-muted-foreground leading-none">进度</div>
+              <div className="mt-1 font-mono text-base leading-none">{Math.round(progress * 100)}%</div>
             </div>
           </div>
 
           {Math.abs(det) < 0.01 && (
-            <div className="mt-1 px-1.5 py-1 rounded bg-destructive/10 text-destructive text-[9.5px] leading-tight">det = 0：3D→2D/1D 降维</div>
+            <div className="mt-1 px-2 py-1 rounded bg-destructive/10 text-destructive text-[11px] leading-tight">det = 0：3D→2D/1D 降维</div>
           )}
 
           {/* 动态解读：用通俗语言说明当前变换的本质 */}
-          <div className="mt-1 px-1.5 py-1 rounded bg-primary/5 border border-primary/15 text-[9.5px] leading-tight text-foreground/80">
+          <div className="mt-1 px-2 py-1.5 rounded bg-primary/5 border border-primary/15 text-[11.5px] leading-snug text-foreground/80">
             {interpretation}
           </div>
 
           {showMath && (
-            <div className="mt-1 pt-1 border-t border-border/40 space-y-1.5">
+            <div className="mt-1 pt-1.5 border-t border-border/40 space-y-1.5">
               <div className="font-medium text-muted-foreground">数学原理</div>
               <FormulaRenderer latex={`\\det(T)=${det.toFixed(3)}`} displayMode />
-              <div className="text-[9px] text-muted-foreground leading-tight">
+              <div className="text-[10.5px] text-muted-foreground leading-relaxed">
                 3D 行列式 = 体积缩放因子<br />
                 迹 = 主对角线之和（对旋转约 1+2cosθ）<br />
                 秩 = 线性无关的行数（满秩=可逆）<br />
@@ -540,7 +553,7 @@ export function Transform3D({ matrix, onMatrixChange }: Transform3DProps) {
             </div>
           )}
 
-          <div className="mt-1 text-[9px] text-muted-foreground/70 leading-tight">
+          <div className="mt-1 text-[10.5px] text-muted-foreground/70 leading-relaxed">
             <div className="font-medium text-muted-foreground mb-0.5">提示</div>
             红箭头 = î（原 e₁）<br />
             绿箭头 = ĵ（原 e₂）<br />

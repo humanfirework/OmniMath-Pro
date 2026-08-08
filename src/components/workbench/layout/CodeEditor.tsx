@@ -26,6 +26,7 @@ import { python } from '@codemirror/lang-python';
 import { tags as t } from '@lezer/highlight';
 import { math, KEYWORDS, FUNCTIONS, getFunctionInfo, MATLAB_STATEMENTS, type MathFnInfo } from '@/lib/editor/mathLanguage';
 import { checkSyntax } from '@/lib/editor/syntaxCheck';
+import { semanticDiagnostics } from '@/lib/editor/semanticCheck';
 import { useSettingsStore } from '@/lib/store/settingsStore';
 import { useWorkbenchStore } from '@/lib/store/workbench';
 
@@ -56,6 +57,7 @@ export function CodeEditor({
   const onRunRef = useRef(onRun);
   const onCursorChangeRef = useRef(onCursorChange);
   const wheelRafRef = useRef<number | null>(null);
+  const langRef = useRef(language);
 
   const storeFontSize = useSettingsStore((s) => s.editorFontSize);
   const fontSize = fontSizeProp ?? storeFontSize;
@@ -179,9 +181,10 @@ export function CodeEditor({
       fontVariantNumeric: 'tabular-nums',
       fontFeatureSettings: '"tnum"',
       boxSizing: 'border-box',
-      // 代码行用 line-height 1.5（半行距使字形比几何中心略高），而行号是被
-      // flex 精确居中的。为让行号字形与代码基线对齐，把行号微移 1px 上浮。
-      transform: 'translateY(-1px)',
+      // 注意：这里不再对行号元素做 transform 微移（之前的 translateY(-1px) 会连
+      // 同 .cm-activeLineGutter 的背景一起偏移，导致左侧行号高光与右侧代码高光
+      // 上下错位）。CodeMirror 用 inline style.height 精确设定每个 gutter 行高，
+      // 配合 flex 垂直居中即可让行号字形居中，同时高光带与内容行完全对齐。
     },
     // Active-line gutter highlight. We want the gutter cell to look like a
     // continuation of the content active-line band. The gutter element's
@@ -238,7 +241,15 @@ export function CodeEditor({
     if (!containerRef.current) return;
 
     const langExt = getLanguageExtension(language);
-    const syntaxLinter = linter((view) => checkSyntax(view, language));
+    const syntaxLinter = linter((view) => {
+      const lang = langRef.current;
+      const syntax = checkSyntax(view, lang);
+      // Python 用其自身的括号检查；Simple/MATLAB 再叠加「语义纠错」：
+      // 未定义函数 / 未定义变量（工作台变量作为已知符号注入，避免误报）。
+      if (lang === 'python') return syntax;
+      const known = { variables: Object.keys(useWorkbenchStore.getState().variables ?? {}) };
+      return [...syntax, ...semanticDiagnostics(view, known)];
+    });
 
     const updateListener = EditorView.updateListener.of((update) => {
       if (update.docChanged) {
@@ -362,6 +373,7 @@ export function CodeEditor({
 
   /* ─── Switch language extension ──────────────────────────────── */
   useEffect(() => {
+    langRef.current = language;
     const view = viewRef.current;
     if (!view) return;
     view.dispatch({

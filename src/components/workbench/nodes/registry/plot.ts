@@ -22,8 +22,10 @@ export const plotNodes = {
       const xMin = Number(config.xMin ?? -10);
       const xMax = Number(config.xMax ?? 10);
       // Sample the curve so the node footer can show a sparkline.
+      // 采样点数随 x 范围自适应：范围越宽越密，保证高频函数（如 sin 在宽区间
+      // 内多次振荡）不因欠采样而混叠成乱码。上限 800 与 2D 面板一致。
       const samples: Array<[number, number]> = [];
-      const N = 60;
+      const N = Math.max(60, Math.min(800, Math.ceil((xMax - xMin) * 20)));
       for (let i = 0; i <= N; i++) {
         const xv = xMin + ((xMax - xMin) * i) / N;
         try {

@@ -120,6 +120,38 @@ export interface Curve2DSpec {
   exprY: string;
   /** θ range (polar) / t range (parametric). Ignored for cartesian. */
   paramRange: [number, number];
+  /** 可选：用表达式（可含变量，如 `t`、`2*pi`）覆盖 paramRange 的端点。
+   *  采样时对实时 scope 求值，变量变化（如滑块调 t）会自动重新采样。
+   *  为空 / 非法时回退到 paramRange 的对应数字。 */
+  paramMinExpr?: string;
+  paramMaxExpr?: string;
+}
+
+/**
+ * 解析曲线参数范围的端点，支持表达式覆盖。
+ * 每个端点：若提供了 `param*Expr` 且能对实时 scope 求值得到有限数，则用之；
+ * 否则回退到 `paramRange` 里对应的数字。
+ */
+export function resolveParamRange(spec: Curve2DSpec): [number, number] {
+  const [a, b] = spec.paramRange;
+  const evalEndpoint = (expr: string | undefined, fallback: number): number => {
+    if (!expr || !expr.trim()) return fallback;
+    const compiled = safeCompile(expr);
+    if (!compiled) return fallback;
+    // 用「实时作用域 + 仅在未定义时补默认」求值：若用户通过滑块把 t 设为某值
+    // （如 θ 上限 = t），这里应取真实的 t，而不是被 0 覆盖。x/θ 同理。
+    const base = getEvalScope();
+    const scope = {
+      ...base,
+      t: base.t ?? 0,
+      x: base.x ?? 0,
+      theta: base.theta ?? 0,
+      θ: base.θ ?? 0,
+    };
+    const v = evalNum(compiled, scope);
+    return Number.isFinite(v) ? v : fallback;
+  };
+  return [evalEndpoint(spec.paramMinExpr, a), evalEndpoint(spec.paramMaxExpr, b)];
 }
 
 /* ------------------------------------------------------------------ */
@@ -275,6 +307,11 @@ export function sampleFunction(
   const n = Math.max(2, Math.min(2000, Math.floor(count)));
   const samples: PlotSample[] = new Array(n);
 
+  // 复用同一个求值作用域（而不是每个采样点都 getEvalScope 复制整个 scope）。
+  // scope 的复制是采样阶段的最大 CPU 开销（拖动滑块时每帧 800~2000 次），
+  // 改为一次复制 + 原位改写参数，动画可逼近 Desmos 的流畅度。
+  const scope = getEvalScope();
+
   for (let i = 0; i < n; i++) {
     const t = lo + ((hi - lo) * i) / (n - 1);
     let xVal: number;
@@ -282,12 +319,14 @@ export function sampleFunction(
     try {
       if (plotType === 'polar') {
         // r = f(θ), θ = x. Convert to cartesian for rendering.
-        const r = toNumber(compiled.evaluate(getEvalScope({ x: t, t })));
+        scope.x = t; scope.t = t;
+        const r = toNumber(compiled.evaluate(scope));
         xVal = r * Math.cos(t);
         yVal = r * Math.sin(t);
       } else if (plotType === 'parametric') {
         // Expression should evaluate to [x(t), y(t)].
-        const v = compiled.evaluate(getEvalScope({ t, x: t }));
+        scope.t = t; scope.x = t;
+        const v = compiled.evaluate(scope);
         if (Array.isArray(v) && v.length >= 2) {
           xVal = toNumber(v[0]);
           yVal = toNumber(v[1]);
@@ -298,7 +337,8 @@ export function sampleFunction(
       } else {
         // cartesian: y = f(x)
         xVal = t;
-        yVal = toNumber(compiled.evaluate(getEvalScope({ x: t })));
+        scope.x = t;
+        yVal = toNumber(compiled.evaluate(scope));
       }
     } catch {
       xVal = NaN;
@@ -371,12 +411,17 @@ export function samplePolar(
 
   const n = Math.max(2, Math.min(2000, Math.floor(count)));
   const samples: PlotSample[] = new Array(n);
+  const scope = getEvalScope();
   for (let i = 0; i < n; i++) {
     const theta = thetaMin + ((thetaMax - thetaMin) * i) / (n - 1);
     let xVal: number;
     let yVal: number;
     try {
-      const r = toNumber(compiled.evaluate(getEvalScope({ x: theta, t: theta, theta })));
+      // Bind both `theta` and the unicode `θ` (normalizeSymbols turns the
+      // latin `theta` into `θ` for display, so the stored expression may
+      // reference either spelling).
+      scope.x = theta; scope.t = theta; scope.theta = theta; scope.θ = theta;
+      const r = toNumber(compiled.evaluate(scope));
       xVal = r * Math.cos(theta);
       yVal = r * Math.sin(theta);
     } catch {
@@ -437,13 +482,15 @@ export function sampleParametric(
 
   const n = Math.max(2, Math.min(2000, Math.floor(count)));
   const samples: PlotSample[] = new Array(n);
+  const scope = getEvalScope();
   for (let i = 0; i < n; i++) {
     const t = tMin + ((tMax - tMin) * i) / (n - 1);
     let xVal: number;
     let yVal: number;
     try {
-      xVal = toNumber(compiledX.evaluate(getEvalScope({ t, x: t })));
-      yVal = toNumber(compiledY.evaluate(getEvalScope({ t, x: t })));
+      scope.t = t; scope.x = t;
+      xVal = toNumber(compiledX.evaluate(scope));
+      yVal = toNumber(compiledY.evaluate(scope));
     } catch {
       xVal = NaN;
       yVal = NaN;
@@ -482,23 +529,32 @@ export function sampleCurve(
   if (spec.mode === 'polar') {
     const compiledX = safeCompile(spec.exprX);
     if (!compiledX) return [];
+    const range = resolveParamRange(spec);
+    const scope = getEvalScope();
+    const bind = (t: number): void => {
+      scope.x = t; scope.t = t; scope.theta = t; scope.θ = t;
+    };
     const px = (t: number): number => {
-      const r = evalNum(compiledX, getEvalScope({ x: t, t, theta: t }));
+      bind(t);
+      const r = evalNum(compiledX, scope);
       return r * Math.cos(t);
     };
     const py = (t: number): number => {
-      const r = evalNum(compiledX, getEvalScope({ x: t, t, theta: t }));
+      bind(t);
+      const r = evalNum(compiledX, scope);
       return r * Math.sin(t);
     };
-    return sampleParametricAdaptive(px, py, spec.paramRange, opts);
+    return sampleParametricAdaptive(px, py, range, opts);
   }
   if (spec.mode === 'parametric') {
     const compiledX = safeCompile(spec.exprX);
     const compiledY = safeCompile(spec.exprY);
     if (!compiledX || !compiledY) return [];
-    const px = (t: number): number => evalNum(compiledX, getEvalScope({ t, x: t }));
-    const py = (t: number): number => evalNum(compiledY, getEvalScope({ t, x: t }));
-    return sampleParametricAdaptive(px, py, spec.paramRange, opts);
+    const range = resolveParamRange(spec);
+    const scope = getEvalScope();
+    const px = (t: number): number => { scope.t = t; scope.x = t; return evalNum(compiledX, scope); };
+    const py = (t: number): number => { scope.t = t; scope.x = t; return evalNum(compiledY, scope); };
+    return sampleParametricAdaptive(px, py, range, opts);
   }
   // cartesian
   const samples = sampleAdaptive(spec.exprX, xRange, opts);
@@ -598,7 +654,11 @@ export function sampleAdaptive(
   const segs = Math.max(1, Math.min(initSegments, 4096));
   const dx = (hi - lo) / segs;
 
-  const f = (x: number): number => evalNum(compiled, getEvalScope({ x }));
+  const scope = getEvalScope();
+  const f = (x: number): number => {
+    scope.x = x;
+    return evalNum(compiled, scope);
+  };
   // Cached f values so we don't re-evaluate segment endpoints.
   const cache = new Map<number, number>();
   const ev = (x: number): number => {

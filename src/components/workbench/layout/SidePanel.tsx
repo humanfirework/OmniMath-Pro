@@ -20,7 +20,7 @@ import {
   TooltipTrigger,
 } from '@/components/ui/tooltip';
 import { useWorkbenchStore } from '@/lib/store/workbench';
-import { t } from '@/lib/i18n';
+import { t, useLocale } from '@/lib/i18n';
 import { cn } from '@/lib/utils';
 import type { SidePanelTab } from '@/lib/store/workbench';
 import type { TranslationDict } from '@/lib/i18n';
@@ -75,6 +75,7 @@ const SIDE_PANEL_TABS: SidePanelTab[] = [
 ];
 
 export function SidePanel() {
+  useLocale();
   const activeSidePanel = useWorkbenchStore((s) => s.activeSidePanel);
   const toggleSidePanel = useWorkbenchStore((s) => s.toggleSidePanel);
 

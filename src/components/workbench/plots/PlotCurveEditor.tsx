@@ -241,6 +241,13 @@ function CurveRow({ plot, spec, onChange, tp }: CurveRowProps) {
           <RangeNumberInput value={spec.paramRange[0]} onChange={(v) => setParam(0, v)} ariaLabel="θ min" />
           <span className="text-muted-foreground/60">~</span>
           <RangeNumberInput value={spec.paramRange[1]} onChange={(v) => setParam(1, v)} ariaLabel="θ max" />
+          {/* θ 上限可用表达式（可含变量，如 t / 2*pi），实时求值 */}
+          <ExprInput
+            value={spec.paramMaxExpr ?? ''}
+            onChange={(expr) => onChange({ ...spec, paramMaxExpr: expr.trim() || undefined })}
+            ariaLabel="θ max (变量表达式)"
+            narrow
+          />
         </>
       )}
 
@@ -264,6 +271,13 @@ function CurveRow({ plot, spec, onChange, tp }: CurveRowProps) {
           <RangeNumberInput value={spec.paramRange[0]} onChange={(v) => setParam(0, v)} ariaLabel="t min" />
           <span className="text-muted-foreground/60">~</span>
           <RangeNumberInput value={spec.paramRange[1]} onChange={(v) => setParam(1, v)} ariaLabel="t max" />
+          {/* t 上限可用表达式（可含变量），实时求值 */}
+          <ExprInput
+            value={spec.paramMaxExpr ?? ''}
+            onChange={(expr) => onChange({ ...spec, paramMaxExpr: expr.trim() || undefined })}
+            ariaLabel="t max (变量表达式)"
+            narrow
+          />
         </>
       )}
     </div>

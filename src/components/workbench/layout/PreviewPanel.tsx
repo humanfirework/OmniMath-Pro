@@ -63,7 +63,7 @@ import { Plot2DPanel } from '@/components/workbench/plots/Plot2DPanel';
 import { AIPanel } from '@/components/workbench/panels/AIPanel';
 import { useWorkbenchStore } from '@/lib/store/workbench';
 import { useLayoutStore } from '@/lib/store/layoutStore';
-import { t } from '@/lib/i18n';
+import { t, useLocale } from '@/lib/i18n';
 import { cn } from '@/lib/utils';
 import { saveTextToFile } from '@/lib/nativeExport';
 import { resultToMarkdown, resultToLatex } from '@/lib/exportMarkdown';
@@ -122,6 +122,7 @@ const TABS: TabDef[] = [
 ];
 
 export function PreviewPanel() {
+  useLocale();
   const activeTab = useWorkbenchStore((s) => s.activePreviewTab);
   const setActiveTab = useWorkbenchStore((s) => s.setActivePreviewTab);
   const currentResult = useWorkbenchStore((s) => s.currentResult);

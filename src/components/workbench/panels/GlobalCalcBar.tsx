@@ -13,7 +13,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { Sigma, X, ArrowRight, Check, Copy, AlertCircle } from 'lucide-react';
 import { useWorkbenchStore } from '@/lib/store/workbench';
 import { evaluateExpression } from '@/lib/engine';
-import { t } from '@/lib/i18n';
+import { t, useLocale } from '@/lib/i18n';
 import { cn } from '@/lib/utils';
 
 interface QuickCalc {
@@ -47,6 +47,7 @@ function saveQuickCalcs(items: QuickCalc[]) {
 }
 
 export function GlobalCalcBar() {
+  useLocale();
   const open = useWorkbenchStore((s) => s.globalCalcOpen);
   const setOpen = useWorkbenchStore((s) => s.setGlobalCalcOpen);
   const inputMode = useWorkbenchStore((s) => s.inputMode);

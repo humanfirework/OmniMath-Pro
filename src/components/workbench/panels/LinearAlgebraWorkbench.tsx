@@ -56,11 +56,12 @@ import {
 } from '@/components/ui/tooltip';
 import { FormulaRenderer } from '@/components/workbench/FormulaRenderer';
 import { MatrixTransformViz } from '@/components/workbench/linalg/MatrixTransformViz';
+import { VectorPreviewCanvas } from '@/components/workbench/linalg/VectorPreviewCanvas';
 import { AiPromptInput } from '@/components/workbench/ai/AiPromptInput';
 import { useAIContextStore } from '@/lib/store/aiContextStore';
 import { useWorkbenchStore, type VariableEntry } from '@/lib/store/workbench';
 import { setScopeVar } from '@/lib/engine';
-import { t, tf, type TranslationDict } from '@/lib/i18n';
+import { t, tf, useLocale, type TranslationDict } from '@/lib/i18n';
 import { cn } from '@/lib/utils';
 import { toast } from 'sonner';
 import { math } from '@/lib/engine/mathInstance';
@@ -369,6 +370,7 @@ function MatrixPreview({ matrix }: { matrix: Matrix }) {
  * MAIN WORKBENCH
  * ================================================================== */
 export function LinearAlgebraWorkbench() {
+  useLocale();
   const [matrices, setMatrices] = useState<MatrixEntry[]>(() => {
     const initial: MatrixEntry[] = [
       { name: 'A', data: [[1, 2, 3], [4, 5, 6], [7, 8, 0]] },
@@ -585,7 +587,11 @@ export function LinearAlgebraWorkbench() {
             </TabsTrigger>
           </TabsList>
 
-          <TabsContent value="edit" className="flex-1 min-h-0 overflow-hidden">
+          <TabsContent
+            value="edit"
+            forceMount
+            className={cn('min-h-0 overflow-hidden', activeTab === 'edit' ? 'flex-1' : 'hidden')}
+          >
             <MatrixEditorTab
               matrices={matrices}
               selected={selected}
@@ -595,23 +601,43 @@ export function LinearAlgebraWorkbench() {
             />
           </TabsContent>
 
-          <TabsContent value="ops" className="flex-1 min-h-0 overflow-hidden">
+          <TabsContent
+            value="ops"
+            forceMount
+            className={cn('min-h-0 overflow-hidden', activeTab === 'ops' ? 'flex-1' : 'hidden')}
+          >
             <OperationsTab matrices={matrices} />
           </TabsContent>
 
-          <TabsContent value="decomp" className="flex-1 min-h-0 overflow-hidden">
+          <TabsContent
+            value="decomp"
+            forceMount
+            className={cn('min-h-0 overflow-hidden', activeTab === 'decomp' ? 'flex-1' : 'hidden')}
+          >
             <DecompositionTab matrices={matrices} selected={selected} />
           </TabsContent>
 
-          <TabsContent value="system" className="flex-1 min-h-0 overflow-hidden">
-            <LinearSystemTab defaultMatrix={selected?.data} />
+          <TabsContent
+            value="system"
+            forceMount
+            className={cn('min-h-0 overflow-hidden', activeTab === 'system' ? 'flex-1' : 'hidden')}
+          >
+            <LinearSystemTab matrices={matrices} selected={selected} />
           </TabsContent>
 
-          <TabsContent value="vector" className="flex-1 min-h-0 overflow-hidden">
+          <TabsContent
+            value="vector"
+            forceMount
+            className={cn('min-h-0 overflow-hidden', activeTab === 'vector' ? 'flex-1' : 'hidden')}
+          >
             <VectorOpsTab />
           </TabsContent>
 
-          <TabsContent value="transform" className="flex-1 min-h-0 overflow-hidden">
+          <TabsContent
+            value="transform"
+            forceMount
+            className={cn('min-h-0 overflow-hidden', activeTab === 'transform' ? 'flex-1' : 'hidden')}
+          >
             <div className="h-full rounded-lg border border-border/60 bg-card/30 p-3 overflow-hidden">
               <MatrixTransformViz />
             </div>
@@ -1499,6 +1525,23 @@ function VectorOpsTab() {
 
   const needsB = op === 'dot' || op === 'cross' || op === 'angle' || op === 'projection';
 
+  // 实时解析输入，用于操作前预览向量内容。
+  const parsedA = useMemo(() => parseVectorInput(vecAText), [vecAText]);
+  const parsedB = useMemo(
+    () => (needsB ? parseVectorInput(vecBText) : null),
+    [needsB, vecBText],
+  );
+
+  // 实时解析 Gram-Schmidt 输入，用于结果/预览前显示原始向量组。
+  const parsedGsVectors = useMemo(
+    () =>
+      gsText
+        .split(/\r?\n/)
+        .map((l) => parseVectorInput(l))
+        .filter((v): v is number[] => v !== null),
+    [gsText],
+  );
+
   const handleCompute = () => {
     setWorking(true);
     setError(null);
@@ -1657,10 +1700,35 @@ function VectorOpsTab() {
     }
   };
 
+  // —— 可视化预览用向量 ——
+  // 向量运算：A / B / 结果（结果为向量时）。
+  const vectorPreviewVectors: { v: number[]; color?: string; label?: string }[] = [];
+  if (parsedA) vectorPreviewVectors.push({ v: parsedA, color: '#2dd4bf', label: 'A' });
+  if (needsB && parsedB) vectorPreviewVectors.push({ v: parsedB, color: '#f59e0b', label: 'B' });
+  if (result?.matrix && result.matrix.length === 1) {
+    vectorPreviewVectors.push({ v: result.matrix[0], color: '#a78bfa', label: '结果' });
+  }
+
+  // Gram-Schmidt：原始向量组（青色系）+ 正交化基（红色系）。
+  const gsOriginColors = ['#2dd4bf', '#f59e0b', '#a78bfa', '#22c55e'];
+  const gsOrthColors = ['#ef4444', '#3b82f6', '#10b981', '#f43f5e'];
+  const gsPreviewVectors: { v: number[]; color?: string; label?: string }[] = [];
+  parsedGsVectors.forEach((v, i) => {
+    gsPreviewVectors.push({ v, color: gsOriginColors[i % gsOriginColors.length], label: `v${i + 1}` });
+  });
+  gsResult?.vectors.forEach((v, i) => {
+    gsPreviewVectors.push({
+      v,
+      color: gsOrthColors[i % gsOrthColors.length],
+      label: `q${i + 1}${'\u2020'}`,
+    });
+  });
+  const gsDim: 2 | 3 = parsedGsVectors.some((v) => v.length >= 3) ? 3 : 2;
+
   return (
     <div className="h-full overflow-auto">
-      <div className="grid grid-cols-[1fr_1fr] gap-5 p-2">
-        {/* Left: vector ops */}
+      <div className="grid grid-cols-[minmax(0,340px)_minmax(0,1fr)] gap-5 p-2">
+        {/* Left: vector ops（收窄向量组输入区） */}
         <div className="space-y-3">
           <div className="text-[12px] font-semibold text-foreground/80 flex items-center gap-1.5">
             <ArrowRight className="size-3.5 text-primary" />
@@ -1679,6 +1747,18 @@ function VectorOpsTab() {
             />
           </div>
 
+          {/* 向量 A 实时预览 */}
+          {parsedA && parsedA.length > 0 ? (
+            <div className="rounded-md border border-border/40 bg-muted/20 p-2">
+              <div className="text-[11px] text-muted-foreground mb-1.5 font-mono">A =</div>
+              <MatrixPreview matrix={parsedA.map((v) => [v])} />
+            </div>
+          ) : (
+            <div className="rounded-md border border-dashed border-border/40 bg-transparent p-2 text-[11px] text-muted-foreground">
+              {t('linalgVectorEmpty')}
+            </div>
+          )}
+
           {needsB && (
             <div>
               <label className="text-[11px] text-muted-foreground">
@@ -1692,6 +1772,19 @@ function VectorOpsTab() {
               />
             </div>
           )}
+
+          {/* 向量 B 实时预览 */}
+          {needsB &&
+            (parsedB && parsedB.length > 0 ? (
+              <div className="rounded-md border border-border/40 bg-muted/20 p-2">
+                <div className="text-[11px] text-muted-foreground mb-1.5 font-mono">B =</div>
+                <MatrixPreview matrix={parsedB.map((v) => [v])} />
+              </div>
+            ) : (
+              <div className="rounded-md border border-dashed border-border/40 bg-transparent p-2 text-[11px] text-muted-foreground">
+                {t('linalgVectorEmpty')}
+              </div>
+            ))}
 
           <div>
             <label className="text-[11px] text-muted-foreground">{t('linalgOperation')}</label>
@@ -1766,90 +1859,121 @@ function VectorOpsTab() {
           </AnimatePresence>
         </div>
 
-        {/* Right: Gram-Schmidt */}
+        {/* Right: 可视化预览 + Gram-Schmidt */}
         <div className="space-y-3">
-          <div className="text-[12px] font-semibold text-foreground/80 flex items-center gap-1.5">
-            <Ruler className="size-3.5 text-primary" />
-            {t('linalgGramSchmidt')}
-          </div>
-
+          {/* 向量运算可视化 */}
           <div>
-            <label className="text-[11px] text-muted-foreground">
-              {t('linalgGramSchmidtHint')}
-            </label>
-            <textarea
-              value={gsText}
-              onChange={(e) => setGsText(e.target.value)}
-              className={cn(
-                'min-h-[88px] w-full p-2.5 text-[12px] font-mono mt-1',
-                'bg-muted/40 border border-border/60 rounded-md',
-                'focus:outline-none focus:border-primary focus:ring-2 focus:ring-primary/40',
-                'resize-y',
-              )}
-              placeholder={'1, 1, 0\n1, 0, 1\n0, 1, 1'}
+            <div className="text-[11px] text-muted-foreground mb-1.5 flex items-center gap-1.5">
+              <Activity className="size-3.5" /> {t('linalgVectorVisual')}
+            </div>
+            <VectorPreviewCanvas
+              vectors={vectorPreviewVectors}
+              dim={parsedA && parsedA.length >= 3 ? 3 : needsB && parsedB && parsedB.length >= 3 ? 3 : 2}
+              height={220}
+              emptyText={t('linalgVectorVisualEmpty')}
             />
           </div>
 
-          <Button
-            onClick={handleGramSchmidt}
-            className="w-full h-9 text-[12px] gap-1.5"
-            size="sm"
-          >
-            <Ruler className="size-4" />
-            {t('linalgGramSchmidt')}
-          </Button>
+          {/* Gram-Schmidt */}
+          <div className="space-y-3">
+            <div className="text-[12px] font-semibold text-foreground/80 flex items-center gap-1.5">
+              <Ruler className="size-3.5 text-primary" />
+              {t('linalgGramSchmidt')}
+            </div>
 
-          <AnimatePresence mode="wait">
-            {gsError && (
-              <motion.div
-                key="gs-err"
-                initial={{ opacity: 0, y: -4 }}
-                animate={{ opacity: 1, y: 0 }}
-                exit={{ opacity: 0 }}
-                className="rounded-md border border-rose-500/40 bg-rose-500/10 p-3 text-[12px] text-rose-600 dark:text-rose-300"
-              >
-                <div className="flex items-start gap-1.5">
-                  <X className="size-4 mt-0.5 shrink-0" />
-                  <span>{gsError}</span>
-                </div>
-              </motion.div>
-            )}
-
-            {gsResult && !gsError && (
-              <motion.div
-                key="gs-res"
-                initial={{ opacity: 0, y: 4 }}
-                animate={{ opacity: 1, y: 0 }}
-                exit={{ opacity: 0 }}
-                className="rounded-md border border-primary/30 bg-primary/5 p-3 glow-card-teal space-y-2"
-              >
-                <div className="text-[11px] text-muted-foreground">{t('linalgOrthogonalized')}</div>
-                {gsResult.vectors.map((v, i) => (
-                  <div key={i} className="overflow-x-auto">
-                    <FormulaRenderer
-                      latex={`q_{${i + 1}} = ${vectorToLatex(v)}`}
-                      displayMode
-                      fitToContainer={true}
-                    />
-                  </div>
-                ))}
-                {gsResult.steps.length > 0 && (
-                  <details className="mt-2 group">
-                    <summary className="cursor-pointer text-[11px] text-muted-foreground hover:text-foreground select-none">
-                      {t('linalgGramSchmidtSteps')} ({gsResult.steps.length})
-                    </summary>
-                    <div className="mt-2 space-y-1.5 overflow-x-auto">
-                      {gsResult.steps.map((s, i) => (
-                        <div key={i} className="text-[11.5px] text-foreground/80">
-                          <FormulaRenderer latex={s} displayMode fitToContainer={true} />
-                        </div>
-                      ))}
-                    </div>
-                  </details>
+            <div>
+              <label className="text-[11px] text-muted-foreground">
+                {t('linalgGramSchmidtHint')}
+              </label>
+              <textarea
+                value={gsText}
+                onChange={(e) => setGsText(e.target.value)}
+                className={cn(
+                  'min-h-[88px] w-full p-2.5 text-[12px] font-mono mt-1',
+                  'bg-muted/40 border border-border/60 rounded-md',
+                  'focus:outline-none focus:border-primary focus:ring-2 focus:ring-primary/40',
+                  'resize-y',
                 )}
-              </motion.div>
+                placeholder={'1, 1, 0\n1, 0, 1\n0, 1, 1'}
+              />
+            </div>
+
+            <Button
+              onClick={handleGramSchmidt}
+              className="w-full h-9 text-[12px] gap-1.5"
+              size="sm"
+            >
+              <Ruler className="size-4" />
+              {t('linalgGramSchmidt')}
+            </Button>
+
+            {/* Gram-Schmidt 可视化：原始向量组 + 正交化基 */}
+            {parsedGsVectors.length > 0 && (
+              <div>
+                <div className="text-[11px] text-muted-foreground mb-1.5 flex items-center gap-1.5">
+                  <Ruler className="size-3.5" /> {t('linalgOrthogonalizedVisual')}
+                </div>
+                <VectorPreviewCanvas
+                  vectors={gsPreviewVectors}
+                  dim={gsDim}
+                  height={220}
+                  emptyText={t('linalgVectorVisualEmpty')}
+                />
+              </div>
             )}
-          </AnimatePresence>
+
+            <AnimatePresence mode="wait">
+              {gsError && (
+                <motion.div
+                  key="gs-err"
+                  initial={{ opacity: 0, y: -4 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  exit={{ opacity: 0 }}
+                  className="rounded-md border border-rose-500/40 bg-rose-500/10 p-3 text-[12px] text-rose-600 dark:text-rose-300"
+                >
+                  <div className="flex items-start gap-1.5">
+                    <X className="size-4 mt-0.5 shrink-0" />
+                    <span>{gsError}</span>
+                  </div>
+                </motion.div>
+              )}
+
+              {gsResult && !gsError && (
+                <motion.div
+                  key="gs-res"
+                  initial={{ opacity: 0, y: 4 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  exit={{ opacity: 0 }}
+                  className="rounded-md border border-primary/30 bg-primary/5 p-3 glow-card-teal space-y-2"
+                >
+                  <div className="text-[11px] text-muted-foreground">{t('linalgOrthogonalized')}</div>
+                  {gsResult.vectors.map((v, i) => (
+                    <div key={i} className="overflow-x-auto">
+                      <FormulaRenderer
+                        latex={`q_{${i + 1}} = ${vectorToLatex(v)}`}
+                        displayMode
+                        fitToContainer={true}
+                      />
+                    </div>
+                  ))}
+                  {gsResult.steps.length > 0 && (
+                    <details className="mt-2 group">
+                      <summary className="cursor-pointer text-[11px] text-muted-foreground hover:text-foreground select-none">
+                        {t('linalgGramSchmidtSteps')} ({gsResult.steps.length})
+                      </summary>
+                      <div className="mt-2 space-y-1.5 overflow-x-auto">
+                        {gsResult.steps.map((s, i) => (
+                          <div key={i} className="text-[11.5px] text-foreground/80">
+                            <FormulaRenderer latex={s} displayMode fitToContainer={true} />
+                          </div>
+                        ))}
+                      </div>
+                    </details>
+                  )}
+                </motion.div>
+              )}
+            </AnimatePresence>
+          </div>
         </div>
       </div>
     </div>
@@ -2029,6 +2153,16 @@ function DecompositionTab({
             </Select>
           </div>
 
+          {/* 选中矩阵 A 的实时预览（与「运算」tab 一致，便于分解前确认输入） */}
+          {matrix && (
+            <div className="rounded-md border border-border/40 bg-muted/20 p-2">
+              <div className="text-[11px] text-muted-foreground mb-1.5 font-mono">
+                {matrixName} =
+              </div>
+              <MatrixPreview matrix={matrix} />
+            </div>
+          )}
+
           <div>
             <label className="text-[11px] text-muted-foreground">{t('linalgDecompType')}</label>
             <Select value={decompKind} onValueChange={(v) => setDecompKind(v as DecompKind)}>
@@ -2161,21 +2295,41 @@ function choleskyDecomp(m: Matrix): Matrix {
 /* ================================================================== *
  * TAB 4 — Linear System (Ax = b)
  * ================================================================== */
-function LinearSystemTab({ defaultMatrix }: { defaultMatrix: Matrix | undefined }) {
+function LinearSystemTab({
+  matrices,
+  selected,
+}: {
+  matrices: MatrixEntry[];
+  selected: MatrixEntry | undefined;
+}) {
   const [matrix, setMatrix] = useState<Matrix>(
-    defaultMatrix ?? [[1, 1, 1], [0, 2, 5], [2, 5, -1]],
+    selected?.data ?? [[1, 1, 1], [0, 2, 5], [2, 5, -1]],
   );
   const [vector, setVector] = useState<number[]>([6, -4, 27]);
   const [solution, setSolution] = useState<SystemSolution | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [working, setWorking] = useState(false);
 
+  // 同步「编辑」tab 中当前选中的矩阵，使方程组不再是一个孤立矩阵：
+  // 切换主矩阵时，以该矩阵为系数矩阵并重置常数向量 b 的维度。
   useEffect(() => {
-    if (defaultMatrix && defaultMatrix.length > 0) {
-      setMatrix(defaultMatrix);
-      setVector(Array(defaultMatrix.length).fill(0));
+    if (selected?.data && selected.data.length > 0) {
+      setMatrix(selected.data);
+      setVector(Array(selected.data.length).fill(0));
+      setSolution(null);
+      setError(null);
     }
-  }, [defaultMatrix]);
+  }, [selected?.name, selected?.data]);
+
+  // 从可用矩阵列表中显式选择系数矩阵（维度适配）。
+  const loadMatrix = (name: string) => {
+    const entry = matrices.find((m) => m.name === name);
+    if (!entry) return;
+    setMatrix(entry.data);
+    setVector(Array(entry.data.length).fill(0));
+    setSolution(null);
+    setError(null);
+  };
 
   const updateCell = (r: number, c: number, val: string) => {
     const v = parseFloat(val);
@@ -2246,6 +2400,25 @@ function LinearSystemTab({ defaultMatrix }: { defaultMatrix: Matrix | undefined 
       <div className="grid grid-cols-[auto_1fr] gap-5 p-2">
         {/* 系数矩阵 + b */}
         <div className="space-y-3">
+          {/* 从已定义矩阵中选择系数矩阵（不再孤立，可直接复用矩阵 A/B/C…） */}
+          <div>
+            <label className="text-[11px] text-muted-foreground">{t('linalgMatrixLabel')}</label>
+            <Select value={selected?.name ?? ''} onValueChange={loadMatrix}>
+              <SelectTrigger className="h-8 text-[12px] mt-1">
+                <SelectValue placeholder={t('linalgMatrixLabel')} />
+              </SelectTrigger>
+              <SelectContent>
+                {matrices.map((m) => (
+                  <SelectItem key={m.name} value={m.name} className="text-[12px]">
+                    <span className="font-mono font-semibold text-primary">{m.name}</span>
+                    <span className="text-muted-foreground ml-1.5">
+                      ({m.data.length}×{m.data[0]?.length ?? 0})
+                    </span>
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
           <div className="flex items-center justify-between">
             <label className="text-[11px] text-muted-foreground">{t('linalgAugmented')}</label>
             <div className="flex gap-1">

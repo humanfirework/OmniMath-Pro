@@ -121,6 +121,14 @@ export interface VisionOptions {
   denoiseRadius?: number;
   /** 是否用边缘检测（edgeMethod）作为轮廓来源（默认 false，保持多阈值分层） */
   useEdgeDetection?: boolean;
+  /**
+   * 是否启用前景遮罩（Foreground Mask）：先自动分割「主体」（优先选面积最大
+   * 且不接触图像边框的连通域），把边缘检测结果限制在主体内，从而抑制复杂背景
+   * 的纹理噪点。仅当 useEdgeDetection=true 时有效。默认 false（保持旧行为）。
+   */
+  useForegroundMask?: boolean;
+  /** 前景遮罩膨胀半径（r×r 方形结构元），防止削掉主体边缘细节（默认 2）。 */
+  fgMaskDilation?: number;
   /** 是否用灰度亚像素 marching squares 等值线追踪（默认 false；true 时替代多阈值分层路径） */
   useMarchingSquares?: boolean;
   /** marching squares 等值线层级数（默认 4） */
@@ -129,6 +137,12 @@ export interface VisionOptions {
   marchSmoothRadius?: number;
   /** marching squares 过滤周长 < 该值的碎轮廓（默认 0=不过滤） */
   marchMinPerimeter?: number;
+  /**
+   * 输出曲线条数上限（默认 0=不限制）。当边缘/轮廓过多导致结果曲线量爆炸、
+   * 渲染卡顿时，可设置此值：按轮廓面积从大到小保留前 maxCurves 条，
+   * 丢弃细碎噪点，显著降低曲线数量与绘制开销。
+   */
+  maxCurves?: number;
 }
 
 /**

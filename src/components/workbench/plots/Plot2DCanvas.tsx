@@ -46,6 +46,7 @@ import type { IntersectionPoint, TangentResult } from '@/lib/plots/plot2dAnalysi
 import { AlertTriangle, RotateCcw, Maximize, Play, Pause } from 'lucide-react';
 import type { PlotConfig } from '@/lib/store/workbench';
 import { useScopeVersion } from '@/lib/hooks/useScopeVersion';
+import { useAnimVersion } from '@/lib/hooks/useAnimVersion';
 import { useSettingsStore } from '@/lib/store/settingsStore';
 
 /* ----------------------------- Props ----------------------------- */
@@ -382,7 +383,7 @@ export function Plot2DCanvas({
   onInsertExample,
   showGrid = true,
   showAxes = true,
-  showMarkers = true,
+  showMarkers = false,
   showLegend = true,
   overlays,
   curveSpecs,
@@ -500,6 +501,11 @@ export function Plot2DCanvas({
   // changes (console assignment, slider drag, variable delete) — this is
   // what makes `a = 3` + `plot(sin(a*x))` + slider work live.
   const scopeVersion = useScopeVersion();
+  // 参数播放动画专用版本号（与 scopeVersion 解耦）。动画每帧经
+  // setScopeVarSilent 只 bump animVersion，本组件订阅它以便在参数动画
+  // 期间实时重采样重绘，而其余组件（DemosPanel / AdvancedPanel / 3D 等）
+  // 不会在每帧被无谓地重渲染 —— 这是逼近 Desmos 流畅度的关键。
+  const animVersion = useAnimVersion();
 
   // 坐标轴字号设置（来自 settingsStore，默认 12，范围 8–24）。用于刻度
   // 数字与坐标标注的 ctx.font，让用户在设置面板调节字号时画布实时跟随。
@@ -556,6 +562,9 @@ export function Plot2DCanvas({
     // scopeVersion is a dependency ONLY (not read inside) — it forces
     // re-sampling when the shared engine scope mutates.
     void scopeVersion;
+    // animVersion: 参数播放动画每帧 bump，强制本组件在动画期间重采样重绘。
+    // 由于动画帧走独立版本号，不会误触发上面的 lowQuality 降采样逻辑。
+    void animVersion;
     const plotW = Math.max(1, canvasSize.w - PADDING.left - PADDING.right);
     const baseCount = Math.min(2000, Math.max(400, Math.floor(plotW * 2)));
     // T7.1: 拖动期间降采样到约 1/3 密度（如 800→266）保帧率；
@@ -563,7 +572,7 @@ export function Plot2DCanvas({
     const sampleCount = lowQuality
       ? Math.max(135, Math.floor(baseCount / 3))
       : baseCount;
-    return plots.map((p, idx) => {
+    const __res = plots.map((p, idx) => {
       // A resolved curve spec (from the panel's curve editor) takes
       // precedence: polar / parametric curves sample over their own
       // parameter range instead of the view window.
@@ -592,8 +601,8 @@ export function Plot2DCanvas({
         visible: p.visible !== false,
       };
     });
-     
-  }, [plots, xRange, canvasSize.w, scopeVersion, lowQuality, curveSpecs]);
+    return __res;
+  }, [plots, xRange, canvasSize.w, scopeVersion, animVersion, lowQuality, curveSpecs]);
 
   /* ----------------------- Coordinate mapping ----------------------- */
 
@@ -781,12 +790,15 @@ export function Plot2DCanvas({
       // xNice/yNice are computed unconditionally so the axes block can reuse
       // them even when showGrid is false. (D8 fix: split grid / axes)
       if (showGrid) {
-        // Use the same target tick count for both axes so the grid spacing
-        // logic is consistent and the visual scale feels balanced.
-        // Minor grid: half-step.
-        const minorX = xNice.tickStep / 2;
-        const minorY = yNice.tickStep / 2;
-        ctx.lineWidth = 1;
+        // 学术风格网格：每个「大方格」（major tick step）被细分为
+        // GRID_DIVISIONS 个「小方格」。小方格很淡、很细（0.5px），
+        // 大方格略深、略粗（1px），形成坐标纸般的双层网格观感，
+        // 类似 Desmos 的 academic style，而不是简单的半格细分。
+        const GRID_DIVISIONS = 4;
+        const minorX = xNice.tickStep / GRID_DIVISIONS;
+        const minorY = yNice.tickStep / GRID_DIVISIONS;
+        // 小方格：细 + 淡，作为「格子纸」背景。
+        ctx.lineWidth = 0.5;
         ctx.strokeStyle = gridMinor;
         ctx.beginPath();
         const xMinTick = Math.floor(vx[0] / minorX) * minorX;
@@ -803,7 +815,8 @@ export function Plot2DCanvas({
         }
         ctx.stroke();
 
-        // Major grid.
+        // 大方格：略粗 + 略深，作为「主网格」。
+        ctx.lineWidth = 1;
         ctx.strokeStyle = gridMajor;
         ctx.beginPath();
         for (const xv of xNice.ticks) {

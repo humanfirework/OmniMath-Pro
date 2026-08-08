@@ -49,6 +49,7 @@ import {
   MoreHorizontal,
   BarChart3,
   CircleGauge,
+  GraduationCap,
 } from 'lucide-react';
 import {
   Tooltip,
@@ -66,7 +67,7 @@ import {
 import { cn } from '@/lib/utils';
 import { useWorkbenchStore } from '@/lib/store/workbench';
 import { useSettingsStore, DEFAULT_ACTIVITY_BAR_ORDER } from '@/lib/store/settingsStore';
-import { t } from '@/lib/i18n';
+import { t, useLocale } from '@/lib/i18n';
 import type { SidePanelTab, ViewMode } from '@/lib/store/workbench';
 import type { TranslationDict } from '@/lib/i18n';
 
@@ -76,6 +77,7 @@ type ActivityItemId =
   | 'control'
   | 'pipeline'
   | 'whiteboard'
+  | 'education'
   | 'linalg'
   | 'toggleEditor'
   | 'togglePreview'
@@ -98,6 +100,7 @@ const ACTIVITY_REGISTRY: Record<ActivityItemId, RegistryEntry> = {
   control: { icon: CircleGauge, labelKey: 'abControl' },
   pipeline: { icon: Workflow, labelKey: 'abPipeline' },
   whiteboard: { icon: PencilRuler, labelKey: 'abWhiteboard' },
+  education: { icon: GraduationCap, labelKey: 'abEducation' },
   linalg: { icon: Grid3x3, labelKey: 'abLinalg' },
   toggleEditor: { icon: LayoutTemplate, labelKey: 'abToggleEditor' },
   togglePreview: { icon: PanelRight, labelKey: 'abTogglePreview' },
@@ -109,9 +112,9 @@ const ACTIVITY_REGISTRY: Record<ActivityItemId, RegistryEntry> = {
 /** Group 1: data / basic panels */
 const GROUP_1_IDS: ActivityItemId[] = ['files', 'history', 'variables'];
 /** Group 2: theory / core math */
-const GROUP_2_IDS: ActivityItemId[] = ['stats', 'solver', 'control', 'linalg', 'formulas'];
+const GROUP_2_IDS: ActivityItemId[] = ['stats', 'solver', 'linalg', 'control', 'formulas'];
 /** Group 3: creative / extensions */
-const GROUP_3_IDS: ActivityItemId[] = ['whiteboard', 'pipeline'];
+const GROUP_3_IDS: ActivityItemId[] = ['whiteboard', 'education', 'pipeline'];
 /** Bottom utilities */
 const BOTTOM_UTIL_IDS: ActivityItemId[] = ['toggleEditor', 'togglePreview', 'toggleSidebar', 'layoutMenu', 'settings'];
 
@@ -135,6 +138,7 @@ function SortableWrapper({ id, children }: { id: string; children: React.ReactNo
 }
 
 export function ActivityBar() {
+  useLocale();
   const activeSidePanel = useWorkbenchStore((s) => s.activeSidePanel);
   const setActiveSidePanel = useWorkbenchStore((s) => s.setActiveSidePanel);
   const sidePanelCollapsed = useWorkbenchStore((s) => s.sidePanelCollapsed);
@@ -320,7 +324,7 @@ export function ActivityBar() {
     }
 
     // ── View-mode switches ──
-    if (['solver', 'control', 'pipeline', 'whiteboard', 'linalg', 'stats'].includes(id)) {
+    if (['solver', 'control', 'pipeline', 'whiteboard', 'linalg', 'stats', 'education'].includes(id)) {
       const isActive = viewMode === id;
       return wrapper(
         <Tooltip delayDuration={200}>
@@ -340,6 +344,11 @@ export function ActivityBar() {
               )}
             >
               <Icon className="size-[18px]" strokeWidth={2} />
+              {id === 'whiteboard' && (
+                <span className="pointer-events-none absolute -right-0.5 -top-0.5 rounded border border-amber-500/40 bg-amber-500/10 px-0.5 text-[7px] font-bold leading-3 text-amber-600 dark:text-amber-400">
+                  β
+                </span>
+              )}
               {isActive && (
                 <motion.span
                   layoutId="activity-indicator"

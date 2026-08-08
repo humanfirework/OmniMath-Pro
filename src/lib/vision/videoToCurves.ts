@@ -13,7 +13,7 @@
  * 全部为纯函数 / 无 DOM 依赖，可在主线程或 Web Worker / vitest 中运行。
  */
 
-import { imageToCurves } from './index';
+import { imageToCurves } from './imageToCurves';
 import { fitBezierPath } from './fit';
 import type { BezierPath, BezierSegment, VisionOptions } from './types';
 import type { FrameSequence } from './video';
@@ -358,28 +358,76 @@ export interface VideoToCurvesResult {
  * @param options 采样 / 矢量化 / 平滑 / 关联参数
  */
 export function videoToCurves(seq: FrameSequence, options?: VideoToCurvesOptions): VideoToCurvesResult {
+  const { picked } = sampleFrames(seq, options);
+  if (picked.length === 0) {
+    return { frames: [], fps: seq.fps, width: seq.width, height: seq.height, frameCount: 0, trackCount: 0 };
+  }
+
+  // 2. 逐帧矢量化（同步，无进度）
+  const perFrame: BezierPath[][] = picked.map((frame) => imageToCurves(frame.imageData, options?.vision).curves);
+
+  return assembleResult(perFrame, picked, seq, options);
+}
+
+/**
+ * 带进度的视频 → 曲线（异步）。
+ *
+ * 与 `videoToCurves` 产出完全一致，但逐帧矢量化之间显式让出事件循环
+ * （`await`），并在每一帧完成后回调 `onProgress`。这样 Web Worker 能
+ * 把处理进度实时 postMessage 回主线程，用户不会误以为「卡死」。
+ *
+ * 注意：`onProgress` 存在时才会让出事件循环；若无需进度，请直接用同步
+ * `videoToCurves`（性能更快、可用于单测）。
+ */
+export async function videoToCurvesWithProgress(
+  seq: FrameSequence,
+  options?: VideoToCurvesOptions,
+  onProgress?: (fraction: number, done: number, total: number) => void,
+): Promise<VideoToCurvesResult> {
+  const { picked } = sampleFrames(seq, options);
+  if (picked.length === 0) {
+    return { frames: [], fps: seq.fps, width: seq.width, height: seq.height, frameCount: 0, trackCount: 0 };
+  }
+
+  // 2. 逐帧矢量化（异步 + 让出事件循环 + 回报进度）
+  const perFrame: BezierPath[][] = [];
+  for (let i = 0; i < picked.length; i++) {
+    const cs = imageToCurves(picked[i].imageData, options?.vision);
+    perFrame.push(cs.curves);
+    onProgress?.((i + 1) / picked.length, i + 1, picked.length);
+    // 让出事件循环，使 Worker 能 postMessage 进度、主线程能重绘
+    if (i < picked.length - 1) {
+      await new Promise((r) => setTimeout(r, 0));
+    }
+  }
+
+  return assembleResult(perFrame, picked, seq, options);
+}
+
+/** 采样帧（stride + 上限 maxFrames + 兜底节流）。 */
+function sampleFrames(
+  seq: FrameSequence,
+  options?: VideoToCurvesOptions,
+): { picked: FrameSequence['frames'] } {
   const stride = Math.max(1, Math.floor(options?.stride ?? 1));
   const maxFrames = Math.max(1, Math.floor(options?.maxFrames ?? 120));
-  const vision = options?.vision;
-  const matchDistance = Math.max(0, options?.matchDistance ?? 32);
-
-  // 1. 采样帧（stride + 上限 maxFrames；再兜底节流保证帧数列不超限）
   let picked: FrameSequence['frames'] = [];
   for (let i = 0; i < seq.frames.length; i += stride) {
     picked.push(seq.frames[i]);
     if (picked.length >= maxFrames) break;
   }
   picked = throttleFrames(picked, maxFrames);
-  if (picked.length === 0) {
-    return { frames: [], fps: seq.fps, width: seq.width, height: seq.height, frameCount: 0, trackCount: 0 };
-  }
+  return { picked };
+}
 
-  // 2. 逐帧矢量化
-  const perFrame: BezierPath[][] = picked.map((frame) => {
-    const cs = imageToCurves(frame.imageData, vision);
-    return cs.curves;
-  });
-
+/** 逐帧曲线 → 关联 → 平滑 → 逐帧输出（`videoToCurves` 与 `videoToCurvesWithProgress` 共用）。 */
+function assembleResult(
+  perFrame: BezierPath[][],
+  picked: FrameSequence['frames'],
+  seq: FrameSequence,
+  options?: VideoToCurvesOptions,
+): VideoToCurvesResult {
+  const matchDistance = Math.max(0, options?.matchDistance ?? 32);
   // 3. 帧间关联
   const tracks = associateTracks(perFrame, matchDistance);
 

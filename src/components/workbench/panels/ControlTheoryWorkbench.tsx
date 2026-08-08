@@ -14,11 +14,12 @@
 import { useState } from 'react';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { cn } from '@/lib/utils';
-import { t } from '@/lib/i18n';
+import { t, useLocale } from '@/lib/i18n';
 import { ControlTheorySection } from '@/components/workbench/panels/ControlTheorySection';
 import { RouthSection } from '@/components/workbench/panels/control/RouthSection';
 import { MasonSection } from '@/components/workbench/panels/control/MasonSection';
 import { SignalFlowGraphEditor } from '@/components/workbench/panels/control/SignalFlowGraphEditor';
+import { BlockDiagramEditor } from '@/components/workbench/panels/control/BlockDiagramEditor';
 import { CompensatorSection } from '@/components/workbench/panels/control/CompensatorSection';
 
 type ControlTab = 'analysis' | 'stability' | 'signal' | 'compensate';
@@ -26,13 +27,14 @@ type ControlTab = 'analysis' | 'stability' | 'signal' | 'compensate';
 const NAV: { id: ControlTab; label: string; desc: string }[] = [
   { id: 'analysis', label: '经典分析', desc: 'Bode / 阶跃 / 根轨迹 / 奈奎斯特 / PID' },
   { id: 'stability', label: '稳定性判据', desc: '劳斯判据 Routh' },
-  { id: 'signal', label: '信号流图', desc: '图形建模 + 梅逊公式' },
+  { id: 'signal', label: '信号流图 / 方框图', desc: '图形建模 + 梅逊公式' },
   { id: 'compensate', label: '校正器设计', desc: '超前 / 滞后校正' },
 ];
 
-type SignalSub = 'visual' | 'formula';
+type SignalSub = 'block' | 'visual' | 'formula';
 
 export function ControlTheoryWorkbench() {
+  useLocale();
   const [tab, setTab] = useState<ControlTab>('analysis');
   const [signalSub, setSignalSub] = useState<SignalSub>('visual');
 
@@ -81,33 +83,46 @@ export function ControlTheoryWorkbench() {
         </div>
 
         <ScrollArea className="flex-1 min-h-0">
+          {/* 保持挂载：所有章节仅用 CSS 隐藏，切换时保留用户输入/结果，避免回到默认 */}
           <div className="p-4">
-            {tab === 'analysis' && <ControlTheorySection />}
-            {tab === 'stability' && <RouthSection />}
-            {tab === 'signal' && (
-              <>
-                <div className="flex flex-wrap items-center gap-1 mb-3">
-                  <span className="text-[11px] text-muted-foreground mr-1">建模方式</span>
-                  {(['visual', 'formula'] as SignalSub[]).map((s) => (
-                    <button
-                      key={s}
-                      type="button"
-                      onClick={() => setSignalSub(s)}
-                      className={cn(
-                        'h-7 px-3 rounded-md text-[11.5px] border transition-colors',
-                        signalSub === s
-                          ? 'border-primary/50 bg-primary/10 text-primary'
-                          : 'border-border/50 text-muted-foreground hover:bg-accent/60',
-                      )}
-                    >
-                      {s === 'visual' ? '图形建模（画图）' : '公式输入（梅逊）'}
-                    </button>
-                  ))}
-                </div>
-                {signalSub === 'visual' ? <SignalFlowGraphEditor /> : <MasonSection />}
-              </>
-            )}
-            {tab === 'compensate' && <CompensatorSection />}
+            <div className={cn(tab !== 'analysis' && 'hidden')}>
+              <ControlTheorySection />
+            </div>
+            <div className={cn(tab !== 'stability' && 'hidden')}>
+              <RouthSection />
+            </div>
+            <div className={cn(tab !== 'signal' && 'hidden')}>
+              <div className="flex flex-wrap items-center gap-1 mb-3">
+                <span className="text-[11px] text-muted-foreground mr-1">建模方式</span>
+                {(['block', 'visual', 'formula'] as SignalSub[]).map((s) => (
+                  <button
+                    key={s}
+                    type="button"
+                    onClick={() => setSignalSub(s)}
+                    className={cn(
+                      'h-7 px-3 rounded-md text-[11.5px] border transition-colors',
+                      signalSub === s
+                        ? 'border-primary/50 bg-primary/10 text-primary'
+                        : 'border-border/50 text-muted-foreground hover:bg-accent/60',
+                    )}
+                  >
+                    {s === 'block' ? '方框图（画图）' : s === 'visual' ? '信号流图（画图）' : '公式输入（梅逊）'}
+                  </button>
+                ))}
+              </div>
+              <div className={cn(signalSub !== 'block' && 'hidden')}>
+                <BlockDiagramEditor />
+              </div>
+              <div className={cn(signalSub !== 'visual' && 'hidden')}>
+                <SignalFlowGraphEditor />
+              </div>
+              <div className={cn(signalSub !== 'formula' && 'hidden')}>
+                <MasonSection />
+              </div>
+            </div>
+            <div className={cn(tab !== 'compensate' && 'hidden')}>
+              <CompensatorSection />
+            </div>
           </div>
         </ScrollArea>
       </main>

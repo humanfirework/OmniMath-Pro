@@ -28,7 +28,7 @@ import { ScrollArea } from '@/components/ui/scroll-area';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { useWorkbenchStore } from '@/lib/store/workbench';
-import { t } from '@/lib/i18n';
+import { t, useLocale } from '@/lib/i18n';
 import { cn } from '@/lib/utils';
 import type { CalculationResult } from '@/lib/store/workbench';
 import { FormulaRenderer } from '@/components/workbench/FormulaRenderer';
@@ -245,6 +245,7 @@ function HistoryCard({ result, onLoad, onDelete }: HistoryCardProps) {
 }
 
 export default function HistoryPanel() {
+  useLocale();
   const results = useWorkbenchStore((s) => s.results);
   const setEditorContent = useWorkbenchStore((s) => s.setEditorContent);
   const removeResult = useWorkbenchStore((s) => s.removeResult);

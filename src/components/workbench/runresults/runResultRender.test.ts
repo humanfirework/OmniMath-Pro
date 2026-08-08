@@ -126,6 +126,9 @@ function makeCtx() {
     lineTo: vi.fn(),
     fill: vi.fn(),
     setTransform: vi.fn(),
+    // 坐标轴刻度 / 标题渲染所需的标准 canvas 方法
+    fillText: vi.fn(),
+    measureText: vi.fn(() => ({ width: 10 })),
   } as unknown as CanvasRenderingContext2D;
   return { ctx, calls };
 }

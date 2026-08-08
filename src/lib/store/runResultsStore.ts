@@ -59,6 +59,9 @@ export interface RunResultPanel {
   animation?: RunAnimation;
   /** 原图叠加层（图像+轮廓窗）。 */
   image?: RunResultImage;
+  /** 坐标轴标题（x 底部居中 / y 左侧旋转），带单位。 */
+  axisX?: string;
+  axisY?: string;
   createdAt: number;
   /** 自动适配的初始视口（world 坐标）。 */
   autoX?: [number, number];

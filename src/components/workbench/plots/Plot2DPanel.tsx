@@ -135,6 +135,9 @@ export function Plot2DPanel() {
   const removePlot = useWorkbenchStore((s) => s.removePlot);
   const togglePlotVisibility = useWorkbenchStore((s) => s.togglePlotVisibility);
   const setEditorContent = useWorkbenchStore((s) => s.setEditorContent);
+  // Demos 模式下变量独立成栏显示在 DemosPanel（左侧），绘图面板不再重复
+  // 显示参数滑块，避免与右侧预览里的滑块重复、视觉冗余。
+  const inputView = useWorkbenchStore((s) => s.inputView);
   // 自由参数滑块面板的折叠态持久化在 settingsStore；工具栏徽标和
   // ParameterSliders 共用这一份状态。
   const variables = useWorkbenchStore((s) => s.variables);
@@ -414,7 +417,9 @@ export function Plot2DPanel() {
   }, [handleReset]);
 
   /* ----------------------- 关键点显隐 ----------------------------- */
-  const [showMarkers, setShowMarkers] = useState(true);
+  // 极点/极值/零点等标记点默认关闭（学术风格更干净），用户可在
+  // 高级面板中手动开启。
+  const [showMarkers, setShowMarkers] = useState(false);
 
   /* ----------------------- Memoize props ---------------------------- */
   const canvasProps: Plot2DCanvasProps = useMemo(
@@ -458,10 +463,12 @@ export function Plot2DPanel() {
         slidersCollapsed={slidersCollapsed}
         onToggleSliders={() => setSlidersCollapsed(!slidersCollapsed)}
       />
-      <ParameterSliders
-        plots={plots.filter(p => p.plotType !== 'surface3d')}
-        className="parameter-sliders-container"
-      />
+      {inputView !== 'demos' && (
+        <ParameterSliders
+          plots={plots.filter(p => p.plotType !== 'surface3d')}
+          className="parameter-sliders-container"
+        />
+      )}
       <PlotCurveEditor plots={plots} specs={curveSpecs} onSpecChange={handleSpecChange} />
       <Plot2DAdvancedPanel
         plots={plots}

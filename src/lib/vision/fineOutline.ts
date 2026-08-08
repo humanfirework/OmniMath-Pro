@@ -757,7 +757,7 @@ export function binaryDilation(
  *
  * 如果最终 mask 面积过小（退化 fallback），则返回 null 表示「不应用 mask」。
  */
-function buildForegroundMask(
+export function buildForegroundMask(
   gray: Uint8ClampedArray,
   w: number,
   h: number,
@@ -784,15 +784,40 @@ function buildForegroundMask(
   }
   domains.sort((a, b) => b.area - a.area);
 
-  // 策略：
-  //   - 若最大连通域面积 / N >= fgMaskMinAreaRatio → 只要最大的那个
-  //   - 否则，按面积从大到小累加 top-k，直到累计占比 ≥ 15%（兜底防止主体被误判为背景小碎块）
+  // 边框接触标记：接触图像四条边界的连通域绝大多数是背景
+  // （天空 / 地面 / 墙 / 大色块纹理），而主体（人 / 物）通常不接触边框。
+  // 因此优先选「面积最大且不接触边框」的连通域作为主体 —— 这能显著改善
+  // 复杂背景（背景比主体更大）下的前景分割。
+  const touchesBorder = new Set<number>();
+  for (let x = 0; x < w; x++) {
+    touchesBorder.add(cc.labels[x]);
+    touchesBorder.add(cc.labels[(h - 1) * w + x]);
+  }
+  for (let y = 0; y < h; y++) {
+    touchesBorder.add(cc.labels[y * w]);
+    touchesBorder.add(cc.labels[y * w + (w - 1)]);
+  }
+  touchesBorder.delete(0); // label 0 = 背景
+
   const minRatio = Math.max(0, Math.min(0.5, fgMaskMinAreaRatio));
   const selectedLabels = new Set<number>();
-  if (domains[0].area / N >= minRatio) {
+
+  // 1) 优先：最大「不接触边框」的连通域（主体）
+  let bestNonBorderArea = 0;
+  for (const d of domains) {
+    if (touchesBorder.has(d.label)) continue;
+    if (d.area > bestNonBorderArea) bestNonBorderArea = d.area;
+  }
+  if (bestNonBorderArea / N >= minRatio) {
+    for (const d of domains) {
+      if (!touchesBorder.has(d.label) && d.area === bestNonBorderArea) selectedLabels.add(d.label);
+    }
+  } else if (domains[0].area / N >= minRatio) {
+    // 2) 主体铺满全帧（全接触边框）→ 退化为最大连通域
     selectedLabels.add(domains[0].label);
   } else {
-    const TARGET = 0.15; // 15% 兜底
+    // 3) 全是碎块 → top-k 累加覆盖 15%（兜底防止主体被误判为背景小碎块）
+    const TARGET = 0.15;
     let acc = 0;
     for (const d of domains) {
       selectedLabels.add(d.label);
@@ -899,7 +924,16 @@ export function fineOutline(
   let chains = chainsFromEdge(edgeBinary, width, height);
   chains.sort((x, y) => y.length - x.length);
   if (chains.length > maxPaths) chains = chains.slice(0, maxPaths);
-  const keepRaw = chains.filter((c) => c.length >= minStrand);
+  let keepRaw = chains.filter((c) => c.length >= minStrand);
+
+  // 2.5) 噪声抑制：嘈杂背景下（花草树木/纹理）会抽出大量短碎链。
+  // 若保留链数量较多，额外丢弃明显短于最长链的碎链，让「主体轮廓」更突出。
+  // 仅在未锁定前景或链数很多时启用，避免误删人脸/表情等关键短特征。
+  if (keepRaw.length >= 40) {
+    const maxLen = keepRaw[0]?.length ?? 0;
+    const cutoff = Math.max(minStrand, Math.floor(maxLen * 0.12));
+    keepRaw = keepRaw.filter((c) => c.length >= cutoff);
+  }
 
   // 3) 排序列 → Polyline → RDP 简化
   const polylines: Polyline[] = [];

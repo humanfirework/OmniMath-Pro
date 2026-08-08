@@ -88,8 +88,8 @@ export const SETTINGS_KEY = 'omnimath-settings-v1';
  *  id 必须与 ActivityBar 中的条目注册表一致）。
  *  「文件」置于首页第一个位置；其余按使用频率排列。 */
 export const DEFAULT_ACTIVITY_BAR_ORDER: string[] = [
-  'files', 'history', 'variables', 'formulas', 'stats',
-  'solver', 'control', 'pipeline', 'whiteboard', 'linalg',
+  'files', 'history', 'variables', 'stats', 'solver', 'linalg',
+  'control', 'formulas', 'whiteboard', 'education', 'pipeline',
   'toggleEditor', 'togglePreview', 'toggleSidebar', 'layoutMenu', 'settings',
 ];
 

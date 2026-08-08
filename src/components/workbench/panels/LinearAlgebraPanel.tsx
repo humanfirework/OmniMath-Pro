@@ -1,4 +1,4 @@
-﻿﻿'use client';
+﻿'use client';
 
 /**
  * OmniMath Pro — Linear Algebra Panel (Task 5-b, Part 1)
@@ -65,7 +65,7 @@ import { FormulaRenderer } from '@/components/workbench/FormulaRenderer';
 import { GaussianEliminationView } from '@/components/workbench/panels/GaussianEliminationView';
 import { useWorkbenchStore, type VariableEntry } from '@/lib/store/workbench';
 import { setScopeVar } from '@/lib/engine';
-import { t, type TranslationDict } from '@/lib/i18n';
+import { t, useLocale, type TranslationDict } from '@/lib/i18n';
 import { cn } from '@/lib/utils';
 import { toast } from 'sonner';
 
@@ -343,6 +343,7 @@ function pickNextName(used: string[]): string {
  * MAIN PANEL
  * ================================================================== */
 export function LinearAlgebraPanel() {
+  useLocale();
   const [activeTab, setActiveTab] = useState<string>('edit');
   const [matrices, setMatrices] = useState<MatrixEntry[]>(() => {
     // Lazy init: read any matrices already in the store on first mount.

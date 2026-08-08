@@ -29,18 +29,15 @@ import {
   binarizeByLevel,
   adaptiveThreshold,
   removeSmallRegions,
-  sobel,
-  canny,
-  traceContours,
-  rdpSimplify,
-  fitBezierPath,
-  fitFourier,
-  sampleFourierCurve,
-  zhangSuenThin,
-  skeletonToPolylines,
-  imageToCurves,
-  videoToCurves,
-} from './index';
+} from './preprocess';
+import { sobel, canny } from './edges';
+import { traceContours } from './trace';
+import { rdpSimplify, fitBezierPath } from './fit';
+import { fitFourier, sampleFourierCurve } from './fourier';
+import { zhangSuenThin, skeletonToPolylines } from './skeleton';
+import { imageToCurves } from './imageToCurves';
+import { fineOutline } from './fineOutline';
+import { videoToCurvesWithProgress } from './videoToCurves';
 import { decodeGif } from './video';
 import type {
   Polyline,
@@ -49,13 +46,15 @@ import type {
   VisionOptions,
   CurveSet,
 } from './types';
+import type { FineOutlineOptions, FineOutlineResult } from './fineOutline';
 import type { FrameSequence } from './video';
 import type { VideoToCurvesOptions, VideoToCurvesResult } from './videoToCurves';
-import type { VisionWorkerOp, VisionWorkerRequest, VisionWorkerResponse } from './visionWorker';
+import type { VisionWorkerOp, VisionWorkerRequest, VisionWorkerResponse, VisionWorkerProgress } from './visionWorker';
 
 interface PendingRequest {
   resolve: (v: unknown) => void;
   reject: (e: Error) => void;
+  onProgress?: (fraction: number, done: number, total: number) => void;
 }
 
 let workerInstance: Worker | null = null;
@@ -84,15 +83,22 @@ function getWorker(): Worker | null {
     // Turbopack/Webpack will statically rewrite into a separate worker
     // chunk. Do not refactor to a string-path import.
     const worker = new Worker(new URL('./visionWorker.ts', import.meta.url));
-    worker.onmessage = (e: MessageEvent<VisionWorkerResponse>) => {
-      const { id, result, error } = e.data;
-      const req = pending.get(id);
+    worker.onmessage = (e: MessageEvent<VisionWorkerResponse | VisionWorkerProgress>) => {
+      const data = e.data;
+      const req = pending.get(data.id);
       if (!req) return;
-      pending.delete(id);
-      if (error !== undefined) {
-        req.reject(new Error(error));
+      // 进度消息：不结束请求，仅转发进度后继续等待最终结果。
+      if ('progress' in data) {
+        const p = data as VisionWorkerProgress;
+        req.onProgress?.(p.progress, p.done, p.total);
+        return;
+      }
+      const resp = data as VisionWorkerResponse;
+      pending.delete(data.id);
+      if (resp.error !== undefined) {
+        req.reject(new Error(resp.error));
       } else {
-        req.resolve(result);
+        req.resolve(resp.result);
       }
     };
     worker.onerror = (e) => {
@@ -120,17 +126,22 @@ function getWorker(): Worker | null {
 }
 
 /** Send a request to the worker; fall back to in-thread call if unavailable. */
-function callWorker<T>(op: VisionWorkerOp, args: unknown[]): Promise<T> {
+function callWorker<T>(
+  op: VisionWorkerOp,
+  args: unknown[],
+  onProgress?: (fraction: number, done: number, total: number) => void,
+): Promise<T> {
   const worker = getWorker();
   if (!worker) {
     // Fallback: run in-thread. Still async to preserve the call shape.
-    return Promise.resolve().then(() => runInThread<T>(op, args));
+    return Promise.resolve().then(() => runInThread<T>(op, args, onProgress));
   }
   return new Promise<T>((resolve, reject) => {
     const id = nextRequestId++;
     pending.set(id, {
       resolve: (v: unknown) => resolve(v as T),
       reject,
+      onProgress,
     });
     const req: VisionWorkerRequest = { id, op, args };
     worker.postMessage(req);
@@ -138,12 +149,28 @@ function callWorker<T>(op: VisionWorkerOp, args: unknown[]): Promise<T> {
 }
 
 /** In-thread fallback — same dispatch table as the worker. */
-async function runInThread<T>(op: VisionWorkerOp, args: unknown[]): Promise<T> {
+async function runInThread<T>(
+  op: VisionWorkerOp,
+  args: unknown[],
+  onProgress?: (fraction: number, done: number, total: number) => void,
+): Promise<T> {
   switch (op) {
     case 'imageToCurves':
       return imageToCurves(args[0] as ImageDataLike, args[1] as VisionOptions | undefined) as T;
+    case 'fineOutline':
+      return fineOutline(
+        args[0] as Uint8Array | Uint8ClampedArray,
+        args[1] as number,
+        args[2] as number,
+        args[3] as 1 | 4,
+        args[4] as FineOutlineOptions | undefined,
+      ) as T;
     case 'videoToCurves':
-      return videoToCurves(args[0] as FrameSequence, args[1] as VideoToCurvesOptions | undefined) as T;
+      return (await videoToCurvesWithProgress(
+        args[0] as FrameSequence,
+        args[1] as VideoToCurvesOptions | undefined,
+        onProgress,
+      )) as T;
     case 'toGrayscale':
       return toGrayscale(args[0] as ImageDataLike) as T;
     case 'binarize':
@@ -192,8 +219,21 @@ export const visionWorkerClient = {
   imageToCurves(imageData: ImageDataLike, options?: VisionOptions): Promise<CurveSet> {
     return callWorker<CurveSet>('imageToCurves', [imageData, options]);
   },
-  videoToCurves(seq: FrameSequence, options?: VideoToCurvesOptions): Promise<VideoToCurvesResult> {
-    return callWorker<VideoToCurvesResult>('videoToCurves', [seq, options]);
+  fineOutline(
+    data: Uint8Array | Uint8ClampedArray,
+    width: number,
+    height: number,
+    channels: 1 | 4,
+    options?: FineOutlineOptions,
+  ): Promise<FineOutlineResult> {
+    return callWorker<FineOutlineResult>('fineOutline', [data, width, height, channels, options]);
+  },
+  videoToCurves(
+    seq: FrameSequence,
+    options?: VideoToCurvesOptions,
+    onProgress?: (fraction: number, done: number, total: number) => void,
+  ): Promise<VideoToCurvesResult> {
+    return callWorker<VideoToCurvesResult>('videoToCurves', [seq, options], onProgress);
   },
   toGrayscale(imageData: ImageDataLike): Promise<Uint8ClampedArray> {
     return callWorker<Uint8ClampedArray>('toGrayscale', [imageData]);

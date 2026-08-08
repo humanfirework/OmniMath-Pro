@@ -100,6 +100,16 @@ export function evaluateExpression(
 
   /* 3. Dispatch on detected intent. */
   try {
+    // ── Polar implicit assignment: `r = f(θ)` → auto polar plot ──
+    // `r = sin(6θ)` is a polar curve, NOT an assignment (despite the `=`).
+    // Detect the Desmos-style implicit form and route it to the polar
+    // plot handler. Only when the RHS references θ (the polar independent
+    // variable) — `r = 5` stays a plain variable assignment.
+    const polarEq = /^\s*r\s*=\s*(.+)$/i.exec(normalized);
+    if (polarEq && polarEq[1] && /[θϑΘ]|\btheta\b/i.test(polarEq[1])) {
+      return handlePlot(polarEq[1], mode, 'polar', /* auto */ true);
+    }
+
     // ── Assignment: `a = …`, `M = […]`, `f(x) = …` ───────────────
     if (isAssignment(input)) {
       return handleAssignment(normalized, input, mode);

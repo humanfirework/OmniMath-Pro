@@ -142,6 +142,7 @@ export interface TranslationDict {
   settingsResetConfirm: string;
   settingsShortcuts: string;
   settingsAbout: string;
+  settingsMinimizeToTray: string;
 
   /* ---------------- Side panel tabs ---------------- */
   tabHistory: string;
@@ -173,6 +174,8 @@ export interface TranslationDict {
   abFormulas: string;
   abPipeline: string;
   abWhiteboard: string;
+  abPixelMode: string;
+  abEducation: string;
   abLayoutMenu: string;
   abAI: string;
   abLinalg: string;
@@ -301,6 +304,7 @@ export interface TranslationDict {
   formulasCategoryStatistics: string;
   formulasCategoryPhysics: string;
   formulasCategoryFinance: string;
+  formulasCategoryControl: string;
   formulasAddCustom: string;
   formulasCustom: string;
   formulasName: string;
@@ -510,6 +514,10 @@ export interface TranslationDict {
   linalgVectorA: string;
   linalgVectorB: string;
   linalgVectorInputHint: string;
+  linalgVectorEmpty: string;
+  linalgVectorVisual: string;
+  linalgVectorVisualEmpty: string;
+  linalgOrthogonalizedVisual: string;
   linalgDotProduct: string;
   linalgCrossProduct: string;
   linalgMagnitude: string;
@@ -1335,7 +1343,7 @@ const zhCN: TranslationDict = {
     "# 输入数学表达式，按 Enter 求值\n# 示例：\n2 + 3 * 4\nsin(pi/4)\nx = 42\nplot(sin(x))",
   editorRun: "运行",
   editorRunToPanel: "运行到独立面板",
-  editorRunToPanelHint: "运行脚本并把绘图结果送入可拖拽的独立结果面板",
+  editorRunToPanelHint: "运行脚本并把结果送入可拖拽的独立结果浮窗（右上角「关闭全部」可清空）",
   editorReset: "重置",
   editorClear: "清空",
   editorModeSimple: "简单",
@@ -1431,6 +1439,7 @@ const zhCN: TranslationDict = {
   settingsResetConfirm: "确定要重置所有设置吗？此操作不可撤销。",
   settingsShortcuts: "快捷键",
   settingsAbout: "关于",
+  settingsMinimizeToTray: "关闭窗口时最小化到托盘",
 
   /* Tabs */
   tabHistory: "历史",
@@ -1462,6 +1471,8 @@ const zhCN: TranslationDict = {
   abFormulas: "公式库",
   abPipeline: "流水线",
   abWhiteboard: "白板",
+  abPixelMode: "像素画模式：笔迹吸附到网格，绘制像素点",
+  abEducation: "学习陪伴",
   abLayoutMenu: "布局选项",
   abAI: "AI 助手",
   abLinalg: "线性代数",
@@ -1590,6 +1601,7 @@ const zhCN: TranslationDict = {
   formulasCategoryStatistics: "统计",
   formulasCategoryPhysics: "物理",
   formulasCategoryFinance: "金融",
+  formulasCategoryControl: "控制",
   formulasAddCustom: "新增公式",
   formulasCustom: "自定义",
   formulasName: "名称",
@@ -1797,6 +1809,10 @@ const zhCN: TranslationDict = {
   linalgVectorA: "向量 A",
   linalgVectorB: "向量 B",
   linalgVectorInputHint: "逗号或空格分隔的数字",
+  linalgVectorEmpty: "（向量为空或格式无效）",
+  linalgVectorVisual: "向量可视化",
+  linalgVectorVisualEmpty: "输入有效向量后显示箭头图",
+  linalgOrthogonalizedVisual: "正交化可视化（青色=原始向量，红色=正交基）",
   linalgDotProduct: "点积",
   linalgCrossProduct: "叉积",
   linalgMagnitude: "模长",
@@ -2612,7 +2628,7 @@ const en: TranslationDict = {
     "# Type a math expression and press Enter to evaluate\n# Examples:\n2 + 3 * 4\nsin(pi/4)\nx = 42\nplot(sin(x))",
   editorRun: "Run",
   editorRunToPanel: "Run to panel",
-  editorRunToPanelHint: "Run the script and send plot results to the draggable independent result panel",
+  editorRunToPanelHint: "Run the script and send results to a draggable floating result window (clear all via the top-right button)",
   editorReset: "Reset",
   editorClear: "Clear",
   editorModeSimple: "Simple",
@@ -2708,6 +2724,7 @@ const en: TranslationDict = {
   settingsResetConfirm: "Are you sure you want to reset all settings? This cannot be undone.",
   settingsShortcuts: "Shortcuts",
   settingsAbout: "About",
+  settingsMinimizeToTray: "Minimize to tray on window close",
 
   /* Tabs */
   tabHistory: "History",
@@ -2739,6 +2756,8 @@ const en: TranslationDict = {
   abFormulas: "Formula Library",
   abPipeline: "Pipeline",
   abWhiteboard: "Whiteboard",
+  abPixelMode: "Pixel mode: snap strokes to a grid and draw pixels",
+  abEducation: "Learning Companion",
   abLayoutMenu: "Layout Options",
   abAI: "AI Assistant",
   abLinalg: "Linear Algebra",
@@ -2867,6 +2886,7 @@ const en: TranslationDict = {
   formulasCategoryStatistics: "Statistics",
   formulasCategoryPhysics: "Physics",
   formulasCategoryFinance: "Finance",
+  formulasCategoryControl: "Control",
   formulasAddCustom: "Add formula",
   formulasCustom: "Custom",
   formulasName: "Name",
@@ -3075,6 +3095,10 @@ const en: TranslationDict = {
   linalgVectorA: "Vector A",
   linalgVectorB: "Vector B",
   linalgVectorInputHint: "comma or space separated numbers",
+  linalgVectorEmpty: "(vector empty or invalid format)",
+  linalgVectorVisual: "Vector visualization",
+  linalgVectorVisualEmpty: "Enter valid vectors to show the arrow plot",
+  linalgOrthogonalizedVisual: "Orthogonalization (cyan=original, red=orthogonal basis)",
   linalgDotProduct: "Dot product",
   linalgCrossProduct: "Cross product",
   linalgMagnitude: "Magnitude",

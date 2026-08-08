@@ -74,6 +74,25 @@ math.import(
   { override: true }
 );
 
+/* ── exp → e^x 显示优化 ─────────────────────────────────────────────
+ * 让所有 `node.toTex()` 把 `exp(x)` 渲染成 `e^{x}`（而不是 `\exp(x)`），
+ * 使积分 / 导数 / 极限 / 普通表达式里出现 e 的指数时，都以手写数学形式
+ * 呈现，更好看、更符合教科书写法。mathjs 的 FunctionNode.toTex 会优先
+ * 读取函数对象上的 `toTex` 属性，这里直接挂在共享实例的 `exp` 上即可
+ * 覆盖所有调用点（console / 绘图 / 蓝图）。 */
+const expFn = (math as any).exp;
+if (expFn && typeof expFn === 'function') {
+  expFn.toTex = function (node: any, options: any): string {
+    const args = node && node.args ? node.args : [];
+    const opt = { ...(options || {}), implicit: 'hide' };
+    if (args.length === 1) {
+      return `e^{${args[0].toTex(opt)}}`;
+    }
+    // 兜底：退回到默认 exp 渲染
+    return `\\exp\\left(${args.map((a: any) => a.toTex(opt)).join(',')}\\right)`;
+  };
+}
+
 /* ================================================================== *
  * 概率分布函数 — 统一走 distributions.ts，供控制台 / 绘图 / 蓝图共用
  * ================================================================== *
@@ -166,7 +185,22 @@ let scope: Scope = {};
 /** Monotonic counter, incremented on EVERY scope mutation. */
 let scopeVersion = 0;
 
+/**
+ * 动画专用版本号。参数播放动画每帧只写「数值型参数」到 scope，若每次都
+ * bump scopeVersion，会让所有 useScopeVersion 订阅组件（DemosPanel 的 KaTeX、
+ * Plot2DAdvancedPanel、FacetGrid、Plot3DPanel 等）在每帧全量重渲染 —— 这是
+ * 拖动/播放动画卡顿的主因。因此动画帧走独立的 animVersion：只通知真正需要
+ * 重采样重绘的 Plot2DCanvas，避免整棵子树每帧重渲染，逼近 Desmos 的流畅度。
+ */
+let animVersion = 0;
+
 const listeners = new Set<() => void>();
+
+/**
+ * 动画专用订阅集。与 scopeVersion 的 listeners 分离，动画帧只唤醒它。
+ * Plot2DCanvas（唯一需要随参数动画实时重绘的组件）同时订阅两者。
+ */
+const animListeners = new Set<() => void>();
 
 /** Current scope object (live reference — mathjs mutates it in place). */
 export function getScope(): Scope {
@@ -178,6 +212,11 @@ export function getScopeVersion(): number {
   return scopeVersion;
 }
 
+/** 当前动画版本号（参数播放动画专用，避免整树重渲染）。 */
+export function getAnimVersion(): number {
+  return animVersion;
+}
+
 /**
  * Subscribe to scope mutations. Returns an unsubscribe function.
  * Compatible with React's `useSyncExternalStore`.
@@ -187,6 +226,30 @@ export function subscribeScope(listener: () => void): () => void {
   return () => {
     listeners.delete(listener);
   };
+}
+
+/** Subscribe to animation-version mutations (parameter playback). */
+export function subscribeAnim(listener: () => void): () => void {
+  animListeners.add(listener);
+  return () => {
+    animListeners.delete(listener);
+  };
+}
+
+/**
+ * 仅通知动画订阅者（Plot2DCanvas）。参数播放动画的每帧更新走这里，
+ * 不触碰 scopeVersion，从而避免 DemosPanel / AdvancedPanel / 3D 等
+ * 无关组件在每帧被不必要地重渲染。
+ */
+export function bumpAnimVersion(): void {
+  animVersion++;
+  for (const l of animListeners) {
+    try {
+      l();
+    } catch {
+      // A broken listener must not take down the others.
+    }
+  }
 }
 
 /**
@@ -210,6 +273,16 @@ export function bumpScopeVersion(): void {
 export function setScopeVar(name: string, value: any): void {
   scope[name] = value;
   bumpScopeVersion();
+}
+
+/**
+ * 写参数值但只 bump 动画版本（不 bump scopeVersion）。供参数播放动画的
+ * 每帧调用：只让 Plot2DCanvas 重采样重绘，避免整棵 React 子树每帧重渲染。
+ * 动画停止后应调用一次 setScopeVar 把最终值落定（触发全局同步）。
+ */
+export function setScopeVarSilent(name: string, value: any): void {
+  scope[name] = value;
+  bumpAnimVersion();
 }
 
 /** Delete a single variable and notify (no-op if absent). */

@@ -23,7 +23,6 @@ import type { NodeTypeDef } from '../pipelineEngine';
 import {
   toGrayscale,
   visionWorkerClient,
-  fineOutline,
   generateCurveFitCandidates,
   applyCurveTransforms,
   type ImageDataLike,
@@ -36,6 +35,7 @@ import {
 import {
   extractVideoFrames,
   downsampleVideoFrame,
+  decodeGif,
   type FrameSequence,
   type VideoFrame,
 } from '@/lib/vision/video';
@@ -231,6 +231,93 @@ async function fitPolyline(
     return visionWorkerClient.fitBezierPath(sampledPoly, errorThreshold, cornerThreshold);
   }
   return visionWorkerClient.fitBezierPath(poly, errorThreshold, cornerThreshold);
+}
+
+/**
+ * 把原始视频 / 帧序列矢量化成逐帧 BezierPath[][]。
+ *
+ * 经 visionWorkerClient.videoToCurves 走完整管线：帧采样 → 逐帧矢量化 →
+ * 帧间轨迹关联 → 时域平滑。这里针对「视频 / GIF 转曲线」场景内置更高质量的
+ * 默认参数，以解决「曲线一段段像虚线、线条乱跳、看不清轮廓」的问题：
+ *   - 用 canny 边缘作为轮廓来源（而非多阈值分层）：更接近人眼所见的
+ *     「描边」，能较完整捕获外轮廓与头发等精细特征，且不易碎成多段；
+ *   - 形态学开运算（denoiseRadius）+ 小区域清理（turdsize）去掉噪点毛刺；
+ *   - 适度提高 errorThreshold 让贝塞尔曲线更简洁平滑；
+ *   - maxCurves 上限，防止边缘过多导致曲线量爆炸、动画乱跳。
+ */
+async function vectorizeFrames(
+  seq: FramesValue,
+  config: Record<string, unknown>,
+  _ctx: unknown,
+): Promise<BezierPath[][]> {
+  const result = await visionWorkerClient.videoToCurves(seq, {
+    stride: Math.max(1, Math.floor(Number(config.stride ?? 1))),
+    maxFrames: Math.max(1, Math.floor(Number(config.maxFrames ?? 60))),
+    matchDistance: Math.max(0, Number(config.matchDistance ?? 48)),
+    smooth: true,
+    smoothWindow: Math.max(3, Math.floor(Number(config.sgWindow ?? 7))),
+    smoothOrder: Math.max(0, Math.floor(Number(config.sgOrder ?? 2))),
+    vision: {
+      useEdgeDetection: true,
+      edgeMethod: 'canny',
+      // 前景遮罩：优先保留「主体（不接触边框的最大连通域）」内的边缘，
+      // 显著抑制复杂背景纹理，避免视频帧里出现大量不稳定的背景曲线。
+      useForegroundMask: true,
+      fgMaskDilation: 2,
+      // Canny 阈值适中偏低：既要留住主体轮廓，也不能把细边缘全删。
+      cannyLow: 50,
+      cannyHigh: 140,
+      // denoiseRadius 必须为 0：对 1px 厚的 Canny 边缘做 opening 会把线条
+      // 整条腐蚀掉，导致「视频转曲线提取出 0 条」的历史 bug。降噪交给
+      // removeSmallRegions(turdsize) 即可——它只删孤立碎块、保留线。
+      denoiseRadius: 0,
+      turdsize: 2,
+      // 更大误差阈值 → 贝塞尔更简洁平滑，少碎段。
+      errorThreshold: 1.8,
+      cornerThreshold: 1.0,
+      // 曲线量上限：每帧只保留面积最大的前 24 条 → 线条更少、更光滑、
+      // 帧间关联更稳定，渲染不再卡顿、不再乱跳。
+      maxCurves: 24,
+    },
+  });
+  return result.frames.map((frame) => frame.filter((c): c is BezierPath => c !== null));
+}
+
+/**
+ * 把视频源（MP4 / WebM / GIF data URL）解码为帧序列。
+ * - GIF：fetch → decodeGif（纯 TS 解析器）；
+ * - 其它（MP4 / WebM）：extractVideoFrames（HTMLVideoElement 逐帧抓取）。
+ * 浏览器环境不可用或解码失败时抛错，由上层给出可读提示。
+ */
+async function decodeToFrames(
+  src: string,
+  options?: { maxFrames?: number; fps?: number; maxDimension?: number },
+): Promise<FrameSequence> {
+  const maxDimension = Math.max(0, Math.floor(options?.maxDimension ?? 512));
+  const isGif = /^data:image\/gif/i.test(src) || /\.gif($|\?)/i.test(src);
+  if (isGif) {
+    if (typeof fetch === 'undefined') throw new Error('当前环境无法解码 GIF');
+    const buf = await (await fetch(src)).arrayBuffer();
+    const seq = await decodeGif(buf);
+    // 按 maxDimension 降采样，控制后续矢量化开销。
+    const dim = Math.max(seq.width, seq.height);
+    if (dim > maxDimension && maxDimension > 0) {
+      const scale = maxDimension / dim;
+      const frames = seq.frames.map((f) => ({
+        ...f,
+        imageData: downsampleVideoFrame(f.imageData, maxDimension),
+        index: f.index,
+      }));
+      return {
+        frames,
+        fps: seq.fps,
+        width: Math.max(1, Math.round(seq.width * scale)),
+        height: Math.max(1, Math.round(seq.height * scale)),
+      };
+    }
+    return seq;
+  }
+  return extractVideoFrames(src, options);
 }
 
 /* ------------------------------------------------------------------ *
@@ -704,14 +791,14 @@ export const visionNodes = {
     defaultConfig: {
       imageType: 'auto' as 'auto' | 'standard' | 'highContrast',
       threshold: 128,
-      low: 55,
-      high: 130,
-      minStrand: 40,
-      eps: 0.9,
-      maxPaths: 200,
-      strokeWidth: 1.6,
-      preset: 'balanced' as 'precise' | 'balanced' | 'rough',
-      enableForegroundMask: false,
+      low: 62,
+      high: 145,
+      minStrand: 55,
+      eps: 1.1,
+      maxPaths: 150,
+      strokeWidth: 1.7,
+      preset: 'normal' as 'normal' | 'precise' | 'balanced' | 'rough',
+      enableForegroundMask: true,
       fgMaskDilation: 2,
       fgMaskMinAreaRatio: 0.01,
     },
@@ -725,9 +812,10 @@ export const visionNodes = {
         ],
       },
       {
-        key: 'preset', label: '预设 Preset', type: 'select', default: 'balanced',
+        key: 'preset', label: '预设 Preset', type: 'select', default: 'normal',
         options: [
-          { value: 'precise', label: '精细 Precise' },
+          { value: 'normal', label: '正常 Normal（推荐）' },
+          { value: 'precise', label: '精细 Precise（曲线多）' },
           { value: 'balanced', label: '均衡 Balanced' },
           { value: 'rough', label: '粗略 Rough' },
         ],
@@ -739,7 +827,7 @@ export const visionNodes = {
       { key: 'eps', label: '简化阈值 Eps', type: 'number', min: 0.1, max: 3, step: 0.05, default: 0.9 },
       { key: 'maxPaths', label: '最大路径 Max Paths', type: 'number', min: 10, max: 2000, step: 10, default: 200 },
       { key: 'strokeWidth', label: '描边宽度 Stroke', type: 'number', min: 0.8, max: 4, step: 0.1, default: 1.6 },
-      { key: 'enableForegroundMask', label: '前景遮罩增强', type: 'boolean', default: false },
+      { key: 'enableForegroundMask', label: '前景遮罩增强', type: 'boolean', default: true },
     ],
     execute: async (inputs, config) => {
       const img = toImageValue(inputs.image);
@@ -748,18 +836,23 @@ export const visionNodes = {
       }
       // 质量预设：优先覆盖数值（standard / highContrast 两套不同默认值）
       const imageType = String(config.imageType ?? 'auto') as 'auto' | 'standard' | 'highContrast';
-      const preset = String(config.preset ?? 'balanced') as 'precise' | 'balanced' | 'rough';
-      // standard 预设：6通道+Canny
+      const preset = String(config.preset ?? 'normal') as 'normal' | 'precise' | 'balanced' | 'rough';
+      // standard 预设：6通道+Canny。normal 为默认档——比 balanced 更强调主体轮廓、
+      // 更少噪点（更高阈值 + 更高简化），保证「正常描出人脸/身体/头发关键轮廓但不爆量」。
       const stdPresets = {
-        precise: { low: 45, high: 115, minStrand: 28, eps: 0.55, maxPaths: 400, strokeWidth: 1.4 },
-        balanced:{ low: 55, high: 130, minStrand: 40, eps: 0.9,  maxPaths: 200, strokeWidth: 1.6 },
-        rough:   { low: 70, high: 160, minStrand: 80, eps: 1.6,  maxPaths: 80,  strokeWidth: 2.0 },
+        // normal：默认档——强调「少而光滑」的主体轮廓（更高阈值 + 更短保留的
+        // 中长链 + 更高 RDP 简化），曲线数量更少、更光滑，渲染不卡顿。
+        normal:   { low: 66, high: 152, minStrand: 68, eps: 1.35, maxPaths: 90,  strokeWidth: 1.7 },
+        precise:  { low: 45, high: 115, minStrand: 28, eps: 0.55, maxPaths: 400, strokeWidth: 1.4 },
+        balanced: { low: 55, high: 130, minStrand: 40, eps: 0.9,  maxPaths: 200, strokeWidth: 1.6 },
+        rough:    { low: 70, high: 160, minStrand: 80, eps: 1.6,  maxPaths: 80,  strokeWidth: 2.0 },
       } as const;
       // highContrast 预设：二值化+Moore（更高精度的 RDP + 更短的 minStrand）
       const hcPresets = {
-        precise: { threshold: 128, minStrand: 6,  eps: 0.4, maxPaths: 2000, strokeWidth: 1.2 },
-        balanced:{ threshold: 128, minStrand: 10, eps: 0.6, maxPaths: 1000, strokeWidth: 1.4 },
-        rough:   { threshold: 140, minStrand: 20, eps: 1.0, maxPaths: 400,  strokeWidth: 1.8 },
+        normal:   { threshold: 132, minStrand: 14, eps: 0.8, maxPaths: 600, strokeWidth: 1.5 },
+        precise:  { threshold: 128, minStrand: 6,  eps: 0.4, maxPaths: 2000, strokeWidth: 1.2 },
+        balanced: { threshold: 128, minStrand: 10, eps: 0.6, maxPaths: 1000, strokeWidth: 1.4 },
+        rough:    { threshold: 140, minStrand: 20, eps: 1.0, maxPaths: 400,  strokeWidth: 1.8 },
       } as const;
       const sp = stdPresets[preset];
       const hp = hcPresets[preset];
@@ -779,19 +872,26 @@ export const visionNodes = {
       const maxPaths   = Math.max(10, Math.floor(userMaxPaths ?? Math.max(sp.maxPaths, hp.maxPaths)));
       const strokeWidth = Math.max(0.8, userStroke ?? Math.min(sp.strokeWidth, hp.strokeWidth));
 
-      // 计算（纯 TS 函数；无 DOM 依赖，Worker/主线程皆可运行）
-      const result = fineOutline(img.data, img.width, img.height, img.channels, {
-        imageType,
-        low,
-        high,
-        threshold,
-        minStrand,
-        eps,
-        maxPaths,
-        enableForegroundMask: Boolean(config.enableForegroundMask),
-        fgMaskDilation: Math.max(0, Math.floor(Number(config.fgMaskDilation ?? 2))),
-        fgMaskMinAreaRatio: Math.max(0, Math.min(0.5, Number(config.fgMaskMinAreaRatio ?? 0.01))),
-      });
+      // 计算（纯 TS 函数；经 Web Worker 执行，避免大图在主线程阻塞造成卡顿，
+      // Worker 不可用时 client 自动降级到同线程，行为完全等价）
+      const result = await visionWorkerClient.fineOutline(
+        img.data,
+        img.width,
+        img.height,
+        img.channels,
+        {
+          imageType,
+          low,
+          high,
+          threshold,
+          minStrand,
+          eps,
+          maxPaths,
+          enableForegroundMask: Boolean(config.enableForegroundMask),
+          fgMaskDilation: Math.max(0, Math.floor(Number(config.fgMaskDilation ?? 2))),
+          fgMaskMinAreaRatio: Math.max(0, Math.min(0.5, Number(config.fgMaskMinAreaRatio ?? 0.01))),
+        },
+      );
 
       // 输出 1: edges（二值边缘图 → ImageValue）
       const edgesVal = binaryImage(result.edgeBinary, result.width, result.height);
@@ -989,8 +1089,11 @@ export const visionNodes = {
     icon: 'Play',
     color: 'cyan',
     inputs: [
-      { id: 'animation', labelKey: 'npPortAnimation', type: 'animation' },
-      { id: 'frames', labelKey: 'npPortFrames', type: 'animation' },
+      // 二选一：animation（已矢量化动画）或 frames（原生帧序列，自动转曲线）。
+      // 标记 optional，使节点在「只连其中一个输入」时也能执行（引擎默认要求
+      // 所有输入就绪，会因缺另一输入而静默跳过，导致视频转曲线「点了没反应」）。
+      { id: 'animation', labelKey: 'npPortAnimation', type: 'animation', optional: true },
+      { id: 'frames', labelKey: 'npPortFrames', type: 'animation', optional: true },
     ],
     outputs: [],
     defaultConfig: {
@@ -999,11 +1102,11 @@ export const visionNodes = {
       smooth: false,
       minCutoff: 1.0,
       beta: 0.007,
-      // P1-1：frames 输入路径
+      // P1-1：frames 输入路径（少而光滑：更少帧、更高关联距离、更大平滑窗口）
       stride: 1,
-      maxFrames: 120,
-      matchDistance: 32,
-      sgWindow: 5,
+      maxFrames: 60,
+      matchDistance: 48,
+      sgWindow: 7,
       sgOrder: 2,
     },
     configSchema: [
@@ -1013,49 +1116,88 @@ export const visionNodes = {
       { key: 'minCutoff', label: '平滑截止频率 Min Cutoff', type: 'number', min: 0.1, max: 5, step: 0.1, default: 1.0 },
       { key: 'beta', label: '速度系数 Beta', type: 'number', min: 0.001, max: 0.05, step: 0.001, default: 0.007 },
       { key: 'stride', label: '帧采样步长 Stride', type: 'number', min: 1, max: 10, step: 1, default: 1 },
-      { key: 'maxFrames', label: '最大帧数 Max Frames', type: 'number', min: 10, max: 600, step: 10, default: 120 },
-      { key: 'matchDistance', label: '关联距离 Match Distance (px)', type: 'number', min: 4, max: 200, step: 4, default: 32 },
-      { key: 'sgWindow', label: '平滑窗口 SG Window', type: 'number', min: 3, max: 15, step: 2, default: 5 },
+      { key: 'maxFrames', label: '最大帧数 Max Frames', type: 'number', min: 10, max: 600, step: 10, default: 60 },
+      { key: 'matchDistance', label: '关联距离 Match Distance (px)', type: 'number', min: 4, max: 200, step: 4, default: 48 },
+      { key: 'sgWindow', label: '平滑窗口 SG Window', type: 'number', min: 3, max: 15, step: 2, default: 7 },
     ],
-    execute: async (inputs, config) => {
+    execute: async (inputs, config, ctx) => {
       const color = String(config.color ?? '#a78bfa');
       const strokeWidth = Number(config.width ?? 2);
 
       // 路径 A：直接喂入原生帧序列 → videoToCurves
       const framesValue = inputs.frames as FramesValue | undefined;
-      let frames: BezierPath[][];
+      // 路径 B：已生成的逐帧曲线动画（pose-track 等）
+      const anim = inputs.animation as
+        | AnimationValue
+        | FramesValue
+        | VideoValue
+        | undefined;
+
+      // 输入归一化：兼容多种连线方式。
+      // 用户可能把 video-input 的原始视频（VideoValue）或 frame-extract 的原始帧
+      // 序列（FramesValue）直接连到 animation 端口——这些都还不是 BezierPath[][]。
+      // 统一在此识别：是「原生帧序列/视频源」就转走 videoToCurves；是「已矢量化
+      // 动画」才走路径 B。避免「只连动画没用 / 只连帧序列没用」的困惑。
+      const isAnimationValue = (v: unknown): v is AnimationValue =>
+        !!v && typeof v === 'object' && 'frames' in (v as AnimationValue) &&
+        Array.isArray((v as AnimationValue).frames) &&
+        ((v as AnimationValue).frames.length === 0 ||
+          Array.isArray((v as AnimationValue).frames[0]));
+
+      const isFramesValue = (v: unknown): v is FramesValue =>
+        !!v && typeof v === 'object' && 'frames' in (v as FramesValue) &&
+        Array.isArray((v as FramesValue).frames) &&
+        !!((v as FramesValue).frames[0] as unknown as { imageData?: unknown })?.imageData;
+
+      const isVideoValue = (v: unknown): v is VideoValue =>
+        !!v && typeof v === 'object' && typeof (v as VideoValue).src === 'string' &&
+        !Array.isArray((v as { frames?: unknown }).frames);
+
+      // 需要矢量化的一帧原始帧序列（优先 frames 端口，其次 animation 端口的原生帧/视频）。
+      let rawFrames: FramesValue | null = null;
       let fps = 30;
       let width = 0;
       let height = 0;
-      if (framesValue && Array.isArray(framesValue.frames) && framesValue.frames.length > 0) {
-        // 性能：视频→曲线的逐帧矢量化（边缘检测/轮廓/贝塞尔拟合）是 CPU 密集，
-        // 经 visionWorkerClient 派发到 Web Worker 执行，主线程不阻塞，避免「生成视频卡顿」。
-        const res = await visionWorkerClient.videoToCurves(framesValue, {
-          stride: Math.max(1, Math.floor(Number(config.stride ?? 1))),
+
+      if (framesValue && isFramesValue(framesValue)) {
+        rawFrames = framesValue;
+        fps = framesValue.fps || 30;
+        width = framesValue.width;
+        height = framesValue.height;
+      } else if (anim && isFramesValue(anim)) {
+        // 用户把 frame-extract 的原生帧序列接到了 animation 端口 → 同样矢量化
+        rawFrames = anim;
+        fps = anim.fps || 30;
+        width = anim.width;
+        height = anim.height;
+      } else if (anim && isVideoValue(anim)) {
+        // 用户把 video-input 的原始视频接到了 animation 端口 → 先解码成帧序列
+        const seq = await decodeToFrames(anim.src, {
           maxFrames: Math.max(1, Math.floor(Number(config.maxFrames ?? 120))),
-          matchDistance: Math.max(0, Number(config.matchDistance ?? 32)),
-          smooth: true,
-          smoothWindow: Math.max(3, Number(config.sgWindow ?? 5)),
-          smoothOrder: 2,
+          fps: 30,
+          maxDimension: 512,
         });
-        frames = res.frames as BezierPath[][];
-        fps = res.fps || 30;
-        width = res.width;
-        height = res.height;
-      } else {
-        // 路径 B：使用已生成的逐帧曲线动画（pose-track 等）
-        const anim = inputs.animation as AnimationValue | undefined;
-        if (!anim || !Array.isArray(anim.frames) || anim.frames.length === 0) {
-          throw new Error('输入动画为空（请连接 frame-extract 或 pose-track 节点）');
-        }
+        rawFrames = seq;
+        fps = seq.fps || 30;
+        width = seq.width;
+        height = seq.height;
+      }
+
+      let frames: BezierPath[][];
+      if (rawFrames) {
+        frames = await vectorizeFrames(rawFrames, config, ctx);
+      } else if (anim && isAnimationValue(anim)) {
+        // 路径 B：已矢量化动画
         frames = anim.frames;
         fps = anim.fps;
         width = anim.width;
         height = anim.height;
+      } else {
+        throw new Error('输入为空：请连接 video-input / frame-extract / pose-track 节点到「动画或帧序列」端口');
       }
 
-      if (frames.length === 0) {
-        throw new Error('未能从输入产出任何曲线帧');
+      if (frames.length === 0 || !frames.some((f) => Array.isArray(f) && f.length > 0)) {
+        throw new Error('未能从视频帧中提取出任何曲线（请降低帧长边上限 maxDim，或调高边缘检测灵敏度后重试）');
       }
 
       // 可选：One Euro Filter 平滑控制点

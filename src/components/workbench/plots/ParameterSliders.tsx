@@ -28,10 +28,10 @@ import { Collapsible, CollapsibleTrigger, CollapsibleContent } from '@/component
 import { Popover, PopoverTrigger, PopoverContent } from '@/components/ui/popover';
 import { Label } from '@/components/ui/label';
 import { Button } from '@/components/ui/button';
-import { useWorkbenchStore, type PlotConfig, type PlotParamConfig } from '@/lib/store/workbench';
+import { useWorkbenchStore, type PlotConfig, type PlotParamConfig, type ParamPlayMode } from '@/lib/store/workbench';
 import { useSettingsStore } from '@/lib/store/settingsStore';
 import { extractFreeParameters } from '@/lib/engine/variableScanner';
-import { getScope, setScopeVar, bumpScopeVersion } from '@/lib/engine/mathInstance';
+import { getScope, setScopeVar, setScopeVarSilent, bumpScopeVersion } from '@/lib/engine/mathInstance';
 import { useScopeVersion } from '@/lib/hooks/useScopeVersion';
 
 /* ------------------------------------------------------------------ */
@@ -53,14 +53,56 @@ function formatParamValue(v: number): string {
   return parseFloat(v.toPrecision(6)).toString();
 }
 
-/** 播放动画的周期（秒/周期）。 */
+/** 播放动画的周期（秒/周期，速度 1× 时）。 */
 const PLAY_CYCLE_SECONDS = 3;
+
+/** 播放动画模式的中文标签（用于模式选择器）。 */
+const PLAY_MODE_LABELS: Record<ParamPlayMode, string> = {
+  bounce: '往复循环',
+  forward: '单向重复',
+  reverse: '反向重复',
+  once: '播放一次',
+};
+
+/**
+ * 依据播放模式计算时刻 `elapsed`（秒）对应的 [min,max] 内的归一化进度。
+ * 所有模式都采用均匀（线性）变化 —— 速度恒定，不忽快忽慢（区别于旧的
+ * 正弦波，避免在端点处明显减速）。
+ */
+function paramPlayFraction(
+  mode: ParamPlayMode,
+  elapsed: number,
+  cycleSeconds: number,
+): { frac: number; done: boolean } {
+  const cycle = Math.max(cycleSeconds, 1e-6);
+  const p = (elapsed % cycle) / cycle; // 0…1（一个周期内的归一化位置）
+  switch (mode) {
+    case 'bounce': // 0→1→0 三角波（前向再回转，匀速）
+      return { frac: p < 0.5 ? p * 2 : 2 - p * 2, done: false };
+    case 'forward': // 0→1 后瞬间跳回 0，重复（单向）
+      return { frac: p, done: false };
+    case 'reverse': // 1→0 后瞬间跳回 1，重复
+      return { frac: 1 - p, done: false };
+    case 'once': // 0→1 播放一次后停止
+      return { frac: Math.min(elapsed / cycle, 1), done: elapsed >= cycle };
+  }
+}
 
 /* ------------------------------------------------------------------ */
 /*  Component                                                         */
 /* ------------------------------------------------------------------ */
 
-export function ParameterSliders({ plots, className }: { plots: PlotConfig[]; className?: string }) {
+export function ParameterSliders({
+  plots,
+  className,
+  extraParams,
+}: {
+  plots: PlotConfig[];
+  className?: string;
+  /** 显式添加的变量（Desmos 式「+ 添加变量」）。即便尚未出现在任何表达式
+   *  中也会显示为可调滑块，写入引擎作用域后供 θ/t 范围等表达式使用。 */
+  extraParams?: string[];
+}) {
   const variables = useWorkbenchStore((s) => s.variables);
   const plotParams = useWorkbenchStore((s) => s.plotParams);
   const setPlotParam = useWorkbenchStore((s) => s.setPlotParam);
@@ -71,14 +113,21 @@ export function ParameterSliders({ plots, className }: { plots: PlotConfig[]; cl
   // 参数列表与引擎作用域中的值。
   const scopeVersion = useScopeVersion();
 
-  /* 可见 2D 表达式中的自由参数（排除 x/y/t、内置符号、已定义变量）。 */
+  /* 可见 2D 表达式中的自由参数（排除 x/y/t、内置符号、已定义变量），
+   * 合并显式添加的变量（extraParams，如用户在 Demos 里新加的 t）。 */
   const params = useMemo(() => {
     void scopeVersion; // variables 可能随赋值变化，与作用域保持同拍
     const exprs = plots
       .filter((p) => p.visible && p.plotType !== 'surface3d')
       .map((p) => p.expression);
-    return extractFreeParameters(exprs, Object.keys(variables));
-  }, [plots, variables, scopeVersion]);
+    const free = extractFreeParameters(exprs, Object.keys(variables));
+    if (extraParams && extraParams.length > 0) {
+      for (const name of extraParams) {
+        if (!free.includes(name)) free.push(name);
+      }
+    }
+    return free;
+  }, [plots, variables, scopeVersion, extraParams]);
 
   /* Task 9.B: 监听 plotParams 的 keys 变化（「清除参数」或清空回默认值时，
    * 确保滑块显示值与引擎重新对齐，不出现显示旧值的脱节）。
@@ -148,18 +197,43 @@ export function ParameterSliders({ plots, className }: { plots: PlotConfig[]; cl
     const now = performance.now();
     const playing = playingParamsRef.current;
     const cfgs = configsRef.current;
+    const doneNames: string[] = [];
     for (const name of playing) {
       const cfg = cfgs[name];
       if (!cfg || cfg.max <= cfg.min) continue;
       const start = startTimesRef.current[name];
       if (start === undefined) continue;
-      // value = center + (range/2) * sin(elapsed/duration * 2π)
       const elapsed = (now - start) / 1000;
-      const center = (cfg.min + cfg.max) / 2;
-      const range = cfg.max - cfg.min;
-      const value = center + (range / 2) * Math.sin((elapsed / PLAY_CYCLE_SECONDS) * 2 * Math.PI);
-      setScopeVar(name, value);
+      // 速度倍率：默认 1×；越大周期越短（动得越快）。
+      const cycle = PLAY_CYCLE_SECONDS / (cfg.speed && cfg.speed > 0 ? cfg.speed : 1);
+      const { frac, done } = paramPlayFraction(cfg.playMode ?? 'bounce', elapsed, cycle);
+      if (done) {
+        doneNames.push(name);
+        continue;
+      }
+      // 均匀线性插值：value = min + frac·(max−min)
+      const value = cfg.min + frac * (cfg.max - cfg.min);
+      // 动画期间用「静默」写入：只 bump animVersion，让 Plot2DCanvas 单独
+      // 重采样重绘，避免整棵 React 子树每帧重渲染（Desmos 流畅度的关键）。
+      // 动画停止后再用 setScopeVar 落定最终值，触发全局 scopeVersion 同步。
+      setScopeVarSilent(name, value);
       setPlotParam(name, { value });
+    }
+    // 'once' 模式播完即从播放集移除（保留当前值，不重置）。
+    if (doneNames.length > 0) {
+      for (const n of doneNames) {
+        playing.delete(n);
+        delete startTimesRef.current[n];
+        // 动画结束（如 'once' 播完）：用 setScopeVar 把最终值同步到全局作用域，
+        // 确保其它组件（KaTeX 显示、AdvancedPanel 等）读到最新值。
+        const cfg0 = cfgs[n];
+        if (cfg0 && cfg0.max > cfg0.min) {
+          const frac0 = paramPlayFraction(cfg0.playMode ?? 'bounce', 0, PLAY_CYCLE_SECONDS).frac;
+          const finalVal = cfg0.min + frac0 * (cfg0.max - cfg0.min);
+          setScopeVar(n, finalVal);
+        }
+      }
+      setPlayingParams(new Set(playing));
     }
     // 仍有参数在播放就续期，否则停止循环并把 rafRef 置空。
     if (playingParamsRef.current.size > 0) {
@@ -208,17 +282,28 @@ export function ParameterSliders({ plots, className }: { plots: PlotConfig[]; cl
   }, [params]);
 
   const togglePlay = useCallback((name: string) => {
+    // 记录播放状态，用于在状态更新之外执行副作用（避免在 reducer 内
+    // 调用 setScopeVar 触发跨组件同步更新，导致 React "setState during
+    // render" 告警）。
+    const wasPlaying = playingParamsRef.current.has(name);
     setPlayingParams((prev) => {
       const next = new Set(prev);
       if (next.has(name)) {
         next.delete(name);
-        delete startTimesRef.current[name];
       } else {
         next.add(name);
-        startTimesRef.current[name] = performance.now();
       }
       return next;
     });
+    if (wasPlaying) {
+      delete startTimesRef.current[name];
+      // 手动暂停：把最后写入的（静默）值用 setScopeVar 落定，
+      // 触发全局 scopeVersion 同步，让其它组件读到最新值。
+      const cfg0 = configsRef.current[name];
+      if (cfg0) setScopeVar(name, cfg0.value);
+    } else {
+      startTimesRef.current[name] = performance.now();
+    }
   }, []);
 
   /* Task 9.C: 「重置全部」按钮：把所有滑块恢复到默认中心、
@@ -334,7 +419,7 @@ function ParamRow({
   onValueChange: (v: number) => void;
   onConfigChange: (patch: Partial<PlotParamConfig>) => void;
 }) {
-  const { value, min, max, step } = config;
+  const { value, min, max, step, playMode = 'bounce', speed = 1 } = config;
   return (
     <div
       className="flex items-center gap-1.5"
@@ -391,8 +476,8 @@ function ParamRow({
             <Settings2 className="size-3" />
           </button>
         </PopoverTrigger>
-        <PopoverContent align="end" className="w-52 p-2.5">
-          <div className="flex flex-col gap-1.5">
+        <PopoverContent align="end" className="w-64 p-2.5">
+          <div className="flex flex-col gap-2">
             <p className="font-mono text-[10px] text-muted-foreground">
               参数 <span className="italic text-primary">{name}</span> 的范围与步长
             </p>
@@ -422,6 +507,59 @@ function ParamRow({
             <p className="text-[9px] text-muted-foreground/80">
               min 必须小于 max，step 必须大于 0。
             </p>
+            <div className="border-t border-border/60 pt-1.5 flex flex-col gap-1.5">
+              <p className="font-mono text-[10px] text-muted-foreground">播放模式</p>
+              <div className="grid grid-cols-2 gap-1">
+                {(Object.keys(PLAY_MODE_LABELS) as ParamPlayMode[]).map((m) => (
+                  <button
+                    key={m}
+                    type="button"
+                    onClick={() => onConfigChange({ playMode: m })}
+                    className={
+                      'h-6 rounded border px-1.5 text-[10px] font-medium transition-colors ' +
+                      (playMode === m
+                        ? 'border-primary/50 bg-primary/15 text-primary'
+                        : 'border-border/60 text-muted-foreground hover:bg-accent hover:text-foreground')
+                    }
+                  >
+                    {PLAY_MODE_LABELS[m]}
+                  </button>
+                ))}
+              </div>
+              <div className="flex items-center justify-between gap-2">
+                <Label className="font-mono text-[9px] text-muted-foreground shrink-0">
+                  速度 {speed}×
+                </Label>
+                <div className="flex items-center gap-1">
+                  <button
+                    type="button"
+                    onClick={() => onConfigChange({ speed: Math.max(0.1, Math.round((speed / 2) * 10) / 10) })}
+                    className="grid size-5 place-items-center rounded border border-border/60 text-[11px] text-muted-foreground hover:bg-accent"
+                    aria-label="放慢速度"
+                  >
+                    −
+                  </button>
+                  <input
+                    type="range"
+                    min={0.1}
+                    max={5}
+                    step={0.1}
+                    value={speed}
+                    onChange={(e) => onConfigChange({ speed: parseFloat(e.target.value) })}
+                    className="desmos-range h-2 w-24"
+                    aria-label={`参数 ${name} 的播放速度`}
+                  />
+                  <button
+                    type="button"
+                    onClick={() => onConfigChange({ speed: Math.min(5, Math.round(speed * 2 * 10) / 10) })}
+                    className="grid size-5 place-items-center rounded border border-border/60 text-[11px] text-muted-foreground hover:bg-accent"
+                    aria-label="加快速度"
+                  >
+                    +
+                  </button>
+                </div>
+              </div>
+            </div>
           </div>
         </PopoverContent>
       </Popover>

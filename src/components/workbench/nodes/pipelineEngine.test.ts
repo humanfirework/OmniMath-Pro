@@ -415,6 +415,42 @@ describe('pipelineEngine', () => {
       expect(out[0]).not.toBe(nodes[0]);
     });
 
+    it('可选输入端口：只连必填输入也能执行（回归：curve-animate 二选一输入）', async () => {
+      // 临时注册一个带「1 必填 + 1 可选」输入的节点，验证引擎在可选端口
+      // 未连线时不会跳过执行。这正是修复「视频→curve-animate 只连 frames
+      // 却点没反应」的核心。
+      const ORIG = NODE_TYPES['__opt_test__'];
+      try {
+        (NODE_TYPES as Record<string, unknown>)['__opt_test__'] = {
+          type: '__opt_test__',
+          category: 'logic',
+          labelKey: 'x',
+          icon: 'Circle',
+          color: 'cyan',
+          inputs: [
+            { id: 'a', labelKey: 'a', type: 'number' },
+            { id: 'b', labelKey: 'b', type: 'number', optional: true },
+          ],
+          outputs: [{ id: 'result', labelKey: 'result', type: 'number' }],
+          defaultConfig: {},
+          execute: (ins: Record<string, unknown>) => ({ result: (ins.a as number) + ((ins.b as number) ?? 100) }),
+        } as never;
+        const nodes = [
+          makeNode('n1', 'number-input', { value: 2 }),
+          makeNode('opt', '__opt_test__' as never),
+        ];
+        const edges = [makeEdge('n1', 'value', 'opt', 'a')];
+        const out = await executePipeline(nodes, edges, emptyCtx);
+        const byId = new Map(out.map((n) => [n.id, n]));
+        // b 未连线（undefined）→ optional 不阻断执行 → result = 2 + 100 = 102
+        expect(byId.get('opt')!.result).toBe(102);
+        expect(byId.get('opt')!.error).toBeUndefined();
+      } finally {
+        if (ORIG === undefined) delete (NODE_TYPES as Record<string, unknown>)['__opt_test__'];
+        else (NODE_TYPES as Record<string, unknown>)['__opt_test__'] = ORIG;
+      }
+    });
+
     it('拓扑排序：节点数组顺序颠倒仍按依赖顺序执行', async () => {
       const nodes = [
         makeNode('disp', 'display'),

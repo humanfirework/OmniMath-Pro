@@ -4,7 +4,7 @@
  * 覆盖：niceNumber / formatCoord / autoYRange / sampleFunction / findExtrema
  * 这些都是纯数学工具，无 React / DOM 依赖，可独立验证。
  */
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, beforeEach } from 'vitest';
 import {
   niceNumber,
   formatCoord,
@@ -13,9 +13,11 @@ import {
   samplePolar,
   sampleParametric,
   sampleCurve,
+  resolveParamRange,
   findExtrema,
   type PlotSample,
 } from './plot2d';
+import { setScopeVar, resetScope } from '@/lib/engine/mathInstance';
 
 /* ----------------------------- niceNumber ----------------------------- */
 
@@ -454,6 +456,82 @@ describe('sampleCurve', () => {
     // tan(x) has asymptotes at π/2 ≈ 1.571 and 3π/2 ≈ 4.712 inside [0, 5].
     // At least one NaN gap must be present so the renderer lifts the pen.
     expect(samples.some((s) => Number.isNaN(s.y))).toBe(true);
+  });
+});
+
+/* ------------ resolveParamRange（Desmos 式变量 θ 范围） ------------ */
+
+describe('resolveParamRange — 变量式 θ/t 范围', () => {
+  beforeEach(() => resetScope());
+
+  it('paramMaxExpr 绑定实时作用域变量 t，随 t 变化更新 θ 上限', () => {
+    // 用户要求：θ 范围设为 0..t，t 是可在变量栏调节的变量。
+    const spec = {
+      mode: 'polar' as const,
+      exprX: 'sin(6θ)',
+      exprY: '',
+      paramRange: [0, Math.PI * 2] as [number, number],
+      paramMinExpr: '0',
+      paramMaxExpr: 't',
+    };
+    setScopeVar('t', Math.PI);
+    expect(resolveParamRange(spec)[1]).toBeCloseTo(Math.PI, 9);
+    // 调大 t → θ 上限随之增大（滑块实时改变 t 时曲线应实时重采样）。
+    setScopeVar('t', 6.28);
+    expect(resolveParamRange(spec)[1]).toBeCloseTo(6.28, 9);
+    // 调小 t → θ 上限随之减小。
+    setScopeVar('t', 1.5);
+    expect(resolveParamRange(spec)[1]).toBeCloseTo(1.5, 9);
+  });
+
+  it('未提供 paramMaxExpr 时回退到 paramRange 的数字端点', () => {
+    const spec = {
+      mode: 'polar' as const,
+      exprX: 'sin(6θ)',
+      exprY: '',
+      paramRange: [0, Math.PI * 2] as [number, number],
+    };
+    expect(resolveParamRange(spec)).toEqual([0, Math.PI * 2]);
+  });
+
+  it('非法 / 未定义变量表达式时回退到 paramRange 端点（不崩溃）', () => {
+    const spec = {
+      mode: 'polar' as const,
+      exprX: 'sin(6θ)',
+      exprY: '',
+      paramRange: [0, 5] as [number, number],
+      paramMaxExpr: 'undefined_symbol_xyz',
+    };
+    // undefined_symbol_xyz 未定义 → 求值为 NaN → 回退到 paramRange[1]=5。
+    expect(resolveParamRange(spec)[1]).toBe(5);
+  });
+});
+
+describe('sampleCurve — 变量式 θ 范围端到端', () => {
+  beforeEach(() => resetScope());
+
+  it('r = 1 且 θ 上限 = 变量 t：t 小时只画局部圆弧，t 增大后范围随之扩展', () => {
+    // 单位圆 r = 1，θ ∈ [0, t]。t 是作用域变量。
+    setScopeVar('t', Math.PI / 2);
+    const spec = {
+      mode: 'polar' as const,
+      exprX: '1',
+      exprY: '',
+      paramRange: [0, Math.PI * 2] as [number, number],
+      paramMinExpr: '0',
+      paramMaxExpr: 't',
+    };
+    const quarter = sampleCurve(spec, [-10, 10], 300);
+    for (const s of quarter) {
+      const th = Math.atan2(s.y, s.x);
+      expect(th).toBeGreaterThanOrEqual(-1e-9);
+      expect(th).toBeLessThanOrEqual(Math.PI / 2 + 1e-9);
+    }
+    // 调大 t 到 π → 上半圆，最大极角应明显超过 π/2。
+    setScopeVar('t', Math.PI);
+    const half = sampleCurve(spec, [-10, 10], 300);
+    const maxTh = Math.max(...half.map((s) => Math.atan2(s.y, s.x)));
+    expect(maxTh).toBeGreaterThan(Math.PI / 2 + 0.1);
   });
 });
 

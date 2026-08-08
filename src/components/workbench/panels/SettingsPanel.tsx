@@ -56,10 +56,15 @@ import {
   RefreshCw,
   Minimize2,
   SlidersHorizontal,
+  GraduationCap,
+  Trash2,
+  AlertTriangle,
 } from 'lucide-react';
 import { useWorkbenchStore } from '@/lib/store/workbench';
 import { useLayoutStore, LAYOUT_KEY } from '@/lib/store/layoutStore';
 import { useSettingsStore, SETTINGS_KEY } from '@/lib/store/settingsStore';
+import { useEducationStore } from '@/lib/store/educationStore';
+import { STAGES, STAGE_LABEL, type QuestionStage } from '@/lib/education/content';
 import {
   useShortcutsStore,
   SHORTCUTS_KEY,
@@ -68,17 +73,17 @@ import {
   type ShortcutAction,
   type ShortcutDef,
 } from '@/lib/store/shortcutsStore';
-import { t } from '@/lib/i18n';
+import { t, useLocale } from '@/lib/i18n';
 import type { TranslationDict } from '@/lib/i18n';
 import { cn } from '@/lib/utils';
 import { inTauri, setMinimizeToTray as syncMinimizeToTray } from '@/lib/tauri';
 import { toast } from 'sonner';
 
-type Category = 'appearance' | 'editor' | 'layout' | 'export' | 'language' | 'shortcuts' | 'advanced' | 'about';
+type Category = 'appearance' | 'editor' | 'layout' | 'data' | 'export' | 'language' | 'shortcuts' | 'advanced' | 'about';
 
 // 版本号优先取构建期注入的 NEXT_PUBLIC_APP_VERSION（与 package.json 对齐），
-// 缺失时回退到 package.json 中的版本（0.1.0）。
-const APP_VERSION = process.env.NEXT_PUBLIC_APP_VERSION ?? '0.1.0';
+// 缺失时回退到 package.json 中的版本（0.1.3）。
+const APP_VERSION = process.env.NEXT_PUBLIC_APP_VERSION ?? '0.1.3';
 
 // 关于页相关链接（仓库地址取自 package.json: humanfirework/OmniMath-Pro）。
 const ABOUT_LINKS: { emoji: string; label: string; url: string }[] = [
@@ -89,6 +94,7 @@ const ABOUT_LINKS: { emoji: string; label: string; url: string }[] = [
 ];
 
 export function SettingsPanel() {
+  useLocale();
   const open = useSettingsStore((s) => s.open);
   const setOpen = useSettingsStore((s) => s.setOpen);
   const loadSettings = useSettingsStore((s) => s.loadFromStorage);
@@ -135,6 +141,13 @@ export function SettingsPanel() {
   const [category, setCategory] = useState<Category>('appearance');
   // Reset confirmation dialog — replaces window.confirm (unavailable in Tauri 2).
   const [resetConfirm, setResetConfirm] = useState(false);
+  // 学习数据：学段与一键清空
+  const eduStage = useEducationStore((s) => s.stage);
+  const eduOnboarded = useEducationStore((s) => s.onboarded);
+  const eduSetStage = useEducationStore((s) => s.setStage);
+  const eduCompleteOnboarding = useEducationStore((s) => s.completeOnboarding);
+  const eduResetAll = useEducationStore((s) => s.resetAll);
+  const [eduClearConfirm, setEduClearConfirm] = useState(false);
   // Update check state
   const [checkingUpdate, setCheckingUpdate] = useState(false);
   const [updateInfo, setUpdateInfo] = useState<{ available: boolean; latest?: string; notes?: string } | null>(null);
@@ -262,6 +275,7 @@ export function SettingsPanel() {
     { id: 'appearance', labelKey: 'settingsAppearance', icon: Palette },
     { id: 'editor', labelKey: 'settingsEditor', icon: Code2 },
     { id: 'layout', labelKey: 'settingsLayout', icon: Layout },
+    { id: 'data', label: '学习数据', icon: GraduationCap },
     { id: 'export', labelKey: 'settingsExport', icon: Download },
     { id: 'language', labelKey: 'settingsLanguage', icon: Languages },
     { id: 'shortcuts', labelKey: 'settingsShortcuts', icon: Keyboard },
@@ -392,7 +406,7 @@ export function SettingsPanel() {
 
                 <div className="h-px bg-border/40 my-1" />
 
-                <SettingRow label="关闭窗口时最小化到托盘" experimental>
+                <SettingRow label={t('settingsMinimizeToTray')} experimental>
                   <Switch
                     checked={minimizeToTray}
                     onCheckedChange={setMinimizeToTray}
@@ -507,6 +521,63 @@ export function SettingsPanel() {
                     </label>
                   </RadioGroup>
                 </SettingRow>
+              </motion.div>
+            )}
+
+            {category === 'data' && (
+              <motion.div
+                initial={{ opacity: 0, x: 8 }}
+                animate={{ opacity: 1, x: 0 }}
+                transition={{ duration: 0.15 }}
+                className="space-y-5"
+              >
+                <SettingRow label="学段">
+                  <div className="flex flex-wrap items-center gap-1 rounded-xl border border-border/60 bg-background/40 p-1">
+                    {STAGES.map((st) => {
+                      const active = st === eduStage;
+                      return (
+                        <button
+                          key={st}
+                          type="button"
+                          onClick={() =>
+                            eduOnboarded ? eduSetStage(st) : eduCompleteOnboarding(st)
+                          }
+                          className={cn(
+                            'rounded-lg px-2.5 py-1.5 text-[11.5px] font-medium transition-colors',
+                            active
+                              ? 'bg-primary/15 text-primary'
+                              : 'text-muted-foreground hover:bg-accent/50 hover:text-foreground',
+                          )}
+                        >
+                          {STAGE_LABEL[st]}
+                        </button>
+                      );
+                    })}
+                  </div>
+                  <p className="mt-1 w-full text-[10px] text-muted-foreground">
+                    决定「每日一题」的出题范围与 AI 助教讲解深度。
+                  </p>
+                </SettingRow>
+
+                <div className="rounded-2xl border border-border/60 bg-background/40 p-4">
+                  <div className="flex items-center gap-2 text-[12.5px] font-semibold text-foreground/90">
+                    <AlertTriangle className="size-4 text-rose-500" />
+                    一键清空学习数据
+                  </div>
+                  <p className="mt-1 text-[11px] leading-relaxed text-muted-foreground">
+                    将删除本地全部打卡、进度、成就、错题与自定义题库，且不可撤销。
+                    学习数据仅保存在本机，清空后无法恢复。
+                  </p>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => setEduClearConfirm(true)}
+                    className="mt-3 h-8 gap-1.5 text-[11.5px] text-rose-600 hover:text-rose-500 hover:border-rose-500/40"
+                  >
+                    <Trash2 className="size-3.5" />
+                    清空学习数据
+                  </Button>
+                </div>
               </motion.div>
             )}
 
@@ -708,6 +779,38 @@ export function SettingsPanel() {
             </Button>
             <Button variant="destructive" size="sm" onClick={confirmReset}>
               {t('commonReset')}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* 清空学习数据 · 二次确认（应用内对话框，兼容桌面 WebView） */}
+      <Dialog open={eduClearConfirm} onOpenChange={setEduClearConfirm}>
+        <DialogContent className="max-w-sm">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2 text-[13px]">
+              <AlertTriangle className="size-4 text-rose-500" />
+              清空全部学习数据？
+            </DialogTitle>
+          </DialogHeader>
+          <p className="text-[11.5px] leading-relaxed text-muted-foreground">
+            将删除本地全部打卡、进度、成就、错题与自定义题库，且不可撤销。确定要清空吗？
+          </p>
+          <DialogFooter>
+            <Button variant="outline" size="sm" onClick={() => setEduClearConfirm(false)}>
+              {t('commonCancel')}
+            </Button>
+            <Button
+              variant="destructive"
+              size="sm"
+              onClick={() => {
+                eduResetAll();
+                setEduClearConfirm(false);
+                toast.success('学习数据已清空');
+              }}
+            >
+              <Trash2 className="size-3.5" />
+              确认清空
             </Button>
           </DialogFooter>
         </DialogContent>

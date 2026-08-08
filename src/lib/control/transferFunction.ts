@@ -1282,19 +1282,25 @@ export function masonFromGraph(
  * 校正器设计（Lead / Lag Compensator）
  * ------------------------------------------------------------------ */
 export interface CompensatorResult {
-  /** 校正类型：超前 lead / 滞后 lag。 */
-  kind: 'lead' | 'lag';
+  /** 校正类型：超前 lead / 滞后 lag / 超前-滞后 leadlag / PID。 */
+  kind: 'lead' | 'lag' | 'leadlag' | 'pid';
   /** 校正器 C(s) 分子 / 分母（高次在前）。 */
   cNum: number[];
   cDen: number[];
   /** 相位超前量 φm（度，滞后为负）。 */
   phaseLeadDeg: number;
-  /** α（lead: <1；lag: >1）。 */
+  /** α（lead: <1；lag: >1；leadlag: 超前级 α）。 */
   alpha: number;
+  /** 滞后级 β（仅 leadlag >1，其余为 1）。 */
+  beta?: number;
   /** 校正器零点位置（rad/s）。 */
   zero: number;
   /** 校正器极点位置（rad/s）。 */
   pole: number;
+  /** PID 增益（仅 kind==='pid'）。 */
+  kp?: number;
+  ki?: number;
+  kd?: number;
   /** 校正后闭环阶跃响应（验证）。 */
   step: StepPoint[];
   /** 校正后 Bode 相位裕度。 */
@@ -1566,4 +1572,114 @@ export function lagCompensator(
     pm: pmAfter,
     note: `滞后校正器 C(s)=(${T.toFixed(4)}s+1)/(${beta.toFixed(4)}T s+1)，T=${T.toFixed(4)}，β=${beta.toFixed(2)}，校正后 PM≈${(pmAfter ?? 0).toFixed(1)}°。`,
   };
+}
+
+/**
+ * 超前-滞后校正（Lead-Lag Compensator）设计：
+ *   C(s) = C_lead(s) · C_lag(s)
+ *        = (1 + T₁s)/(1 + αT₁s) · (1 + T₂s)/(1 + βT₂s)，α<1、β>1。
+ * 超前级用于把相位裕度提到目标（保证动态），滞后级用于提升低频增益
+ * 以满足速度误差系数 Kv（改善稳态）。设计分两步：
+ *   1. 先按超前校正把 PM 提到目标附近；
+ *   2. 再在超前校正后的开环上，按滞后校正满足 Kv。
+ * 两级级联合并为一个校正器 C(s)，返回校正后闭环响应与相位裕度。
+ */
+export function leadLagCompensator(
+  num: number[],
+  den: number[],
+  opts?: { targetPM?: number; kv?: number; fMin?: number; fMax?: number; tEnd?: number },
+): CompensatorResult | { error: string } {
+  const targetPM = opts?.targetPM ?? 50;
+  const kv = opts?.kv && opts.kv > 0 ? opts.kv : undefined;
+  const fMin = opts?.fMin ?? 0.001;
+  const fMax = opts?.fMax ?? 1000;
+  const tEnd = opts?.tEnd ?? Math.max(8, 10 * (den.length - 1));
+
+  // 1) 超前级：把 PM 提到目标附近（若原系统已达标则返回单位超前级）。
+  const lead = leadCompensator(num, den, { targetPM, fMin, fMax, tEnd });
+  if ('error' in lead) return lead;
+  const leadLoopNum = polyMul(lead.cNum, num);
+  const leadLoopDen = polyMul(lead.cDen, den);
+
+  // 2) 滞后级：在超前校正后的开环上满足 Kv（若 Kv 未给或已满足则返回单位滞后级）。
+  const lag = lagCompensator(leadLoopNum, leadLoopDen, { targetPM: targetPM - 5, kv, fMin, fMax, tEnd });
+  if ('error' in lag) return lag;
+
+  // 3) 级联合并：C(s) = C_lead · C_lag，并约分。
+  const raw = { num: polyMul(lead.cNum, lag.cNum), den: polyMul(lead.cDen, lag.cDen) };
+  const merged = normalizeRat(raw);
+  const cNum = merged.num;
+  const cDen = merged.den;
+
+  const Lnum = polyMul(cNum, num);
+  const Lden = polyMul(cDen, den);
+  const pmAfter = stabilityMargins(bode(Lnum, Lden, fMin, fMax, 800)).pm;
+  const { num: Tnum, den: Tden } = closedLoopTransfer(Lnum, Lden);
+  const beta = Number.isFinite(lag.alpha) && lag.alpha > 1 ? lag.alpha : 1;
+
+  return {
+    kind: 'leadlag',
+    cNum,
+    cDen,
+    phaseLeadDeg: lead.phaseLeadDeg,
+    alpha: lead.alpha,
+    beta,
+    zero: lead.zero,
+    pole: lead.pole,
+    step: stepResponse(Tnum, Tden, tEnd, 400),
+    pm: pmAfter,
+    note: `超前-滞后校正器 C(s)=${polyToLatexFracLike(cNum, cDen)}，超前相位 ${lead.phaseLeadDeg.toFixed(1)}°，滞后 β=${beta.toFixed(2)}，校正后 PM≈${(pmAfter ?? 0).toFixed(1)}°。`,
+  };
+}
+
+/**
+ * PID 校正器（PID Compensator）：
+ *   C(s) = Kp + Ki/s + Kd·s = (Kd·s² + Kp·s + Ki)/s。
+ * 用 Ziegler-Nichols 临界比例度法整定 Kp/Ki/Kd，返回校正器与校正后闭环响应。
+ */
+export function pidCompensator(
+  num: number[],
+  den: number[],
+  opts?: { method?: PidMethod; fMin?: number; fMax?: number; tEnd?: number },
+): CompensatorResult | { error: string } {
+  const method = opts?.method ?? 'pid';
+  const fMin = opts?.fMin ?? 0.001;
+  const fMax = opts?.fMax ?? 1000;
+  const tEnd = opts?.tEnd ?? Math.max(8, 10 * (den.length - 1));
+
+  const tune = pidTune(num, den, { method, fMin, fMax, tEnd });
+  if ('error' in tune) return tune;
+  const g = tune.gains;
+  // C(s) = (Kd s² + Kp s + Ki) / s
+  const cNum = [g.Kd, g.Kp, g.Ki];
+  const cDen = [1, 0];
+  const Lnum = polyMul(cNum, num);
+  const Lden = polyMul(cDen, den);
+  const pmAfter = stabilityMargins(bode(Lnum, Lden, fMin, fMax, 800)).pm;
+
+  return {
+    kind: 'pid',
+    cNum,
+    cDen,
+    phaseLeadDeg: 0,
+    alpha: 1,
+    kp: g.Kp,
+    ki: g.Ki,
+    kd: g.Kd,
+    zero: Number.NaN,
+    pole: Number.NaN,
+    step: tune.step,
+    pm: pmAfter,
+    note: `PID 校正器 C(s)=Kp + Ki/s + Kd·s，Kp=${g.Kp.toPrecision(4)}，Ki=${g.Ki.toPrecision(4)}，Kd=${g.Kd.toPrecision(4)}，校正后 PM≈${(pmAfter ?? 0).toFixed(1)}°。`,
+  };
+}
+
+/** 由分子/分母系数生成「(…)/(…)」的简短字符串（用于 note 文案，避免依赖 LaTeX）。 */
+function polyToLatexFracLike(num: number[], den: number[]): string {
+  const fmt = (a: number[]) =>
+    a
+      .map((c, i) => (c === 0 ? '' : `${c === 1 && i < a.length - 1 ? '' : Number(c.toPrecision(4))}` + (a.length - 1 - i > 0 ? `s${a.length - 1 - i > 1 ? `^${a.length - 1 - i}` : ''}` : '')))
+      .filter(Boolean)
+      .join(' + ') || '1';
+  return `(${fmt(num)})/(${fmt(den)})`;
 }

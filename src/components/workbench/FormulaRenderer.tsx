@@ -37,7 +37,7 @@ import {
   DropdownMenuSeparator,
 } from '@/components/ui/dropdown-menu';
 import { cn } from '@/lib/utils';
-import { t } from '@/lib/i18n';
+import { t, useLocale } from '@/lib/i18n';
 import { useWorkbenchStore } from '@/lib/store/workbench';
 import { useSettingsStore } from '@/lib/store/settingsStore';
 import { exportFormula, type FormulaFormat } from '@/lib/formulaExport';
@@ -81,6 +81,16 @@ const MAX_SCALE = 2.0;
 const SCALE_STEP = 0.15;
 const COLLAPSED_HEIGHT = 120;
 
+/**
+ * 去掉 LaTeX 末尾的中文标点与空白（。，、！？；：…）。
+ * AI 导入的答案常在 `$...$。` 里带句号，KaTeX 会把中文全角句号当作
+ * 数学字符渲染成多余的「圆点 / 度」式符号。统一在渲染前清理，供
+ * 全工作台（预览 / 历史 / 公式库 / 教育模块）复用。
+ */
+export function sanitizeLatexInput(s: string): string {
+  return s.replace(/[。，、！？；：…\s]+$/u, '').trim();
+}
+
 export function FormulaRenderer({
   latex,
   displayMode = true,
@@ -96,6 +106,7 @@ export function FormulaRenderer({
   maxHeight,
   scrollbarOnHover = false,
 }: FormulaRendererProps) {
+  useLocale();
   const [copied, setCopied] = useState(false);
   const [scale, setScale] = useState(1);
   const [isCollapsed, setIsCollapsed] = useState(defaultCollapsed);
@@ -106,6 +117,8 @@ export function FormulaRenderer({
   const theme = useWorkbenchStore((s) => s.theme);
   const defaultFormulaFontSize = useSettingsStore((s) => s.defaultFormulaFontSize);
   const baseFontSize = fontSize ?? defaultFormulaFontSize ?? 28;
+  // 统一清理 AI 导入答案末尾的中文标点，避免 KaTeX 渲染出多余圆点/度。
+  const cleanLatex = useMemo(() => sanitizeLatexInput(latex), [latex]);
 
   /* ---------------------------------------------------------------
      KaTeX font availability probe — explains "why localhost fine /
@@ -174,13 +187,13 @@ export function FormulaRenderer({
 
   const hasComplexEnv = useMemo(() => {
     const envRegex = /\\begin\{(matrix|bmatrix|pmatrix|vmatrix|Vmatrix|smallmatrix|cases|aligned|gathered|multline)\}/;
-    return envRegex.test(latex);
-  }, [latex]);
+    return envRegex.test(cleanLatex);
+  }, [cleanLatex]);
 
   const html = useMemo(() => {
-    if (!latex) return '';
+    if (!cleanLatex) return '';
     try {
-      const rendered = katex.renderToString(latex, {
+      const rendered = katex.renderToString(cleanLatex, {
         displayMode,
         throwOnError: false,
         strict: false,
@@ -208,13 +221,13 @@ export function FormulaRenderer({
       }
       return rendered;
     } catch {
-      return `<span class="katex-error">${escapeHtml(latex)}</span>`;
+      return `<span class="katex-error">${escapeHtml(cleanLatex)}</span>`;
     }
     // Re-run render *after* fonts.ready fires so KaTeX measures with
     // the *actual* math-font glyph widths instead of a Times fallback.
     // The first render (fontsReady=false) will still show content but
     // with slight width drift; the second pass snaps it into place.
-  }, [latex, displayMode, hasComplexEnv, fontsReady]);
+  }, [cleanLatex, displayMode, hasComplexEnv, fontsReady]);
 
   useLayoutEffect(() => {
     if (collapsible && contentRef.current) {
@@ -265,7 +278,7 @@ export function FormulaRenderer({
 
   const handleCopy = async () => {
     try {
-      await navigator.clipboard.writeText(latex);
+      await navigator.clipboard.writeText(cleanLatex);
       setCopied(true);
       clearTimeout(copyTimerRef.current);
       copyTimerRef.current = setTimeout(() => setCopied(false), 1400);
@@ -284,7 +297,7 @@ export function FormulaRenderer({
       setExporting(true);
       try {
         // 导出字号随当前缩放联动（baseFontSize × scale），保证导出与所见一致
-        await exportFormula(latex, {
+        await exportFormula(cleanLatex, {
           format,
           defaultName: `omnimath-formula-${Date.now()}`,
           dpi: 2,
@@ -296,10 +309,10 @@ export function FormulaRenderer({
         setExporting(false);
       }
     },
-    [latex, displayMode, theme, scale, exporting, baseFontSize],
+    [cleanLatex, displayMode, theme, scale, exporting, baseFontSize],
   );
 
-  if (!latex) return null;
+  if (!cleanLatex) return null;
 
   const showToolbar = displayMode && (collapsible || showCopy || showExport);
 

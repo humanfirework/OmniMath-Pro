@@ -86,7 +86,7 @@ import {
   type SymbolicResult,
 } from '@/lib/engine/symbolic';
 import { inputToLatex } from '@/lib/engine/latex';
-import { t, type TranslationDict } from '@/lib/i18n';
+import { t, useLocale, type TranslationDict } from '@/lib/i18n';
 import { cn } from '@/lib/utils';
 import { toast } from 'sonner';
 
@@ -1293,6 +1293,7 @@ function LimitSection() {
  * MAIN WORKBENCH
  * ================================================================== */
 export function SolverWorkbench() {
+  useLocale();
   const [kind, setKind] = useState<SolverKind>('equation');
   const active = NAV_ITEMS.find((n) => n.id === kind) ?? NAV_ITEMS[0];
 
@@ -1356,22 +1357,14 @@ export function SolverWorkbench() {
         </div>
 
         <ScrollArea className="flex-1 min-h-0">
-          <AnimatePresence mode="wait">
-            <motion.div
-              key={kind}
-              initial={{ opacity: 0, y: 6 }}
-              animate={{ opacity: 1, y: 0 }}
-              exit={{ opacity: 0, y: -6 }}
-              transition={{ duration: 0.18, ease: 'easeOut' }}
-              className="p-4"
-            >
-              {kind === 'equation' && <EquationSection />}
-              {kind === 'system' && <SystemSection />}
-              {kind === 'derivative' && <DerivativeSection />}
-              {kind === 'integral' && <IntegralSection />}
-              {kind === 'limit' && <LimitSection />}
-            </motion.div>
-          </AnimatePresence>
+          {/* 保持挂载：各求解类型仅用 CSS 隐藏，切换时保留输入/结果，避免回到默认 */}
+          <div className="p-4">
+            <div className={cn(kind !== 'equation' && 'hidden')}><EquationSection /></div>
+            <div className={cn(kind !== 'system' && 'hidden')}><SystemSection /></div>
+            <div className={cn(kind !== 'derivative' && 'hidden')}><DerivativeSection /></div>
+            <div className={cn(kind !== 'integral' && 'hidden')}><IntegralSection /></div>
+            <div className={cn(kind !== 'limit' && 'hidden')}><LimitSection /></div>
+          </div>
         </ScrollArea>
       </main>
     </div>
