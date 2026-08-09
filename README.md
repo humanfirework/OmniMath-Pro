@@ -27,58 +27,6 @@
 
 ---
 
-## 预览
-
-### 工作台主页
-
-![工作台主页](./public/screenshots/features/workbench.png)
-
-### 浮动计算器（基础模式）
-
-![浮动计算器 - 基础模式](./public/screenshots/calculator/calculator-basic.png)
-
-### 浮动计算器（便签面板）
-
-![浮动计算器 - 便签面板](./public/screenshots/calculator/calculator-notepad.png)
-
-### 浮动计算器（科学模式）
-
-![浮动计算器 - 科学模式](./public/screenshots/calculator/calculator-scientific.png)
-
-### 浮动计算器（单位换算）
-
-![浮动计算器 - 单位换算](./public/screenshots/calculator/calculator-converter.png)
-
-### 2D 函数绘图
-
-![2D 函数绘图](./public/screenshots/features/plot2d.png)
-
-### 3D 曲面绘图
-
-![3D 曲面绘图](./public/screenshots/features/plot3d.png)
-
-### 线性代数求解
-
-![线性代数求解](./public/screenshots/features/linear-algebra.png)
-
-### Pipeline 节点工作流
-
-![Pipeline 节点工作流](./public/screenshots/features/pipeline.png)
-
-### 求解器工作台
-
-![求解器工作台](./public/screenshots/features/solver.png)
-
-### 设置面板
-
-![设置面板](./public/screenshots/features/settings.png)
-
-### 浅色模式
-
-![浅色模式](./public/screenshots/features/light-mode.png)
-
----
-
 ## 为什么是 OmniMath Pro？
 
 普通计算器功能有限，专业数学软件又过于笨重。OmniMath Pro 取其中间态：
