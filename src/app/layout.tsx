@@ -31,9 +31,15 @@ export const metadata: Metadata = {
     "AI",
   ],
   authors: [{ name: "OmniMath Team" }],
+  manifest: "/manifest.webmanifest",
+  appleWebApp: {
+    capable: true,
+    title: "OmniMath",
+    statusBarStyle: "black-translucent",
+  },
   icons: {
-    icon: "/logo.png",
-    apple: "/logo.png",
+    icon: "/icons/icon-192.png",
+    apple: "/icons/icon-192.png",
   },
 };
 
@@ -44,6 +50,7 @@ export const viewport: Viewport = {
   ],
   width: "device-width",
   initialScale: 1,
+  viewportFit: "cover",
 };
 
 export default function RootLayout({

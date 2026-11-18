@@ -17,8 +17,8 @@
 import { useEffect, useRef, useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 
-/** 兜底：若 onEnded 未触发，最长停留时间（ms）。 */
-const MAX_MS = 6000;
+/** 兜底：若 onEnded 未触发，最长停留时间（ms）。主工作台已在背后加载。 */
+const MAX_MS = 1800;
 
 export function SplashScreen({ onFinish }: { onFinish: () => void }) {
   const [exiting, setExiting] = useState(false);

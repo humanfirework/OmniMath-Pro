@@ -1,0 +1,41 @@
+{
+  "name": "OmniMath Pro — 数学学习与创作工作台",
+  "short_name": "OmniMath",
+  "description": "手写数学、函数绘图、线性代数、蓝图与 AI 辅助的一体化学习创作工具。",
+  "id": "/",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "display_override": ["window-controls-overlay", "standalone"],
+  "orientation": "any",
+  "background_color": "#0b1114",
+  "theme_color": "#14b8a6",
+  "lang": "zh-CN",
+  "categories": ["education", "productivity", "utilities"],
+  "icons": [
+    {
+      "src": "/icons/icon-192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "/icons/icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any maskable"
+    }
+  ],
+  "shortcuts": [
+    {
+      "name": "白板 / 手写笔记",
+      "short_name": "白板",
+      "url": "/?view=whiteboard"
+    },
+    {
+      "name": "线性代数",
+      "short_name": "线代",
+      "url": "/?view=linalg"
+    }
+  ]
+}

@@ -460,9 +460,20 @@ export class InkEngine {
     this.clear(ctx, this.mainCanvas);
     this.applyWorld(ctx);
     const dragging = this.drag ? new Set(this.drag.ids) : null;
+    // Viewport culling: with thousands of strokes most of them are off-screen
+    // at any given moment. Skipping them keeps pan/zoom at 60fps.
+    const margin = 48 / this.view.k;
+    const left = -this.view.x / this.view.k - margin;
+    const top = -this.view.y / this.view.k - margin;
+    const right = left + this.width / this.view.k + margin * 2;
+    const bottom = top + this.height / this.view.k + margin * 2;
     for (const stroke of this.strokes) {
       if (dragging?.has(stroke.id)) continue;
-      this.cache.get(stroke.id)?.draw(ctx);
+      const cached = this.cache.get(stroke.id);
+      if (!cached) continue;
+      const b = cached.bounds;
+      if (b.x2 < left || b.x1 > right || b.y2 < top || b.y1 > bottom) continue;
+      cached.draw(ctx);
     }
     if (this.optimistic) {
       buildCachedStroke(this.optimistic, this.backgroundColor).draw(ctx);

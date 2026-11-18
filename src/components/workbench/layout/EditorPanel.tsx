@@ -715,7 +715,7 @@ export function EditorPanel() {
         </div>
       )}
 
-      {fsLoaded && openTabs.length === 0 ? (
+      {fsLoaded && openTabs.length === 0 && !editorContent.trim() ? (
         /* Empty state — no open tabs */
         <div className="flex-1 min-h-0 flex flex-col items-center justify-center gap-3 px-6 text-center">
           <div className="grid place-items-center size-12 rounded-2xl bg-primary/10 text-primary">
