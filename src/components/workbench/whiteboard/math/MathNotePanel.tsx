@@ -22,6 +22,8 @@ export interface MathNoteDraft {
   text: string;
   /** Recognized display text (e.g. 2.5×365). */
   display: string;
+  /** Text produced by the recognizer before any correction. */
+  sourceText?: string;
   glyphs: RecognizedGlyph[];
   confidence: number;
   error?: string;

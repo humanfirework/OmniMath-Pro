@@ -222,6 +222,97 @@ interface GlyphTemplate {
   bbox: BBox;
 }
 
+/* ── Personal glyph bank ───────────────────────────────────────────
+ * High-confidence glyphs the user has actually written are stored locally
+ * and added to the template set. Recognition then adapts to this specific
+ * hand instead of only matching system fonts. Nothing leaves the device.
+ */
+export const USER_GLYPHS_KEY = 'omnimath-glyph-bank-v1';
+const MAX_PER_CHAR = 6;
+const MAX_TOTAL = 160;
+
+export interface UserGlyphSample {
+  char: string;
+  strokes: Array<Array<{ x: number; y: number }>>;
+  bbox: BBox;
+  addedAt: number;
+}
+
+export function loadUserGlyphSamples(): UserGlyphSample[] {
+  if (typeof localStorage === 'undefined') return [];
+  try {
+    const raw = localStorage.getItem(USER_GLYPHS_KEY);
+    if (!raw) return [];
+    const parsed = JSON.parse(raw);
+    if (!Array.isArray(parsed)) return [];
+    return parsed.filter(
+      (s): s is UserGlyphSample =>
+        !!s &&
+        typeof s.char === 'string' &&
+        s.char.length === 1 &&
+        Array.isArray(s.strokes) &&
+        s.strokes.length > 0 &&
+        s.bbox &&
+        typeof s.bbox.x0 === 'number',
+    );
+  } catch {
+    return [];
+  }
+}
+
+export function clearUserGlyphBank(): void {
+  if (typeof localStorage === 'undefined') return;
+  try {
+    localStorage.removeItem(USER_GLYPHS_KEY);
+  } catch {
+    // ignore
+  }
+  templateCache = null;
+}
+
+/**
+ * Learn from a successfully inserted math note. Only confident, non-superscript
+ * glyphs are stored, so a corrected symbol cannot poison the bank too easily.
+ */
+export function addUserGlyphSamples(glyphs: RecognizedGlyph[]): void {
+  if (typeof localStorage === 'undefined') return;
+  const fresh = glyphs.filter(
+    (g) =>
+      g.char !== '?' &&
+      !g.superscript &&
+      g.confidence >= 0.66 &&
+      g.strokes.length > 0 &&
+      g.bbox.x1 > g.bbox.x0,
+  );
+  if (fresh.length === 0) return;
+
+  const samples = loadUserGlyphSamples();
+  const now = Date.now();
+  for (const g of fresh) {
+    samples.push({
+      char: g.char,
+      strokes: g.strokes.map((s) => s.points.map((p) => ({ x: p.x, y: p.y }))),
+      bbox: g.bbox,
+      addedAt: now,
+    });
+    // Keep the bank small: newest samples per character win.
+    const forChar = samples.filter((s) => s.char === g.char);
+    if (forChar.length > MAX_PER_CHAR) {
+      const oldest = forChar.sort((a, b) => a.addedAt - b.addedAt)[0];
+      const idx = samples.indexOf(oldest);
+      if (idx >= 0) samples.splice(idx, 1);
+    }
+  }
+  while (samples.length > MAX_TOTAL) samples.shift();
+
+  try {
+    localStorage.setItem(USER_GLYPHS_KEY, JSON.stringify(samples));
+  } catch {
+    // ignore quota errors
+  }
+  templateCache = null;
+}
+
 let templateCache: GlyphTemplate[] | null = null;
 
 /** Render + thin a character with a local font. Browser only. */
@@ -269,6 +360,23 @@ export function getGlyphTemplates(): GlyphTemplate[] {
       if (t) out.push(t);
     }
   }
+
+  // Personal samples are added alongside the fonts, never replacing them.
+  for (const sample of loadUserGlyphSamples()) {
+    const raster = rasterizeGlyph(sample.strokes.map((points) => ({ points })));
+    if (!raster) continue;
+    const skeleton = skeletonize(raster.ink, TEMPLATE_SIZE, TEMPLATE_SIZE);
+    let inkCount = 0;
+    for (let i = 0; i < skeleton.length; i++) inkCount += skeleton[i];
+    if (inkCount === 0) continue;
+    out.push({
+      char: sample.char,
+      skeleton,
+      distance: distanceTransform(skeleton, TEMPLATE_SIZE, TEMPLATE_SIZE),
+      bbox: bitmapBBox(skeleton, TEMPLATE_SIZE, TEMPLATE_SIZE),
+    });
+  }
+
   templateCache = out;
   return out;
 }

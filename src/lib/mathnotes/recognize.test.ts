@@ -1,7 +1,10 @@
 import { describe, expect, it } from 'vitest';
 import {
+  addUserGlyphSamples,
   buildRecognizedText,
   classifyGlyphGeometry,
+  clearUserGlyphBank,
+  loadUserGlyphSamples,
   distanceTransform,
   groupStrokesIntoGlyphs,
   skeletonize,
@@ -139,6 +142,37 @@ describe('classifyGlyphGeometry', () => {
   it('recognizes a dot and a diagonal slash', () => {
     expect(classifyGlyphGeometry(asGroup([line(10, 10, 12, 12)]))?.char).toBe('.');
     expect(classifyGlyphGeometry(asGroup([line(0, 20, 20, 0)]))?.char).toBe('/');
+  });
+});
+
+describe('personal glyph bank', () => {
+  const sample = (char: string, confidence: number, superscript = false): RecognizedGlyph => ({
+    char,
+    displayChar: char,
+    confidence,
+    bbox: { x0: 0, y0: 0, x1: 10, y1: 20 },
+    superscript,
+    strokes: [line(0, 0, 10, 20)],
+  });
+
+  it('stores confident, non-superscript glyphs', () => {
+    localStorage.clear();
+    addUserGlyphSamples([sample('2', 0.9), sample('3', 0.2), sample('4', 0.9, true)]);
+    const stored = loadUserGlyphSamples();
+    expect(stored.map((s) => s.char)).toEqual(['2']);
+  });
+
+  it('caps the number of samples per character', () => {
+    localStorage.clear();
+    for (let i = 0; i < 9; i++) addUserGlyphSamples([sample('5', 0.9)]);
+    expect(loadUserGlyphSamples().filter((s) => s.char === '5').length).toBeLessThanOrEqual(6);
+  });
+
+  it('can be cleared', () => {
+    localStorage.clear();
+    addUserGlyphSamples([sample('7', 0.9)]);
+    clearUserGlyphBank();
+    expect(loadUserGlyphSamples()).toHaveLength(0);
   });
 });
 

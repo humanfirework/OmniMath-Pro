@@ -57,7 +57,7 @@ import { PEN_COLORS, PEN_ERASER_SIZES, PEN_WIDTHS } from '@/lib/ink/presets';
 import { hitTestInk, translateInk } from '@/lib/ink/hitTest';
 import { applyEraser, type EraserMode } from '@/lib/ink/eraser';
 import type { InkBrush, InkStroke, InkView } from '@/lib/ink/types';
-import { getGlyphTemplates, recognizeMathInk } from '@/lib/mathnotes/recognize';
+import { getGlyphTemplates, recognizeMathInk, addUserGlyphSamples } from '@/lib/mathnotes/recognize';
 import { evaluateMathNote } from '@/lib/mathnotes/expression';
 import { MathCardView, type MathCard } from './math/MathCardView';
 import { MathNotePanel, type MathNoteDraft } from './math/MathNotePanel';
@@ -459,6 +459,7 @@ export function WhiteboardCanvas() {
     setMathDraft({
       text: rec.text,
       display: rec.display,
+      sourceText: rec.text,
       glyphs: rec.glyphs,
       confidence: rec.confidence,
       error: rec.text
@@ -507,6 +508,11 @@ export function WhiteboardCanvas() {
     (text: string) => {
       const evaluation = evaluateMathNote(text);
       if (!evaluation.ok) return;
+      // Only learn from notes the user accepted without editing: a corrected
+      // expression may no longer match the recognized glyphs.
+      if (mathDraft && mathDraft.sourceText === text) {
+        addUserGlyphSamples(mathDraft.glyphs);
+      }
       const anchor = mathAnchorRef.current;
       const card: MathCard = {
         id: `m-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
