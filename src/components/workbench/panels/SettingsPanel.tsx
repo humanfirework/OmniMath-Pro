@@ -230,7 +230,7 @@ export function SettingsPanel() {
       toast.success(
         importMode === 'replace'
           ? `已恢复 ${result.written} 项数据`
-          : `已补全 ${result.written} 项数据，保留 ${result.skipped} 项现有数据`,
+          : `已补全 ${result.written} 项、合并 ${result.merged} 项，保留 ${result.skipped} 项现有数据`,
         { description: '即将重新载入界面…', duration: 2200 },
       );
       setTimeout(() => {
@@ -280,7 +280,7 @@ export function SettingsPanel() {
       toast.success(
         importMode === 'replace'
           ? `已从文件夹恢复 ${result.written} 项数据`
-          : `已合并 ${result.written} 项，保留 ${result.skipped} 项本机数据`,
+          : `已合并 ${result.merged} 项记录、补全 ${result.written} 项，保留 ${result.skipped} 项本机数据`,
         { description: '即将重新载入界面…', duration: 2200 },
       );
       setTimeout(() => {

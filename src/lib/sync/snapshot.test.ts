@@ -3,6 +3,7 @@ import {
   applySnapshot,
   collectSnapshot,
   isWorkspaceSnapshot,
+  mergeJsonRecords,
   parseSnapshot,
   snapshotFilename,
   snapshotSize,
@@ -39,13 +40,54 @@ describe('workspace snapshot', () => {
     expect(localStorage.getItem('omnimath-new')).toBe('new');
   });
 
-  it('merge mode keeps existing values', () => {
+  it('merge mode keeps existing unknown values', () => {
     localStorage.setItem('omnimath-a', 'local');
     const result = applySnapshot(snapshot({ 'omnimath-a': 'remote', 'omnimath-b': 'remote' }), 'merge');
     expect(result.skipped).toBe(1);
+    expect(result.merged).toBe(0);
     expect(result.written).toBe(1);
     expect(localStorage.getItem('omnimath-a')).toBe('local');
     expect(localStorage.getItem('omnimath-b')).toBe('remote');
+  });
+
+  it('merges workbench records by id instead of skipping the whole blob', () => {
+    const local = JSON.stringify({
+      results: [{ id: 'a', output: '1' }],
+      plots: [{ id: 'p1', expression: 'sin(x)' }],
+      variables: { x: { name: 'x', value: 1 } },
+      editorContent: 'local script',
+    });
+    const remote = JSON.stringify({
+      results: [
+        { id: 'a', output: 'remote-should-lose' },
+        { id: 'b', output: '2' },
+      ],
+      plots: [{ id: 'p2', expression: 'cos(x)' }],
+      variables: { y: { name: 'y', value: 2 } },
+      editorContent: 'remote script',
+      theme: 'light',
+    });
+    localStorage.setItem('omnimath-pro-v2', local);
+    const result = applySnapshot(
+      snapshot({ 'omnimath-pro-v2': remote }),
+      'merge',
+    );
+    expect(result.merged).toBe(1);
+    expect(result.skipped).toBe(0);
+
+    const merged = JSON.parse(localStorage.getItem('omnimath-pro-v2') ?? '{}');
+    expect(merged.results.map((r: { id: string }) => r.id)).toEqual(['a', 'b']);
+    expect(merged.results[0].output).toBe('1'); // local wins on conflict
+    expect(merged.plots.map((p: { id: string }) => p.id)).toEqual(['p1', 'p2']);
+    expect(Object.keys(merged.variables).sort()).toEqual(['x', 'y']);
+    expect(merged.editorContent).toBe('local script');
+    expect(merged.theme).toBe('light');
+  });
+
+  it('mergeJsonRecords returns null when nothing new can be added', () => {
+    const local = JSON.stringify({ results: [{ id: 'a' }] });
+    expect(mergeJsonRecords(local, local, { arrays: ['results'] })).toBeNull();
+    expect(mergeJsonRecords('not json', local, { arrays: ['results'] })).toBeNull();
   });
 
   it('keeps AI secrets during replace', () => {
