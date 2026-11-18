@@ -1,15 +1,13 @@
 'use client';
 
 /**
- * OmniMath Pro — History Panel (sticky-note style)
+ * OmniMath Pro — History Panel
  *
- * Each result is rendered as a compact sticky-note card:
- *  - Collapsed: one-line preview (input + truncated output) so the list stays
- *    scannable and the panel never feels crowded.
- *  - Expanded: full input, formatted output/LaTeX, type badge, timestamp and
- *    actions (copy / load into editor / delete).
- *  - Smooth but lightweight animations: simple opacity/translate/scale
- *    transitions, no expensive layout re-measurement on every list update.
+ * 每个结果是一张紧凑卡片：
+ *  - 折叠：一行输入 + 截断输出，列表保持可扫读；
+ *  - 展开：完整输入、排版后的结果、类型徽标、时间与操作；
+ *  - 列表按「今天 / 昨天 / 本周 / 更早」分组，日期标题 + 细线，
+ *    标题行不重复 SidePanel 的头部，整体更清爽。
  */
 
 import { useMemo, useState } from 'react';
@@ -27,6 +25,11 @@ import {
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipTrigger,
+} from '@/components/ui/tooltip';
 import { useWorkbenchStore } from '@/lib/store/workbench';
 import { t, useLocale } from '@/lib/i18n';
 import { cn } from '@/lib/utils';
@@ -67,6 +70,38 @@ interface HistoryCardProps {
   onDelete: (id: string) => void;
 }
 
+/* ── 日期分组：今天 / 昨天 / 本周 / 更早 ─────────────────────────── */
+type GroupKey = 'today' | 'yesterday' | 'week' | 'earlier';
+const GROUP_ORDER: GroupKey[] = ['today', 'yesterday', 'week', 'earlier'];
+const GROUP_LABEL_KEY: Record<GroupKey, 'histToday' | 'histYesterday' | 'histThisWeek' | 'histEarlier'> = {
+  today: 'histToday',
+  yesterday: 'histYesterday',
+  week: 'histThisWeek',
+  earlier: 'histEarlier',
+};
+
+function startOfDay(ts: number): number {
+  const d = new Date(ts);
+  d.setHours(0, 0, 0, 0);
+  return d.getTime();
+}
+
+function groupByDay(results: CalculationResult[]): Array<{ key: GroupKey; items: CalculationResult[] }> {
+  const today = startOfDay(Date.now());
+  const yesterday = today - 86_400_000;
+  const weekStart = today - 6 * 86_400_000;
+  const buckets: Record<GroupKey, CalculationResult[]> = {
+    today: [], yesterday: [], week: [], earlier: [],
+  };
+  for (const r of results) {
+    if (r.timestamp >= today) buckets.today.push(r);
+    else if (r.timestamp >= yesterday) buckets.yesterday.push(r);
+    else if (r.timestamp >= weekStart) buckets.week.push(r);
+    else buckets.earlier.push(r);
+  }
+  return GROUP_ORDER.filter((k) => buckets[k].length > 0).map((k) => ({ key: k, items: buckets[k] }));
+}
+
 function HistoryCard({ result, onLoad, onDelete }: HistoryCardProps) {
   const [expanded, setExpanded] = useState(false);
   const isError = Boolean(result.error);
@@ -81,14 +116,14 @@ function HistoryCard({ result, onLoad, onDelete }: HistoryCardProps) {
       exit={{ opacity: 0, x: 24, scale: 0.96 }}
       transition={{ duration: 0.18, ease: 'easeOut' }}
       className={cn(
-        'group relative rounded-xl border p-3 shadow-sm transition-shadow',
+        'group relative rounded-lg border px-2.5 py-2 shadow-sm transition-shadow',
         'bg-card/80 hover:shadow-md hover:bg-card',
         isError
           ? 'border-destructive/30'
           : isPlot
             ? 'border-primary/30'
             : 'border-border/70',
-        'before:absolute before:left-0 before:top-2 before:bottom-2 before:w-[3px] before:rounded-full',
+        'before:absolute before:left-0 before:top-1.5 before:bottom-1.5 before:w-[3px] before:rounded-full',
         isError
           ? 'before:bg-destructive/60'
           : isPlot
@@ -267,28 +302,13 @@ export default function HistoryPanel() {
     setEditorContent(input);
   };
 
+  const groups = useMemo(() => groupByDay(filtered), [filtered]);
+
   return (
     <div className="h-full flex flex-col">
-      {/* Header + search */}
-      <div className="px-3 pt-3 pb-2 space-y-2 shrink-0">
-        <div className="flex items-center justify-between">
-          <div className="flex items-center gap-1.5 text-[12px] font-medium text-foreground/80">
-            <History className="size-3.5 text-primary/70" />
-            {t('histTitle')}
-            <span className="text-muted-foreground">({filtered.length})</span>
-          </div>
-          {results.length > 0 && (
-            <Button
-              variant="ghost"
-              size="sm"
-              className="h-6 px-2 text-[11px] text-muted-foreground hover:text-destructive"
-              onClick={clearHistory}
-            >
-              {t('histClear')}
-            </Button>
-          )}
-        </div>
-        <div className="relative">
+      {/* Search + clear — 标题已由 SidePanel 头部显示，这里不再重复。 */}
+      <div className="px-2.5 pt-2.5 pb-2 flex items-center gap-1.5 shrink-0">
+        <div className="relative flex-1 min-w-0">
           <Search className="absolute left-2 top-1/2 -translate-y-1/2 size-3.5 text-muted-foreground" />
           <Input
             value={query}
@@ -297,21 +317,50 @@ export default function HistoryPanel() {
             className="h-8 pl-7 pr-2 text-[12px] bg-muted/40 border-border/60"
           />
         </div>
+        {results.length > 0 && (
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <Button
+                variant="ghost"
+                size="icon"
+                className="size-8 shrink-0 text-muted-foreground hover:text-destructive"
+                onClick={clearHistory}
+                aria-label={t('histClear')}
+              >
+                <Trash2 className="size-3.5" />
+              </Button>
+            </TooltipTrigger>
+            <TooltipContent side="bottom">{t('histClear')}</TooltipContent>
+          </Tooltip>
+        )}
       </div>
 
-      {/* Sticky-note list */}
-      <ScrollArea className="flex-1 px-3 pb-3">
-        <div className="space-y-2.5">
-          <AnimatePresence mode="popLayout" initial={false}>
-            {filtered.map((result) => (
-              <HistoryCard
-                key={result.id}
-                result={result}
-                onLoad={handleLoad}
-                onDelete={removeResult}
-              />
-            ))}
-          </AnimatePresence>
+      {/* Grouped list — 按日期分段，比一整条长列表更容易扫读 */}
+      <ScrollArea className="flex-1 px-2.5 pb-3">
+        <div className="space-y-3">
+          {groups.map((group) => (
+            <div key={group.key} className="space-y-1.5">
+              <div className="flex items-center gap-2 px-0.5 pt-0.5">
+                <span className="text-[10px] font-medium uppercase tracking-wider text-muted-foreground/70">
+                  {t(GROUP_LABEL_KEY[group.key])}
+                </span>
+                <span className="h-px flex-1 bg-border/50" />
+                <span className="text-[10px] tabular-nums text-muted-foreground/50">
+                  {group.items.length}
+                </span>
+              </div>
+              <AnimatePresence mode="popLayout" initial={false}>
+                {group.items.map((result) => (
+                  <HistoryCard
+                    key={result.id}
+                    result={result}
+                    onLoad={handleLoad}
+                    onDelete={removeResult}
+                  />
+                ))}
+              </AnimatePresence>
+            </div>
+          ))}
           {filtered.length === 0 && (
             <motion.div
               initial={{ opacity: 0 }}

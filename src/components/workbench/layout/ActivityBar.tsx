@@ -559,8 +559,10 @@ export function ActivityBar() {
     }
     if (SIDE_TAB_SET.has(id)) {
       if (viewMode !== 'workbench') setViewMode('workbench');
+      // setActiveSidePanel 已经会把 sidePanelCollapsed 置为 false（展开侧栏）。
+      // 这里不能再按旧的 sidePanelCollapsed 调 toggleSidePanel —— 那样会把刚展开的
+      // 侧栏又收起来，表现为「从全部工具菜单点历史/文件没有任何反应」。
       setActiveSidePanel(id as SidePanelTab);
-      if (sidePanelCollapsed) toggleSidePanel();
       return;
     }
     if (VIEW_MODE_SET.has(id)) {

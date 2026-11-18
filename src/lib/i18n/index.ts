@@ -270,6 +270,10 @@ export interface TranslationDict {
   histHourAgoPlural: string;
   histDayAgo: string;
   histDayAgoPlural: string;
+  histToday: string;
+  histYesterday: string;
+  histThisWeek: string;
+  histEarlier: string;
   histPlot: string;
   searchHistory: string;
   noSearchResults: string;
@@ -1586,6 +1590,10 @@ const zhCN: TranslationDict = {
   histHourAgo: "小时前",
   histHourAgoPlural: "小时前",
   histDayAgo: "天前",
+  histToday: "今天",
+  histYesterday: "昨天",
+  histThisWeek: "本周",
+  histEarlier: "更早",
   histPlot: "绘图",
   searchHistory: "搜索历史…",
   noSearchResults: "无匹配结果",
@@ -2892,6 +2900,10 @@ const en: TranslationDict = {
   histHourAgoPlural: "hours ago",
   histDayAgo: "day ago",
   histDayAgoPlural: "days ago",
+  histToday: "Today",
+  histYesterday: "Yesterday",
+  histThisWeek: "This week",
+  histEarlier: "Earlier",
   histPlot: "Plot",
   searchHistory: "Search history…",
   noSearchResults: "No matching results",
