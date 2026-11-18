@@ -178,7 +178,7 @@ function assertNoDuplicateName(
 /* ------------------------------------------------------------------ */
 
 const DEFAULT_SCRIPT = `# OmniMath Pro — 示例脚本
-# 按 Ctrl+Enter 运行（Enter 换行）
+# 按 Ctrl+Enter 运行（手机点右上角「运行」）
 
 # 矩阵运算
 A = [1, 2; 3, 4]
