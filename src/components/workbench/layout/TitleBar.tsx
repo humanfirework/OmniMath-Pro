@@ -140,6 +140,7 @@ export function TitleBar() {
   const previewVisible = useWorkbenchStore((s) => s.previewVisible);
   const setPreviewVisible = useWorkbenchStore((s) => s.setPreviewVisible);
   const sidePanelCollapsed = useWorkbenchStore((s) => s.sidePanelCollapsed);
+  const activeSidePanel = useWorkbenchStore((s) => s.activeSidePanel);
   const toggleSidePanel = useWorkbenchStore((s) => s.toggleSidePanel);
   const setActiveSidePanel = useWorkbenchStore((s) => s.setActiveSidePanel);
   const setEditorContent = useWorkbenchStore((s) => s.setEditorContent);
@@ -160,6 +161,19 @@ export function TitleBar() {
   /** 运行当前脚本：由 EditorPanel 监听执行，避免这里耦合求值逻辑。 */
   const runScript = () => {
     window.dispatchEvent(new CustomEvent('omnimath:run-all'));
+  };
+
+  /**
+   * 视图菜单里的侧栏切换：首页没有侧栏，先回到工作台再展开；
+   * 其它视图直接切换收起/展开。
+   */
+  const handleToggleSidebar = () => {
+    if (viewMode === 'home') {
+      setViewMode('workbench');
+      setActiveSidePanel(activeSidePanel);
+      return;
+    }
+    toggleSidePanel();
   };
 
   // 仅在 Tauri 桌面壳内渲染窗口控制按钮。
@@ -409,26 +423,34 @@ export function TitleBar() {
             <button type="button" className={menuTriggerClass}>{t('menuView')}</button>
           </DropdownMenuTrigger>
           <DropdownMenuContent align="start" className="w-56">
-            <DropdownMenuItem className="gap-2 text-[12px]" onClick={toggleSidePanel}>
+            <DropdownMenuItem className="gap-2 text-[12px]" onClick={handleToggleSidebar}>
               <PanelLeft className="size-3.5 text-muted-foreground" />
               {sidePanelCollapsed ? t('abShowSidebar') : t('abHideSidebar')}
-              {!sidePanelCollapsed && <Check className="ml-auto size-3.5 text-primary" />}
+              {!sidePanelCollapsed && viewMode !== 'home' && (
+                <Check className="ml-auto size-3.5 text-primary" />
+              )}
             </DropdownMenuItem>
             <DropdownMenuItem
               className="gap-2 text-[12px]"
+              disabled={viewMode === 'home'}
               onClick={() => setEditorVisible(!editorVisible)}
             >
               <LayoutTemplate className="size-3.5 text-muted-foreground" />
               {t('abToggleEditor')}
-              {editorVisible && <Check className="ml-auto size-3.5 text-primary" />}
+              {editorVisible && viewMode !== 'home' && (
+                <Check className="ml-auto size-3.5 text-primary" />
+              )}
             </DropdownMenuItem>
             <DropdownMenuItem
               className="gap-2 text-[12px]"
+              disabled={viewMode === 'home'}
               onClick={() => setPreviewVisible(!previewVisible)}
             >
               <PanelRight className="size-3.5 text-muted-foreground" />
               {t('abTogglePreview')}
-              {previewVisible && <Check className="ml-auto size-3.5 text-primary" />}
+              {previewVisible && viewMode !== 'home' && (
+                <Check className="ml-auto size-3.5 text-primary" />
+              )}
             </DropdownMenuItem>
             <DropdownMenuSeparator />
             <DropdownMenuItem className="gap-2 text-[12px]" onClick={toggleTheme}>
