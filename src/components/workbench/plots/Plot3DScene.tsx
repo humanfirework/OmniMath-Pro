@@ -42,7 +42,7 @@
  *     trigger a WebGL error.
  */
 
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { MutableRefObject } from 'react';
 import { Canvas, useThree, useFrame, invalidate } from '@react-three/fiber';
 import { OrbitControls, Grid, Text, Line, Billboard } from '@react-three/drei';
@@ -102,8 +102,6 @@ const THEME = {
     axisLabel: '#b0b0b0',
     tickLabel: '#808080',
     fogColor: '#1e1e1e',
-    fogNear: 14,
-    fogFar: 40,
   },
   light: {
     bg: '#fafafa',
@@ -112,8 +110,6 @@ const THEME = {
     axisLabel: '#404040',
     tickLabel: '#707070',
     fogColor: '#fafafa',
-    fogNear: 16,
-    fogFar: 44,
   },
 };
 
@@ -552,43 +548,64 @@ function CaptureBridge({
 }
 
 /* ------------------------------------------------------------------ */
-/*  CameraReset — watches resetSignal, calls controls.reset()         */
+/*  CameraReset — 自动取景 + 重置相机                                  */
 /* ------------------------------------------------------------------ */
+
+interface OrbitControlsHandle {
+  reset: () => void;
+  update?: () => void;
+  saveState?: () => void;
+}
 
 function CameraReset({
   resetSignal,
   controlsRef,
   upAxis,
+  fitDistance,
+  fitKey,
 }: {
   resetSignal: number;
-  controlsRef: MutableRefObject<{ reset: () => void; update?: () => void } | null>;
+  controlsRef: MutableRefObject<OrbitControlsHandle | null>;
   upAxis: 'y' | 'z';
+  /** 能装下整个场景的相机距离（由包围盒半径与 FOV 计算）。 */
+  fitDistance: number;
+  /** 仅在场景范围/轴向变化时变化，避免参数滑块拖动时相机乱跳。 */
+  fitKey: string;
 }) {
   const { camera } = useThree();
 
-  // upAxis 变化时总是同步 camera.up 向量 + controls，不受 resetSignal 限制。
-  // 这修复了"切换 Y/Z 轴有时失效"的问题：之前 upAxis 变化被 resetSignal===0
-  // 守卫跳过，导致 camera.up 未更新，OrbitControls 行为异常。
-  useEffect(() => {
-    camera.up.set(0, upAxis === 'z' ? 0 : 1, upAxis === 'z' ? 1 : 0);
-    camera.lookAt(0, 0, 0);
-    if (controlsRef.current?.update) {
-      controlsRef.current.update();
-    }
-  }, [upAxis, camera]);
+  // 用 ref 保存最新的取景距离：zRange 会随参数实时变化，
+  // 但只有「新增/删除曲面、修改定义域、切换 up 轴」才应重新取景。
+  const fitDistanceRef = useRef(fitDistance);
+  fitDistanceRef.current = fitDistance;
 
-  // resetSignal 变化时重置相机到默认位置（保留首次挂载跳过）。
+  const applyDefault = useCallback(() => {
+    const dir = upAxis === 'z'
+      ? new THREE.Vector3(1, 1, 0.85)
+      : new THREE.Vector3(1, 0.85, 1);
+    dir.normalize().multiplyScalar(fitDistanceRef.current);
+    camera.up.set(0, upAxis === 'z' ? 0 : 1, upAxis === 'z' ? 1 : 0);
+    camera.position.copy(dir);
+    camera.lookAt(0, 0, 0);
+    controlsRef.current?.update?.();
+  }, [camera, upAxis, controlsRef]);
+
+  // 场景范围变化时自动取景，保证曲面完整落在视口内（之前固定 [6,5,6]，
+  // 默认 [-5,5] 定义域的曲面会被裁掉边缘）。
+  useEffect(() => {
+    applyDefault();
+    controlsRef.current?.saveState?.();
+    invalidate();
+  }, [fitKey, applyDefault, controlsRef]);
+
+  // 手动重置按钮：回到当前场景的取景位置。
   useEffect(() => {
     if (resetSignal === 0) return; // skip initial mount
-    const defaultPos: [number, number, number] =
-      upAxis === 'z' ? [6, 6, 5] : [6, 5, 6];
-    camera.up.set(0, upAxis === 'z' ? 0 : 1, upAxis === 'z' ? 1 : 0);
-    camera.position.set(...defaultPos);
-    camera.lookAt(0, 0, 0);
-    if (controlsRef.current) {
-      controlsRef.current.reset();
-    }
-  }, [resetSignal, upAxis, camera]);  
+    applyDefault();
+    controlsRef.current?.update?.();
+    invalidate();
+  }, [resetSignal, applyDefault, controlsRef]);
+
   return null;
 }
 
@@ -649,7 +666,7 @@ function SceneContents({
   captureRef,
 }: SceneContentsProps) {
   const palette = THEME[theme];
-  const controlsRef = useRef<{ reset: () => void } | null>(null);
+  const controlsRef = useRef<OrbitControlsHandle | null>(null);
 
   // T5: 各轴独立计算半轴长度。X/Y 来自曲面域，Z 来自实际采样到的 zRange，
   // 这样高曲率曲面（如 e^x）的 Z 轴不再被压扁成 X/Y 的尺度。
@@ -671,10 +688,33 @@ function SceneContents({
     return { sizeX: snap(mx), sizeY: snap(my), sizeZ: snap(mz) };
   }, [surfaces]);
 
+  // 自动取景：用最大半轴长度换算相机距离。
+  // 竖直方向的可视半高 = tan(fov/2) * distance；留 1.25 倍余量，
+  // 兼顾透视近大远小与较窄的面板（右边缘不贴边）。
+  // 用包围球对角线会过于保守（曲面只占视口一半），这里按最长半轴取景。
+  const maxHalfAxis = Math.max(sizeX, sizeY, sizeZ);
+  const fitDistance = Math.min(
+    39,
+    Math.max(7, (maxHalfAxis / Math.tan((50 * Math.PI) / 180 / 2)) * 1.25),
+  );
+  // 只在「曲面集合 / 定义域 / 轴向」变化时重新取景；zRange 随参数滑动实时变化，
+  // 不进入 key，避免拖参数滑块时相机来回跳。
+  const fitKey = useMemo(
+    () =>
+      `${upAxis}|${surfaces
+        .map((s) => `${s.expression}:${s.xRange.join(',')}:${s.yRange.join(',')}`)
+        .join(';')}`,
+    [surfaces, upAxis],
+  );
+
   return (
     <>
       <color attach="background" args={[palette.bg]} />
-      <fog attach="fog" args={[palette.fogColor, palette.fogNear, palette.fogFar]} />
+      {/* 雾随取景距离缩放，避免相机拉远后整个曲面被雾洗白 */}
+      <fog
+        attach="fog"
+        args={[palette.fogColor, fitDistance * 1.2, fitDistance * 3.4]}
+      />
 
       {/* Lighting — soft natural lighting like math software */}
       <ambientLight intensity={theme === 'dark' ? 0.7 : 0.8} />
@@ -735,7 +775,13 @@ function SceneContents({
         makeDefault
       />
 
-      <CameraReset resetSignal={resetSignal} controlsRef={controlsRef} upAxis={upAxis} />
+      <CameraReset
+        resetSignal={resetSignal}
+        controlsRef={controlsRef}
+        upAxis={upAxis}
+        fitDistance={fitDistance}
+        fitKey={fitKey}
+      />
 
       {/* T6: 命令式截图桥接 — 把 gl.render + toDataURL 注册到外部 ref */}
       {captureRef && <CaptureBridge captureRef={captureRef} />}
@@ -789,11 +835,12 @@ export function Plot3DScene({
     <div className="plot-3d-scene-root h-full w-full">
       <Canvas
         camera={{
-          position: upAxis === 'z' ? [6, 6, 5] : [6, 5, 6],
+          // 初始位置只作为占位；CameraReset 会在挂载后按场景包围盒自动取景。
+          position: upAxis === 'z' ? [14, 14, 12] : [14, 12, 14],
           up: upAxis === 'z' ? [0, 0, 1] : [0, 1, 0],
           fov: 50,
           near: 0.1,
-          far: 100,
+          far: 120,
         }}
         dpr={[1, 2]}
         frameloop={frameloop}
