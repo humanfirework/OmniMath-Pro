@@ -18,8 +18,8 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { LineChart, MessageSquare, Play, Wand2 } from 'lucide-react';
 import { toast } from 'sonner';
-import { EditorState, EditorSelection, Compartment, StateField } from '@codemirror/state';
-import { EditorView, keymap, lineNumbers, highlightActiveLine, highlightActiveLineGutter, hoverTooltip, showTooltip, placeholder as cmPlaceholder } from '@codemirror/view';
+import { EditorState, EditorSelection, Compartment, StateField, StateEffect } from '@codemirror/state';
+import { EditorView, keymap, lineNumbers, highlightActiveLine, highlightActiveLineGutter, hoverTooltip, showTooltip, placeholder as cmPlaceholder, Decoration, WidgetType, type DecorationSet } from '@codemirror/view';
 import { defaultKeymap, historyKeymap, history, indentWithTab } from '@codemirror/commands';
 import { bracketMatching, indentUnit, indentOnInput, foldGutter, codeFolding, foldKeymap, StreamLanguage, HighlightStyle, syntaxHighlighting } from '@codemirror/language';
 import { linter, lintGutter } from '@codemirror/lint';
@@ -48,12 +48,74 @@ export interface CodeEditorProps {
   onChange: (value: string) => void;
   onRun: () => void;
   /** 只运行选中的代码（编辑器选区动作条的「运行」）。 */
-  onRunSelection?: (code: string) => void;
+  onRunSelection?: (code: string, startLine?: number) => void;
   onCursorChange?: (line: number, col: number) => void;
   language?: 'simple' | 'python' | 'matlab';
   placeholder?: string;
   fontSize?: number;
+  /** 运行后每行的结果胶囊（行号 1 起）；内容变化时自动清空。 */
+  inlineResults?: InlineResult[];
 }
+
+export interface InlineResult {
+  line: number;
+  text: string;
+  error?: boolean;
+}
+
+/* ------------------------------------------------------------------ *
+ * Inline results — MATLAB live-editor style per-line result chips.
+ * ------------------------------------------------------------------ */
+
+const setInlineResultsEffect = StateEffect.define<InlineResult[]>();
+
+class InlineResultWidget extends WidgetType {
+  constructor(readonly result: InlineResult) {
+    super();
+  }
+
+  eq(other: InlineResultWidget): boolean {
+    return other.result.text === this.result.text && other.result.error === this.result.error;
+  }
+
+  toDOM(): HTMLElement {
+    const span = document.createElement('span');
+    span.className = this.result.error ? 'cm-inline-result is-error' : 'cm-inline-result';
+    span.textContent = this.result.text;
+    span.title = this.result.text;
+    span.setAttribute('aria-label', this.result.text);
+    return span;
+  }
+
+  ignoreEvent(): boolean {
+    // 点结果胶囊不移动光标、不触发编辑。
+    return true;
+  }
+}
+
+const inlineResultsField = StateField.define<DecorationSet>({
+  create() {
+    return Decoration.none;
+  },
+  update(deco, tr) {
+    // 文档一改，行号与结果就不再对应 —— 直接清空，避免显示过期结果。
+    if (tr.docChanged) return Decoration.none;
+    let next = deco;
+    for (const effect of tr.effects) {
+      if (!effect.is(setInlineResultsEffect)) continue;
+      const ranges = effect.value
+        .filter((r) => r.line >= 1 && r.line <= tr.state.doc.lines)
+        .map((r) => {
+          const line = tr.state.doc.line(r.line);
+          return Decoration.widget({ widget: new InlineResultWidget(r), side: 1 }).range(line.to);
+        })
+        .sort((a, b) => a.from - b.from);
+      next = Decoration.set(ranges, true);
+    }
+    return next;
+  },
+  provide: (field) => EditorView.decorations.from(field),
+});
 
 export function CodeEditor({
   value,
@@ -64,6 +126,7 @@ export function CodeEditor({
   language = 'simple',
   placeholder,
   fontSize: fontSizeProp,
+  inlineResults,
 }: CodeEditorProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const viewRef = useRef<EditorView | null>(null);
@@ -80,6 +143,8 @@ export function CodeEditor({
   // 坐标用视口坐标系 + position:fixed，避免被编辑器容器的 overflow:hidden 裁掉。
   const [selectionBubble, setSelectionBubble] = useState<{
     text: string;
+    /** 选区起始行（1 起）：运行选区时把结果胶囊放回正确的行。 */
+    startLine: number;
     left: number;
     top: number;
     placement: 'above' | 'below';
@@ -163,6 +228,32 @@ export function CodeEditor({
     '.cm-scroller': {
       fontFamily: 'ui-monospace, "Geist Mono", "JetBrains Mono", monospace',
       lineHeight: '1.5',
+    },
+    // 运行后行尾的结果胶囊：不参与测量（inline-block + 固定行高），
+    // 过长时省略，悬停看完整结果。
+    '.cm-inline-result': {
+      display: 'inline-block',
+      marginLeft: '12px',
+      padding: '0 6px',
+      borderRadius: '4px',
+      border: '1px solid color-mix(in srgb, var(--primary) 28%, transparent)',
+      background: 'color-mix(in srgb, var(--primary) 10%, transparent)',
+      color: 'var(--primary)',
+      fontSize: `${Math.max(9, Math.round(fontSize * 0.78))}px`,
+      lineHeight: '1.5',
+      fontFamily: 'ui-monospace, "Geist Mono", "JetBrains Mono", monospace',
+      maxWidth: 'min(40vw, 320px)',
+      overflow: 'hidden',
+      textOverflow: 'ellipsis',
+      whiteSpace: 'nowrap',
+      verticalAlign: 'baseline',
+      userSelect: 'none',
+      pointerEvents: 'auto',
+    },
+    '.cm-inline-result.is-error': {
+      border: '1px solid color-mix(in srgb, var(--destructive, #ef4444) 35%, transparent)',
+      background: 'color-mix(in srgb, var(--destructive, #ef4444) 12%, transparent)',
+      color: 'var(--destructive, #ef4444)',
     },
     '.cm-gutters': {
       backgroundColor: 'transparent',
@@ -318,6 +409,7 @@ export function CodeEditor({
         const above = start.top - 6 - BUBBLE_H >= Math.max((rect?.top ?? 0) + 2, 4);
         setSelectionBubble({
           text,
+          startLine: view.state.doc.lineAt(view.state.selection.main.from).number,
           left: Math.min(Math.max(minLeft, center - BUBBLE_W / 2), Math.max(minLeft, maxLeft)),
           top: above
             ? start.top - 6
@@ -397,6 +489,7 @@ export function CodeEditor({
         ]),
         langCompartment.current.of(langExt),
         placeholderCompartment.current.of(cmPlaceholder(placeholder ?? '')),
+        inlineResultsField,
         syntaxLinter,
         updateListener,
         EditorView.contentAttributes.of({ 'aria-label': 'Code editor' }),
@@ -464,6 +557,13 @@ export function CodeEditor({
       effects: themeCompartment.current.reconfigure(editorTheme),
     });
   }, [editorTheme]);
+
+  /* ─── Push per-line results into the editor ──────────────────── */
+  useEffect(() => {
+    const view = viewRef.current;
+    if (!view) return;
+    view.dispatch({ effects: setInlineResultsEffect.of(inlineResults ?? []) });
+  }, [inlineResults]);
 
   /* ─── Sync external value changes ────────────────────────────── */
   useEffect(() => {
@@ -590,7 +690,7 @@ export function CodeEditor({
                 title="运行选中的代码"
                 aria-label="运行选中的代码"
                 onClick={() => {
-                  onRunSelection(selectionBubble.text);
+                  onRunSelection(selectionBubble.text, selectionBubble.startLine);
                   setSelectionBubble(null);
                   viewRef.current?.focus();
                 }}

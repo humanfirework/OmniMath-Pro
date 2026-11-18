@@ -53,7 +53,8 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
-import { useWorkbenchStore, STORAGE_KEY } from '@/lib/store/workbench';
+import { useWorkbenchStore } from '@/lib/store/workbench';
+import { DEFAULT_SCRIPT } from '@/lib/editor/defaultScript';
 import { useFileSystemStore } from '@/lib/store/fileSystemStore';
 import { useSettingsStore } from '@/lib/store/settingsStore';
 import {
@@ -71,21 +72,11 @@ import type { CalculationResult } from '@/lib/store/workbench';
 import { useRunResultsStore } from '@/lib/store/runResultsStore';
 import { sampleFunction, type Plot2DType } from '@/lib/plots/plot2d';
 import { buildPlotConfig } from '@/lib/plots/fromResult';
-import { CodeEditor } from '@/components/workbench/layout/CodeEditor';
+import { CodeEditor, type InlineResult } from '@/components/workbench/layout/CodeEditor';
 import { registerShortcutHandler } from '@/lib/hooks/useGlobalShortcuts';
 import { SymbolPalette } from '@/components/workbench/SymbolPalette';
 import { FormulaRenderer } from '@/components/workbench/FormulaRenderer';
 import { DemosPanel } from '@/components/workbench/plots/DemosPanel';
-
-const DEFAULT_SCRIPT = `# 按 Ctrl+Enter 运行（手机点右上角「运行」）
-# 用 --- 分隔独立计算块；含 x 的表达式自动画图
-
-sin(x) * cos(x)
-integrate(x^2 * e^x, x)
-
----
-# 极坐标：r = 2(1 + cosθ)
-r = 2*(1 + cos(theta))`;
 
 const MODES: Array<{ id: InputMode; labelKey: 'editorModeSimple' | 'editorModePython' | 'editorModeMatlab' }> = [
   { id: 'simple', labelKey: 'editorModeSimple' },
@@ -98,6 +89,12 @@ const MODE_DESCRIPTION: Record<InputMode, string> = {
   python: 'Python 风格：np.sin、math.log 等模块前缀将被剥离。',
   matlab: 'MATLAB 风格：A\\b 求解线性方程组，A\' 转置。',
 };
+
+/** 行尾结果胶囊的一句话摘要：压平换行、限制长度。 */
+function clipInlineText(text: string, max = 40): string {
+  const single = text.replace(/\s+/g, ' ').trim();
+  return single.length > max ? `${single.slice(0, max - 1)}…` : single;
+}
 
 /**
  * i18n keys added by the multi-tab feature, pending merge into
@@ -126,10 +123,12 @@ export function EditorPanel() {
 
   const [isRunning, setIsRunning] = useState(false);
   const [previewLine, setPreviewLine] = useState(1);
+  // 运行后行尾的结果胶囊（MATLAB live editor 风格）：任何编辑都会清空，
+  // 避免结果与代码行错位。
+  const [inlineResults, setInlineResults] = useState<InlineResult[]>([]);
   // 输入界面：'code'（代码编辑器） | 'demos'（Desmos 式直接输入）。
   // 状态已提升到 workbench store，供顶栏 TitleBar 与 EditorPanel 共享。
   const previewTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const defaultScriptSetRef = useRef(false);
   const editorContainerRef = useRef<HTMLDivElement | null>(null);
 
   /* ─── Editor font size from settings store ───────────────────── */
@@ -152,21 +151,10 @@ export function EditorPanel() {
     return () => el.removeEventListener('wheel', onWheel);
   }, [editorFontSize, setEditorFontSize]);
 
-  // Initialize default script only on the very first app launch (no persisted
-  // storage). Once storage exists, an empty editor is intentional — do not
-  // restore the default script, even if this component remounts (e.g. after
-  // switching from the pipeline view).
-  useEffect(() => {
-    if (!defaultScriptSetRef.current && typeof window !== 'undefined') {
-      defaultScriptSetRef.current = true;
-      const hasStorage = localStorage.getItem(STORAGE_KEY) !== null;
-      if (!editorContent && !hasStorage) {
-        setEditorContent(DEFAULT_SCRIPT);
-      }
-    }
-  }, [editorContent, setEditorContent]);
-
   /* ─── File system integration ──────────────────────────────────── */
+  // 首次启动的示例脚本由 workbench store 在 loadFromStorage 时写入
+  //（见 `@/lib/editor/defaultScript`）——编辑器现在按需加载，不能在这里
+  // 判断「是否首次启动」，否则自动保存会先落一个空内容。
   // Load the file system on mount (async, IndexedDB).
   const activeFileId = useFileSystemStore((s) => s.activeFileId);
   const loadFromStorage = useFileSystemStore((s) => s.loadFromStorage);
@@ -313,11 +301,16 @@ export function EditorPanel() {
     return inputToLatex(line, 'simple');
   }, [previewLine, editorContent, inputMode]);
 
+  // 任何编辑 / 切换文件都会改变行号与内容的对应关系，行尾结果立即清空。
+  useEffect(() => {
+    setInlineResults([]);
+  }, [editorContent]);
+
   /* ─── Run script ───────────────────────────────────────────────── */
   const runScriptTimerRef = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
   // P2-1: target='independent' 时，把绘图结果额外送入「独立运行结果面板」
   //（可拖拽/缩放/多开的 MATLAB figure 风格浮窗），而非仅预览面板。
-  const runScript = useCallback((target: 'preview' | 'independent' = 'preview', source?: string) => {
+  const runScript = useCallback((target: 'preview' | 'independent' = 'preview', source?: string, sourceStartLine = 1) => {
     if (isRunning) return;
     setIsRunning(true);
     // Defer to allow UI to show running state.
@@ -332,6 +325,8 @@ export function EditorPanel() {
         let resultCount = 0;
         // 收集本次运行的 2D 绘图（供 target='independent' 时送入独立面板）。
         const runPlots: Array<{ expression: string; xRange: [number, number]; plotType: Plot2DType; color: string }> = [];
+        // 行尾结果胶囊：行号 = 源起始行 + 循环下标（选区运行也能对回原文件）。
+        const nextInline: InlineResult[] = [];
         const PLOT_COLORS = ['#2dd4bf', '#fbbf24', '#fb7185', '#34d399', '#a78bfa', '#fb923c'];
         let plotColorIdx = 0;
 
@@ -370,6 +365,17 @@ export function EditorPanel() {
           lastResult = calcResult;
           resultCount++;
 
+          const inlineText = !result.success
+            ? `错误: ${result.error ?? '无法计算'}`
+            : result.plotExpression
+              ? `图像: ${result.plotExpression}`
+              : `= ${result.result}`;
+          nextInline.push({
+            line: sourceStartLine + i,
+            text: clipInlineText(inlineText),
+            error: !result.success,
+          });
+
           if (result.isMatrix) matrixSeen = true;
 
           // If assignment, capture the variable from scope
@@ -403,6 +409,7 @@ export function EditorPanel() {
         }
 
         if (lastResult) setCurrentResult(lastResult);
+        setInlineResults(nextInline);
 
         // ── 自动切换预览标签 ──────────────────────────────────────────
         // 优先级：3D 图 > 2D 图 > 多结果(日志) > 矩阵(公式) > 单结果(公式)
@@ -770,7 +777,7 @@ export function EditorPanel() {
           value={editorContent}
           onChange={setEditorContent}
           onRun={runScript}
-          onRunSelection={(code) => runScript('preview', code)}
+          onRunSelection={(code, startLine) => runScript('preview', code, startLine ?? 1)}
           onCursorChange={(line) => {
             // Debounced preview update.
             if (previewTimerRef.current) clearTimeout(previewTimerRef.current);
@@ -779,6 +786,7 @@ export function EditorPanel() {
           language={inputMode}
           placeholder={t('editorPlaceholder')}
           fontSize={editorFontSize}
+          inlineResults={inlineResults}
         />
       </div>
 

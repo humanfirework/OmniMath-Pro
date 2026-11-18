@@ -3,6 +3,7 @@ import type { InputMode } from '@/lib/engine/types';
 import type { Locale } from '@/lib/i18n';
 import { setLocale as setI18nLocale } from '@/lib/i18n';
 import type { CurveSetData } from '@/lib/plots/curveTypes';
+import { DEFAULT_SCRIPT } from '@/lib/editor/defaultScript';
 import { useSettingsStore } from './settingsStore';
 
 export interface CalculationResult {
@@ -611,6 +612,12 @@ export const useWorkbenchStore = create<WorkbenchState>((set, get) => ({
   },
   loadFromStorage: () => {
     const initial = loadInitial();
+    // 首次启动（没有任何持久化记录）时，由 store 写入示例脚本。
+    // 不能放在 EditorPanel 里判断：编辑器是按需加载的，等它挂载时自动保存
+    // 可能已经把空内容写进 localStorage，首次启动会变成空白编辑器。
+    if (typeof window !== 'undefined' && localStorage.getItem(STORAGE_KEY) === null) {
+      set({ editorContent: DEFAULT_SCRIPT });
+    }
     if (Object.keys(initial).length > 0) {
       set(initial);
       // 主动同步主题类 — light 时移除 dark 类，避免 layout.tsx 硬编码的 dark
