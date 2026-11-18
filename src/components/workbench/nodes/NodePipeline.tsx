@@ -1080,6 +1080,11 @@ function NodePipelineInner() {
         shouldCancel: () => cancelRunRef.current,
       });
 
+      // 把执行结果写回节点状态，节点卡片的底部结果 / 错误才会刷新。
+      // （executePipeline 在克隆的节点上写入 result/outputs，不回写则卡片一直显示「—」。）
+      setNodes(executed);
+      setComputeTick((n) => n + 1);
+
       // Side-effects: plot / curve / animation 输出统统进入独立运行结果面板，
       // 不再 push 到 2D 绘图工作台 store（彻底解耦）、不再自动切回 plot2d tab。
       pushRunResults(executed, edges);
@@ -4401,6 +4406,43 @@ function NodeResultFooter({
         <Triangle className="size-3 shrink-0 text-cyan-500" />
         <span className="truncate text-foreground/80">{shapes.summary || '—'}</span>
       </div>
+    );
+  }
+  // Vision outputs → 紧凑尺寸/数量摘要（否则 MathRender 会显示 [object Object]）
+  if (node.type === 'image-input' || node.type === 'grayscale-threshold' || node.type === 'edge-detect' || node.type === 'fine-outline') {
+    const img = node.result as { width?: number; height?: number; src?: string } | undefined;
+    if (img && typeof img === 'object') {
+      const w = Number(img.width ?? 0);
+      const h = Number(img.height ?? 0);
+      return (
+        <span className="text-[10.5px] font-mono text-muted-foreground">
+          {w > 0 && h > 0 ? `${w} × ${h}` : img.src ? '已载入图片' : '—'}
+        </span>
+      );
+    }
+  }
+  if (node.type === 'contour-trace') {
+    const contours = node.result as { polylines?: unknown[] } | undefined;
+    return (
+      <span className="text-[10.5px] font-mono text-muted-foreground">
+        {Array.isArray(contours?.polylines) ? `${contours.polylines.length} 条轮廓` : '—'}
+      </span>
+    );
+  }
+  if (node.type === 'curve-fit') {
+    const curveSet = node.result as { curves?: unknown[] } | undefined;
+    return (
+      <span className="text-[10.5px] font-mono text-muted-foreground">
+        {Array.isArray(curveSet?.curves) ? `${curveSet.curves.length} 条曲线` : '—'}
+      </span>
+    );
+  }
+  if (node.type === 'frame-extract') {
+    const frames = node.result as { frames?: unknown[] } | undefined;
+    return (
+      <span className="text-[10.5px] font-mono text-muted-foreground">
+        {Array.isArray(frames?.frames) ? `${frames.frames.length} 帧` : '—'}
+      </span>
     );
   }
   // Plot output → mini sparkline (click to open in 2D panel)

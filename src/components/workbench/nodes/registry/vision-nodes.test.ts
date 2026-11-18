@@ -414,6 +414,36 @@ describe('vision: shape-classify', () => {
     // flipY：y' = H - 1 - y
     expect(curves.shapeLabels?.[0].y).toBeCloseTo(100 - 1 - contours.shapeLabels[0].y, 5);
   });
+
+  it('端到端：二值图（方块 + 圆）→ contour-trace → shape-classify 各自识别', async () => {
+    const w = 220;
+    const h = 110;
+    const fg = new Array(w * h).fill(0);
+    // 实心方块：x∈[20,80), y∈[20,90)
+    for (let y = 20; y < 90; y++) {
+      for (let x = 20; x < 80; x++) fg[y * w + x] = 1;
+    }
+    // 实心圆：圆心 (160,55)，半径 32
+    for (let y = 0; y < h; y++) {
+      for (let x = 0; x < w; x++) {
+        if (Math.hypot(x - 160, y - 55) <= 32) fg[y * w + x] = 1;
+      }
+    }
+    const traced = await run(
+      'contour-trace',
+      { image: binaryImage(fg, w, h) },
+      { turdsize: 2, skeletonize: false },
+    );
+    const out = await run('shape-classify', { contours: traced.contours }, { minPerimeter: 60 });
+    const shapes = out.shapes as {
+      annotations: Array<{ shape: string; confidence: number; perimeter: number; extent: number }>;
+      counts: Record<string, number>;
+    };
+    // 方块只输出 4 个角点、圆输出上百点：两种轮廓都要能正确分类。
+    expect(shapes.annotations).toHaveLength(2);
+    expect(shapes.counts.circle).toBe(1);
+    expect(shapes.counts.rectangle).toBe(1);
+  });
 });
 
 /* ------------------------------------------------------------------ *

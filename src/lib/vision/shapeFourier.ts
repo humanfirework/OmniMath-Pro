@@ -306,8 +306,13 @@ export function annotateContours(
     if (perimeter < minPerimeter) continue;
     if (!closed && !includeOpen) continue;
 
+    // 闭合轮廓可能只保留角点（如 contour-trace 输出的 4 点矩形），首尾点相距
+    // 很远会被 classifyWithFourier 当成「开放笔画」，且少于 6 点会被直接判为直线。
+    // 统一按弧长重采样成 64 点闭环再分类。
+    const closingGap = Math.hypot(first.x - last.x, first.y - last.y);
+    const closedPoints = closed && closingGap > 1e-6 ? [...points, first] : points;
     const match = closed
-      ? classifyWithFourier(points)
+      ? classifyWithFourier(closedPoints.length === DEFAULT_SAMPLES ? closedPoints : resampleContour(closedPoints, DEFAULT_SAMPLES))
       : { shape: 'line' as FourierShape, confidence: 0.55 };
     if (match.shape === 'line' && !includeOpen) continue;
     if (match.confidence < minConfidence) continue;
