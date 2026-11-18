@@ -20,7 +20,7 @@
  * - Mount effects: loadFromStorage(), apply theme class, set i18n locale.
  */
 
-import { lazy, Suspense, useCallback, useEffect, useState } from 'react';
+import { lazy, Suspense, useCallback, useEffect, useRef, useState } from 'react';
 import { motion } from 'framer-motion';
 import { PanelLeftClose, PanelLeftOpen, PanelRight, PanelRightOpen, LayoutTemplate } from 'lucide-react';
 import { getCurrentWindow } from '@tauri-apps/api/window';
@@ -452,6 +452,25 @@ export function Workbench() {
   // 平板打开白板时收起编辑器/侧栏，让画布吃满屏幕。
   const focusWhiteboard = coarsePointer && viewMode === 'whiteboard';
   const showFsSide = !sidePanelCollapsed && viewMode !== 'focus' && !focusWhiteboard;
+
+  // 白板 / 蓝图是创作型视图：进入时自动收起代码编辑器，让画布占满宽度，
+  // 返回工作台时再恢复用户原来的编辑器可见性。
+  // 之前打开白板/蓝图，左侧仍挂着 40% 的无关代码编辑器 —— 正是「无意义展开」。
+  const autoHiddenEditorRef = useRef(false);
+  useEffect(() => {
+    const creative = viewMode === 'whiteboard' || viewMode === 'pipeline';
+    if (creative) {
+      if (!autoHiddenEditorRef.current && useWorkbenchStore.getState().editorVisible) {
+        autoHiddenEditorRef.current = true;
+        setEditorVisible(false);
+      }
+      return;
+    }
+    if (autoHiddenEditorRef.current && (viewMode === 'workbench' || viewMode === 'home')) {
+      autoHiddenEditorRef.current = false;
+      setEditorVisible(true);
+    }
+  }, [viewMode, setEditorVisible]);
 
   if (isMobile) {
     // 手机上点开首页卡片（蓝图/矩阵/求解/统计等）时，直接渲染全宽视图，

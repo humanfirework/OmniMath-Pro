@@ -68,6 +68,9 @@ export function StatusBar() {
   const lineCount = editorContent.split('\n').length;
   const varCount = Object.keys(variables).length;
   const plotCount = plots.length;
+  // 编辑器隐藏时（白板 / 蓝图 / 专注模式）不再显示行数与输入模式，
+  // 否则底部会挂着与当前画布无关的「9 行 · simple」。
+  const showEditorSummary = editorVisible && viewMode !== 'focus' && viewMode !== 'home';
 
   return (
     <footer
@@ -100,15 +103,17 @@ export function StatusBar() {
         </span>
       </div>
 
-      {/* Center: editor summary */}
-      <div className="hidden flex-1 items-center justify-center gap-1.5 text-muted-foreground sm:flex">
-        <span>{lineCount} {t('editorLines')}</span>
-        <span className="text-border/60">·</span>
-        <span className="flex items-center gap-1">
-          <Sigma className="size-2.5 text-primary" />
-          {inputMode}
-        </span>
-      </div>
+      {/* Center: editor summary（仅编辑器可见时） */}
+      {showEditorSummary && (
+        <div className="hidden flex-1 items-center justify-center gap-1.5 text-muted-foreground sm:flex">
+          <span>{lineCount} {t('editorLines')}</span>
+          <span className="text-border/60">·</span>
+          <span className="flex items-center gap-1">
+            <Sigma className="size-2.5 text-primary" />
+            {inputMode}
+          </span>
+        </div>
+      )}
 
       {/* Right: data + preferences */}
       <div className="flex items-center gap-1.5">
