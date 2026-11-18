@@ -15,10 +15,10 @@ import { join } from '@tauri-apps/api/path';
 import { inTauri } from '@/lib/tauri';
 import {
   applySnapshot,
-  collectSnapshot,
   parseSnapshot,
   type ImportResult,
 } from './snapshot';
+import { applySnapshotFiles, collectSnapshotWithFiles } from './files';
 
 export const SYNC_FOLDER_KEY = 'omnimath-sync-folder';
 export const SYNC_FILE_NAME = 'omnimath-workspace.json';
@@ -57,7 +57,7 @@ export async function pushToSyncFolder(): Promise<PushResult> {
   const folder = getSyncFolder();
   if (!inTauri()) throw new Error('同步文件夹仅桌面版可用');
   if (!folder) throw new Error('请先选择同步文件夹');
-  const snapshot = collectSnapshot();
+  const snapshot = await collectSnapshotWithFiles();
   const json = JSON.stringify(snapshot, null, 2);
   const path = await syncFilePath(folder);
   await writeTextFile(path, json);
@@ -74,5 +74,6 @@ export async function pullFromSyncFolder(
   const json = await readTextFile(path);
   const snapshot = parseSnapshot(json);
   const result = applySnapshot(snapshot, mode);
+  await applySnapshotFiles(snapshot);
   return { ...result, path };
 }

@@ -107,6 +107,15 @@ describe('workspace snapshot', () => {
     expect(parseSnapshot(JSON.stringify(snap)).keys['omnimath-a']).toBe('1');
   });
 
+  it('accepts the optional files map but rejects malformed values', () => {
+    const snap = snapshot({ 'omnimath-a': '1' });
+    expect(isWorkspaceSnapshot({ ...snap, files: {} })).toBe(true);
+    expect(isWorkspaceSnapshot({ ...snap, files: [] })).toBe(false);
+    expect(isWorkspaceSnapshot({ ...snap, files: 'nope' })).toBe(false);
+    // 旧快照（没有 files 字段）仍然合法。
+    expect(isWorkspaceSnapshot(snap)).toBe(true);
+  });
+
   it('reports size and filename', () => {
     const snap = snapshot({ 'omnimath-a': '1234' });
     expect(snapshotSize(snap).keys).toBe(1);

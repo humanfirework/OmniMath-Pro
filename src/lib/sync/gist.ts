@@ -8,11 +8,8 @@
  * Authorization header to api.github.com, and it is excluded from snapshots.
  */
 
-import {
-  collectSnapshot,
-  parseSnapshot,
-  type WorkspaceSnapshot,
-} from './snapshot';
+import { parseSnapshot, type WorkspaceSnapshot } from './snapshot';
+import { collectSnapshotWithFiles } from './files';
 
 export const GIST_TOKEN_KEY = 'omnimath:sync:gistToken';
 export const GIST_ID_KEY = 'omnimath:sync:gistId';
@@ -156,7 +153,7 @@ export async function findBackupGist(token = getGistToken()): Promise<string | n
 
 /** Upload the current workspace. Creates the Gist on first use. */
 export async function pushToGist(token = getGistToken()): Promise<GistResult> {
-  const snapshot = collectSnapshot();
+  const snapshot = await collectSnapshotWithFiles();
   const payload = JSON.stringify(buildGistPayload(snapshot));
   const storedId = getStoredGistId();
   if (storedId) {

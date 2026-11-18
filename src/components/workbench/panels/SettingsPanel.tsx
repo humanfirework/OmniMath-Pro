@@ -102,6 +102,7 @@ import {
   setGistToken,
   testGistToken,
 } from '@/lib/sync/gist';
+import { applySnapshotFiles } from '@/lib/sync/files';
 import { toast } from 'sonner';
 
 type Category = 'appearance' | 'editor' | 'layout' | 'data' | 'backup' | 'export' | 'language' | 'shortcuts' | 'advanced' | 'about';
@@ -352,11 +353,16 @@ export function SettingsPanel() {
       setGistToken(gistTokenInput);
       const { snapshot, gistId: id } = await pullFromGist(gistTokenInput);
       const result = applySnapshot(snapshot, importMode);
+      // 文件树在 IndexedDB：单独合并，随后 reload 让编辑器重新载入。
+      const files = await applySnapshotFiles(snapshot);
       setGistId(id);
+      const filesNote = files && (files.added > 0 || files.updated > 0)
+        ? `，文件 +${files.added} / 更新 ${files.updated}`
+        : '';
       toast.success(
         importMode === 'replace'
-          ? `已从 Gist 恢复 ${result.written} 项数据`
-          : `已合并 ${result.merged} 项记录、补全 ${result.written} 项，保留 ${result.skipped} 项本机数据`,
+          ? `已从 Gist 恢复 ${result.written} 项数据${filesNote}`
+          : `已合并 ${result.merged} 项记录、补全 ${result.written} 项，保留 ${result.skipped} 项本机数据${filesNote}`,
         { description: '即将重新载入界面…', duration: 2200 },
       );
       setTimeout(() => {

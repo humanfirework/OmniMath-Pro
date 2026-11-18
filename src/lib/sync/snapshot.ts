@@ -7,6 +7,8 @@
  * import on another. Secrets (AI API keys) are never included.
  */
 
+import type { FileNode } from '@/lib/store/fileSystemStore';
+
 export const SNAPSHOT_APP = 'omnimath' as const;
 export const SNAPSHOT_VERSION = 1 as const;
 export const SNAPSHOT_EXTENSION = 'json';
@@ -20,7 +22,17 @@ export interface WorkspaceSnapshot {
   createdAt: string;
   /** localStorage key → raw string value. */
   keys: Record<string, string>;
+  /**
+   * 文件树（代码文件 / 文件夹，正文随节点一起同步）。
+   *
+   * 文件正文存放在 IndexedDB（localStorage 放不下），所以不能塞进 `keys`。
+   * 旧版本快照没有该字段，读取时按「没有文件可同步」处理。
+   */
+  files?: Record<string, SnapshotFileNode>;
 }
+
+/** 与 `FileNode` 结构一致（type-only 引入，不把 store 的运行时拖进 sync 层）。 */
+export type SnapshotFileNode = FileNode;
 
 function isSecretKey(key: string): boolean {
   return SECRET_PREFIXES.some((p) => key.startsWith(p));
@@ -50,9 +62,17 @@ export function isWorkspaceSnapshot(value: unknown): value is WorkspaceSnapshot 
   const v = value as Partial<WorkspaceSnapshot>;
   if (v.app !== SNAPSHOT_APP || v.version !== SNAPSHOT_VERSION) return false;
   if (!v.keys || typeof v.keys !== 'object' || Array.isArray(v.keys)) return false;
-  return Object.entries(v.keys).every(
+  if (!Object.entries(v.keys).every(
     ([k, val]) => k.startsWith(KEY_PREFIX) && !isSecretKey(k) && typeof val === 'string',
-  );
+  )) {
+    return false;
+  }
+  // `files` 是后加的可选字段；旧快照没有它仍然合法。存在时只做轻量结构检查，
+  // 具体节点校验交给 mergeFileNodes（会丢弃非法条目）。
+  if (v.files !== undefined) {
+    if (!v.files || typeof v.files !== 'object' || Array.isArray(v.files)) return false;
+  }
+  return true;
 }
 
 export interface ImportResult {

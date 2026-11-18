@@ -22,6 +22,7 @@
 
 import { create } from 'zustand';
 import type { InputMode } from '@/lib/engine/types';
+import { mergeFileNodes, type FileMergeResult } from '@/lib/sync/fileMerge';
 
 /* ------------------------------------------------------------------ */
 /*  Types                                                             */
@@ -565,3 +566,42 @@ export const useFileSystemStore = create<FileSystemState>((set, get) => ({
     }, 400);
   },
 }));
+
+/* ------------------------------------------------------------------ */
+/*  Cross-device sync helpers（文件正文在 IndexedDB，快照 keys 装不下） */
+/* ------------------------------------------------------------------ */
+
+/** 导出文件树节点，供云端备份 / 同步文件夹写入快照。 */
+export async function exportFileNodesForSync(): Promise<Record<string, FileNode> | null> {
+  const data = (await idbGet(FS_KEY)) as Partial<PersistedFS> | null;
+  if (!data || !data.nodes || typeof data.nodes !== 'object') return null;
+  return data.nodes;
+}
+
+/**
+ * 把远端文件树合并进本机 IndexedDB。
+ *
+ * 只合并节点（按 id + updatedAt），保留本机的打开标签与当前文件；失效的
+ * 标签 id 会被清理。合并后需要刷新页面（调用方负责）才能让编辑器重新加载。
+ */
+export async function mergeRemoteFileNodes(
+  remote: Record<string, FileNode>,
+): Promise<FileMergeResult> {
+  const local = (await idbGet(FS_KEY)) as Partial<PersistedFS> | null;
+  const localNodes = local && local.nodes && typeof local.nodes === 'object' ? local.nodes : {};
+  const result = mergeFileNodes(localNodes, remote);
+  const openTabs = Array.isArray(local?.openTabs)
+    ? local.openTabs.filter((id) => result.nodes[id]?.type === 'file')
+    : [];
+  const activeTabId =
+    local?.activeTabId && result.nodes[local.activeTabId]?.type === 'file'
+      ? local.activeTabId
+      : (openTabs[0] ?? null);
+  await idbSet(FS_KEY, {
+    nodes: result.nodes,
+    activeFileId: activeTabId,
+    openTabs,
+    activeTabId,
+  } satisfies PersistedFS);
+  return result;
+}
