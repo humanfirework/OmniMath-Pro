@@ -28,6 +28,8 @@ export interface RunCurve {
   flipY?: boolean;
   flipX?: boolean;
   visible?: boolean;
+  /** 形状标签（世界坐标）：蓝图 shape-classify 透传，绘制在图形中心。 */
+  labels?: Array<{ x: number; y: number; text: string }>;
 }
 
 /** 逐帧动画（视频/GIF → 姿态 → 曲线动画）。 */

@@ -1238,6 +1238,14 @@ export interface TranslationDict {
   npGrayscaleThreshold: string;
   npEdgeDetect: string;
   npContourTrace: string;
+  npShapeClassify: string;
+  npPortShapes: string;
+  npShapeCircle: string;
+  npShapeEllipse: string;
+  npShapeRectangle: string;
+  npShapeTriangle: string;
+  npShapeLine: string;
+  npShapeNone: string;
   npCurveFit: string;
   npPortContours: string;
   npPortCurves: string;
@@ -2578,6 +2586,14 @@ const zhCN: TranslationDict = {
   npGrayscaleThreshold: "灰度阈值",
   npEdgeDetect: "边缘检测",
   npContourTrace: "轮廓追踪",
+  npShapeClassify: "形状识别",
+  npPortShapes: "形状",
+  npShapeCircle: "圆",
+  npShapeEllipse: "椭圆",
+  npShapeRectangle: "矩形",
+  npShapeTriangle: "三角形",
+  npShapeLine: "直线",
+  npShapeNone: "未识别到形状",
   npCurveFit: "图像转曲线",
   npPortContours: "轮廓",
   npPortCurves: "曲线集合",
@@ -3871,6 +3887,14 @@ const en: TranslationDict = {
   npGrayscaleThreshold: "Grayscale Threshold",
   npEdgeDetect: "Edge Detect",
   npContourTrace: "Contour Trace",
+  npShapeClassify: "Shape Classify",
+  npPortShapes: "Shapes",
+  npShapeCircle: "Circle",
+  npShapeEllipse: "Ellipse",
+  npShapeRectangle: "Rectangle",
+  npShapeTriangle: "Triangle",
+  npShapeLine: "Line",
+  npShapeNone: "No shapes found",
   npCurveFit: "Curve Fit",
   npPortContours: "Contours",
   npPortCurves: "Curves",

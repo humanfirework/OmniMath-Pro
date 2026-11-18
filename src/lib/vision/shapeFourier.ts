@@ -218,3 +218,111 @@ export function classifyWithFourier(points: ContourPoint[]): ShapeMatch {
     distances,
   };
 }
+
+/* ── Contour annotation (blueprint `shape-classify` node) ─────────── */
+
+export interface ShapeBBox {
+  minX: number;
+  minY: number;
+  maxX: number;
+  maxY: number;
+}
+
+/** A classified contour with the geometry needed to label it on screen. */
+export interface ShapeAnnotation {
+  shape: FourierShape;
+  confidence: number;
+  /** Index of the source contour in the input array. */
+  index: number;
+  /** Contour centroid, in source pixel coordinates. */
+  center: ContourPoint;
+  bbox: ShapeBBox;
+  /** Contour perimeter, in source pixels. */
+  perimeter: number;
+  /** Bounding-box area (used for largest-first ordering). */
+  extent: number;
+  closed: boolean;
+}
+
+export interface AnnotateContoursOptions {
+  /** Drop contours shorter than this perimeter (source pixels). Default 48. */
+  minPerimeter?: number;
+  /** Minimum classifier confidence kept. Default 0.35. */
+  minConfidence?: number;
+  /** Keep at most this many annotations, largest first. Default 12. */
+  maxLabels?: number;
+  /** Also label open strokes as `line`. Default false. */
+  includeOpen?: boolean;
+}
+
+/**
+ * Classify every contour with the Fourier descriptor and return annotations
+ * sorted largest-first. Tiny contours (noise) and low-confidence matches are
+ * dropped so the blueprint result stays readable instead of labelling every
+ * speck of dust.
+ */
+export function annotateContours(
+  contours: Array<{ points: ContourPoint[]; closed?: boolean }>,
+  options: AnnotateContoursOptions = {},
+): ShapeAnnotation[] {
+  const minPerimeter = Math.max(0, options.minPerimeter ?? 48);
+  const minConfidence = Math.max(0, Math.min(1, options.minConfidence ?? 0.35));
+  const maxLabels = Math.max(1, Math.floor(options.maxLabels ?? 12));
+  const includeOpen = options.includeOpen ?? false;
+
+  const out: ShapeAnnotation[] = [];
+  for (let index = 0; index < contours.length; index++) {
+    const contour = contours[index];
+    const points = contour?.points;
+    if (!points || points.length < 4) continue;
+
+    let minX = Infinity;
+    let minY = Infinity;
+    let maxX = -Infinity;
+    let maxY = -Infinity;
+    let cx = 0;
+    let cy = 0;
+    for (const p of points) {
+      if (p.x < minX) minX = p.x;
+      if (p.y < minY) minY = p.y;
+      if (p.x > maxX) maxX = p.x;
+      if (p.y > maxY) maxY = p.y;
+      cx += p.x;
+      cy += p.y;
+    }
+    const diag = Math.hypot(maxX - minX, maxY - minY) || 1;
+    const first = points[0];
+    const last = points[points.length - 1];
+    const closed =
+      contour.closed ?? Math.hypot(last.x - first.x, last.y - first.y) / diag <= 0.35;
+
+    let perimeter = 0;
+    for (let i = 1; i < points.length; i++) {
+      perimeter += Math.hypot(points[i].x - points[i - 1].x, points[i].y - points[i - 1].y);
+    }
+    if (closed) {
+      perimeter += Math.hypot(first.x - last.x, first.y - last.y);
+    }
+    if (perimeter < minPerimeter) continue;
+    if (!closed && !includeOpen) continue;
+
+    const match = closed
+      ? classifyWithFourier(points)
+      : { shape: 'line' as FourierShape, confidence: 0.55 };
+    if (match.shape === 'line' && !includeOpen) continue;
+    if (match.confidence < minConfidence) continue;
+
+    out.push({
+      shape: match.shape,
+      confidence: match.confidence,
+      index,
+      center: { x: cx / points.length, y: cy / points.length },
+      bbox: { minX, minY, maxX, maxY },
+      perimeter,
+      extent: Math.max(0, maxX - minX) * Math.max(0, maxY - minY),
+      closed,
+    });
+  }
+
+  return out.sort((a, b) => b.extent - a.extent).slice(0, maxLabels);
+}

@@ -972,12 +972,23 @@ function NodePipelineInner() {
             flipY: false,
           }));
         if (curves.length > 0) {
+          // 形状标签（shape-classify 透传）：挂在第一条曲线上，由渲染层统一绘制。
+          const rawLabels = (o as { shapeLabels?: unknown }).shapeLabels;
+          const labels = Array.isArray(rawLabels)
+            ? (rawLabels as Array<{ x: number; y: number; text: string }>).filter(
+                (l) => l && Number.isFinite(l.x) && Number.isFinite(l.y) && typeof l.text === 'string',
+              )
+            : [];
+          const withLabels: RunCurve[] =
+            labels.length > 0
+              ? curves.map((c, i) => (i === 0 ? { ...c, labels } : c))
+              : curves;
           // P0-4 图像+轮廓窗：把上游 image-input 的原图作为背景叠加到曲线结果上。
           const srcImage = findSourceImage(n.id);
           add({
             title: nodeTitle(n),
             kind: 'curves',
-            curves,
+            curves: withLabels,
             ...(srcImage ? { image: { ...srcImage } } : {}),
           });
         }
@@ -4379,6 +4390,16 @@ function NodeResultFooter({
       <div className="flex items-center gap-1.5 text-[11px] text-destructive w-full">
         <AlertCircle className="size-3 shrink-0" />
         <span className="truncate">{node.error}</span>
+      </div>
+    );
+  }
+  // Shape classify → one-line localized summary (圆 2 · 矩形 1)
+  if (node.type === 'shape-classify' && node.outputs?.shapes) {
+    const shapes = node.outputs.shapes as { summary?: string; total?: number };
+    return (
+      <div className="flex items-center gap-1.5 w-full min-w-0 text-[11px]">
+        <Triangle className="size-3 shrink-0 text-cyan-500" />
+        <span className="truncate text-foreground/80">{shapes.summary || '—'}</span>
       </div>
     );
   }

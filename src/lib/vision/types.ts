@@ -19,6 +19,12 @@ export interface Polyline {
   area?: number;
   /** 是否为孔洞轮廓（Moore 追踪时标记） */
   isHole?: boolean;
+  /** 形状分类结果（由 shape-classify 节点写入，如 circle / rectangle）。 */
+  shape?: string;
+  /** 形状分类置信度 0–1。 */
+  shapeConfidence?: number;
+  /** 形状标注中心（源图像像素坐标，供结果面板打标签）。 */
+  shapeCenter?: Point;
 }
 
 /** 三次贝塞尔曲线段 */

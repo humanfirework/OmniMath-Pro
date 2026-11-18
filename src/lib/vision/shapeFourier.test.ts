@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import {
+  annotateContours,
   classifyWithFourier,
   fourierMagnitudes,
   resampleContour,
@@ -87,5 +88,66 @@ describe('classifyWithFourier', () => {
     const result = classifyWithFourier(line);
     expect(result.shape).toBe('line');
     expect(result.confidence).toBeGreaterThan(0.5);
+  });
+});
+
+describe('annotateContours', () => {
+  const scaled = (pts: ContourPoint[], r: number): ContourPoint[] =>
+    pts.map((p) => ({ x: p.x * r + 200, y: p.y * r + 120 }));
+
+  it('labels closed contours with their shape and pixel geometry', () => {
+    const annotations = annotateContours(
+      [
+        { points: scaled(square(), 80), closed: true },
+        { points: scaled(circle(), 80), closed: true },
+      ],
+      { minPerimeter: 40 },
+    );
+    expect(annotations).toHaveLength(2);
+    expect(annotations.map((a) => a.shape).sort()).toEqual(['circle', 'rectangle']);
+    for (const a of annotations) {
+      expect(a.closed).toBe(true);
+      expect(a.perimeter).toBeGreaterThan(300);
+      expect(a.center.x).toBeGreaterThan(190);
+      expect(a.center.x).toBeLessThan(210);
+      expect(a.center.y).toBeGreaterThan(110);
+      expect(a.center.y).toBeLessThan(130);
+    }
+  });
+
+  it('drops small noise contours below minPerimeter', () => {
+    const annotations = annotateContours(
+      [
+        { points: scaled(square(), 80), closed: true },
+        { points: scaled(square(), 2), closed: true },
+      ],
+      { minPerimeter: 120 },
+    );
+    expect(annotations).toHaveLength(1);
+    expect(annotations[0].perimeter).toBeGreaterThan(500);
+  });
+
+  it('ignores open strokes unless includeOpen is set', () => {
+    const open: ContourPoint[] = Array.from({ length: 40 }, (_, i) => ({ x: i * 10, y: 20 }));
+    expect(annotateContours([{ points: open, closed: false }], { minPerimeter: 40 })).toHaveLength(0);
+    const withOpen = annotateContours(
+      [{ points: open, closed: false }],
+      { minPerimeter: 40, includeOpen: true },
+    );
+    expect(withOpen).toHaveLength(1);
+    expect(withOpen[0].shape).toBe('line');
+  });
+
+  it('sorts largest first and caps the number of labels', () => {
+    const annotations = annotateContours(
+      [
+        { points: scaled(square(), 20), closed: true },
+        { points: scaled(square(), 90), closed: true },
+        { points: scaled(square(), 50), closed: true },
+      ],
+      { minPerimeter: 40, maxLabels: 2 },
+    );
+    expect(annotations).toHaveLength(2);
+    expect(annotations[0].extent).toBeGreaterThan(annotations[1].extent);
   });
 });

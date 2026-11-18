@@ -93,6 +93,7 @@ export type NodeType =
   | 'grayscale-threshold'
   | 'edge-detect'
   | 'contour-trace'
+  | 'shape-classify'
   | 'curve-fit'
   | 'plot-curves'
   | 'fine-outline'

@@ -42,6 +42,17 @@ import {
 } from '@/lib/vision/video';
 import { detectPoses, poseSequenceToAnimation } from '@/lib/vision/pose';
 import { smoothPoseSequence, smoothCurveAnimation } from '@/lib/vision/smooth';
+import { annotateContours, type ShapeAnnotation, type FourierShape } from '@/lib/vision/shapeFourier';
+import { t } from '@/lib/i18n';
+
+/** 形状 → i18n 键（用于节点摘要与结果面板标签）。 */
+const SHAPE_LABEL_KEYS: Record<FourierShape, string> = {
+  circle: 'npShapeCircle',
+  ellipse: 'npShapeEllipse',
+  rectangle: 'npShapeRectangle',
+  triangle: 'npShapeTriangle',
+  line: 'npShapeLine',
+};
 
 /* ------------------------------------------------------------------ *
  * 数据类型
@@ -66,6 +77,27 @@ export interface ContoursValue {
   polylines: Polyline[];
   width: number;
   height: number;
+  /** 形状标签（shape-classify 写入，随轮廓一路透传到结果面板）。 */
+  shapeLabels?: ShapeLabel[];
+}
+
+/** 形状标签：源图像像素坐标 + 显示文字。 */
+export interface ShapeLabel {
+  x: number;
+  y: number;
+  text: string;
+}
+
+/** shapes 值（shape-classify 输出）。 */
+export interface ShapesValue {
+  annotations: ShapeAnnotation[];
+  counts: Partial<Record<FourierShape, number>>;
+  /** 本地化的一行摘要，如「圆 2 · 矩形 1」。 */
+  summary: string;
+  width: number;
+  height: number;
+  /** 参与分类的轮廓总数（含被过滤掉的噪点）。 */
+  total: number;
 }
 
 /** curves 值（curve-fit / plot-curves 输出）。 */
@@ -88,6 +120,11 @@ export interface CurvesValue {
    * 时附带；供 2D 绘图「切换候选结果」使用。坐标为像素→数学坐标变换后。
    */
   candidates?: CurveCandidate[];
+  /**
+   * 形状标签（来自 shape-classify，已随曲线完成像素→数学坐标变换）。
+   * 结果面板据此在图形中心绘制「圆 / 矩形」等标签。
+   */
+  shapeLabels?: ShapeLabel[];
 }
 
 /** video 端口值：视频源引用（data URL / blob URL / http URL）。 */
@@ -224,6 +261,8 @@ interface CurveInput {
   height: number;
   /** 若输入已是 BezierPath[]（来自上游 curve-fit），则直接携带。 */
   existingCurves?: BezierPath[];
+  /** 形状标签（来自 shape-classify），随曲线透传到结果面板。 */
+  shapeLabels?: ShapeLabel[];
 }
 
 /** 从 curves 端口的任意输入归一化为 { polylines | existingCurves, width, height }。 */
@@ -241,11 +280,16 @@ function normalizeCurveInput(v: unknown): CurveInput {
     const o = v as Record<string, unknown>;
     const width = Number(o.width ?? 0);
     const height = Number(o.height ?? 0);
+    const shapeLabels = Array.isArray(o.shapeLabels)
+      ? (o.shapeLabels as ShapeLabel[]).filter(
+          (l) => l && Number.isFinite(l.x) && Number.isFinite(l.y) && typeof l.text === 'string',
+        )
+      : undefined;
     if (Array.isArray(o.polylines)) {
-      return { polylines: o.polylines as Polyline[], width, height };
+      return { polylines: o.polylines as Polyline[], width, height, shapeLabels };
     }
     if (Array.isArray(o.curves)) {
-      return { polylines: [], width, height, existingCurves: o.curves as BezierPath[] };
+      return { polylines: [], width, height, existingCurves: o.curves as BezierPath[], shapeLabels };
     }
   }
   return { polylines: [], width: 0, height: 0 };
@@ -616,6 +660,107 @@ export const visionNodes = {
     },
   },
 
+  /* ── shape-classify ────────────────────────────────────────────
+   * 傅里叶形状描述子：把闭合轮廓识别为圆 / 椭圆 / 矩形 / 三角形。
+   *   - 输入：contours（contour-trace / fine-outline 的折线集）
+   *   - 输出：
+   *       shapes  (any)    — 逐条标注 + 计数 + 本地化摘要
+   *       contours(curves)  — 原折线透传，并写入 shape / shapeConfidence /
+   *                           shapeCenter 元数据与 shapeLabels（供结果面板打标签）
+   *   说明：这是「形状特征」分类，不做语义识别（不判断画的是杯子还是人脸）。
+   *   轮廓先按周长过滤噪点，再按包围盒面积保留最大的 N 个，避免满屏标签。
+   * ───────────────────────────────────────────────────────────── */
+  'shape-classify': {
+    type: 'shape-classify',
+    category: 'vision',
+    labelKey: 'npShapeClassify',
+    icon: 'Triangle',
+    color: 'cyan',
+    inputs: [{ id: 'contours', labelKey: 'npPortContours', type: 'curves' }],
+    outputs: [
+      { id: 'shapes', labelKey: 'npPortShapes', type: 'any' },
+      { id: 'contours', labelKey: 'npPortContours', type: 'curves' },
+    ],
+    defaultConfig: {
+      minPerimeter: 60,
+      minConfidence: 0.35,
+      maxLabels: 12,
+      includeOpen: false,
+    },
+    configSchema: [
+      { key: 'minPerimeter', label: '最小周长 Min Perimeter', type: 'number', min: 8, max: 2000, step: 4, default: 60 },
+      { key: 'minConfidence', label: '最小置信度 Min Confidence', type: 'number', min: 0, max: 0.95, step: 0.05, default: 0.35 },
+      { key: 'maxLabels', label: '最多标记 Max Labels', type: 'number', min: 1, max: 60, step: 1, default: 12 },
+      { key: 'includeOpen', label: '标记开放笔画（直线）', type: 'boolean', default: false },
+    ],
+    execute: (inputs, config) => {
+      const input = normalizeCurveInput(inputs.contours);
+      // 上游若已是 BezierPath[]，先采样回折线再做形状分类。
+      const polylines: Polyline[] =
+        input.polylines.length > 0
+          ? input.polylines
+          : (input.existingCurves ?? []).map((bp) => ({
+              points: sampleBezierPath(bp),
+              closed: bp.closed,
+              area: bp.area,
+            }));
+
+      const annotations = annotateContours(polylines, {
+        minPerimeter: Math.max(0, Number(config.minPerimeter ?? 60)),
+        minConfidence: Math.max(0, Math.min(1, Number(config.minConfidence ?? 0.35))),
+        maxLabels: Math.max(1, Math.floor(Number(config.maxLabels ?? 12))),
+        includeOpen: Boolean(config.includeOpen),
+      });
+
+      const byIndex = new Map<number, ShapeAnnotation>();
+      for (const a of annotations) byIndex.set(a.index, a);
+
+      const annotated: Polyline[] = polylines.map((poly, i) => {
+        const a = byIndex.get(i);
+        if (!a) return poly;
+        return {
+          ...poly,
+          shape: a.shape,
+          shapeConfidence: a.confidence,
+          shapeCenter: a.center,
+        };
+      });
+
+      const counts: Partial<Record<FourierShape, number>> = {};
+      for (const a of annotations) {
+        counts[a.shape] = (counts[a.shape] ?? 0) + 1;
+      }
+      const summary =
+        (Object.entries(counts) as Array<[FourierShape, number]>)
+          .map(([shape, n]) => `${t(SHAPE_LABEL_KEYS[shape])} ${n}`)
+          .join(' · ') || t('npShapeNone');
+
+      const shapes: ShapesValue = {
+        annotations,
+        counts,
+        summary,
+        width: input.width,
+        height: input.height,
+        total: polylines.length,
+      };
+
+      const shapeLabels: ShapeLabel[] = annotations.map((a) => ({
+        x: a.center.x,
+        y: a.center.y,
+        text: t(SHAPE_LABEL_KEYS[a.shape]),
+      }));
+
+      const contours: ContoursValue = {
+        polylines: annotated,
+        width: input.width,
+        height: input.height,
+        shapeLabels,
+      };
+
+      return { shapes, contours };
+    },
+  },
+
   /* ── curve-fit ───────────────────────────────────────────────── */
   'curve-fit': {
     type: 'curve-fit',
@@ -686,6 +831,14 @@ export const visionNodes = {
         if (scale !== 1.0) result = scaleBezierPaths(result, scale);
         return result;
       };
+      // 形状标签与曲线保持同一套像素→数学坐标变换（顺序：flipX → flipY → scale）。
+      const shapeLabels: ShapeLabel[] = (input.shapeLabels ?? []).map((l) => {
+        let x = l.x;
+        let y = l.y;
+        if (flipX) x = sourceWidth - 1 - x;
+        if (flipY) y = sourceHeight - 1 - y;
+        return { x: x * scale, y: y * scale, text: l.text };
+      });
 
       // 输入已是 BezierPath[]：bezier 模式直接透传（保留引用相等性）；
       // fourier 模式把每条闭合 BezierPath 重采样为折线后再做傅里叶拟合。
@@ -699,6 +852,7 @@ export const visionNodes = {
               height: sourceHeight,
               meta: { imageHeight: sourceHeight, flippedY: flipY },
               originalPolylines: input.polylines ?? [],
+              shapeLabels,
             } satisfies CurvesValue & { originalPolylines?: Polyline[] },
           };
         }
@@ -720,6 +874,7 @@ export const visionNodes = {
             height: sourceHeight,
             meta: { imageHeight: sourceHeight, flippedY: flipY },
             originalPolylines: input.polylines ?? [],
+            shapeLabels,
           } satisfies CurvesValue & { originalPolylines?: Polyline[] },
         };
       }
@@ -756,6 +911,7 @@ export const visionNodes = {
           meta: { imageHeight: sourceHeight, flippedY: flipY },
           originalPolylines: input.polylines,
           candidates,
+          shapeLabels,
         } satisfies CurvesValue & { originalPolylines?: Polyline[]; candidates?: CurveCandidate[] },
       };
     },
@@ -782,10 +938,11 @@ export const visionNodes = {
       const curves = input.existingCurves ?? [];
       const color = String(config.color ?? '#a78bfa');
       const width = Number(config.width ?? 2);
-      // 尝试取出上游（curve-fit）带过来的 originalPolylines / candidates
+      // 尝试取出上游（curve-fit）带过来的 originalPolylines / candidates / 形状标签
       const withMeta = inputs.curves as unknown as {
         originalPolylines?: Polyline[];
         candidates?: CurveCandidate[];
+        shapeLabels?: ShapeLabel[];
       };
       const candidates = Array.isArray(withMeta.candidates) ? withMeta.candidates : undefined;
       return {
@@ -797,11 +954,13 @@ export const visionNodes = {
           strokeWidth: width,
           originalPolylines: withMeta.originalPolylines ?? [],
           candidates,
+          shapeLabels: Array.isArray(withMeta.shapeLabels) ? withMeta.shapeLabels : undefined,
         } satisfies CurvesValue & {
           color: string;
           strokeWidth: number;
           originalPolylines?: Polyline[];
           candidates?: CurveCandidate[];
+          shapeLabels?: ShapeLabel[];
         },
       };
     },

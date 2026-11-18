@@ -24,7 +24,7 @@ export const PALETTE_GROUPS: PaletteGroup[] = [
   { category: 'statistics', types: ['random-sample', 'mean-variance', 'histogram', 'data-input'] },
   { category: 'logic', types: ['switch', 'threshold-gate'] },
   { category: 'output', types: ['display', 'svg-export'] },
-  { category: 'vision', types: ['image-input', 'grayscale-threshold', 'edge-detect', 'contour-trace', 'fine-outline', 'curve-fit', 'plot-curves', 'video-input', 'frame-extract', 'pose-track', 'curve-animate'] },
+  { category: 'vision', types: ['image-input', 'grayscale-threshold', 'edge-detect', 'contour-trace', 'shape-classify', 'fine-outline', 'curve-fit', 'plot-curves', 'video-input', 'frame-extract', 'pose-track', 'curve-animate'] },
   { category: 'simulation', types: ['sim-clock', 'sim-constant', 'sim-sine', 'sim-step', 'sim-ramp', 'sim-pulse', 'sim-noise', 'sim-sum', 'sim-gain', 'sim-product', 'sim-saturation', 'sim-first-order', 'sim-integrator', 'sim-derivative', 'sim-delay', 'sim-scope', 'sim-transfer-fn'] },
   { category: 'control', types: ['control-tf', 'control-serial', 'control-feedback', 'control-step', 'control-impulse', 'control-bode', 'control-nyquist', 'control-rlocus', 'control-pole', 'control-zero', 'control-roots', 'control-closed-step'] },
 ];

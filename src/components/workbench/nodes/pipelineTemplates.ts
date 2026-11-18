@@ -160,29 +160,33 @@ const templateImageVectorizationQuickstart: PipelineTemplate = {
  *
  * 旧模板直接把 Sobel/Canny 全量边缘当曲线输出 → 线条爆炸、渲染卡顿、看不清。
  * 改为「线稿提取」管线，专为手绘线稿/示意图/白底黑线图优化：
- *   image → grayscale-threshold(multi) → contour-trace → curve-fit(smooth) → plot-curves
+ *   image → grayscale-threshold(multi) → contour-trace → shape-classify
+ *         → curve-fit(smooth) → plot-curves
  *   - 多级阈值只保留「暗色前景线」，天然滤掉白底噪点；
+ *   - shape-classify 用傅里叶描述子标出圆/矩形/三角形，结果面板显示标签；
  *   - smooth 拟合 + 较高误差阈值 → 曲线少而光滑，不卡顿；
  *   - 默认即出干净轮廓，开箱即用。
  * ------------------------------------------------------------------ */
 const templateLineArt: PipelineTemplate = {
   id: 'line-art-extraction',
-  name: '线稿/草图矢量化',
-  description: '线稿/手绘图/示意图：灰度 → 多级阈值 → 轮廓追踪 → 贝塞尔拟合 → 2D 画布。专为线稿与草图优化，曲线简洁、渲染不卡顿。',
+  name: '线稿/草图矢量化 + 形状识别',
+  description: '线稿/手绘图/示意图：灰度 → 多级阈值 → 轮廓追踪 → 傅里叶形状识别（圆/矩形/三角形）→ 贝塞尔拟合 → 2D 画布。识别结果会以标签标在图形中心。',
   category: 'vision',
   thumbnailColor: '#22d3ee',
   nodes: [
     { id: 'la_in', type: 'image-input', position: { x: 80, y: 220 }, config: {} },
-    { id: 'la_gt', type: 'grayscale-threshold', position: { x: 360, y: 220 }, config: { method: 'multi', levels: 3 } },
-    { id: 'la_ct', type: 'contour-trace', position: { x: 640, y: 220 }, config: { turdsize: 3, skeletonize: false } },
-    { id: 'la_cf', type: 'curve-fit', position: { x: 920, y: 220 }, config: { fitMode: 'bezier', quality: 'smooth', errorThreshold: 2.0, flipY: true, flipX: false, scale: 1 } },
-    { id: 'la_pc', type: 'plot-curves', position: { x: 1200, y: 220 }, config: { color: '#22d3ee', width: 2, flipX: false, flipY: true } },
+    { id: 'la_gt', type: 'grayscale-threshold', position: { x: 340, y: 220 }, config: { method: 'multi', levels: 3 } },
+    { id: 'la_ct', type: 'contour-trace', position: { x: 600, y: 220 }, config: { turdsize: 3, skeletonize: false } },
+    { id: 'la_sc', type: 'shape-classify', position: { x: 860, y: 220 }, config: { minPerimeter: 60, minConfidence: 0.35, maxLabels: 12, includeOpen: false } },
+    { id: 'la_cf', type: 'curve-fit', position: { x: 1120, y: 220 }, config: { fitMode: 'bezier', quality: 'smooth', errorThreshold: 2.0, flipY: true, flipX: false, scale: 1 } },
+    { id: 'la_pc', type: 'plot-curves', position: { x: 1380, y: 220 }, config: { color: '#22d3ee', width: 2, flipX: false, flipY: true } },
   ],
   edges: [
     edge('la1', 'la_in', 'image', 'la_gt', 'image'),
     edge('la2', 'la_gt', 'binary', 'la_ct', 'image'),
-    edge('la3', 'la_ct', 'contours', 'la_cf', 'contours'),
-    edge('la4', 'la_cf', 'curves', 'la_pc', 'curves'),
+    edge('la3', 'la_ct', 'contours', 'la_sc', 'contours'),
+    edge('la4', 'la_sc', 'contours', 'la_cf', 'contours'),
+    edge('la5', 'la_cf', 'curves', 'la_pc', 'curves'),
   ],
   onLoad: { viewMode: 'pipeline', activePreviewTab: 'plot2d' },
 };

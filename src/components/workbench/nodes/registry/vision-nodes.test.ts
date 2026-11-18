@@ -319,6 +319,104 @@ describe('vision: contour-trace', () => {
 });
 
 /* ------------------------------------------------------------------ *
+ * shape-classify
+ * ------------------------------------------------------------------ */
+describe('vision: shape-classify', () => {
+  /** 生成半径 r、圆心 (cx,cy) 的闭合折线。 */
+  const ring = (cx: number, cy: number, r: number, n = 48) => ({
+    points: Array.from({ length: n }, (_, i) => {
+      const a = (i / n) * Math.PI * 2;
+      return { x: cx + Math.cos(a) * r, y: cy + Math.sin(a) * r };
+    }),
+    closed: true,
+  });
+
+  /** 生成边长 2r、中心 (cx,cy) 的闭合正方形折线。 */
+  const box = (cx: number, cy: number, r: number, n = 16) => {
+    const corners = [
+      { x: cx - r, y: cy - r },
+      { x: cx + r, y: cy - r },
+      { x: cx + r, y: cy + r },
+      { x: cx - r, y: cy + r },
+    ];
+    const points: { x: number; y: number }[] = [];
+    for (let i = 0; i < 4; i++) {
+      const a = corners[i];
+      const b = corners[(i + 1) % 4];
+      for (let s = 0; s < n; s++) {
+        const t = s / n;
+        points.push({ x: a.x + (b.x - a.x) * t, y: a.y + (b.y - a.y) * t });
+      }
+    }
+    return { points, closed: true };
+  };
+
+  it('识别圆与正方形，并给出本地化摘要', async () => {
+    const out = await run('shape-classify', {
+      contours: { polylines: [ring(100, 100, 60), box(240, 100, 60)], width: 400, height: 200 },
+    }, { minPerimeter: 40 });
+    const shapes = out.shapes as {
+      summary: string;
+      counts: Record<string, number>;
+      annotations: Array<{ shape: string }>;
+    };
+    expect(shapes.annotations).toHaveLength(2);
+    expect(shapes.counts.circle).toBe(1);
+    expect(shapes.counts.rectangle).toBe(1);
+    expect(shapes.summary).toContain('1');
+    const contours = out.contours as {
+      polylines: Array<{ shape?: string; shapeCenter?: { x: number; y: number } }>;
+      shapeLabels: Array<{ x: number; y: number; text: string }>;
+    };
+    expect(contours.polylines.map((p) => p.shape).sort()).toEqual(['circle', 'rectangle']);
+    expect(contours.polylines[0].shapeCenter).toBeDefined();
+    // 标签与标注一一对应，坐标来自源图像像素空间。
+    expect(contours.shapeLabels).toHaveLength(2);
+    for (const label of contours.shapeLabels) {
+      expect(label.text.length).toBeGreaterThan(0);
+      expect(label.x).toBeGreaterThan(0);
+    }
+  });
+
+  it('过小轮廓被 minPerimeter 过滤，不计入摘要', async () => {
+    const out = await run('shape-classify', {
+      contours: { polylines: [ring(100, 100, 60), ring(300, 100, 3)], width: 400, height: 200 },
+    }, { minPerimeter: 100 });
+    const shapes = out.shapes as { annotations: unknown[]; summary: string };
+    expect(shapes.annotations).toHaveLength(1);
+    expect(shapes.summary).not.toContain('2');
+  });
+
+  it('空轮廓 → 空标注与占位摘要', async () => {
+    const out = await run('shape-classify', {
+      contours: { polylines: [], width: 10, height: 10 },
+    }, {});
+    const shapes = out.shapes as { annotations: unknown[]; summary: string };
+    expect(shapes.annotations).toHaveLength(0);
+    expect(shapes.summary.length).toBeGreaterThan(0);
+  });
+
+  it('curve-fit 透传 shapeLabels，并随 Y 翻转更新坐标', async () => {
+    const out = await run('shape-classify', {
+      contours: { polylines: [ring(100, 40, 30)], width: 200, height: 100 },
+    }, { minPerimeter: 40 });
+    const contours = out.contours as {
+      polylines: unknown[];
+      shapeLabels: Array<{ x: number; y: number; text: string }>;
+    };
+    const fitted = await run('curve-fit', { contours }, {
+      fitMode: 'bezier', flipY: true, flipX: false, scale: 1,
+    });
+    const curves = fitted.curves as {
+      shapeLabels?: Array<{ x: number; y: number; text: string }>;
+    };
+    expect(curves.shapeLabels).toHaveLength(contours.shapeLabels.length);
+    // flipY：y' = H - 1 - y
+    expect(curves.shapeLabels?.[0].y).toBeCloseTo(100 - 1 - contours.shapeLabels[0].y, 5);
+  });
+});
+
+/* ------------------------------------------------------------------ *
  * curve-fit
  * ------------------------------------------------------------------ */
 describe('vision: curve-fit', () => {

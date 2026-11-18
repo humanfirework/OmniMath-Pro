@@ -128,8 +128,53 @@ export function renderPanel(
     if (pts.length === 0) continue;
     drawPolyline(ctx, pts, view, size, curve.color || '#4ade80', curve.width || 2);
   }
+  // 形状标签（蓝图 shape-classify 透传）：画在曲线之上，不挡坐标轴。
+  drawShapeLabels(ctx, curvesToDraw, view, size);
   // 坐标轴标题（带单位），置于最上层避免被曲线/网格遮挡。
   if (panel.axisX || panel.axisY) drawAxisTitles(ctx, size, { x: panel.axisX, y: panel.axisY });
+  ctx.restore();
+}
+
+/**
+ * 绘制曲线携带的形状标签（世界坐标）。
+ * 标签来自蓝图 shape-classify 节点，字体固定在屏幕空间，
+ * 因此缩放画布时标签保持可读，不随图形一起放大。
+ */
+function drawShapeLabels(
+  ctx: CanvasRenderingContext2D,
+  curves: RunCurve[],
+  view: ResultView,
+  size: { w: number; h: number },
+) {
+  const labels = curves.flatMap((c) => (c.visible === false ? [] : c.labels ?? []));
+  if (labels.length === 0) return;
+  ctx.save();
+  ctx.font = '600 11px ui-sans-serif, system-ui, -apple-system, sans-serif';
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+  for (const label of labels) {
+    if (!Number.isFinite(label.x) || !Number.isFinite(label.y)) continue;
+    const p = worldToScreen(label.x, label.y, size, view);
+    if (p.x < -60 || p.x > size.w + 60 || p.y < -24 || p.y > size.h + 24) continue;
+    const tw = textWidth(ctx, label.text);
+    const padX = 6;
+    const boxH = 17;
+    const x = p.x - tw / 2 - padX;
+    const y = p.y - boxH / 2;
+    ctx.fillStyle = 'rgba(15,23,42,0.78)';
+    ctx.beginPath();
+    if (typeof ctx.roundRect === 'function') {
+      ctx.roundRect(x, y, tw + padX * 2, boxH, 6);
+    } else {
+      ctx.rect(x, y, tw + padX * 2, boxH);
+    }
+    ctx.fill();
+    ctx.strokeStyle = 'rgba(148,163,184,0.35)';
+    ctx.lineWidth = 1;
+    ctx.stroke();
+    ctx.fillStyle = '#e2e8f0';
+    ctx.fillText(label.text, p.x, p.y + 0.5);
+  }
   ctx.restore();
 }
 
