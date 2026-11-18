@@ -1257,6 +1257,9 @@ export interface TranslationDict {
   npBlueprintNodes: string;
   npBlueprintLinks: string;
   npBlueprintNoNodes: string;
+  npBlueprintComponents: string;
+  npBlueprintIsolated: string;
+  npBlueprintCycle: string;
   npCurveFit: string;
   npPortContours: string;
   npPortCurves: string;
@@ -2616,6 +2619,9 @@ const zhCN: TranslationDict = {
   npBlueprintNodes: "节点",
   npBlueprintLinks: "连线",
   npBlueprintNoNodes: "未识别到节点",
+  npBlueprintComponents: "连通块",
+  npBlueprintIsolated: "孤立节点",
+  npBlueprintCycle: "闭环",
   npCurveFit: "图像转曲线",
   npPortContours: "轮廓",
   npPortCurves: "曲线集合",
@@ -3928,6 +3934,9 @@ const en: TranslationDict = {
   npBlueprintNodes: "Nodes",
   npBlueprintLinks: "Links",
   npBlueprintNoNodes: "No nodes found",
+  npBlueprintComponents: "Groups",
+  npBlueprintIsolated: "Isolated",
+  npBlueprintCycle: "Cycle",
   npCurveFit: "Curve Fit",
   npPortContours: "Contours",
   npPortCurves: "Curves",

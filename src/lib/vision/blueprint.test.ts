@@ -3,8 +3,25 @@ import {
   contourEndpoints,
   parseBlueprint,
   pointToBBoxDistance,
+  summarizeBlueprintGraph,
+  type BlueprintLinkInfo,
+  type BlueprintNodeInfo,
 } from './blueprint';
 import type { Point, Polyline } from './types';
+
+function node(id: string): BlueprintNodeInfo {
+  return {
+    id,
+    shape: 'rectangle',
+    bbox: { minX: 0, minY: 0, maxX: 10, maxY: 10 },
+    center: { x: 5, y: 5 },
+    confidence: 0.9,
+  };
+}
+
+function edge(from: string, to: string): BlueprintLinkInfo {
+  return { id: `${from}-${to}`, from, to, confidence: 0.9 };
+}
 
 function rect(x0: number, y0: number, x1: number, y1: number): Polyline {
   return {
@@ -93,5 +110,63 @@ describe('parseBlueprint', () => {
     const graph = parseBlueprint([]);
     expect(graph.nodes).toHaveLength(0);
     expect(graph.links).toHaveLength(0);
+  });
+});
+
+describe('summarizeBlueprintGraph', () => {
+  it('一条链：单连通块、两个叶子、无环', () => {
+    const s = summarizeBlueprintGraph({
+      nodes: [node('N1'), node('N2'), node('N3')],
+      links: [edge('N1', 'N2'), edge('N2', 'N3')],
+    });
+    expect(s).toMatchObject({
+      nodeCount: 3,
+      linkCount: 2,
+      components: 1,
+      isolated: 0,
+      hasCycle: false,
+      leaves: 2,
+    });
+  });
+
+  it('两块互不相连的子图 + 一个孤立节点', () => {
+    const s = summarizeBlueprintGraph({
+      nodes: [node('N1'), node('N2'), node('N3'), node('N4'), node('N5')],
+      links: [edge('N1', 'N2'), edge('N3', 'N4')],
+    });
+    expect(s.components).toBe(3);
+    expect(s.isolated).toBe(1);
+    expect(s.leaves).toBe(4);
+  });
+
+  it('三角形闭环被识别为有环', () => {
+    const s = summarizeBlueprintGraph({
+      nodes: [node('N1'), node('N2'), node('N3')],
+      links: [edge('N1', 'N2'), edge('N2', 'N3'), edge('N3', 'N1')],
+    });
+    expect(s.hasCycle).toBe(true);
+    expect(s.components).toBe(1);
+    expect(s.leaves).toBe(0);
+  });
+
+  it('忽略指向未知节点的连线', () => {
+    const s = summarizeBlueprintGraph({
+      nodes: [node('N1')],
+      links: [edge('N1', 'N9')],
+    });
+    expect(s.linkCount).toBe(1);
+    expect(s.components).toBe(1);
+    expect(s.isolated).toBe(1);
+  });
+
+  it('空图返回全零结构', () => {
+    expect(summarizeBlueprintGraph({ nodes: [], links: [] })).toMatchObject({
+      nodeCount: 0,
+      linkCount: 0,
+      components: 0,
+      isolated: 0,
+      hasCycle: false,
+      leaves: 0,
+    });
   });
 });

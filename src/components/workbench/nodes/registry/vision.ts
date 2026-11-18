@@ -43,7 +43,7 @@ import {
 import { detectPoses, poseSequenceToAnimation } from '@/lib/vision/pose';
 import { smoothPoseSequence, smoothCurveAnimation } from '@/lib/vision/smooth';
 import { annotateContours, type ShapeAnnotation, type FourierShape } from '@/lib/vision/shapeFourier';
-import { parseBlueprint, type BlueprintLinkInfo, type BlueprintNodeInfo } from '@/lib/vision/blueprint';
+import { parseBlueprint, summarizeBlueprintGraph, type BlueprintLinkInfo, type BlueprintNodeInfo } from '@/lib/vision/blueprint';
 import { t } from '@/lib/i18n';
 
 /** 形状 → i18n 键（用于节点摘要与结果面板标签）。 */
@@ -105,8 +105,15 @@ export interface ShapesValue {
 export interface BlueprintGraphValue {
   nodes: BlueprintNodeInfo[];
   links: BlueprintLinkInfo[];
-  /** 本地化摘要，如「节点 3 · 连线 2」。 */
+  /** 本地化摘要，如「节点 3 · 连线 2 · 连通块 1」。 */
   summary: string;
+  /** 结构语义统计（连通块 / 孤立节点 / 环 / 叶子）。 */
+  stats?: {
+    components: number;
+    isolated: number;
+    hasCycle: boolean;
+    leaves: number;
+  };
   width: number;
   height: number;
 }
@@ -821,15 +828,27 @@ export const visionNodes = {
         maxLinks: Math.max(0, Math.floor(Number(config.maxLinks ?? 40))),
       });
 
+      // 结构语义（不依赖 OCR）：连通块 / 孤立节点 / 闭环，帮助用户快速发现
+      // 没画全的连线、被误识别的框，或带反馈回路的图。
+      const stats = summarizeBlueprintGraph(graph);
       const summary =
         graph.nodes.length === 0
           ? t('npBlueprintNoNodes')
-          : `${t('npBlueprintNodes')} ${graph.nodes.length} · ${t('npBlueprintLinks')} ${graph.links.length}`;
+          : [
+              `${t('npBlueprintNodes')} ${graph.nodes.length}`,
+              `${t('npBlueprintLinks')} ${graph.links.length}`,
+              stats.components > 1 ? `${t('npBlueprintComponents')} ${stats.components}` : '',
+              stats.isolated > 0 ? `${t('npBlueprintIsolated')} ${stats.isolated}` : '',
+              stats.hasCycle ? t('npBlueprintCycle') : '',
+            ]
+              .filter(Boolean)
+              .join(' · ');
 
       const value: BlueprintGraphValue = {
         nodes: graph.nodes,
         links: graph.links,
         summary,
+        stats,
         width: input.width,
         height: input.height,
       };

@@ -238,3 +238,83 @@ export function parseBlueprint(
 
   return { nodes, links, nodeIndices, linkIndices };
 }
+
+/** 蓝图图结构的高层摘要（只做结构规则，不做文字 OCR）。 */
+export interface BlueprintGraphSummary {
+  nodeCount: number;
+  linkCount: number;
+  /** 连通块数量（无孤立节点时通常为 1）。 */
+  components: number;
+  /** 没有任何连线的节点数。 */
+  isolated: number;
+  /** 是否存在环（闭环回路）。 */
+  hasCycle: boolean;
+  /** 度为 1 的节点数（流程图的起点/终点候选）。 */
+  leaves: number;
+}
+
+/**
+ * 从视觉层图结构推导高层语义线索：
+ *   - 连通块：哪些节点属于同一张子图；
+ *   - 孤立节点：可能是没画全的连线，或被误识别的框；
+ *   - 环：反馈回路 / 电路闭环的候选；
+ *   - 叶子：流程的入口 / 出口候选。
+ *
+ * 这些规则不依赖文字标签，因此对任意手绘蓝图都适用；
+ * 同时保持纯函数，方便单测与下游复用。
+ */
+export function summarizeBlueprintGraph(graph: BlueprintGraph): BlueprintGraphSummary {
+  const ids = graph.nodes.map((n) => n.id);
+  const parent = new Map<string, string>(ids.map((id) => [id, id]));
+  const degree = new Map<string, number>(ids.map((id) => [id, 0]));
+
+  const find = (id: string): string => {
+    let root = id;
+    while (parent.get(root) !== root) {
+      const next = parent.get(root);
+      if (!next) return root;
+      root = next;
+    }
+    // 路径压缩，保持多次查询接近 O(1)。
+    let cur = id;
+    while (parent.get(cur) !== root) {
+      const next = parent.get(cur);
+      if (!next) break;
+      parent.set(cur, root);
+      cur = next;
+    }
+    return root;
+  };
+
+  let hasCycle = false;
+  for (const link of graph.links) {
+    if (!parent.has(link.from) || !parent.has(link.to)) continue;
+    degree.set(link.from, (degree.get(link.from) ?? 0) + 1);
+    degree.set(link.to, (degree.get(link.to) ?? 0) + 1);
+    const a = find(link.from);
+    const b = find(link.to);
+    if (a === b) {
+      hasCycle = true;
+    } else {
+      parent.set(a, b);
+    }
+  }
+
+  const roots = new Set(ids.map((id) => find(id)));
+  let isolated = 0;
+  let leaves = 0;
+  for (const id of ids) {
+    const d = degree.get(id) ?? 0;
+    if (d === 0) isolated++;
+    else if (d === 1) leaves++;
+  }
+
+  return {
+    nodeCount: ids.length,
+    linkCount: graph.links.length,
+    components: roots.size,
+    isolated,
+    hasCycle,
+    leaves,
+  };
+}

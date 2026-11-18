@@ -485,14 +485,37 @@ describe('vision: blueprint-parse', () => {
       nodes: unknown[];
       links: unknown[];
       summary: string;
+      stats: { components: number; isolated: number; hasCycle: boolean };
     };
     expect(graph.nodes).toHaveLength(2);
     expect(graph.links).toHaveLength(1);
-    expect(graph.summary).toContain('2');
+    expect(graph.summary).toContain('节点 2');
+    expect(graph.summary).toContain('连线 1');
+    expect(graph.stats).toMatchObject({ components: 1, isolated: 0, hasCycle: false });
     const contours = out.contours as {
       shapeLabels: Array<{ text: string }>;
     };
     expect(contours.shapeLabels.map((l) => l.text)).toEqual(['N1', 'N2']);
+  });
+
+  it('两个互不相连的框 → 摘要标注孤立节点', async () => {
+    const out = await run(
+      'blueprint-parse',
+      {
+        contours: {
+          polylines: [rect(20, 20, 100, 80), rect(240, 20, 320, 80)],
+          width: 400,
+          height: 200,
+        },
+      },
+      { minNodeSize: 24, snapDistance: 20 },
+    );
+    const graph = out.graph as {
+      summary: string;
+      stats: { components: number; isolated: number; hasCycle: boolean };
+    };
+    expect(graph.stats).toMatchObject({ components: 2, isolated: 2, hasCycle: false });
+    expect(graph.summary).toContain('孤立节点 2');
   });
 
   it('空轮廓 → 空图与占位摘要', async () => {
