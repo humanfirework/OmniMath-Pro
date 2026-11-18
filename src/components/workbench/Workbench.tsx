@@ -510,7 +510,7 @@ export function Workbench() {
         ) : !editorVisible && !previewVisible ? (
           /* Plain layout when both main panels are hidden — avoids empty resizable group. */
           <ResizablePanelGroup direction="horizontal" autoSaveId="omnimath-side-only" className="flex-1 min-w-0">
-            {!sidePanelCollapsed && viewMode !== 'focus' && (
+            {!sidePanelCollapsed && (
               <>
                 <ResizablePanel defaultSize={25} minSize={12} maxSize={40} id="side-only-panel" order={1}>
                   <ErrorBoundary>
@@ -520,7 +520,7 @@ export function Workbench() {
                 <ResizableHandle withHandle className="data-[resize-handle-active]:bg-primary/60" />
               </>
             )}
-            <ResizablePanel defaultSize={sidePanelCollapsed || viewMode === 'focus' ? 100 : 75} minSize={50} id="side-only-empty" order={2}>
+            <ResizablePanel defaultSize={sidePanelCollapsed ? 100 : 75} minSize={50} id="side-only-empty" order={2}>
               <div className="h-full w-full flex flex-col items-center justify-center gap-3 px-6 text-center bg-background/40">
                 <div className="grid place-items-center size-14 rounded-2xl bg-primary/8 border border-primary/20">
                   <PanelLeftClose className="size-6 text-primary/70" />
@@ -563,7 +563,7 @@ export function Workbench() {
         ) : editorVisible && previewVisible ? (
           /* 双面板布局：外层 side | main，内层 editor | preview（方向由 previewPosition 决定） */
           <ResizablePanelGroup direction="horizontal" autoSaveId="omnimath-side-v2" className="flex-1 min-w-0">
-            {!sidePanelCollapsed && viewMode !== 'focus' && (
+            {!sidePanelCollapsed && (
               <>
                 <ResizablePanel
                   defaultSize={20}
@@ -581,7 +581,7 @@ export function Workbench() {
             )}
 
             <ResizablePanel
-              defaultSize={sidePanelCollapsed || viewMode === 'focus' ? 100 : 80}
+              defaultSize={sidePanelCollapsed ? 100 : 80}
               minSize={50}
               id="main-panel"
               order={2}
@@ -621,7 +621,7 @@ export function Workbench() {
           /* 单面板布局：side | (editor 或 preview)，沿用旧的扁平结构 */
           <ResizablePanelGroup direction="horizontal" autoSaveId={`omnimath-layout-${previewSize}`} className="flex-1 min-w-0">
             {/* Side panel — collapsible (hidden in focus mode) */}
-            {!sidePanelCollapsed && viewMode !== 'focus' && (
+            {!sidePanelCollapsed && (
               <>
                 <ResizablePanel
                   defaultSize={20}
