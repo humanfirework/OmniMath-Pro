@@ -453,13 +453,13 @@ export function Workbench() {
   const focusWhiteboard = coarsePointer && viewMode === 'whiteboard';
   const showFsSide = !sidePanelCollapsed && viewMode !== 'focus' && !focusWhiteboard;
 
-  // 白板 / 蓝图是创作型视图：进入时自动收起代码编辑器，让画布占满宽度，
-  // 返回工作台时再恢复用户原来的编辑器可见性。
-  // 之前打开白板/蓝图，左侧仍挂着 40% 的无关代码编辑器 —— 正是「无意义展开」。
+  // 全屏工具视图（白板 / 蓝图 / 矩阵 / 求解 / 统计 / 控制 / 学习）都是自包含的：
+  // 进入时自动收起代码编辑器，让工具占满宽度，返回工作台时再恢复。
+  // 之前左侧始终挂着 40% 的无关代码编辑器 —— 正是「内容无意义展开」。
   const autoHiddenEditorRef = useRef(false);
   useEffect(() => {
-    const creative = viewMode === 'whiteboard' || viewMode === 'pipeline';
-    if (creative) {
+    const toolView = isFullScreenView(viewMode);
+    if (toolView) {
       if (!autoHiddenEditorRef.current && useWorkbenchStore.getState().editorVisible) {
         autoHiddenEditorRef.current = true;
         setEditorVisible(false);
