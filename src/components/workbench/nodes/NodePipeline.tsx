@@ -4403,6 +4403,16 @@ function NodeResultFooter({
       </div>
     );
   }
+  // Blueprint parse → 节点/连线摘要
+  if (node.type === 'blueprint-parse' && node.outputs?.graph) {
+    const graph = node.outputs.graph as { summary?: string };
+    return (
+      <div className="flex items-center gap-1.5 w-full min-w-0 text-[11px]">
+        <GitBranch className="size-3 shrink-0 text-cyan-500" />
+        <span className="truncate text-foreground/80">{graph.summary || '—'}</span>
+      </div>
+    );
+  }
   // Shape classify → one-line localized summary (圆 2 · 矩形 1)
   if (node.type === 'shape-classify' && node.outputs?.shapes) {
     const shapes = node.outputs.shapes as { summary?: string; total?: number };

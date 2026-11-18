@@ -1246,6 +1246,11 @@ export interface TranslationDict {
   npShapeTriangle: string;
   npShapeLine: string;
   npShapeNone: string;
+  npBlueprintParse: string;
+  npPortGraph: string;
+  npBlueprintNodes: string;
+  npBlueprintLinks: string;
+  npBlueprintNoNodes: string;
   npCurveFit: string;
   npPortContours: string;
   npPortCurves: string;
@@ -2594,6 +2599,11 @@ const zhCN: TranslationDict = {
   npShapeTriangle: "三角形",
   npShapeLine: "直线",
   npShapeNone: "未识别到形状",
+  npBlueprintParse: "蓝图解析",
+  npPortGraph: "图结构",
+  npBlueprintNodes: "节点",
+  npBlueprintLinks: "连线",
+  npBlueprintNoNodes: "未识别到节点",
   npCurveFit: "图像转曲线",
   npPortContours: "轮廓",
   npPortCurves: "曲线集合",
@@ -3895,6 +3905,11 @@ const en: TranslationDict = {
   npShapeTriangle: "Triangle",
   npShapeLine: "Line",
   npShapeNone: "No shapes found",
+  npBlueprintParse: "Blueprint Parse",
+  npPortGraph: "Graph",
+  npBlueprintNodes: "Nodes",
+  npBlueprintLinks: "Links",
+  npBlueprintNoNodes: "No nodes found",
   npCurveFit: "Curve Fit",
   npPortContours: "Contours",
   npPortCurves: "Curves",

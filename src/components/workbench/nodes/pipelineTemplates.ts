@@ -192,6 +192,37 @@ const templateLineArt: PipelineTemplate = {
 };
 
 /* ------------------------------------------------------------------ *
+ * Template 6b2 — 手绘蓝图识别（节点 + 连线）
+ *   image → grayscale-threshold(simple) → contour-trace → blueprint-parse
+ *         → curve-fit → plot-curves
+ *   视觉层解析：矩形/椭圆/圆形视为节点，两端落在两个节点附近的细长线视为连线；
+ *   结果面板用 N1/N2 标注节点。不识别文字标签，也不判断图语义。
+ * ------------------------------------------------------------------ */
+const templateBlueprintParse: PipelineTemplate = {
+  id: 'blueprint-recognition',
+  name: '手绘蓝图识别（节点 + 连线）',
+  description: '上传手绘/拍摄的框图：二值化 → 轮廓 → 蓝图解析（矩形/椭圆节点 + 连线）→ 贝塞尔 → 画布。节点以 N1/N2 标注；不识别文字。',
+  category: 'vision',
+  thumbnailColor: '#0ea5e9',
+  nodes: [
+    { id: 'bp_in', type: 'image-input', position: { x: 80, y: 220 }, config: {} },
+    { id: 'bp_gt', type: 'grayscale-threshold', position: { x: 340, y: 220 }, config: { method: 'simple', threshold: 128 } },
+    { id: 'bp_ct', type: 'contour-trace', position: { x: 600, y: 220 }, config: { turdsize: 3, skeletonize: false } },
+    { id: 'bp_bp', type: 'blueprint-parse', position: { x: 860, y: 220 }, config: { minNodeSize: 30, snapDistance: 30, maxNodes: 24, maxLinks: 40 } },
+    { id: 'bp_cf', type: 'curve-fit', position: { x: 1120, y: 220 }, config: { fitMode: 'bezier', quality: 'smooth', errorThreshold: 2.0, flipY: true, flipX: false, scale: 1 } },
+    { id: 'bp_pc', type: 'plot-curves', position: { x: 1380, y: 220 }, config: { color: '#0ea5e9', width: 2, flipX: false, flipY: true } },
+  ],
+  edges: [
+    edge('bp1', 'bp_in', 'image', 'bp_gt', 'image'),
+    edge('bp2', 'bp_gt', 'binary', 'bp_ct', 'image'),
+    edge('bp3', 'bp_ct', 'contours', 'bp_bp', 'contours'),
+    edge('bp4', 'bp_bp', 'contours', 'bp_cf', 'contours'),
+    edge('bp5', 'bp_cf', 'curves', 'bp_pc', 'curves'),
+  ],
+  onLoad: { viewMode: 'pipeline', activePreviewTab: 'plot2d' },
+};
+
+/* ------------------------------------------------------------------ *
  * Template 6c — 人物姿态追踪（视频）
  *   video → frame-extract → pose-track → curve-animate
  *   用 MediaPipe Pose 对视频/GIF 逐帧检测人体关键点，把动作轨迹
@@ -459,6 +490,7 @@ export const PIPELINE_TEMPLATES: PipelineTemplate[] = [
   templateMathShowcase,
   templateImageVectorizationQuickstart,
   templateLineArt,
+  templateBlueprintParse,
   templatePoseTrack,
   templateVideoToCurves,
   templateOdeLoop,

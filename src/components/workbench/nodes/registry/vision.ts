@@ -43,6 +43,7 @@ import {
 import { detectPoses, poseSequenceToAnimation } from '@/lib/vision/pose';
 import { smoothPoseSequence, smoothCurveAnimation } from '@/lib/vision/smooth';
 import { annotateContours, type ShapeAnnotation, type FourierShape } from '@/lib/vision/shapeFourier';
+import { parseBlueprint, type BlueprintLinkInfo, type BlueprintNodeInfo } from '@/lib/vision/blueprint';
 import { t } from '@/lib/i18n';
 
 /** 形状 → i18n 键（用于节点摘要与结果面板标签）。 */
@@ -98,6 +99,16 @@ export interface ShapesValue {
   height: number;
   /** 参与分类的轮廓总数（含被过滤掉的噪点）。 */
   total: number;
+}
+
+/** graph 值（blueprint-parse 输出）：视觉层的节点框 + 连线。 */
+export interface BlueprintGraphValue {
+  nodes: BlueprintNodeInfo[];
+  links: BlueprintLinkInfo[];
+  /** 本地化摘要，如「节点 3 · 连线 2」。 */
+  summary: string;
+  width: number;
+  height: number;
 }
 
 /** curves 值（curve-fit / plot-curves 输出）。 */
@@ -758,6 +769,93 @@ export const visionNodes = {
       };
 
       return { shapes, contours };
+    },
+  },
+
+  /* ── blueprint-parse ───────────────────────────────────────────
+   * 蓝图视觉解析（视觉层，不做语义理解）：
+   *   - 节点：闭合的矩形/椭圆/圆形，按 minNodeSize 过滤，同心轮廓去重；
+   *   - 连线：细长折线的两个端点分别落在两个不同节点框附近（snapDistance）。
+   *   输出 graph 数据（nodes/links/摘要）与带 N1/N2 标签的 contours 透传，
+   *   下游 curve-fit → plot-curves 后，结果面板会在节点中心显示编号。
+   *   说明：不识别文字标签，也不判断这是流程图还是电路图。
+   * ───────────────────────────────────────────────────────────── */
+  'blueprint-parse': {
+    type: 'blueprint-parse',
+    category: 'vision',
+    labelKey: 'npBlueprintParse',
+    icon: 'GitBranch',
+    color: 'cyan',
+    inputs: [{ id: 'contours', labelKey: 'npPortContours', type: 'curves' }],
+    outputs: [
+      { id: 'graph', labelKey: 'npPortGraph', type: 'any' },
+      { id: 'contours', labelKey: 'npPortContours', type: 'curves' },
+    ],
+    defaultConfig: {
+      minNodeSize: 30,
+      snapDistance: 30,
+      maxNodes: 24,
+      maxLinks: 40,
+    },
+    configSchema: [
+      { key: 'minNodeSize', label: '最小节点尺寸 Min Node', type: 'number', min: 8, max: 400, step: 2, default: 30 },
+      { key: 'snapDistance', label: '端点吸附距离 Snap', type: 'number', min: 4, max: 200, step: 2, default: 30 },
+      { key: 'maxNodes', label: '最多节点 Max Nodes', type: 'number', min: 1, max: 60, step: 1, default: 24 },
+      { key: 'maxLinks', label: '最多连线 Max Links', type: 'number', min: 0, max: 100, step: 1, default: 40 },
+    ],
+    execute: (inputs, config) => {
+      const input = normalizeCurveInput(inputs.contours);
+      const polylines: Polyline[] =
+        input.polylines.length > 0
+          ? input.polylines
+          : (input.existingCurves ?? []).map((bp) => ({
+              points: sampleBezierPath(bp),
+              closed: bp.closed,
+              area: bp.area,
+            }));
+
+      const graph = parseBlueprint(polylines, {
+        minNodeSize: Math.max(6, Number(config.minNodeSize ?? 30)),
+        snapDistance: Math.max(4, Number(config.snapDistance ?? 30)),
+        maxNodes: Math.max(1, Math.floor(Number(config.maxNodes ?? 24))),
+        maxLinks: Math.max(0, Math.floor(Number(config.maxLinks ?? 40))),
+      });
+
+      const summary =
+        graph.nodes.length === 0
+          ? t('npBlueprintNoNodes')
+          : `${t('npBlueprintNodes')} ${graph.nodes.length} · ${t('npBlueprintLinks')} ${graph.links.length}`;
+
+      const value: BlueprintGraphValue = {
+        nodes: graph.nodes,
+        links: graph.links,
+        summary,
+        width: input.width,
+        height: input.height,
+      };
+
+      const shapeLabels: ShapeLabel[] = graph.nodes.map((n) => ({
+        x: n.center.x,
+        y: n.center.y,
+        text: n.id,
+      }));
+
+      // 只保留被识别为节点/连线的轮廓：去掉同一节点外侧的重复边框环，
+      // 结果面板不会出现「双线框」。
+      const keep = new Set<number>([
+        ...graph.nodeIndices.map((n) => n.index),
+        ...graph.linkIndices,
+      ]);
+      const cleanedPolylines = keep.size > 0 ? polylines.filter((_, i) => keep.has(i)) : polylines;
+
+      const contours: ContoursValue = {
+        polylines: cleanedPolylines,
+        width: input.width,
+        height: input.height,
+        shapeLabels,
+      };
+
+      return { graph: value, contours };
     },
   },
 

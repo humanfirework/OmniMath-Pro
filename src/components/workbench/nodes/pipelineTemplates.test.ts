@@ -32,6 +32,7 @@ const SIM_TEMPLATE_IDS = new Set([
 const EXTERNAL_INPUT_TEMPLATE_IDS = new Set([
   'image-vectorization-quickstart',
   'line-art-extraction',
+  'blueprint-recognition',
   'pose-track-animation',
   'video-to-curves-animation',
 ]);

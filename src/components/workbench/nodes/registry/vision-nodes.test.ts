@@ -447,6 +447,101 @@ describe('vision: shape-classify', () => {
 });
 
 /* ------------------------------------------------------------------ *
+ * blueprint-parse
+ * ------------------------------------------------------------------ */
+describe('vision: blueprint-parse', () => {
+  const rect = (x0: number, y0: number, x1: number, y1: number) => ({
+    points: [
+      { x: x0, y: y0 },
+      { x: x1, y: y0 },
+      { x: x1, y: y1 },
+      { x: x0, y: y1 },
+    ],
+    closed: true,
+  });
+  const ribbon = (x0: number, x1: number, y: number) => ({
+    points: [
+      { x: x0, y: y - 1 },
+      { x: x1, y: y - 1 },
+      { x: x1, y: y + 1 },
+      { x: x0, y: y + 1 },
+    ],
+    closed: true,
+  });
+
+  it('输出节点/连线摘要，并给轮廓打 N1/N2 标签', async () => {
+    const out = await run(
+      'blueprint-parse',
+      {
+        contours: {
+          polylines: [rect(20, 20, 100, 80), rect(240, 20, 320, 80), ribbon(100, 240, 50)],
+          width: 400,
+          height: 200,
+        },
+      },
+      { minNodeSize: 24, snapDistance: 20 },
+    );
+    const graph = out.graph as {
+      nodes: unknown[];
+      links: unknown[];
+      summary: string;
+    };
+    expect(graph.nodes).toHaveLength(2);
+    expect(graph.links).toHaveLength(1);
+    expect(graph.summary).toContain('2');
+    const contours = out.contours as {
+      shapeLabels: Array<{ text: string }>;
+    };
+    expect(contours.shapeLabels.map((l) => l.text)).toEqual(['N1', 'N2']);
+  });
+
+  it('空轮廓 → 空图与占位摘要', async () => {
+    const out = await run(
+      'blueprint-parse',
+      { contours: { polylines: [], width: 10, height: 10 } },
+      {},
+    );
+    const graph = out.graph as { nodes: unknown[]; summary: string };
+    expect(graph.nodes).toHaveLength(0);
+    expect(graph.summary.length).toBeGreaterThan(0);
+  });
+
+  it('端到端：二值线框图 → contour-trace → blueprint-parse', async () => {
+    const w = 420;
+    const h = 220;
+    const fg = new Array(w * h).fill(0);
+    const paint = (x0: number, y0: number, x1: number, y1: number) => {
+      for (let y = y0; y <= y1; y++) {
+        for (let x = x0; x <= x1; x++) {
+          if (x >= 0 && x < w && y >= 0 && y < h) fg[y * w + x] = 1;
+        }
+      }
+    };
+    // 两个 3px 边框矩形
+    paint(30, 40, 150, 43); paint(30, 147, 150, 150);
+    paint(30, 40, 33, 150); paint(147, 40, 150, 150);
+    paint(270, 40, 390, 43); paint(270, 147, 390, 150);
+    paint(270, 40, 273, 150); paint(387, 40, 390, 150);
+    // 中间 3px 连线（与两个框各留 10px 间隙，便于轮廓独立成段）
+    paint(160, 94, 260, 96);
+
+    const traced = await run(
+      'contour-trace',
+      { image: binaryImage(fg, w, h) },
+      { turdsize: 3, skeletonize: false },
+    );
+    const out = await run(
+      'blueprint-parse',
+      { contours: traced.contours },
+      { minNodeSize: 30, snapDistance: 30 },
+    );
+    const graph = out.graph as { nodes: unknown[]; links: unknown[] };
+    expect(graph.nodes.length).toBe(2);
+    expect(graph.links.length).toBe(1);
+  });
+});
+
+/* ------------------------------------------------------------------ *
  * curve-fit
  * ------------------------------------------------------------------ */
 describe('vision: curve-fit', () => {

@@ -94,6 +94,7 @@ export type NodeType =
   | 'edge-detect'
   | 'contour-trace'
   | 'shape-classify'
+  | 'blueprint-parse'
   | 'curve-fit'
   | 'plot-curves'
   | 'fine-outline'

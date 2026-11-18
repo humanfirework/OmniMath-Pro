@@ -61,7 +61,7 @@ const ALL_TYPES: NodeType[] = [
   'switch', 'threshold-gate',
   /* vision */
   'image-input', 'grayscale-threshold', 'edge-detect', 'fine-outline',
-  'contour-trace', 'shape-classify', 'curve-fit', 'plot-curves',
+  'contour-trace', 'shape-classify', 'blueprint-parse', 'curve-fit', 'plot-curves',
   /* vision — 视频动捕 */
   'video-input', 'frame-extract', 'pose-track', 'curve-animate',
   /* simulation — Simulink-style 仿真 */
@@ -78,8 +78,8 @@ const ALL_TYPES: NodeType[] = [
 ];
 
 describe('蓝图节点库扩展 — 注册表完整性', () => {
-  it('NODE_TYPES 恰好包含 96 个节点类型', () => {
-    expect(Object.keys(NODE_TYPES).length).toBe(96);
+  it('NODE_TYPES 恰好包含 97 个节点类型', () => {
+    expect(Object.keys(NODE_TYPES).length).toBe(97);
   });
 
   it('每个 ALL_TYPES 条目都存在于 NODE_TYPES', () => {
