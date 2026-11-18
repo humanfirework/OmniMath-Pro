@@ -1,7 +1,11 @@
 name: ci
 
-# 持续集成质量门禁：仅 Pull Request 触发（release.yml 已覆盖标签推送时的测试）
+# 持续集成质量门禁：分支推送 + Pull Request 均触发。
+# 构建发布（多平台安装包）由 release.yml 在 v* 标签时执行。
 on:
+  push:
+    branches:
+      - "**"
   pull_request:
 
 jobs:
@@ -27,3 +31,6 @@ jobs:
 
       - name: Run tests
         run: npx vitest run
+
+      - name: Build static app
+        run: npm run build
