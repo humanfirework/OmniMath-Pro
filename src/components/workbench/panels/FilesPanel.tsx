@@ -104,6 +104,9 @@ export function FilesPanel() {
 
   // 拖拽到根目录
   const [rootDragOver, setRootDragOver] = useState(false);
+  // 仅在拖动文件树节点时显示「移动到根目录」放置区，
+  // 平时不占位置、不制造一块常驻的虚线框。
+  const [treeDragging, setTreeDragging] = useState(false);
   const handleRootDragOver = useCallback((e: React.DragEvent) => {
     e.preventDefault();
     e.stopPropagation();
@@ -240,6 +243,8 @@ export function FilesPanel() {
           onDragOver={handleRootDragOver}
           onDragLeave={handleRootDragLeave}
           onDrop={handleRootDrop}
+          onDragStart={() => setTreeDragging(true)}
+          onDragEnd={() => setTreeDragging(false)}
         >
           {rootChildren.length === 0 ? (
             <div className="flex flex-col items-center justify-center gap-2 px-4 py-8 text-center">
@@ -259,22 +264,24 @@ export function FilesPanel() {
             ))
           )}
 
-          {/* 拖拽到根目录的放置区：始终可见，方便把文件夹里的文件拖出来。 */}
-          <div
-            className={cn(
-              'mt-1 mx-1.5 flex h-8 items-center justify-center gap-1.5 rounded-md border border-dashed text-[10.5px] transition-colors',
-              rootDragOver
-                ? 'border-primary bg-primary/10 text-primary'
-                : 'border-border/60 text-muted-foreground/50 hover:border-border hover:text-muted-foreground',
-            )}
-            onDragOver={handleRootDragOver}
-            onDragLeave={handleRootDragLeave}
-            onDrop={handleRootDrop}
-            title="拖拽文件到此处移动到根目录"
-          >
-            <CornerDownRight className="size-3" />
-            <span>移动到根目录</span>
-          </div>
+          {/* 拖拽到根目录的放置区：仅在拖动文件树节点时出现 */}
+          {treeDragging && (
+            <div
+              className={cn(
+                'mt-1 mx-1.5 flex h-8 items-center justify-center gap-1.5 rounded-md border border-dashed text-[10.5px] transition-colors',
+                rootDragOver
+                  ? 'border-primary bg-primary/10 text-primary'
+                  : 'border-border/60 text-muted-foreground/50 hover:border-border hover:text-muted-foreground',
+              )}
+              onDragOver={handleRootDragOver}
+              onDragLeave={handleRootDragLeave}
+              onDrop={handleRootDrop}
+              title="拖拽文件到此处移动到根目录"
+            >
+              <CornerDownRight className="size-3" />
+              <span>移动到根目录</span>
+            </div>
+          )}
         </div>
       </ScrollArea>
 
