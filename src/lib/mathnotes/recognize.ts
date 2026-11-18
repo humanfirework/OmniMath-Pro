@@ -49,6 +49,8 @@ export interface RecognizedGlyph {
   alternatives?: string[];
   /** Which rule produced this glyph (diagnostics). */
   reason?: string;
+  /** Multi-character token (e.g. a fraction); takes precedence over `char`. */
+  text?: string;
   bbox: BBox;
   superscript: boolean;
   strokes: RecognitionStroke[];
@@ -122,9 +124,21 @@ export function groupStrokesIntoGlyphs(strokes: RecognitionStroke[]): GlyphGroup
       const overlap = xOverlapRatio(g.bbox, item.bbox);
       const gap = horizontalGap(g.bbox, item.bbox);
       const verticalOverlap = yOverlapRatio(g.bbox, item.bbox);
+      const vGap = verticalGap(g.bbox, item.bbox);
       const near = gap <= medianHeight * 0.18 && verticalOverlap > 0.35;
+      // Strong horizontal overlap alone must not merge a fraction bar with
+      // the digits above/below it — require vertical proximity as well.
+      const wideFlat =
+        isWideFlat(g.bbox, medianHeight) || isWideFlat(item.bbox, medianHeight);
+      const bothBars =
+        isWideFlat(g.bbox, medianHeight) && isWideFlat(item.bbox, medianHeight);
+      const sameRow =
+        overlap >= 0.28 &&
+        (verticalOverlap > 0.12 ||
+          bothBars ||
+          (!wideFlat && vGap <= medianHeight * 0.35));
       const score = near ? Math.max(0.6, overlap) : overlap;
-      if ((overlap >= 0.28 || near) && score > bestScore) {
+      if ((sameRow || near) && score > bestScore) {
         bestScore = score;
         bestIndex = i;
       }
@@ -158,7 +172,9 @@ export function groupStrokesIntoGlyphs(strokes: RecognitionStroke[]): GlyphGroup
           (a.bbox.y0 + a.bbox.y1) / 2 - (b.bbox.y0 + b.bbox.y1) / 2,
         );
         const crossing = xo >= 0.35 && yo >= 0.1;
-        const stacked = xo >= 0.7 && centerDy <= medianHeight * 0.5;
+        const wideFlat =
+          isWideFlat(a.bbox, medianHeight) || isWideFlat(b.bbox, medianHeight);
+        const stacked = !wideFlat && xo >= 0.7 && centerDy <= medianHeight * 0.5;
         if (crossing || stacked) {
           a.strokes.push(...b.strokes);
           a.bbox = combined;
@@ -200,6 +216,19 @@ function horizontalGap(a: BBox, b: BBox): number {
   if (b.x0 > a.x1) return b.x0 - a.x1;
   if (a.x0 > b.x1) return a.x0 - b.x1;
   return 0;
+}
+
+function verticalGap(a: BBox, b: BBox): number {
+  if (b.y0 > a.y1) return b.y0 - a.y1;
+  if (a.y0 > b.y1) return a.y0 - b.y1;
+  return 0;
+}
+
+/** A fraction bar or long dash: wide and very flat relative to the writing. */
+function isWideFlat(bbox: BBox, medianHeight: number): boolean {
+  const w = bbox.x1 - bbox.x0;
+  const h = bbox.y1 - bbox.y0;
+  return w > medianHeight * 1.2 && h < medianHeight * 0.3;
 }
 
 /* ================================================================== *
@@ -827,37 +856,145 @@ function segmentsIntersect(
  * ================================================================== */
 
 const DIGITS = new Set(['0', '1', '2', '3', '4', '5', '6', '7', '8', '9']);
-const VALUE_END = new Set(['0', '1', '2', '3', '4', '5', '6', '7', '8', '9', ')', 'x', 'y']);
+
+type GlyphKind = 'digit' | 'dot' | 'var' | 'close' | 'open' | 'op' | 'fraction' | 'other';
+
+function glyphKind(g: RecognizedGlyph): GlyphKind {
+  if (g.text) return 'fraction';
+  const ch = g.char;
+  if (DIGITS.has(ch)) return 'digit';
+  if (ch === '.') return 'dot';
+  if (ch === 'x' || ch === 'y') return 'var';
+  if (ch === ')') return 'close';
+  if (ch === '(') return 'open';
+  if (ch === '+' || ch === '-' || ch === '*' || ch === '/' || ch === '=' || ch === '^') {
+    return 'op';
+  }
+  return 'other';
+}
+
+function startsValue(kind: GlyphKind): boolean {
+  return kind === 'digit' || kind === 'var' || kind === 'fraction' || kind === 'open';
+}
 
 /**
  * Rebuild implicit multiplication without breaking numbers.
  * Multi-digit numbers arrive as separate glyphs ("3" "6" "5" → 365), so a
  * digit followed by a digit must never gain a `*`.
  */
-function needsMultiplication(prev: string, next: string): boolean {
-  if (!prev) return false;
-  if (next === '.' || prev === '.') return false;
-  if (DIGITS.has(prev) && DIGITS.has(next)) return false;
-  if (!VALUE_END.has(prev)) return false;
-  if (next === '(') return true;
-  if (next === 'x' || next === 'y') return true;
-  if (prev === ')' && DIGITS.has(next)) return true;
-  if ((prev === 'x' || prev === 'y') && DIGITS.has(next)) return true;
-  return false;
+function needsMultiplication(prev: RecognizedGlyph, next: RecognizedGlyph): boolean {
+  const a = glyphKind(prev);
+  const b = glyphKind(next);
+  if (b === 'dot' || a === 'dot') return false;
+  if (a === 'digit' && b === 'digit') return false;
+  if (a === 'open' || a === 'op' || a === 'other') return false;
+  if (b === 'close' || b === 'op' || b === 'other') return false;
+  return startsValue(b);
+}
+
+function tokenText(g: RecognizedGlyph): string {
+  return g.text ?? g.char;
 }
 
 export function buildRecognizedText(glyphs: RecognizedGlyph[]): string {
   let out = '';
+  let prev: RecognizedGlyph | null = null;
   for (const g of glyphs) {
-    if (g.char === '?') continue;
+    if (g.char === '?' && !g.text) continue;
+    const token = tokenText(g);
     if (g.superscript) {
-      out += `^${g.char}`;
+      out += `^${/^[0-9a-zA-Z]$/.test(token) ? token : `(${token})`}`;
+      prev = g;
       continue;
     }
-    const next = g.char;
-    const prev = out.slice(-1);
-    if (needsMultiplication(prev, next)) out += '*';
-    out += next;
+    if (prev && needsMultiplication(prev, g)) out += '*';
+    out += token;
+    prev = g;
+  }
+  return out;
+}
+
+/**
+ * Turn the flat glyph list into 2D tokens: a wide horizontal bar with glyphs
+ * above and below becomes one fraction token.
+ */
+export function buildFractionLayout(glyphs: RecognizedGlyph[]): RecognizedGlyph[] {
+  if (glyphs.length < 3) return glyphs;
+
+  const widths = glyphs
+    .filter((g) => g.char !== '-' && !g.text)
+    .map((g) => Math.max(1, g.bbox.x1 - g.bbox.x0))
+    .sort((a, b) => a - b);
+  const heights = glyphs
+    .map((g) => Math.max(1, g.bbox.y1 - g.bbox.y0))
+    .sort((a, b) => a - b);
+  if (widths.length === 0) return glyphs;
+  const medianWidth = widths[Math.floor(widths.length / 2)];
+  const medianHeight = heights[Math.floor(heights.length / 2)];
+
+  const consumed = new Set<number>();
+  const tokens = new Map<number, RecognizedGlyph>();
+
+  for (let i = 0; i < glyphs.length; i++) {
+    const bar = glyphs[i];
+    if (consumed.has(i) || bar.superscript || bar.text || bar.char !== '-') continue;
+    const barWidth = bar.bbox.x1 - bar.bbox.x0;
+    const barHeight = bar.bbox.y1 - bar.bbox.y0;
+    if (barWidth < medianWidth * 1.5 || barHeight > medianHeight * 0.45) continue;
+
+    const tol = Math.max(4, medianHeight * 0.22);
+    const above: number[] = [];
+    const below: number[] = [];
+    for (let j = 0; j < glyphs.length; j++) {
+      if (j === i || consumed.has(j)) continue;
+      const g = glyphs[j];
+      if (g.char === '-' || g.text || g.char === '?') continue;
+      const cx = (g.bbox.x0 + g.bbox.x1) / 2;
+      if (cx < bar.bbox.x0 - barWidth * 0.2 || cx > bar.bbox.x1 + barWidth * 0.2) continue;
+      if (g.bbox.y1 <= bar.bbox.y0 + tol) above.push(j);
+      else if (g.bbox.y0 >= bar.bbox.y1 - tol) below.push(j);
+    }
+    if (above.length === 0 || below.length === 0) continue;
+
+    above.sort((a, b) => glyphs[a].bbox.x0 - glyphs[b].bbox.x0);
+    below.sort((a, b) => glyphs[a].bbox.x0 - glyphs[b].bbox.x0);
+    // Fraction parts are positioned by the bar, not by a superscript baseline.
+    const numGlyphs = above.map((j) => ({ ...glyphs[j], superscript: false }));
+    const denGlyphs = below.map((j) => ({ ...glyphs[j], superscript: false }));
+    const numText = buildRecognizedText(numGlyphs);
+    const denText = buildRecognizedText(denGlyphs);
+    if (!numText || !denText) continue;
+
+    const numDisplay = numGlyphs.map((g) => g.displayChar).join('');
+    const denDisplay = denGlyphs.map((g) => g.displayChar).join('');
+    const tokenTextValue = `(${numText})/(${denText})`;
+    const parts = [...above, ...below].map((j) => glyphs[j]);
+    const confidence =
+      parts.reduce((sum, g) => sum + g.confidence, bar.confidence) / (parts.length + 1);
+
+    tokens.set(i, {
+      char: tokenTextValue,
+      displayChar: `${numDisplay}/${denDisplay}`,
+      text: tokenTextValue,
+      confidence,
+      bbox: {
+        x0: bar.bbox.x0,
+        y0: Math.min(bar.bbox.y0, ...above.map((j) => glyphs[j].bbox.y0)),
+        x1: bar.bbox.x1,
+        y1: Math.max(bar.bbox.y1, ...below.map((j) => glyphs[j].bbox.y1)),
+      },
+      superscript: false,
+      reason: 'fraction',
+      strokes: bar.strokes,
+    });
+    for (const j of [...above, ...below]) consumed.add(j);
+  }
+
+  if (tokens.size === 0) return glyphs;
+  const out: RecognizedGlyph[] = [];
+  for (let i = 0; i < glyphs.length; i++) {
+    if (consumed.has(i)) continue;
+    out.push(tokens.get(i) ?? glyphs[i]);
   }
   return out;
 }
@@ -933,13 +1070,16 @@ export function recognizeMathInk(strokes: RecognitionStroke[]): MathRecognitionR
     });
   }
 
-  const rawText = buildRecognizedText(glyphs);
+  const layoutGlyphs = buildFractionLayout(glyphs);
+  const rawText = buildRecognizedText(layoutGlyphs);
   // "x" and "×" share the same two crossing strokes. A lone × after "=", at
   // the start, or before a superscript is the variable x — not multiplication.
   const text = rawText
     .replace(/^\*(?=[+\-/^()]|$)/, 'x')
     .replace(/=\*(?=[+\-/^()]|$)/g, '=x');
-  const display = glyphs.map((g) => (g.superscript ? `^${g.displayChar}` : g.displayChar)).join('');
+  const display = layoutGlyphs
+    .map((g) => (g.superscript ? `^${g.displayChar}` : g.displayChar))
+    .join('');
   const confidence =
     glyphs.length > 0
       ? glyphs.reduce((sum, g) => sum + g.confidence, 0) / glyphs.length

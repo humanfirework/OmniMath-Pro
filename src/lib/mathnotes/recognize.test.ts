@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
   addUserGlyphSamples,
+  buildFractionLayout,
   buildRecognizedText,
   classifyGlyphGeometry,
   clearUserGlyphBank,
@@ -173,6 +174,59 @@ describe('personal glyph bank', () => {
     addUserGlyphSamples([sample('7', 0.9)]);
     clearUserGlyphBank();
     expect(loadUserGlyphSamples()).toHaveLength(0);
+  });
+});
+
+describe('fraction layout', () => {
+  const at = (
+    char: string,
+    x0: number,
+    y0: number,
+    x1: number,
+    y1: number,
+    superscript = false,
+  ): RecognizedGlyph => ({
+    char,
+    displayChar: char,
+    confidence: 1,
+    bbox: { x0, y0, x1, y1 },
+    superscript,
+    strokes: [],
+  });
+
+  it('turns a wide bar with ink above and below into a fraction', () => {
+    const glyphs = [
+      at('1', 0, 0, 12, 30),
+      at('-', -4, 40, 48, 44),
+      at('2', 0, 52, 12, 82),
+    ];
+    const layout = buildFractionLayout(glyphs);
+    expect(layout).toHaveLength(1);
+    expect(layout[0].text).toBe('(1)/(2)');
+    expect(buildRecognizedText(layout)).toBe('(1)/(2)');
+  });
+
+  it('does not turn a normal minus sign into a fraction', () => {
+    const glyphs = [at('5', 0, 0, 12, 30), at('-', 20, 14, 32, 16), at('3', 40, 0, 52, 30)];
+    expect(buildFractionLayout(glyphs)).toHaveLength(3);
+  });
+
+  it('keeps surrounding terms and inserts multiplication', () => {
+    const glyphs = [
+      at('x', 0, 0, 12, 30),
+      at('+', 20, 14, 36, 16),
+      at('1', 46, 0, 58, 30),
+      at('-', 42, 40, 94, 44),
+      at('2', 46, 52, 58, 82),
+    ];
+    const layout = buildFractionLayout(glyphs);
+    expect(buildRecognizedText(layout)).toBe('x+(1)/(2)');
+  });
+
+  it('treats a fraction token as a value for multiplication', () => {
+    const fraction = at('(1)/(2)', 0, 0, 30, 40);
+    fraction.text = '(1)/(2)';
+    expect(buildRecognizedText([fraction, at('x', 40, 0, 52, 30)])).toBe('(1)/(2)*x');
   });
 });
 
