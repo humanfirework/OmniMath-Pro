@@ -12,6 +12,8 @@
  */
 
 import { useRef } from 'react';
+import { useWorkbenchStore } from '@/lib/store/workbench';
+import { useAIContextStore } from '@/lib/store/aiContextStore';
 
 export interface AiPromptInputProps {
   /** 模块名，如 pipeline / solver / linalg / editor。 */
@@ -56,9 +58,13 @@ export function AiPromptInput({
       .filter((s) => s !== '')
       .join('\n');
 
-    if (typeof window !== 'undefined') {
-      window.dispatchEvent(new CustomEvent('omnimath:ai-explain', { detail: prompt }));
-    }
+    // 全屏工具视图（蓝图 / 求解器 / 线代）里没有预览区：先回到工作台，
+    // 再把请求排进 AI 队列，AI 面板挂载后会自动发送。
+    const store = useWorkbenchStore.getState();
+    if (store.viewMode !== 'workbench') store.setViewMode('workbench');
+    store.setPreviewVisible(true);
+    store.setActivePreviewTab('ai');
+    useAIContextStore.getState().queuePrompt(prompt);
     el.value = '';
     autoResize();
   };

@@ -40,6 +40,7 @@ import {
 import { DEFAULT_CARTESIAN_RANGE } from '@/lib/engine/types';
 import { useSettingsStore } from '@/lib/store/settingsStore';
 import { useWorkbenchStore } from '@/lib/store/workbench';
+import { useAIContextStore } from '@/lib/store/aiContextStore';
 import { cn } from '@/lib/utils';
 
 export interface CodeEditorProps {
@@ -547,10 +548,11 @@ export function CodeEditor({
             ? buildExplainPrompt(bubble.text, language)
             : buildSimplifyPrompt(bubble.text, language);
         const store = useWorkbenchStore.getState();
-        // 回答出现在预览区的 AI 标签里：先让预览可见并切过去。
+        // 回答出现在预览区的 AI 标签里：先让预览可见并切过去，
+        // 再把 prompt 排队（AI 面板挂载后消费，避免事件丢失）。
         store.setPreviewVisible(true);
         store.setActivePreviewTab('ai');
-        window.dispatchEvent(new CustomEvent<string>('omnimath:ai-explain', { detail: prompt }));
+        useAIContextStore.getState().queuePrompt(prompt);
       }
 
       setSelectionBubble(null);

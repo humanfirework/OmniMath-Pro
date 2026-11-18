@@ -63,6 +63,7 @@ import { Plot2DPanel } from '@/components/workbench/plots/Plot2DPanel';
 import { AIPanel } from '@/components/workbench/panels/AIPanel';
 import { useWorkbenchStore } from '@/lib/store/workbench';
 import { useLayoutStore } from '@/lib/store/layoutStore';
+import { useAIContextStore } from '@/lib/store/aiContextStore';
 import { t, useLocale } from '@/lib/i18n';
 import { cn } from '@/lib/utils';
 import { saveTextToFile } from '@/lib/nativeExport';
@@ -368,12 +369,13 @@ const FormulaView = memo(function FormulaView({
     [],
   );
 
-  // 端到端闭环：把当前结果交给 AI 解释。切到 AI 标签并通过事件把
-  // 一句包含上下文的提示词注入 AIPanel（由 AIPanel 监听并自动发送）。
+  // 端到端闭环：把当前结果交给 AI 解释。切到 AI 标签并把
+  // 一句包含上下文的提示词排进队列（由 AIPanel 消费并自动发送）。
   const handleAIExplain = useCallback((result: CalculationResult) => {
     useWorkbenchStore.getState().setActivePreviewTab('ai');
     const prompt = `请用中文解释这个计算结果：\n输入：\`${result.input}\`\n输出：\`${result.output}\`\n请你不仅陈述结果，还要说明它的数学含义、推导依据和常见易错点。`;
-    window.dispatchEvent(new CustomEvent<string>('omnimath:ai-explain', { detail: prompt }));
+    // 排队而不是直接派发事件：AI 标签刚切过去时面板可能还没挂载。
+    useAIContextStore.getState().queuePrompt(prompt);
   }, []);
 
   if (results.length === 0) {

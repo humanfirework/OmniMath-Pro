@@ -41,6 +41,7 @@ import {
 } from 'lucide-react';
 import { useWorkbenchStore } from '@/lib/store/workbench';
 import { useFileSystemStore } from '@/lib/store/fileSystemStore';
+import { useAIContextStore } from '@/lib/store/aiContextStore';
 import { useT, t as translateRaw, type TranslationDict } from '@/lib/i18n';
 import { FormulaRenderer } from '@/components/workbench/FormulaRenderer';
 import { Button } from '@/components/ui/button';
@@ -409,6 +410,8 @@ export function AIPanel() {
   // The last user message we attempted — used to auto-retry after saving config.
   const lastPendingRef = useRef<string | null>(null);
   const pendingSendTimerRef = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
+  // 专用计时器：排队 prompt 的发送（与事件通道的 debounce 分开，避免互相清理）。
+  const queueSendTimerRef = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
   const scrollRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
   // 当前流式请求的 AbortController，供「停止」按钮中断生成。
@@ -585,6 +588,42 @@ export function AIPanel() {
     };
     window.addEventListener('omnimath:ai-explain', handler);
     return () => window.removeEventListener('omnimath:ai-explain', handler);
+  }, [send]);
+
+  // 排队式请求：AI 面板只在预览区的 AI 标签激活时挂载，全屏工具视图
+  // （蓝图 / 求解器 / 线代）或首次切到 AI 标签时，事件可能在监听器挂载前
+  // 就派发了。这里的队列保证面板一挂载（或已在挂载）就消费并发送。
+  //
+  // 关键点：布局切换 / StrictMode 会让面板「挂载 → 卸载 → 重挂载」。
+  // 因此：
+  //   1) 启动时晚一点再消费，给布局稳定留时间；
+  //   2) 只在真正发送前才把 prompt 从队列里取走 —— 实例若中途被卸载，
+  //      待发送内容会留给下一个实例，不会丢。
+  useEffect(() => {
+    let alive = true;
+    const run = () => {
+      if (!alive) return;
+      const pending = useAIContextStore.getState().pendingPrompt;
+      if (!pending) return;
+      setInput(pending);
+      clearTimeout(queueSendTimerRef.current);
+      queueSendTimerRef.current = setTimeout(() => {
+        if (!alive) return;
+        if (!useAIContextStore.getState().consumePrompt(pending)) return;
+        setInput('');
+        void send(pending);
+      }, 60);
+    };
+    const startupTimer = setTimeout(run, 120);
+    const unsubscribe = useAIContextStore.subscribe((state, prev) => {
+      if (state.promptSeq !== prev.promptSeq) run();
+    });
+    return () => {
+      alive = false;
+      clearTimeout(startupTimer);
+      clearTimeout(queueSendTimerRef.current);
+      unsubscribe();
+    };
   }, [send]);
 
   const handleSaveConfig = useCallback(

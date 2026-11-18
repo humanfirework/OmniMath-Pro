@@ -23,19 +23,40 @@ interface AIContextState {
   linalg: unknown;
   /** 控制理论摘要（预留）。 */
   control: unknown;
+  /**
+   * 待发送的 prompt。AI 面板只在「预览区 AI 标签」激活时挂载，
+   * 直接派发 `omnimath:ai-explain` 事件可能在监听器挂载前丢失；
+   * 这里先把请求排队，AI 面板挂载后消费，保证请求一定被送出。
+   */
+  pendingPrompt: string | null;
+  /** 每排一次队 +1，供 AI 面板区分「同一个 prompt 再次发送」。 */
+  promptSeq: number;
   setPipeline: (v: unknown) => void;
   setSolver: (v: unknown) => void;
   setLinalg: (v: unknown) => void;
   setControl: (v: unknown) => void;
+  queuePrompt: (prompt: string) => void;
+  /** 取出并清空待发送 prompt；传入 expected 时只在内容一致时清空。 */
+  consumePrompt: (expected?: string) => string | null;
 }
 
-export const useAIContextStore = create<AIContextState>((set) => ({
+export const useAIContextStore = create<AIContextState>((set, get) => ({
   pipeline: undefined,
   solver: undefined,
   linalg: undefined,
   control: undefined,
+  pendingPrompt: null,
+  promptSeq: 0,
   setPipeline: (v) => set((s) => ({ pipeline: v })),
   setSolver: (v) => set((s) => ({ solver: v })),
   setLinalg: (v) => set((s) => ({ linalg: v })),
   setControl: (v) => set((s) => ({ control: v })),
+  queuePrompt: (prompt) => set((s) => ({ pendingPrompt: prompt, promptSeq: s.promptSeq + 1 })),
+  consumePrompt: (expected) => {
+    const prompt = get().pendingPrompt;
+    if (!prompt) return null;
+    if (expected !== undefined && prompt !== expected) return null;
+    set({ pendingPrompt: null });
+    return prompt;
+  },
 }));
