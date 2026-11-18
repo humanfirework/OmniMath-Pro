@@ -482,6 +482,13 @@ export function Workbench() {
     }
   }, [viewMode, setEditorVisible]);
 
+  // 设置面板只在第一次打开后挂载，之后保持挂载：既避免首屏加载它的代码块，
+  // 又保留面板内部的关闭动画与分类 / 导入方式等本地状态（反复开关不重置）。
+  const [settingsMounted, setSettingsMounted] = useState(settingsOpen);
+  useEffect(() => {
+    if (settingsOpen) setSettingsMounted(true);
+  }, [settingsOpen]);
+
   // 进入全屏工具视图时，effect 会在提交后把 editorVisible 置 false。若这一帧
   // 就渲染编辑器，会白下载编辑器 + mathjs 的 chunk（白板/蓝图根本用不到）。
   // 因此在「首次自动隐藏尚未生效」的这帧先渲染空占位；用户之后手动再打开
@@ -517,7 +524,7 @@ export function Workbench() {
           <GlobalCalcBar />
           <FloatingCalculator />
           <RunResultsHost />
-          {settingsOpen && <LazySettingsPanel />}
+          {settingsMounted && <LazySettingsPanel />}
           <OnboardingOverlay />
         </>
       );
@@ -529,7 +536,7 @@ export function Workbench() {
         <GlobalCalcBar />
         <FloatingCalculator />
         <RunResultsHost />
-        {settingsOpen && <LazySettingsPanel />}
+        {settingsMounted && <LazySettingsPanel />}
         <OnboardingOverlay />
       </>
     );
@@ -828,7 +835,7 @@ export function Workbench() {
       <GlobalCalcBar />
       <RunResultsHost />
       <FloatingCalculator />
-      {settingsOpen && <LazySettingsPanel />}
+      {settingsMounted && <LazySettingsPanel />}
       <OnboardingOverlay />
       <PracticeGuide />
     </motion.div>

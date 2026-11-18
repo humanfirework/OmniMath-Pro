@@ -918,7 +918,7 @@ export function SettingsPanel() {
                     GitHub Gist 云同步（可选）
                   </div>
                   <p className="mt-1.5 text-[11px] leading-relaxed text-muted-foreground">
-                    用 GitHub Token 把工作区上传为私有 Gist，另一台设备填同一 Token 读取即可。
+                    用 GitHub Token 把工作区（含代码文件）上传为私有 Gist，另一台设备填同一 Token 读取即可。
                     Token 只保存在本机，不会写进备份。
                   </p>
                   <div className="mt-2 flex flex-col gap-2 sm:flex-row">
