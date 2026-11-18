@@ -11,12 +11,13 @@
  *   • Bracket matching + auto-close
  *   • Indent guides (2 spaces)
  *   • Linting (mathjs parse errors underlined)
- *   • Custom keymap: Enter=run, Shift+Enter=newline, Tab=indent, Ctrl+/=comment
+ *   • Keymap: Enter=newline (标准编辑器行为), Ctrl/Cmd+Enter=run, Tab=indent,
+ *     Ctrl+/=comment。运行不再抢占 Enter —— 多行脚本需要自然换行。
  */
 
 import { useEffect, useMemo, useRef } from 'react';
 import { EditorState, EditorSelection, Compartment, StateField } from '@codemirror/state';
-import { EditorView, keymap, lineNumbers, highlightActiveLine, highlightActiveLineGutter, hoverTooltip, showTooltip } from '@codemirror/view';
+import { EditorView, keymap, lineNumbers, highlightActiveLine, highlightActiveLineGutter, hoverTooltip, showTooltip, placeholder as cmPlaceholder } from '@codemirror/view';
 import { defaultKeymap, historyKeymap, history } from '@codemirror/commands';
 import { bracketMatching, indentUnit, indentOnInput, foldGutter, codeFolding, foldKeymap, StreamLanguage, HighlightStyle, syntaxHighlighting } from '@codemirror/language';
 import { linter, lintGutter } from '@codemirror/lint';
@@ -53,6 +54,7 @@ export function CodeEditor({
   const viewRef = useRef<EditorView | null>(null);
   const langCompartment = useRef(new Compartment());
   const themeCompartment = useRef(new Compartment());
+  const placeholderCompartment = useRef(new Compartment());
   const onChangeRef = useRef(onChange);
   const onRunRef = useRef(onRun);
   const onCursorChangeRef = useRef(onCursorChange);
@@ -225,6 +227,10 @@ export function CodeEditor({
       fontSize: `${fontSize}px`,
     },
     '.cm-cursor': { borderLeftColor: 'var(--primary, #2dd4bf)' },
+    '.cm-placeholder': {
+      color: 'var(--muted-foreground, #888)',
+      opacity: 0.65,
+    },
     '.cm-selectionBackground, ::selection': { backgroundColor: 'rgba(45, 212, 191, 0.2)' },
     '.cm-lintRange-error': { textDecoration: 'underline wavy #ef4444' },
     '.cm-tooltip': {
@@ -263,18 +269,17 @@ export function CodeEditor({
       }
     });
 
+    // Enter 交给 CodeMirror 默认的 insertNewlineAndIndent（自动保持缩进）；
+    // 运行绑定到 Ctrl/Cmd+Enter —— 与 VSCode / Jupyter / MATLAB 的习惯一致，
+    // 避免「想换行却把代码跑了一遍」的割裂感。
     const runKeymap = keymap.of([
       {
-        key: 'Enter',
+        key: 'Mod-Enter',
         preventDefault: true,
         run: () => {
           onRunRef.current();
           return true;
         },
-      },
-      {
-        key: 'Shift-Enter',
-        run: () => false, // let default newline happen
       },
       {
         key: 'Mod-/',
@@ -317,6 +322,7 @@ export function CodeEditor({
           ...searchKeymap,
         ]),
         langCompartment.current.of(langExt),
+        placeholderCompartment.current.of(cmPlaceholder(placeholder ?? '')),
         syntaxLinter,
         updateListener,
         EditorView.contentAttributes.of({ 'aria-label': 'Code editor' }),
@@ -381,6 +387,15 @@ export function CodeEditor({
       effects: langCompartment.current.reconfigure(getLanguageExtension(language)),
     });
   }, [language]);
+
+  /* ─── Update placeholder (locale switch) ─────────────────────── */
+  useEffect(() => {
+    const view = viewRef.current;
+    if (!view) return;
+    view.dispatch({
+      effects: placeholderCompartment.current.reconfigure(cmPlaceholder(placeholder ?? '')),
+    });
+  }, [placeholder]);
 
   /* ─── Insert symbol at cursor (SymbolPalette → custom event) ─── */
   useEffect(() => {

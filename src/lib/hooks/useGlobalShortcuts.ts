@@ -12,7 +12,7 @@
  *     });
  *   }, [viewMode, setViewMode]);
  *
- * 注意：编辑器内部行为（CodeMirror keymap 的 Enter/Tab/Shift+Enter）
+ * 注意：编辑器内部行为（CodeMirror keymap 的 Ctrl+Enter/Tab/Enter）
  * 不走此机制，它们是编辑器内部行为而非全局快捷键。
  */
 

@@ -34,7 +34,8 @@ export interface ShortcutDef {
 
 /** 默认快捷键配置 */
 export const DEFAULT_SHORTCUTS: Record<ShortcutAction, ShortcutDef> = {
-  run:           { mod: '',           key: 'Enter' },
+  // Enter 留给编辑器换行；运行改为 Ctrl/Cmd+Enter（VSCode / Jupyter 习惯）。
+  run:           { mod: 'ctrl',       key: 'Enter' },
   toggleSidebar: { mod: 'ctrl',       key: 'b' },
   focusMode:     { mod: '',           key: 'F11' },
   openSettings:  { mod: 'ctrl',       key: ',' },
@@ -102,7 +103,13 @@ export const useShortcutsStore = create<ShortcutsState>((set, get) => ({
         for (const key of Object.keys(DEFAULT_SHORTCUTS) as ShortcutAction[]) {
           const v = data.shortcuts[key];
           if (v && typeof v.mod === 'string' && typeof v.key === 'string' && v.key.length > 0) {
-            merged[key] = { mod: v.mod, key: v.key };
+            // 旧版本默认值（run = 无修饰键 Enter）会让「换行」变成「运行」，
+            // 与新的编辑器行为冲突。仅迁移这一组旧默认值，用户自定义的其它组合保持不变。
+            if (key === 'run' && v.mod === '' && v.key.toLowerCase() === 'enter') {
+              merged[key] = DEFAULT_SHORTCUTS.run;
+            } else {
+              merged[key] = { mod: v.mod, key: v.key };
+            }
           }
         }
         set({ shortcuts: merged });

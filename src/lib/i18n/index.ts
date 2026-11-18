@@ -1360,7 +1360,7 @@ const zhCN: TranslationDict = {
   /* Editor */
   editorTitle: "编辑器",
   editorPlaceholder:
-    "# 输入数学表达式，按 Enter 求值\n# 示例：\n2 + 3 * 4\nsin(pi/4)\nx = 42\nplot(sin(x))",
+    "# 输入数学表达式，按 Ctrl+Enter 求值\n# 示例：\n2 + 3 * 4\nsin(pi/4)\nx = 42\nplot(sin(x))",
   editorRun: "运行",
   editorRunToPanel: "运行到独立面板",
   editorRunToPanelHint: "运行脚本并把结果送入可拖拽的独立结果浮窗（右上角「关闭全部」可清空）",
@@ -1370,7 +1370,7 @@ const zhCN: TranslationDict = {
   editorModePython: "Python",
   editorModeMatlab: "MATLAB",
   editorModeAdvanced: "高级",
-  editorEnterToEval: "Enter 求值",
+  editorEnterToEval: "Ctrl+Enter 求值",
   editorShiftEnterNewLine: "Shift+Enter 换行",
   editorCtrlSlashComment: "Ctrl+/ 注释",
   editorVars: "变量",
@@ -1399,7 +1399,7 @@ const zhCN: TranslationDict = {
   previewResult: "结果",
   previewError: "错误",
   previewEmpty: "暂无结果",
-  previewEmptyHint: "在编辑器中输入表达式并按 Enter",
+  previewEmptyHint: "在编辑器中输入表达式并按 Ctrl+Enter",
   previewClearAll: "全部清除",
   previewNoHistory: "暂无计算历史",
   previewDownload: "下载",
@@ -2665,7 +2665,7 @@ const en: TranslationDict = {
   /* Editor */
   editorTitle: "Editor",
   editorPlaceholder:
-    "# Type a math expression and press Enter to evaluate\n# Examples:\n2 + 3 * 4\nsin(pi/4)\nx = 42\nplot(sin(x))",
+    "# Type a math expression and press Ctrl+Enter to evaluate\n# Examples:\n2 + 3 * 4\nsin(pi/4)\nx = 42\nplot(sin(x))",
   editorRun: "Run",
   editorRunToPanel: "Run to panel",
   editorRunToPanelHint: "Run the script and send results to a draggable floating result window (clear all via the top-right button)",
@@ -2675,7 +2675,7 @@ const en: TranslationDict = {
   editorModePython: "Python",
   editorModeMatlab: "MATLAB",
   editorModeAdvanced: "Advanced",
-  editorEnterToEval: "Enter to evaluate",
+  editorEnterToEval: "Ctrl+Enter to evaluate",
   editorShiftEnterNewLine: "Shift+Enter for new line",
   editorCtrlSlashComment: "Ctrl+/ to comment",
   editorVars: "vars",
@@ -2704,7 +2704,7 @@ const en: TranslationDict = {
   previewResult: "Result",
   previewError: "Error",
   previewEmpty: "No results yet",
-  previewEmptyHint: "Type an expression in the editor and press Enter",
+  previewEmptyHint: "Type an expression in the editor and press Ctrl+Enter",
   previewClearAll: "Clear All",
   previewNoHistory: "No calculations yet",
   previewDownload: "Download",

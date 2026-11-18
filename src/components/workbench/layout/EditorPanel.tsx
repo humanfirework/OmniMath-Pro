@@ -10,8 +10,8 @@
  *  - Bottom info bar (h-6): shortcut hints + Ln/Col indicator.
  *
  * Keyboard:
- *  - Enter = run (no shift)
- *  - Shift+Enter = newline
+ *  - Enter = newline (standard editor behaviour, keeps indentation)
+ *  - Ctrl/Cmd+Enter = run
  *  - Tab = indent 2 spaces
  *  - Ctrl+/ = comment line
  *
@@ -40,7 +40,6 @@ import {
   Loader2,
   Sigma,
   X,
-  PanelTop,
 } from 'lucide-react';
 import {
   Tooltip,
@@ -65,11 +64,12 @@ import type { CalculationResult, PlotConfig } from '@/lib/store/workbench';
 import { useRunResultsStore } from '@/lib/store/runResultsStore';
 import { sampleFunction, type Plot2DType } from '@/lib/plots/plot2d';
 import { CodeEditor } from '@/components/workbench/layout/CodeEditor';
+import { registerShortcutHandler } from '@/lib/hooks/useGlobalShortcuts';
 import { SymbolPalette } from '@/components/workbench/SymbolPalette';
 import { FormulaRenderer } from '@/components/workbench/FormulaRenderer';
 import { DemosPanel } from '@/components/workbench/plots/DemosPanel';
 
-const DEFAULT_SCRIPT = `# 输入表达式，按 Enter 运行（Shift+Enter 换行）
+const DEFAULT_SCRIPT = `# 输入表达式，按 Ctrl+Enter 运行（或点右上角「运行」）
 # 用 --- 分隔独立计算块；含 x 的表达式自动画图
 
 sin(x) * cos(x)
@@ -114,7 +114,6 @@ export function EditorPanel() {
   const clearVariables = useWorkbenchStore((s) => s.clearVariables);
   const clearPlots = useWorkbenchStore((s) => s.clearPlots);
   const setActivePreviewTab = useWorkbenchStore((s) => s.setActivePreviewTab);
-  const setActiveSidePanel = useWorkbenchStore((s) => s.setActiveSidePanel);
   const variables = useWorkbenchStore((s) => s.variables);
 
   const [isRunning, setIsRunning] = useState(false);
@@ -474,6 +473,11 @@ export function EditorPanel() {
     return () => window.removeEventListener('omnimath:run-all', handler);
   }, [runScript]);
 
+  /* ─── Global run shortcut (Ctrl/Cmd+Enter from settings) ──────── */
+  // 编辑器自身由 CodeMirror keymap 处理 Ctrl+Enter；这里补上焦点在
+  // 画布/蓝图等其它区域时的全局运行，使设置页里的「运行」快捷键真正生效。
+  useEffect(() => registerShortcutHandler('run', () => runScript()), [runScript]);
+
   /* ─── Reset scope ──────────────────────────────────────────────── */
   const handleReset = useCallback(() => {
     try {
@@ -591,47 +595,54 @@ export function EditorPanel() {
             </TooltipTrigger>
             <TooltipContent side="bottom">{t('editorClear')}</TooltipContent>
           </Tooltip>
-          <motion.button
-            type="button"
-            onClick={() => runScript()}
-            disabled={isRunning}
-            whileTap={{ scale: 0.95 }}
-            whileHover={{ scale: 1.02 }}
-            className={cn(
-              'relative flex items-center gap-1.5 h-7 px-3 ml-1 rounded-md text-[11.5px] font-medium',
-              'text-primary-foreground transition-all',
-              'bg-gradient-to-r from-primary to-primary/80',
-            )}
-            style={{
-              boxShadow: isRunning
-                ? '0 0 0 2px oklch(0.7 0.15 165 / 30%), 0 0 16px oklch(0.7 0.15 165 / 40%)'
-                : '0 0 0 1px oklch(0.7 0.15 165 / 25%), 0 4px 12px oklch(0.7 0.15 165 / 18%)',
-            }}
-            aria-label={t('editorRun')}
-          >
-            <AnimatePresence mode="wait" initial={false}>
-              {isRunning ? (
-                <motion.span
-                  key="running"
-                  initial={{ opacity: 0, scale: 0.5 }}
-                  animate={{ opacity: 1, scale: 1 }}
-                  exit={{ opacity: 0, scale: 0.5 }}
-                >
-                  <Loader2 className="size-3.5 animate-spin" />
-                </motion.span>
-              ) : (
-                <motion.span
-                  key="play"
-                  initial={{ opacity: 0, scale: 0.5 }}
-                  animate={{ opacity: 1, scale: 1 }}
-                  exit={{ opacity: 0, scale: 0.5 }}
-                >
-                  <Play className="size-3.5" fill="currentColor" />
-                </motion.span>
-              )}
-            </AnimatePresence>
-            <span>{t('editorRun')}</span>
-          </motion.button>
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <motion.button
+                type="button"
+                onClick={() => runScript()}
+                disabled={isRunning}
+                whileTap={{ scale: 0.95 }}
+                whileHover={{ scale: 1.02 }}
+                className={cn(
+                  'relative flex items-center gap-1.5 h-7 px-3 ml-1 rounded-md text-[11.5px] font-medium',
+                  'text-primary-foreground transition-all',
+                  'bg-gradient-to-r from-primary to-primary/80',
+                )}
+                style={{
+                  boxShadow: isRunning
+                    ? '0 0 0 2px oklch(0.7 0.15 165 / 30%), 0 0 16px oklch(0.7 0.15 165 / 40%)'
+                    : '0 0 0 1px oklch(0.7 0.15 165 / 25%), 0 4px 12px oklch(0.7 0.15 165 / 18%)',
+                }}
+                aria-label={t('editorRun')}
+              >
+                <AnimatePresence mode="wait" initial={false}>
+                  {isRunning ? (
+                    <motion.span
+                      key="running"
+                      initial={{ opacity: 0, scale: 0.5 }}
+                      animate={{ opacity: 1, scale: 1 }}
+                      exit={{ opacity: 0, scale: 0.5 }}
+                    >
+                      <Loader2 className="size-3.5 animate-spin" />
+                    </motion.span>
+                  ) : (
+                    <motion.span
+                      key="play"
+                      initial={{ opacity: 0, scale: 0.5 }}
+                      animate={{ opacity: 1, scale: 1 }}
+                      exit={{ opacity: 0, scale: 0.5 }}
+                    >
+                      <Play className="size-3.5" fill="currentColor" />
+                    </motion.span>
+                  )}
+                </AnimatePresence>
+                <span>{t('editorRun')}</span>
+              </motion.button>
+            </TooltipTrigger>
+            <TooltipContent side="bottom">
+              {t('editorRun')} · Ctrl+Enter
+            </TooltipContent>
+          </Tooltip>
         </div>
         )}
       </div>
@@ -696,66 +707,38 @@ export function EditorPanel() {
         </div>
       )}
 
-      {fsLoaded && openTabs.length === 0 && !editorContent.trim() ? (
-        /* Empty state — no open tabs */
-        <div className="flex-1 min-h-0 flex flex-col items-center justify-center gap-3 px-6 text-center">
-          <div className="grid place-items-center size-12 rounded-2xl bg-primary/10 text-primary">
-            <FileCode2 className="size-6" />
-          </div>
-          <div className="space-y-1">
-            <p className="text-[13px] font-semibold text-foreground">
-              {tPending('editorTabsEmptyTitle')}
-            </p>
-            <p className="text-[11.5px] text-muted-foreground/80 max-w-[300px] leading-relaxed">
-              {tPending('editorTabsEmptyHint')}
-            </p>
-          </div>
-          <button
-            type="button"
-            onClick={() => setActiveSidePanel('files')}
-            className="mt-1 flex items-center gap-1.5 h-8 px-3.5 rounded-lg text-[12px] font-medium text-primary-foreground bg-gradient-to-r from-primary to-primary/80 hover:brightness-110 transition-all"
-          >
-            <PanelTop className="size-3.5" />
-            打开文件浏览器
-          </button>
-          <p className="text-[10.5px] text-muted-foreground/60">
-            也可以在左侧活动栏点击「文件」图标浏览并打开脚本
-          </p>
+      {/* Live preview bar (simple mode only, hidden when the line is empty) */}
+      {inputMode === 'simple' && previewLatex && (
+        <div className="shrink-0 min-h-10 max-h-48 flex items-start gap-2 px-2.5 py-2 border-b border-border/60 bg-muted/30 border-l-2 border-l-primary/60 overflow-x-auto overflow-y-auto">
+          <span className="text-[12px] font-medium text-muted-foreground shrink-0 mt-0.5">
+            {t('editorLivePreview')}:
+          </span>
+          <FormulaRenderer
+            latex={previewLatex}
+            displayMode
+            className="min-w-0 flex-1 text-[13px]"
+          />
         </div>
-      ) : (
-        <>
-          {/* Live preview bar (simple mode only, hidden when the line is empty) */}
-          {inputMode === 'simple' && previewLatex && (
-            <div className="shrink-0 min-h-10 max-h-48 flex items-start gap-2 px-2.5 py-2 border-b border-border/60 bg-muted/30 border-l-2 border-l-primary/60 overflow-x-auto overflow-y-auto">
-              <span className="text-[12px] font-medium text-muted-foreground shrink-0 mt-0.5">
-                {t('editorLivePreview')}:
-              </span>
-              <FormulaRenderer
-                latex={previewLatex}
-                displayMode
-                className="min-w-0 flex-1 text-[13px]"
-              />
-            </div>
-          )}
-
-          {/* Editor area */}
-          <div ref={editorContainerRef} className="flex-1 min-h-0 flex overflow-hidden">
-            <CodeEditor
-              value={editorContent}
-              onChange={setEditorContent}
-              onRun={runScript}
-              onCursorChange={(line) => {
-                // Debounced preview update.
-                if (previewTimerRef.current) clearTimeout(previewTimerRef.current);
-                previewTimerRef.current = setTimeout(() => setPreviewLine(line), 200);
-              }}
-              language={inputMode}
-              placeholder={t('editorPlaceholder')}
-              fontSize={editorFontSize}
-            />
-          </div>
-        </>
       )}
+
+      {/* Editor area — 永远保持可输入。
+          之前当「未打开文件且内容为空」时会用空状态替换整个编辑器，
+          用户按 Ctrl+A + Delete 清空后编辑器直接消失、无法继续输入。 */}
+      <div ref={editorContainerRef} className="flex-1 min-h-0 flex overflow-hidden">
+        <CodeEditor
+          value={editorContent}
+          onChange={setEditorContent}
+          onRun={runScript}
+          onCursorChange={(line) => {
+            // Debounced preview update.
+            if (previewTimerRef.current) clearTimeout(previewTimerRef.current);
+            previewTimerRef.current = setTimeout(() => setPreviewLine(line), 200);
+          }}
+          language={inputMode}
+          placeholder={t('editorPlaceholder')}
+          fontSize={editorFontSize}
+        />
+      </div>
 
       {/* Symbol palette (collapsible) */}
       <SymbolPalette />
