@@ -18,7 +18,7 @@
 import { useEffect, useMemo, useRef } from 'react';
 import { EditorState, EditorSelection, Compartment, StateField } from '@codemirror/state';
 import { EditorView, keymap, lineNumbers, highlightActiveLine, highlightActiveLineGutter, hoverTooltip, showTooltip, placeholder as cmPlaceholder } from '@codemirror/view';
-import { defaultKeymap, historyKeymap, history } from '@codemirror/commands';
+import { defaultKeymap, historyKeymap, history, indentWithTab } from '@codemirror/commands';
 import { bracketMatching, indentUnit, indentOnInput, foldGutter, codeFolding, foldKeymap, StreamLanguage, HighlightStyle, syntaxHighlighting } from '@codemirror/language';
 import { linter, lintGutter } from '@codemirror/lint';
 import { searchKeymap, highlightSelectionMatches } from '@codemirror/search';
@@ -320,6 +320,10 @@ export function CodeEditor({
           ...closeBracketsKeymap,
           ...completionKeymap,
           ...searchKeymap,
+          // Tab / Shift+Tab 缩进/反缩进。
+          // 不绑定的话浏览器会把焦点移到下一个可聚焦元素（这里是分栏拖拽条），
+          // 用户继续输入时字符直接丢失 —— 编辑器「不好用」的典型来源。
+          indentWithTab,
         ]),
         langCompartment.current.of(langExt),
         placeholderCompartment.current.of(cmPlaceholder(placeholder ?? '')),
