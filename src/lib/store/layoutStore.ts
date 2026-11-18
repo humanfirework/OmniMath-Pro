@@ -85,6 +85,20 @@ export const useLayoutStore = create<LayoutState>((set, get) => ({
       previewPosition: 'right',
       previewSize: 'compact',
     });
+    // react-resizable-panels 把拖拽后的尺寸存在 `react-resizable-panels:<id>`。
+    // 仅重置 layoutStore 不会清掉这些尺寸，面板会继续停留在被拖坏的比例上。
+    if (typeof window !== 'undefined') {
+      try {
+        const stale: string[] = [];
+        for (let i = 0; i < localStorage.length; i++) {
+          const key = localStorage.key(i);
+          if (key && key.startsWith('react-resizable-panels:')) stale.push(key);
+        }
+        for (const key of stale) localStorage.removeItem(key);
+      } catch {
+        // ignore storage errors
+      }
+    }
     get().saveToStorage();
   },
 }));
