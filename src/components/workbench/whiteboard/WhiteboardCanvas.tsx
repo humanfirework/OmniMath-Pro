@@ -47,7 +47,19 @@ import {
   Highlighter,
   PenLine,
   Sigma,
+  RotateCcw,
+  RotateCw,
+  MoreHorizontal,
+  Check,
 } from 'lucide-react';
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu';
 import { cn } from '@/lib/utils';
 import { t, useLocale } from '@/lib/i18n';
 import { InkCanvas, type InkCanvasHandle } from './InkCanvas';
@@ -56,6 +68,7 @@ import { useCoarsePointer } from '@/hooks/use-coarse-pointer';
 import { PEN_COLORS, PEN_ERASER_SIZES, PEN_WIDTHS } from '@/lib/ink/presets';
 import { hitTestInk, translateInk } from '@/lib/ink/hitTest';
 import { applyEraser, type EraserMode } from '@/lib/ink/eraser';
+import { rotateSelection, scaleSelection } from '@/lib/ink/transform';
 import type { InkBrush, InkStroke, InkView } from '@/lib/ink/types';
 import { getGlyphTemplates, recognizeMathInk, addUserGlyphSamples } from '@/lib/mathnotes/recognize';
 import { evaluateMathNote } from '@/lib/mathnotes/expression';
@@ -615,6 +628,29 @@ export function WhiteboardCanvas() {
     [commitStrokes],
   );
 
+  const handleScaleSelection = useCallback(
+    (factor: number) => {
+      if (selectedIds.length === 0) return;
+      commitStrokes(scaleSelection(strokesRef.current, selectedIds, factor));
+    },
+    [selectedIds, commitStrokes],
+  );
+
+  const handleRotateSelection = useCallback(
+    (degrees: number) => {
+      if (selectedIds.length === 0) return;
+      commitStrokes(rotateSelection(strokesRef.current, selectedIds, degrees));
+    },
+    [selectedIds, commitStrokes],
+  );
+
+  const handleDeleteSelected = useCallback(() => {
+    if (selectedIds.length === 0) return;
+    const selected = new Set(selectedIds);
+    commitStrokes(strokesRef.current.filter((s) => !selected.has(s.id)));
+    setSelectedIds([]);
+  }, [selectedIds, commitStrokes]);
+
   const handleViewChange = useCallback((next: InkView) => {
     setView(next);
   }, []);
@@ -694,14 +730,12 @@ export function WhiteboardCanvas() {
       if (e.key === 'Delete' || e.key === 'Backspace') {
         if (selectedIds.length === 0) return;
         e.preventDefault();
-        const selected = new Set(selectedIds);
-        commitStrokes(strokesRef.current.filter((s) => !selected.has(s.id)));
-        setSelectedIds([]);
+        handleDeleteSelected();
       }
     };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
-  }, [selectedIds, handleUndo, handleRedo, commitStrokes]);
+  }, [selectedIds, handleUndo, handleRedo, handleDeleteSelected]);
 
   const zoomAt = useCallback((factor: number, clientX?: number, clientY?: number) => {
     inkRef.current?.zoomAt(factor, clientX, clientY);
@@ -748,9 +782,6 @@ export function WhiteboardCanvas() {
           <PencilRuler className="size-4 text-primary mr-1" />
           <span className="text-[12px] font-medium text-foreground/80">
             {t('abWhiteboard')}
-          </span>
-          <span className="rounded border border-amber-500/40 bg-amber-500/10 px-1 text-[9px] font-semibold leading-4 text-amber-600 dark:text-amber-400">
-            BETA
           </span>
         </div>
         <div className="w-px h-5 bg-border/60" />
@@ -859,54 +890,6 @@ export function WhiteboardCanvas() {
 
         <div className="w-px h-5 bg-border/60" />
 
-        {/* Shape tools */}
-        <div className="flex items-center gap-0.5 p-0.5 rounded-md bg-muted/40 border border-border/40">
-          {SHAPES.map(({ id, icon: Icon, label }) => (
-            <button
-              key={id}
-              type="button"
-              onClick={() => selectShape(shapeTool === id ? null : id)}
-              className={cn(
-                'grid place-items-center size-6 rounded transition-colors',
-                shapeTool === id
-                  ? 'bg-primary/15 text-primary'
-                  : 'text-muted-foreground hover:text-foreground hover:bg-accent/60',
-              )}
-              aria-label={`shape ${label}`}
-              title={label}
-            >
-              <Icon className="size-3.5" />
-            </button>
-          ))}
-        </div>
-
-        <div className="w-px h-5 bg-border/60" />
-
-        {/* Pixel art mode toggle */}
-        <button
-          type="button"
-          onClick={() => {
-            const next = !pixelMode;
-            setPixelMode(next);
-            selectShape(null);
-            selectTool('pen');
-            inkRef.current?.setStyle({ pixelMode: next });
-          }}
-          className={cn(
-            'inline-flex items-center gap-1 h-7 px-2 rounded-md text-[11px] transition-colors',
-            pixelMode
-              ? 'bg-primary/15 text-primary'
-              : 'text-muted-foreground hover:bg-accent/60',
-          )}
-          aria-label="pixel mode"
-          title={t('abPixelMode')}
-        >
-          <Grid2x2 className="size-3.5" />
-          {pixelMode ? '像素开' : '像素'}
-        </button>
-
-        <div className="w-px h-5 bg-border/60" />
-
         {/* Color picker */}
         <div className="flex items-center gap-1">
           {PEN_COLORS.map((c) => (
@@ -1011,51 +994,98 @@ export function WhiteboardCanvas() {
           </div>
         )}
 
-        <div className="w-px h-5 bg-border/60" />
+        <div className="flex-1" />
 
-        {/* Shape recognition toggle */}
-        <button
-          type="button"
-          onClick={() => setRecognize((r) => !r)}
-          className={cn(
-            'inline-flex items-center gap-1 h-7 px-2 rounded-md text-[11px] transition-colors',
-            recognize
-              ? 'bg-primary/15 text-primary'
-              : 'text-muted-foreground hover:bg-accent/60',
-          )}
-          aria-label="shape recognition"
-        >
-          <Shapes className="size-3.5" />
-          {recognize ? '识别开' : '识别关'}
-        </button>
-
-        <div className="w-px h-5 bg-border/60" />
-
-        {/* Background switcher */}
-        <div className="flex items-center gap-0.5 p-0.5 rounded-md bg-muted/40 border border-border/40">
-          {BACKGROUNDS.map(({ id, icon: Icon, label }) => (
+        {/* More tools: shapes, pixel mode, recognition, background, clear */}
+        <DropdownMenu>
+          <DropdownMenuTrigger asChild>
             <button
-              key={id}
               type="button"
-              onClick={() => {
-                setBackground(id);
-                inkRef.current?.setStyle({ background: id });
-              }}
+              aria-label="更多工具"
+              title="形状 / 像素 / 背景 / 清空"
               className={cn(
-                'grid place-items-center size-6 rounded transition-colors',
-                background === id
-                  ? 'bg-primary/15 text-primary'
+                'grid place-items-center size-7 rounded-md transition-colors',
+                shapeTool || pixelMode || background !== 'dot'
+                  ? 'text-primary bg-primary/10'
                   : 'text-muted-foreground hover:text-foreground hover:bg-accent/60',
               )}
-              aria-label={`background ${label}`}
-              title={label}
             >
-              <Icon className="size-3.5" />
+              <MoreHorizontal className="size-4" />
             </button>
-          ))}
-        </div>
+          </DropdownMenuTrigger>
+          <DropdownMenuContent align="end" className="w-52">
+            <DropdownMenuLabel className="text-[10px] uppercase tracking-wide text-muted-foreground">
+              形状工具
+            </DropdownMenuLabel>
+            {SHAPES.map(({ id, icon: Icon, label }) => (
+              <DropdownMenuItem
+                key={id}
+                onClick={() => selectShape(shapeTool === id ? null : id)}
+                className="gap-2 text-[11.5px]"
+              >
+                <Icon className="size-3.5" />
+                <span>{label}</span>
+                {shapeTool === id && <Check className="ml-auto size-3 text-primary" />}
+              </DropdownMenuItem>
+            ))}
 
-        <div className="flex-1" />
+            <DropdownMenuSeparator />
+            <DropdownMenuLabel className="text-[10px] uppercase tracking-wide text-muted-foreground">
+              画布
+            </DropdownMenuLabel>
+            <DropdownMenuItem
+              onClick={() => {
+                const next = !pixelMode;
+                setPixelMode(next);
+                selectShape(null);
+                selectTool('pen');
+                inkRef.current?.setStyle({ pixelMode: next });
+              }}
+              className="gap-2 text-[11.5px]"
+            >
+              <Grid2x2 className="size-3.5" />
+              <span>像素画</span>
+              {pixelMode && <Check className="ml-auto size-3 text-primary" />}
+            </DropdownMenuItem>
+            <DropdownMenuItem
+              onClick={() => setRecognize((r) => !r)}
+              className="gap-2 text-[11.5px]"
+            >
+              <Shapes className="size-3.5" />
+              <span>形状识别</span>
+              {recognize && <Check className="ml-auto size-3 text-primary" />}
+            </DropdownMenuItem>
+
+            <DropdownMenuSeparator />
+            <DropdownMenuLabel className="text-[10px] uppercase tracking-wide text-muted-foreground">
+              背景
+            </DropdownMenuLabel>
+            {BACKGROUNDS.map(({ id, icon: Icon, label }) => (
+              <DropdownMenuItem
+                key={id}
+                onClick={() => {
+                  setBackground(id);
+                  inkRef.current?.setStyle({ background: id });
+                }}
+                className="gap-2 text-[11.5px]"
+              >
+                <Icon className="size-3.5" />
+                <span>{label}</span>
+                {background === id && <Check className="ml-auto size-3 text-primary" />}
+              </DropdownMenuItem>
+            ))}
+
+            <DropdownMenuSeparator />
+            <DropdownMenuItem
+              onClick={handleClear}
+              disabled={empty}
+              className="gap-2 text-[11.5px] text-rose-500 focus:text-rose-500"
+            >
+              <Trash2 className="size-3.5" />
+              <span>清空画布</span>
+            </DropdownMenuItem>
+          </DropdownMenuContent>
+        </DropdownMenu>
 
         {/* Zoom controls */}
         <div className="flex items-center gap-0.5 p-0.5 rounded-md bg-muted/40 border border-border/40">
@@ -1106,15 +1136,6 @@ export function WhiteboardCanvas() {
           aria-label="redo"
         >
           <Redo2 className="size-3.5" />
-        </button>
-        <button
-          type="button"
-          onClick={handleClear}
-          disabled={empty}
-          className="grid place-items-center size-7 rounded-md text-muted-foreground hover:text-rose-500 hover:bg-rose-500/10 transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
-          aria-label="clear"
-        >
-          <Trash2 className="size-3.5" />
         </button>
         <button
           type="button"
@@ -1183,6 +1204,64 @@ export function WhiteboardCanvas() {
               className="pointer-events-auto rounded-full border border-border/60 px-1.5 py-0.5 text-[9.5px] hover:bg-accent hover:text-foreground"
             >
               手动输入
+            </button>
+          </div>
+        )}
+
+        {/* Selection actions: move is direct, scale/rotate/delete live here. */}
+        {selectedIds.length > 0 && (
+          <div
+            className="absolute bottom-3 left-3 z-20 flex items-center gap-0.5 rounded-full border border-border/60 bg-background/95 px-1.5 py-1 shadow-lg backdrop-blur"
+            onPointerDown={(e) => e.stopPropagation()}
+            onWheel={(e) => e.stopPropagation()}
+          >
+            <span className="px-1 text-[10px] text-muted-foreground">
+              已选 {selectedIds.length}
+            </span>
+            <button
+              type="button"
+              title="缩小 10%"
+              aria-label="缩小选区"
+              onClick={() => handleScaleSelection(0.9)}
+              className="grid size-6 place-items-center rounded-full text-muted-foreground hover:bg-accent hover:text-foreground"
+            >
+              <ZoomOut className="size-3.5" />
+            </button>
+            <button
+              type="button"
+              title="放大 10%"
+              aria-label="放大选区"
+              onClick={() => handleScaleSelection(1.1)}
+              className="grid size-6 place-items-center rounded-full text-muted-foreground hover:bg-accent hover:text-foreground"
+            >
+              <ZoomIn className="size-3.5" />
+            </button>
+            <button
+              type="button"
+              title="逆时针旋转 15°"
+              aria-label="逆时针旋转选区"
+              onClick={() => handleRotateSelection(-15)}
+              className="grid size-6 place-items-center rounded-full text-muted-foreground hover:bg-accent hover:text-foreground"
+            >
+              <RotateCcw className="size-3.5" />
+            </button>
+            <button
+              type="button"
+              title="顺时针旋转 15°"
+              aria-label="顺时针旋转选区"
+              onClick={() => handleRotateSelection(15)}
+              className="grid size-6 place-items-center rounded-full text-muted-foreground hover:bg-accent hover:text-foreground"
+            >
+              <RotateCw className="size-3.5" />
+            </button>
+            <button
+              type="button"
+              title="删除选中对象"
+              aria-label="删除选中对象"
+              onClick={handleDeleteSelected}
+              className="grid size-6 place-items-center rounded-full text-rose-500 hover:bg-rose-500/10"
+            >
+              <Trash2 className="size-3.5" />
             </button>
           </div>
         )}
