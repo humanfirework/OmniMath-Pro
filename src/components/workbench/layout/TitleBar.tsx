@@ -6,7 +6,7 @@
  * VSCode-style top bar (h-10) with glass background.
  *  - Left: animated teal Sigma logo + "OmniMath Pro" wordmark (text-gradient-teal)
  *          + i18n appSubtitle.
- *  - Center: File / Edit / View / Help menu buttons (open command palette).
+ *  - Center: File / Edit / View / Help menus with real dropdown actions.
  *  - Right: theme toggle (Sun/Moon, animated), language switcher (zh/EN),
  *           window controls (minimize / maximize / close, Tauri desktop only).
  *  View-mode switching lives in the ActivityBar (left icon rail) — not here.
@@ -26,7 +26,21 @@ import {
   Minimize2,
   FileCode2,
   SquareFunction,
+  FolderOpen,
+  Settings,
+  Github,
+  Play,
+  Eraser,
+  Sigma,
+  LayoutTemplate,
+  PanelRight,
+  PanelLeft,
+  Command as CommandIcon,
+  Keyboard,
+  Check,
+  Info,
 } from 'lucide-react';
+import { toast } from 'sonner';
 import { getCurrentWindow } from '@tauri-apps/api/window';
 import {
   Tooltip,
@@ -43,11 +57,12 @@ import {
 import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
 import { useWorkbenchStore } from '@/lib/store/workbench';
+import { useSettingsStore } from '@/lib/store/settingsStore';
 import { inTauri } from '@/lib/tauri';
 import { t, useLocale, setLocale, type Locale } from '@/lib/i18n';
 import pkg from '@/../package.json';
 
-const MENU_KEYS = ['menuFile', 'menuEdit', 'menuView', 'menuHelp'] as const;
+const GITHUB_URL = 'https://github.com/humanfirework/OmniMath-Pro';
 
 /** 双击 logo 的彩蛋：随机数学趣语 / 冷知识。 */
 const EASTER_EGGS = [
@@ -119,8 +134,33 @@ export function TitleBar() {
   const inputView = useWorkbenchStore((s) => s.inputView);
   const setInputView = useWorkbenchStore((s) => s.setInputView);
   const viewMode = useWorkbenchStore((s) => s.viewMode);
+  const setViewMode = useWorkbenchStore((s) => s.setViewMode);
   const editorVisible = useWorkbenchStore((s) => s.editorVisible);
+  const setEditorVisible = useWorkbenchStore((s) => s.setEditorVisible);
+  const previewVisible = useWorkbenchStore((s) => s.previewVisible);
+  const setPreviewVisible = useWorkbenchStore((s) => s.setPreviewVisible);
+  const sidePanelCollapsed = useWorkbenchStore((s) => s.sidePanelCollapsed);
+  const toggleSidePanel = useWorkbenchStore((s) => s.toggleSidePanel);
+  const setActiveSidePanel = useWorkbenchStore((s) => s.setActiveSidePanel);
+  const setEditorContent = useWorkbenchStore((s) => s.setEditorContent);
+  const setSettingsOpen = useSettingsStore((s) => s.setOpen);
+  const symbolPaletteOpen = useSettingsStore((s) => s.symbolPaletteOpen);
+  const setSymbolPaletteOpen = useSettingsStore((s) => s.setSymbolPaletteOpen);
   const showInputViewSwitch = viewMode === 'workbench' && editorVisible;
+
+  const menuTriggerClass =
+    'px-2.5 h-7 text-[12.5px] rounded-md text-muted-foreground hover:text-foreground hover:bg-accent/70 transition-colors';
+
+  /** 打开文件浏览器：回到工作台并展开文件侧栏。 */
+  const openFileExplorer = () => {
+    setViewMode('workbench');
+    setActiveSidePanel('files');
+  };
+
+  /** 运行当前脚本：由 EditorPanel 监听执行，避免这里耦合求值逻辑。 */
+  const runScript = () => {
+    window.dispatchEvent(new CustomEvent('omnimath:run-all'));
+  };
 
   // 仅在 Tauri 桌面壳内渲染窗口控制按钮。
   // 初始渲染一律为 false（SSR / 浏览器），挂载后再判定，
@@ -309,16 +349,127 @@ export function TitleBar() {
             </button>
           </div>
         )}
-        {MENU_KEYS.map((key) => (
-          <button
-            key={key}
-            type="button"
-            onClick={() => setCommandPaletteOpen(true)}
-            className="px-2.5 h-7 text-[12.5px] rounded-md text-muted-foreground hover:text-foreground hover:bg-accent/70 transition-colors"
-          >
-            {t(key)}
-          </button>
-        ))}
+        {/* ── 文件 ─────────────────────────────────────────────── */}
+        <DropdownMenu>
+          <DropdownMenuTrigger asChild>
+            <button type="button" className={menuTriggerClass}>{t('menuFile')}</button>
+          </DropdownMenuTrigger>
+          <DropdownMenuContent align="start" className="w-52">
+            <DropdownMenuItem className="gap-2 text-[12px]" onClick={openFileExplorer}>
+              <FolderOpen className="size-3.5 text-muted-foreground" />
+              {t('menuOpenFiles')}
+            </DropdownMenuItem>
+            <DropdownMenuItem className="gap-2 text-[12px]" onClick={() => setSettingsOpen(true)}>
+              <Settings className="size-3.5 text-muted-foreground" />
+              {t('settingsTitle')}
+            </DropdownMenuItem>
+            <DropdownMenuSeparator />
+            <DropdownMenuItem
+              className="gap-2 text-[12px]"
+              onClick={() => window.open(GITHUB_URL, '_blank', 'noopener,noreferrer')}
+            >
+              <Github className="size-3.5 text-muted-foreground" />
+              {t('menuGithub')}
+            </DropdownMenuItem>
+          </DropdownMenuContent>
+        </DropdownMenu>
+
+        {/* ── 编辑 ─────────────────────────────────────────────── */}
+        <DropdownMenu>
+          <DropdownMenuTrigger asChild>
+            <button type="button" className={menuTriggerClass}>{t('menuEdit')}</button>
+          </DropdownMenuTrigger>
+          <DropdownMenuContent align="start" className="w-56">
+            <DropdownMenuItem className="gap-2 text-[12px]" onClick={runScript}>
+              <Play className="size-3.5 text-muted-foreground" />
+              {t('cpRunAll')}
+              <span className="ml-auto text-[10px] text-muted-foreground/70">Ctrl+Enter</span>
+            </DropdownMenuItem>
+            <DropdownMenuItem
+              className="gap-2 text-[12px]"
+              onClick={() => setEditorContent('')}
+            >
+              <Eraser className="size-3.5 text-muted-foreground" />
+              {t('cpClearEditor')}
+            </DropdownMenuItem>
+            <DropdownMenuItem
+              className="gap-2 text-[12px]"
+              onClick={() => setSymbolPaletteOpen(!symbolPaletteOpen)}
+            >
+              <Sigma className="size-3.5 text-muted-foreground" />
+              {t('symbolPaletteToggle')}
+              {symbolPaletteOpen && <Check className="ml-auto size-3.5 text-primary" />}
+            </DropdownMenuItem>
+          </DropdownMenuContent>
+        </DropdownMenu>
+
+        {/* ── 视图 ─────────────────────────────────────────────── */}
+        <DropdownMenu>
+          <DropdownMenuTrigger asChild>
+            <button type="button" className={menuTriggerClass}>{t('menuView')}</button>
+          </DropdownMenuTrigger>
+          <DropdownMenuContent align="start" className="w-56">
+            <DropdownMenuItem className="gap-2 text-[12px]" onClick={toggleSidePanel}>
+              <PanelLeft className="size-3.5 text-muted-foreground" />
+              {sidePanelCollapsed ? t('abShowSidebar') : t('abHideSidebar')}
+              {!sidePanelCollapsed && <Check className="ml-auto size-3.5 text-primary" />}
+            </DropdownMenuItem>
+            <DropdownMenuItem
+              className="gap-2 text-[12px]"
+              onClick={() => setEditorVisible(!editorVisible)}
+            >
+              <LayoutTemplate className="size-3.5 text-muted-foreground" />
+              {t('abToggleEditor')}
+              {editorVisible && <Check className="ml-auto size-3.5 text-primary" />}
+            </DropdownMenuItem>
+            <DropdownMenuItem
+              className="gap-2 text-[12px]"
+              onClick={() => setPreviewVisible(!previewVisible)}
+            >
+              <PanelRight className="size-3.5 text-muted-foreground" />
+              {t('abTogglePreview')}
+              {previewVisible && <Check className="ml-auto size-3.5 text-primary" />}
+            </DropdownMenuItem>
+            <DropdownMenuSeparator />
+            <DropdownMenuItem className="gap-2 text-[12px]" onClick={toggleTheme}>
+              {theme === 'dark' ? (
+                <Sun className="size-3.5 text-muted-foreground" />
+              ) : (
+                <Moon className="size-3.5 text-muted-foreground" />
+              )}
+              {theme === 'dark' ? t('cpSwitchLight') : t('cpSwitchDark')}
+            </DropdownMenuItem>
+          </DropdownMenuContent>
+        </DropdownMenu>
+
+        {/* ── 帮助 ─────────────────────────────────────────────── */}
+        <DropdownMenu>
+          <DropdownMenuTrigger asChild>
+            <button type="button" className={menuTriggerClass}>{t('menuHelp')}</button>
+          </DropdownMenuTrigger>
+          <DropdownMenuContent align="start" className="w-56">
+            <DropdownMenuItem
+              className="gap-2 text-[12px]"
+              onClick={() => setCommandPaletteOpen(true)}
+            >
+              <CommandIcon className="size-3.5 text-muted-foreground" />
+              {t('menuCommandPalette')}
+              <span className="ml-auto text-[10px] text-muted-foreground/70">Ctrl+K</span>
+            </DropdownMenuItem>
+            <DropdownMenuItem className="gap-2 text-[12px]" onClick={() => setSettingsOpen(true)}>
+              <Keyboard className="size-3.5 text-muted-foreground" />
+              {t('menuShortcuts')}
+            </DropdownMenuItem>
+            <DropdownMenuSeparator />
+            <DropdownMenuItem
+              className="gap-2 text-[12px]"
+              onClick={() => toast(`OmniMath Pro v${pkg.version}`)}
+            >
+              <Info className="size-3.5 text-muted-foreground" />
+              {t('menuAbout')}
+            </DropdownMenuItem>
+          </DropdownMenuContent>
+        </DropdownMenu>
       </nav>
 
       {/* ── Right: actions ────────────────────────────────────────── */}

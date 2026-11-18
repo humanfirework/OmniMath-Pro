@@ -30,6 +30,8 @@ export interface TranslationDict {
   menuRedo: string;
   menuFind: string;
   menuCommandPalette: string;
+  menuOpenFiles: string;
+  menuGithub: string;
   menuToggleSidebar: string;
   menuTogglePreview: string;
   menuZoomIn: string;
@@ -1350,6 +1352,8 @@ const zhCN: TranslationDict = {
   menuRedo: "重做",
   menuFind: "查找",
   menuCommandPalette: "命令面板",
+  menuOpenFiles: "打开文件浏览器",
+  menuGithub: "GitHub 仓库",
   menuToggleSidebar: "切换侧栏",
   menuTogglePreview: "切换预览",
   menuZoomIn: "放大",
@@ -2659,6 +2663,8 @@ const en: TranslationDict = {
   menuRedo: "Redo",
   menuFind: "Find",
   menuCommandPalette: "Command Palette",
+  menuOpenFiles: "Open File Explorer",
+  menuGithub: "GitHub Repository",
   menuToggleSidebar: "Toggle Sidebar",
   menuTogglePreview: "Toggle Preview",
   menuZoomIn: "Zoom In",
