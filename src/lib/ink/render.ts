@@ -355,12 +355,17 @@ export function buildCachedStroke(stroke: InkStroke, background: string): Cached
 
   const maxWidth = pts.reduce((m, p) => Math.max(m, p.w ?? stroke.width), stroke.width);
   const path = buildInkOutline(pts, stroke.width);
+  const brush = stroke.brush ?? 'pen';
   return {
     source: stroke,
     bounds: strokeBounds(pts, maxWidth / 2 + 1),
     draw(ctx) {
+      ctx.save();
+      if (brush === 'highlighter') ctx.globalAlpha = 0.32;
+      else if (brush === 'marker') ctx.globalAlpha = 0.88;
       ctx.fillStyle = color;
       ctx.fill(path);
+      ctx.restore();
     },
   };
 }

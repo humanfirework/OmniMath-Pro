@@ -11,10 +11,12 @@ import {
   Download,
   Eraser,
   Grid2x2,
+  Highlighter,
   Lasso,
   Minus,
   MousePointer2,
   Pencil,
+  PenLine,
   Redo2,
   Shapes,
   Square,
@@ -28,7 +30,8 @@ import {
   PEN_ERASER_SIZES as ERASER_SIZES,
   PEN_WIDTHS as WIDTHS,
 } from '@/lib/ink/presets';
-import type { InkShapeId, InkTool } from '@/lib/ink/types';
+import type { InkBrush, InkShapeId, InkTool } from '@/lib/ink/types';
+import type { EraserMode } from '@/lib/ink/eraser';
 import { cn } from '@/lib/utils';
 
 const SHAPES: Array<{ id: InkShapeId; icon: typeof Minus; label: string }> = [
@@ -39,9 +42,19 @@ const SHAPES: Array<{ id: InkShapeId; icon: typeof Minus; label: string }> = [
   { id: 'axes', icon: Crosshair, label: '坐标' },
 ];
 
+const BRUSHES: Array<{ id: InkBrush; icon: typeof Pencil; label: string }> = [
+  { id: 'pen', icon: Pencil, label: '钢笔' },
+  { id: 'marker', icon: PenLine, label: '马克笔' },
+  { id: 'highlighter', icon: Highlighter, label: '荧光笔' },
+];
+
 export interface PenDockProps {
   tool: InkTool;
   onTool: (tool: InkTool) => void;
+  brush: InkBrush;
+  onBrush: (brush: InkBrush) => void;
+  eraserMode: EraserMode;
+  onEraserMode: (mode: EraserMode) => void;
   color: string;
   onColor: (color: string) => void;
   width: number;
@@ -140,6 +153,57 @@ export function PenDock(props: PenDockProps) {
               />
             ))}
           </div>
+
+          <div className="mt-3 flex items-center justify-between">
+            <span className="text-2xs text-muted-foreground">笔刷</span>
+            <div className="flex items-center gap-1">
+              {BRUSHES.map(({ id, icon: Icon, label }) => (
+                <button
+                  key={id}
+                  type="button"
+                  aria-label={label}
+                  title={label}
+                  onClick={() => props.onBrush(id)}
+                  className={cn(
+                    'grid size-8 place-items-center rounded-lg border transition-colors',
+                    props.tool === 'pen' && props.brush === id
+                      ? 'border-foreground/30 bg-accent text-foreground'
+                      : 'border-border/60 text-muted-foreground hover:bg-accent/60',
+                  )}
+                >
+                  <Icon className="size-4" />
+                </button>
+              ))}
+            </div>
+          </div>
+
+          {props.tool === 'eraser' && (
+            <div className="mt-3 flex items-center justify-between">
+              <span className="text-2xs text-muted-foreground">橡皮模式</span>
+              <div className="flex items-center gap-1">
+                {(
+                  [
+                    ['partial', '点擦'],
+                    ['stroke', '划擦'],
+                  ] as Array<[EraserMode, string]>
+                ).map(([mode, label]) => (
+                  <button
+                    key={mode}
+                    type="button"
+                    onClick={() => props.onEraserMode(mode)}
+                    className={cn(
+                      'h-8 rounded-lg border px-2 text-2xs transition-colors',
+                      props.eraserMode === mode
+                        ? 'border-foreground/30 bg-accent text-foreground'
+                        : 'border-border/60 text-muted-foreground hover:bg-accent/60',
+                    )}
+                  >
+                    {label}
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
 
           <div className="mt-3 flex items-center justify-between">
             <span className="text-2xs text-muted-foreground">

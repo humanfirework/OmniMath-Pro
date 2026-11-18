@@ -94,6 +94,7 @@ export class InkEngine {
   private style: InkStyle = {
     tool: 'pen',
     shapeTool: null,
+    brush: 'pen',
     color: '#0ea5e9',
     width: 4,
     eraserSize: 24,
@@ -882,20 +883,24 @@ export class InkEngine {
     const p = this.toWorld(e.clientX, e.clientY);
     const isEraser = this.style.tool === 'eraser';
     const isPixel = this.style.pixelMode && !isEraser && !this.style.shapeTool;
+    const brush = this.style.brush;
+    const scale = brush === 'highlighter' ? 3.2 : brush === 'marker' ? 1.8 : 1;
+    const baseWidth = isEraser ? this.style.eraserSize : this.style.width * scale;
 
     const point: InkPoint = {
       x: isPixel ? snapCell(p.x) : p.x,
       y: isPixel ? snapCell(p.y) : p.y,
       t: performance.now(),
-      w: isPixel ? PIXEL_CELL : this.pointWidth(e, isEraser),
+      w: isPixel ? PIXEL_CELL : this.pointWidth(e, baseWidth),
     };
 
     const stroke: InkStroke = {
       id: newInkId(),
       points: [point],
       color: this.style.color,
-      width: isEraser ? this.style.eraserSize : this.style.width,
+      width: baseWidth,
       style: isEraser ? 'eraser' : 'pen',
+      brush: isEraser ? undefined : brush,
       recognized: null,
       pixel: isPixel,
       shape: !isEraser && this.style.shapeTool ? this.style.shapeTool : undefined,
@@ -911,8 +916,7 @@ export class InkEngine {
     this.scheduleLive();
   }
 
-  private pointWidth(e: PointerEvent, isEraser: boolean): number {
-    const base = isEraser ? this.style.eraserSize : this.style.width;
+  private pointWidth(e: PointerEvent, base: number): number {
     if (e.pointerType === 'pen' && e.pressure > 0) {
       return clamp(base * (0.4 + e.pressure * 1.2), base * 0.35, base * 1.8);
     }

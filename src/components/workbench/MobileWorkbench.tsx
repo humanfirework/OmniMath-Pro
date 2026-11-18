@@ -9,12 +9,13 @@
  *  - Bottom: StatusBar
  */
 
-import { useState } from 'react';
+import { lazy, Suspense, useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
   Code2,
   Eye,
   PanelLeft,
+  PencilRuler,
 } from 'lucide-react';
 import { useWorkbenchStore } from '@/lib/store/workbench';
 import { TitleBar } from '@/components/workbench/layout/TitleBar';
@@ -24,13 +25,20 @@ import { SidePanel } from '@/components/workbench/layout/SidePanel';
 import { StatusBar } from '@/components/workbench/layout/StatusBar';
 import { cn } from '@/lib/utils';
 
-type MobileTab = 'editor' | 'preview' | 'side';
+type MobileTab = 'editor' | 'preview' | 'side' | 'canvas';
 
 const TABS: Array<{ id: MobileTab; icon: typeof Code2; label: string }> = [
   { id: 'side', icon: PanelLeft, label: '侧栏' },
   { id: 'editor', icon: Code2, label: '编辑器' },
+  { id: 'canvas', icon: PencilRuler, label: '画布' },
   { id: 'preview', icon: Eye, label: '预览' },
 ];
+
+const WhiteboardCanvas = lazy(() =>
+  import('@/components/workbench/whiteboard/WhiteboardCanvas').then((m) => ({
+    default: m.WhiteboardCanvas,
+  })),
+);
 
 export function MobileWorkbench() {
   const [tab, setTab] = useState<MobileTab>('editor');
@@ -52,6 +60,17 @@ export function MobileWorkbench() {
             {tab === 'editor' && <EditorPanel />}
             {tab === 'preview' && <PreviewPanel />}
             {tab === 'side' && <SidePanel />}
+            {tab === 'canvas' && (
+              <Suspense
+                fallback={
+                  <div className="grid h-full place-items-center text-xs text-muted-foreground">
+                    加载画布…
+                  </div>
+                }
+              >
+                <WhiteboardCanvas />
+              </Suspense>
+            )}
           </motion.div>
         </AnimatePresence>
       </div>

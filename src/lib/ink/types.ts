@@ -18,6 +18,8 @@ export type InkRecognized = 'circle' | 'rectangle' | 'triangle' | 'line' | null;
 
 export type InkShapeId = 'line' | 'rect' | 'triangle' | 'circle' | 'axes';
 
+export type InkBrush = 'pen' | 'marker' | 'highlighter';
+
 /** 与旧白板 Stroke 字段一一对应，方便直接投影。 */
 export interface InkStroke {
   id: string;
@@ -25,6 +27,8 @@ export interface InkStroke {
   color: string;
   width: number;
   style: 'pen' | 'eraser';
+  /** 笔刷类型：钢笔 / 马克笔 / 荧光笔。旧数据没有该字段时按 pen 处理。 */
+  brush?: InkBrush;
   recognized?: InkRecognized;
   pixel?: boolean;
   shape?: InkShapeId;
@@ -56,6 +60,7 @@ export const MAX_VIEW_K = 8;
 export interface InkStyle {
   tool: InkTool;
   shapeTool: InkShapeId | null;
+  brush: InkBrush;
   color: string;
   width: number;
   eraserSize: number;

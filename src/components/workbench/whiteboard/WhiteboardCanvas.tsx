@@ -44,6 +44,8 @@ import {
   Maximize2,
   MousePointer2,
   Lasso,
+  Highlighter,
+  PenLine,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { t, useLocale } from '@/lib/i18n';
@@ -52,7 +54,8 @@ import { PenDock } from './PenDock';
 import { useCoarsePointer } from '@/hooks/use-coarse-pointer';
 import { PEN_COLORS, PEN_ERASER_SIZES, PEN_WIDTHS } from '@/lib/ink/presets';
 import { hitTestInk, translateInk } from '@/lib/ink/hitTest';
-import type { InkStroke, InkView } from '@/lib/ink/types';
+import { applyEraser, type EraserMode } from '@/lib/ink/eraser';
+import type { InkBrush, InkStroke, InkView } from '@/lib/ink/types';
 
 type Tool = 'pen' | 'eraser' | 'select' | 'lasso';
 type Background = 'dot' | 'grid' | 'ruled' | 'blank';
@@ -164,80 +167,6 @@ function minMax(values: number[]): [number, number] {
   return [min, max];
 }
 
-/**
- * 判断一点是否落在橡皮「扫过区域」半径 r 内。
- * 同时检查橡皮的每个点以及相邻点之间的线段（橡皮移动快、事件稀疏时，
- * 相邻橡皮点之间可能隔很远，若只查点会漏掉中间细线，导致「擦不干净」）。
- */
-function pointHit(p: Point, eraser: Stroke, r: number): boolean {
-  const pts = eraser.points;
-  for (let i = 0; i < pts.length; i++) {
-    if (Math.hypot(pts[i].x - p.x, pts[i].y - p.y) <= r) return true;
-  }
-  for (let i = 0; i < pts.length - 1; i++) {
-    if (pointToSegmentDist(p, pts[i], pts[i + 1]) <= r) return true;
-  }
-  return false;
-}
-
-/**
- * 应用橡皮效果：
- *  - 像素画笔画 → 擦除被橡皮覆盖的像素格。
- *  - 已识别/图形（rect/circle/triangle 等整体线条）→ 整体擦除（防止拆散标准形）。
- *  - 自由笔迹 → 沿橡皮路径切断，实现「部分擦除」。
- *
- * 返回 { next, changed }：changed 表示是否真的删除了内容。
- * 早期实现仅靠「笔画数量是否变化」判断，导致只擦掉笔画末端时
- * （仍为一段、数量不变）不提交，出现「擦不掉」的 bug，现改为按点数比较。
- */
-function applyEraser(strokes: Stroke[], eraser: Stroke): { next: Stroke[]; changed: boolean } {
-  const r = eraser.width / 2;
-  const result: Stroke[] = [];
-  let changed = false;
-  for (const s of strokes) {
-    if (s.style === 'eraser' || s.points.length === 0) continue;
-    // 像素画：移除被覆盖的格子。
-    if (s.pixel) {
-      const kept = s.points.filter((p) => !pointHit({ x: p.x + PIXEL_CELL / 2, y: p.y + PIXEL_CELL / 2 }, eraser, r));
-      if (kept.length !== s.points.length) changed = true;
-      if (kept.length) result.push({ ...s, points: kept });
-      continue;
-    }
-    // 标准形 / 图形工具：整体擦除。
-    if (s.recognized || s.shape) {
-      if (s.points.some((p) => pointHit(p, eraser, r))) {
-        changed = true;
-      } else {
-        result.push(s);
-      }
-      continue;
-    }
-    // 自由笔迹：切断成若干不相交片段。
-    const pts = s.points;
-    const segments: Point[][] = [];
-    let seg: Point[] = [];
-    let removed = 0;
-    for (const p of pts) {
-      if (pointHit(p, eraser, r)) {
-        removed++;
-        if (seg.length) {
-          segments.push(seg);
-          seg = [];
-        }
-      } else {
-        seg.push(p);
-      }
-    }
-    if (seg.length) segments.push(seg);
-    if (removed > 0) changed = true;
-    for (const pseg of segments) {
-      if (pseg.length === 0) continue;
-      result.push({ ...s, id: makeId(), points: pseg });
-    }
-  }
-  return { next: result, changed };
-}
-
 /** Heuristic shape recognition. */
 function recognizeShape(points: Point[]): Stroke['recognized'] {
   if (points.length < 4) {
@@ -345,6 +274,8 @@ export function WhiteboardCanvas() {
   redoStackRef.current = redoStack;
 
   const [tool, setTool] = useState<Tool>('pen');
+  const [brush, setBrush] = useState<InkBrush>('pen');
+  const [eraserMode, setEraserMode] = useState<EraserMode>('partial');
   const [color, setColor] = useState<string>(PEN_COLORS[0]);
   const [width, setWidth] = useState<number>(PEN_WIDTHS[1]);
   const [recognize, setRecognize] = useState<boolean>(false);
@@ -407,13 +338,13 @@ export function WhiteboardCanvas() {
 
   const handleEraseEnd = useCallback(
     (stroke: InkStroke): boolean => {
-      const { next, changed } = applyEraser(strokesRef.current, stroke);
+      const { next, changed } = applyEraser(strokesRef.current, stroke, eraserMode);
       if (!changed) return false;
       commitStrokes(next);
       setSelectedIds([]);
       return true;
     },
-    [commitStrokes],
+    [commitStrokes, eraserMode],
   );
 
   const handleSelect = useCallback((ids: string[]) => {
@@ -445,13 +376,25 @@ export function WhiteboardCanvas() {
   const selectTool = useCallback((next: Tool) => {
     setShapeTool(null);
     setTool(next);
-    inkRef.current?.setStyle({ tool: next, shapeTool: null });
+    if (next === 'pen') {
+      setBrush('pen');
+      inkRef.current?.setStyle({ tool: next, shapeTool: null, brush: 'pen' });
+    } else {
+      inkRef.current?.setStyle({ tool: next, shapeTool: null });
+    }
   }, []);
 
   const selectShape = useCallback((next: ShapeId | null) => {
     setShapeTool(next);
     setTool('pen');
     inkRef.current?.setStyle({ tool: 'pen', shapeTool: next });
+  }, []);
+
+  const selectBrush = useCallback((next: InkBrush) => {
+    setBrush(next);
+    setTool('pen');
+    setShapeTool(null);
+    inkRef.current?.setStyle({ tool: 'pen', brush: next, shapeTool: null });
   }, []);
 
   const handleUndo = useCallback(() => {
@@ -587,13 +530,41 @@ export function WhiteboardCanvas() {
           onClick={() => selectTool('pen')}
           className={cn(
             'grid place-items-center size-7 rounded-md transition-colors',
-            toolBtn.pen && !shapeTool
+            toolBtn.pen && !shapeTool && brush === 'pen'
               ? 'bg-primary/15 text-primary'
               : 'text-muted-foreground hover:text-foreground hover:bg-accent/60',
           )}
           aria-label="pen"
         >
           <Pencil className="size-3.5" />
+        </button>
+        <button
+          type="button"
+          onClick={() => selectBrush('marker')}
+          className={cn(
+            'grid place-items-center size-7 rounded-md transition-colors',
+            tool === 'pen' && brush === 'marker' && !shapeTool
+              ? 'bg-primary/15 text-primary'
+              : 'text-muted-foreground hover:text-foreground hover:bg-accent/60',
+          )}
+          aria-label="marker"
+          title="马克笔"
+        >
+          <PenLine className="size-3.5" />
+        </button>
+        <button
+          type="button"
+          onClick={() => selectBrush('highlighter')}
+          className={cn(
+            'grid place-items-center size-7 rounded-md transition-colors',
+            tool === 'pen' && brush === 'highlighter' && !shapeTool
+              ? 'bg-primary/15 text-primary'
+              : 'text-muted-foreground hover:text-foreground hover:bg-accent/60',
+          )}
+          aria-label="highlighter"
+          title="荧光笔"
+        >
+          <Highlighter className="size-3.5" />
         </button>
         <button
           type="button"
@@ -686,6 +657,28 @@ export function WhiteboardCanvas() {
         {/* Width / Eraser size */}
         {tool === 'eraser' && !shapeTool ? (
           <div className="flex items-center gap-1">
+            <div className="flex items-center gap-0.5 p-0.5 rounded-md border border-border/40 bg-muted/30">
+              {(
+                [
+                  ['partial', '点擦'],
+                  ['stroke', '划擦'],
+                ] as Array<[EraserMode, string]>
+              ).map(([mode, label]) => (
+                <button
+                  key={mode}
+                  type="button"
+                  onClick={() => setEraserMode(mode)}
+                  className={cn(
+                    'h-6 rounded px-1.5 text-[10px] transition-colors',
+                    eraserMode === mode
+                      ? 'bg-primary/15 text-primary'
+                      : 'text-muted-foreground hover:bg-accent/60',
+                  )}
+                >
+                  {label}
+                </button>
+              ))}
+            </div>
             {PEN_ERASER_SIZES.map((s) => (
               <button
                 key={s}
@@ -866,6 +859,7 @@ export function WhiteboardCanvas() {
           strokes={strokes}
           tool={tool}
           shapeTool={shapeTool}
+          brush={brush}
           color={color}
           width={width}
           eraserSize={eraserSize}
@@ -884,6 +878,10 @@ export function WhiteboardCanvas() {
           <PenDock
             tool={tool}
             onTool={selectTool}
+            brush={brush}
+            onBrush={selectBrush}
+            eraserMode={eraserMode}
+            onEraserMode={setEraserMode}
             color={color}
             onColor={(c) => {
               setColor(c);
@@ -945,7 +943,17 @@ export function WhiteboardCanvas() {
       <div className="shrink-0 flex items-center justify-between px-3 py-1 border-t border-border/60 bg-card/30 text-[11px] text-muted-foreground">
         <span>
           {strokes.length} 笔 ·{' '}
-          {tool === 'pen' ? '钢笔' : tool === 'eraser' ? '橡皮' : tool === 'lasso' ? '套圈' : '选择'}
+          {tool === 'pen'
+            ? brush === 'highlighter'
+              ? '荧光笔'
+              : brush === 'marker'
+                ? '马克笔'
+                : '钢笔'
+            : tool === 'eraser'
+              ? `橡皮/${eraserMode === 'stroke' ? '划擦' : '点擦'}`
+              : tool === 'lasso'
+                ? '套圈'
+                : '选择'}
           {selectedIds.length > 0 ? ` · 已选 ${selectedIds.length}` : ''} · 识别{' '}
           {recognize ? '开' : '关'} · 背景 {BACKGROUNDS.find((b) => b.id === background)?.label}
         </span>

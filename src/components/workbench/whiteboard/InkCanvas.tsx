@@ -9,6 +9,7 @@ import { forwardRef, useEffect, useImperativeHandle, useLayoutEffect, useRef } f
 import { InkEngine } from '@/lib/ink/engine';
 import type {
   InkBackground,
+  InkBrush,
   InkShapeId,
   InkStroke,
   InkStyle,
@@ -28,6 +29,7 @@ export interface InkCanvasProps {
   strokes: InkStroke[];
   tool: InkTool;
   shapeTool: InkShapeId | null;
+  brush: InkBrush;
   color: string;
   width: number;
   eraserSize: number;
@@ -69,6 +71,7 @@ export const InkCanvas = forwardRef<InkCanvasHandle, InkCanvasProps>(function In
     const style: InkStyle = {
       tool: propsRef.current.tool,
       shapeTool: propsRef.current.shapeTool,
+      brush: propsRef.current.brush,
       color: propsRef.current.color,
       width: propsRef.current.width,
       eraserSize: propsRef.current.eraserSize,
@@ -89,6 +92,7 @@ export const InkCanvas = forwardRef<InkCanvasHandle, InkCanvasProps>(function In
     strokes,
     tool,
     shapeTool,
+    brush,
     color,
     width,
     eraserSize,
@@ -105,13 +109,14 @@ export const InkCanvas = forwardRef<InkCanvasHandle, InkCanvasProps>(function In
     engineRef.current?.setStyle({
       tool,
       shapeTool,
+      brush,
       color,
       width,
       eraserSize,
       pixelMode,
       background,
     });
-  }, [tool, shapeTool, color, width, eraserSize, pixelMode, background]);
+  }, [tool, shapeTool, brush, color, width, eraserSize, pixelMode, background]);
 
   useLayoutEffect(() => {
     engineRef.current?.setSelected(selectedIds);
