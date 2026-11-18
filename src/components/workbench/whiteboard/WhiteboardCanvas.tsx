@@ -1332,8 +1332,8 @@ export function WhiteboardCanvas() {
       </div>
 
       {/* Status bar */}
-      <div className="shrink-0 flex items-center justify-between px-3 py-1 border-t border-border/60 bg-card/30 text-[11px] text-muted-foreground">
-        <span>
+      <div className="shrink-0 flex items-center justify-between gap-2 px-3 py-1 border-t border-border/60 bg-card/30 text-[11px] text-muted-foreground">
+        <span className="min-w-0 truncate">
           {strokes.length} 笔 ·{' '}
           {tool === 'pen'
             ? brush === 'highlighter'
@@ -1351,7 +1351,9 @@ export function WhiteboardCanvas() {
           {mathMode ? ' · 数学模式（停笔 1 秒识别）' : ''}
           {mathCards.length > 0 ? ` · ${mathCards.length} 个结果卡` : ''}
         </span>
-        <span>提示：数学模式下可手写算式或 y=x³，结果卡可拖动、图上滚轮缩放</span>
+        <span className="hidden shrink-0 sm:block">
+          提示：数学模式下可手写算式或 y=x³，结果卡可拖动、图上滚轮缩放
+        </span>
       </div>
     </div>
   );

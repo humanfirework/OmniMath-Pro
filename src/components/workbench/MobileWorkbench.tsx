@@ -22,7 +22,6 @@ import { TitleBar } from '@/components/workbench/layout/TitleBar';
 import { EditorPanel } from '@/components/workbench/layout/EditorPanel';
 import { PreviewPanel } from '@/components/workbench/layout/PreviewPanel';
 import { SidePanel } from '@/components/workbench/layout/SidePanel';
-import { StatusBar } from '@/components/workbench/layout/StatusBar';
 import { cn } from '@/lib/utils';
 
 type MobileTab = 'editor' | 'preview' | 'side' | 'canvas';
@@ -95,7 +94,8 @@ export function MobileWorkbench() {
         ))}
       </div>
 
-      <StatusBar />
+      {/* Status bar removed on phones: the tab bar already carries navigation,
+          and the extra 24px row wrapped into the tabs on narrow screens. */}
     </div>
   );
 }

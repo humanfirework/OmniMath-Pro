@@ -1248,7 +1248,7 @@ export function FloatingCalculator() {
           // approaches (hover jitter), so it becomes nearly impossible to grab.
           // Only a shadow/color hover is used for feedback.
           'transition-[box-shadow,colors,background-color] duration-200 hover:shadow-xl hover:bg-primary/90',
-          fabPosition.x === -1 ? 'bottom-4 right-4' : 'left-0 top-0',
+          fabPosition.x === -1 ? 'bottom-4 max-md:bottom-32 right-4' : 'left-0 top-0',
           fabDragging ? 'cursor-grabbing' : 'cursor-grab'
         )}
         style={fabPosition.x === -1 ? undefined : { transform: `translate3d(${fabPosition.x}px, ${fabPosition.y}px, 0)` }}
