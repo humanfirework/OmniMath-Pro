@@ -63,6 +63,7 @@ import {
 } from '@/components/ui/dropdown-menu';
 import { cn } from '@/lib/utils';
 import { t, useLocale } from '@/lib/i18n';
+import { useSettingsStore } from '@/lib/store/settingsStore';
 import { InkCanvas, type InkCanvasHandle } from './InkCanvas';
 import { PenDock } from './PenDock';
 import { useCoarsePointer } from '@/hooks/use-coarse-pointer';
@@ -225,14 +226,20 @@ export function WhiteboardCanvas() {
   redoStackRef.current = redoStack;
 
   const [tool, setTool] = useState<Tool>('pen');
-  const [brush, setBrush] = useState<InkBrush>('pen');
   const [eraserMode, setEraserMode] = useState<EraserMode>('partial');
-  const [color, setColor] = useState<string>(PEN_COLORS[0]);
-  const [width, setWidth] = useState<number>(PEN_WIDTHS[1]);
+  // 笔刷 / 颜色 / 线宽 / 识别开关 / 数学模式都跨会话保留：
+  // 用户挑好的笔不该每次进白板都被重置。
+  const brush = useSettingsStore((s) => s.whiteboardBrush);
+  const setBrush = useSettingsStore((s) => s.setWhiteboardBrush);
+  const color = useSettingsStore((s) => s.whiteboardColor);
+  const setColor = useSettingsStore((s) => s.setWhiteboardColor);
+  const width = useSettingsStore((s) => s.whiteboardWidth);
+  const setWidth = useSettingsStore((s) => s.setWhiteboardWidth);
   // 形状识别默认开启：画布空状态明确写着「圆、矩形、三角形和直线会被
   // 自动识别」，默认关闭会让用户以为功能失效。识别只是给笔迹打标签并在
   // 渲染时美化，不会改变笔迹的几何语义，可随时在「更多」里关闭。
-  const [recognize, setRecognize] = useState<boolean>(true);
+  const recognize = useSettingsStore((s) => s.whiteboardRecognize);
+  const setRecognize = useSettingsStore((s) => s.setWhiteboardRecognize);
   const [pixelMode, setPixelMode] = useState<boolean>(false);
   const [eraserSize, setEraserSize] = useState<number>(PEN_ERASER_SIZES[1]);
   const [shapeTool, setShapeTool] = useState<ShapeId | null>(null);
@@ -250,7 +257,8 @@ export function WhiteboardCanvas() {
     }
   });
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
-  const [mathMode, setMathMode] = useState(false);
+  const mathMode = useSettingsStore((s) => s.whiteboardMathMode);
+  const setMathMode = useSettingsStore((s) => s.setWhiteboardMathMode);
   const [mathDraft, setMathDraft] = useState<MathNoteDraft | null>(null);
   const [mathCards, setMathCards] = useState<MathCard[]>(loadMathCards);
   const [latencyProbe, setLatencyProbeOn] = useState(false);
@@ -1009,7 +1017,7 @@ export function WhiteboardCanvas() {
               {pixelMode && <Check className="ml-auto size-3 text-primary" />}
             </DropdownMenuItem>
             <DropdownMenuItem
-              onClick={() => setRecognize((r) => !r)}
+              onClick={() => setRecognize(!recognize)}
               className="gap-2 text-[11.5px]"
             >
               <Shapes className="size-3.5" />

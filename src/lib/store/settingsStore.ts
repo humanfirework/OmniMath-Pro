@@ -4,6 +4,7 @@
 // 持久化到 localStorage，键名 omnimath-settings-v1
 
 import { create } from 'zustand';
+import type { InkBrush } from '@/lib/ink/types';
 
 interface SettingsState {
   /** 设置面板是否打开 */
@@ -29,6 +30,18 @@ interface SettingsState {
   editorFontSize: number;
   /** 坐标轴字号（px，8–24），默认 12 */
   plotAxisFontSize: number;
+
+  /* 白板偏好（跨会话保留，避免每次进来都重置成默认笔） */
+  /** 当前笔色 */
+  whiteboardColor: string;
+  /** 当前笔刷 */
+  whiteboardBrush: InkBrush;
+  /** 线宽（px） */
+  whiteboardWidth: number;
+  /** 形状识别开关 */
+  whiteboardRecognize: boolean;
+  /** 数学识别模式 */
+  whiteboardMathMode: boolean;
 
   /* 高级设置（结构化表单，原 JSON 编辑的替代） */
   /** 2D 曲线采样点数（100–2000），默认 800（对应 plot2dAnalysis 的 steps 默认值） */
@@ -64,6 +77,11 @@ interface SettingsState {
   setActivityBarCompact: (v: boolean) => void;
   setEditorFontSize: (size: number) => void;
   setPlotAxisFontSize: (size: number) => void;
+  setWhiteboardColor: (color: string) => void;
+  setWhiteboardBrush: (brush: InkBrush) => void;
+  setWhiteboardWidth: (width: number) => void;
+  setWhiteboardRecognize: (v: boolean) => void;
+  setWhiteboardMathMode: (v: boolean) => void;
 
   setAdvancedPlotSamples: (n: number) => void;
   setAdvancedPlot3dResolution: (n: number) => void;
@@ -123,6 +141,11 @@ interface PersistedSettings {
   slidersCollapsed?: boolean;
   symbolPaletteOpen?: boolean;
   symbolCategoryOrder?: string[];
+  whiteboardColor?: string;
+  whiteboardBrush?: InkBrush;
+  whiteboardWidth?: number;
+  whiteboardRecognize?: boolean;
+  whiteboardMathMode?: boolean;
 }
 
 /** 高级区各项默认值（resetAdvanced / resetToDefaults 共用） */
@@ -157,6 +180,11 @@ export const useSettingsStore = create<SettingsState>((set, get) => ({
   ...ADVANCED_DEFAULTS,
   slidersCollapsed: false,
   symbolCategoryOrder: [...DEFAULT_SYMBOL_CATEGORY_ORDER],
+  whiteboardColor: '#0ea5e9',
+  whiteboardBrush: 'pen',
+  whiteboardWidth: 4,
+  whiteboardRecognize: true,
+  whiteboardMathMode: false,
 
   setOpen: (v) => set({ open: v }),
   toggleOpen: () => set((s) => ({ open: !s.open })),
@@ -194,6 +222,28 @@ export const useSettingsStore = create<SettingsState>((set, get) => ({
   },
   setPlotAxisFontSize: (size) => {
     set({ plotAxisFontSize: clampInt(size, 8, 24) });
+    get().saveToStorage();
+  },
+  setWhiteboardColor: (color) => {
+    if (typeof color !== 'string' || color.length === 0 || color.length > 32) return;
+    set({ whiteboardColor: color });
+    get().saveToStorage();
+  },
+  setWhiteboardBrush: (brush) => {
+    if (brush !== 'pen' && brush !== 'marker' && brush !== 'highlighter') return;
+    set({ whiteboardBrush: brush });
+    get().saveToStorage();
+  },
+  setWhiteboardWidth: (width) => {
+    set({ whiteboardWidth: clampInt(width, 1, 32) });
+    get().saveToStorage();
+  },
+  setWhiteboardRecognize: (v) => {
+    set({ whiteboardRecognize: v });
+    get().saveToStorage();
+  },
+  setWhiteboardMathMode: (v) => {
+    set({ whiteboardMathMode: v });
     get().saveToStorage();
   },
 
@@ -269,6 +319,11 @@ export const useSettingsStore = create<SettingsState>((set, get) => ({
           slidersCollapsed: s.slidersCollapsed,
           symbolPaletteOpen: s.symbolPaletteOpen,
           symbolCategoryOrder: s.symbolCategoryOrder,
+          whiteboardColor: s.whiteboardColor,
+          whiteboardBrush: s.whiteboardBrush,
+          whiteboardWidth: s.whiteboardWidth,
+          whiteboardRecognize: s.whiteboardRecognize,
+          whiteboardMathMode: s.whiteboardMathMode,
         };
         localStorage.setItem(SETTINGS_KEY, JSON.stringify(payload));
       } catch {
@@ -355,6 +410,21 @@ export const useSettingsStore = create<SettingsState>((set, get) => ({
         }
         set({ symbolCategoryOrder: valid });
       }
+      if (typeof data.whiteboardColor === 'string' && data.whiteboardColor.length > 0 && data.whiteboardColor.length <= 32) {
+        set({ whiteboardColor: data.whiteboardColor });
+      }
+      if (data.whiteboardBrush === 'pen' || data.whiteboardBrush === 'marker' || data.whiteboardBrush === 'highlighter') {
+        set({ whiteboardBrush: data.whiteboardBrush });
+      }
+      if (typeof data.whiteboardWidth === 'number' && data.whiteboardWidth >= 1 && data.whiteboardWidth <= 32) {
+        set({ whiteboardWidth: Math.round(data.whiteboardWidth) });
+      }
+      if (typeof data.whiteboardRecognize === 'boolean') {
+        set({ whiteboardRecognize: data.whiteboardRecognize });
+      }
+      if (typeof data.whiteboardMathMode === 'boolean') {
+        set({ whiteboardMathMode: data.whiteboardMathMode });
+      }
     } catch {
       // ignore parse errors
     }
@@ -373,6 +443,11 @@ export const useSettingsStore = create<SettingsState>((set, get) => ({
       slidersCollapsed: false,
       symbolPaletteOpen: false,
       symbolCategoryOrder: [...DEFAULT_SYMBOL_CATEGORY_ORDER],
+      whiteboardColor: '#0ea5e9',
+      whiteboardBrush: 'pen',
+      whiteboardWidth: 4,
+      whiteboardRecognize: true,
+      whiteboardMathMode: false,
     });
     get().saveToStorage();
   },
