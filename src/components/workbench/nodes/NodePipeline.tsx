@@ -583,10 +583,15 @@ function fitViewFor(
   const pad = 64;
   const availW = Math.max(canvasSize.w - pad * 2, 100);
   const availH = Math.max(canvasSize.h - pad * 2, 100);
-  const scale = Math.min(2, Math.max(0.4, Math.min(availW / bboxW, availH / bboxH)));
-  // Center the bbox in the canvas.
-  const x = (canvasSize.w - bboxW * scale) / 2 - minX * scale;
-  const y = (canvasSize.h - bboxH * scale) / 2 - minY * scale;
+  // 最小缩放 0.5：低于此值节点标题与结果已经不可读，宁可让用户横向平移，
+  // 也不要为了「全部塞进视口」把整张图缩成缩略图。
+  const scale = Math.min(2, Math.max(0.5, Math.min(availW / bboxW, availH / bboxH)));
+  // Center when it fits; otherwise anchor to the top-left padding so the
+  // first nodes stay visible (the rest can be reached by panning).
+  const scaledW = bboxW * scale;
+  const scaledH = bboxH * scale;
+  const x = scaledW <= availW ? (canvasSize.w - scaledW) / 2 - minX * scale : pad - minX * scale;
+  const y = scaledH <= availH ? (canvasSize.h - scaledH) / 2 - minY * scale : pad - minY * scale;
   return { x, y, scale };
 }
 
@@ -3068,8 +3073,10 @@ function NodeCard({
   // hooks. cardRef stays unattached for error cards, so the glow effect
   // is a no-op there.
   const cardRef = useRef<HTMLDivElement>(null);
-  // P1-3 最小暴露：可折叠配置面板。折叠后仅保留端口与标题，隐藏配置/结果区。
-  const [collapsed, setCollapsed] = useState(false);
+  // P1-3 最小暴露：可折叠配置面板。折叠后仅保留端口、标题与结果；
+  // 配置项多的节点（视觉/仿真等）默认折叠，画布先呈现「结构 + 结果」，
+  // 需要调参时再展开，避免每张卡片都摊开一整墙控件。
+  const [collapsed, setCollapsed] = useState((def?.configSchema?.length ?? 0) > 2);
 
   // Compute-pulse glow: re-trigger on computeTick bump via direct DOM
   // manipulation (avoids setState-in-effect lint error).
@@ -3202,7 +3209,7 @@ function NodeCard({
             onClick={(e) => { e.stopPropagation(); setCollapsed((c) => !c); }}
             className={cn(
               'size-5 grid place-items-center rounded text-muted-foreground hover:text-foreground hover:bg-accent transition-all',
-              selected ? 'opacity-100' : 'opacity-0 group-hover:opacity-100',
+              collapsed || selected ? 'opacity-100' : 'opacity-0 group-hover:opacity-100',
             )}
             aria-label={collapsed ? t('pipelineExpand') : t('pipelineCollapse')}
           >
@@ -3285,17 +3292,15 @@ function NodeCard({
           这里显示 "依赖: a, b"。让用户直观看到节点和变量的联动关系。 */}
       {!collapsed && <NodeDependencyBadge node={node} variables={variables} />}
 
-      {/* Result footer */}
-      {!collapsed && (
-        <div
-          className={cn(
-            'border-t border-border/60 px-3 py-2 grid place-items-center min-h-[58px]',
-            node.error ? 'bg-destructive/8' : 'bg-primary/5',
-          )}
-        >
-          <NodeResultFooter node={node} onPlotOpen={onPlotOpen} />
-        </div>
-      )}
+      {/* Result footer —— 折叠时仍保留：画布上先看到「结构 + 最近结果」 */}
+      <div
+        className={cn(
+          'border-t border-border/60 px-3 py-2 grid place-items-center min-h-[58px]',
+          node.error ? 'bg-destructive/8' : 'bg-primary/5',
+        )}
+      >
+        <NodeResultFooter node={node} onPlotOpen={onPlotOpen} />
+      </div>
     </motion.div>
   );
 }
