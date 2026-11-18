@@ -10,7 +10,6 @@ import {
   Maximize2, Minimize2, ChevronRight,
   Download,
 } from 'lucide-react';
-import { evaluateExpression, math } from '@/lib/engine';
 import { cn } from '@/lib/utils';
 import { useT } from '@/lib/i18n';
 import { saveTextToFile } from '@/lib/nativeExport';
@@ -761,7 +760,7 @@ export function FloatingCalculator() {
     }
   }, [display, expression, justEvaluated, clearAll]);
 
-  const evaluate = useCallback(() => {
+  const evaluate = useCallback(async () => {
     try {
       // Auto-close any unclosed parentheses so `cos(π` (user hit `=` without
       // typing the closing paren) evaluates as `cos(π)` instead of throwing a
@@ -774,6 +773,9 @@ export function FloatingCalculator() {
         else if (ch === ')') depth = Math.max(0, depth - 1);
       }
       const expr = depth > 0 ? raw + ')'.repeat(depth) : raw;
+      // 引擎（mathjs）按需加载：计算器按钮在首屏就可见，但用户真正按下
+      // 「=」之前不需要下载 1.4 MB 的求值引擎。
+      const { evaluateExpression } = await import('@/lib/engine');
       const r = evaluateExpression(expr, 'simple');
       if (r.success) {
         lastResultRef.current = r.result;
@@ -859,10 +861,11 @@ export function FloatingCalculator() {
   }, [display, expression, justEvaluated]);
 
   // Compute factorial of current display value using math.factorial
-  const computeFactorial = useCallback(() => {
+  const computeFactorial = useCallback(async () => {
     try {
       const val = parseFloat(display);
       if (!isNaN(val) && val >= 0 && Number.isInteger(val) && val <= 170) {
+        const { math } = await import('@/lib/engine');
         const result = math.factorial(val);
         const resultStr = result.toString();
         setDisplay(resultStr);
@@ -1125,10 +1128,11 @@ export function FloatingCalculator() {
     return data;
   };
 
-  const runMatrixOp = useCallback((op: MatrixOp) => {
+  const runMatrixOp = useCallback(async (op: MatrixOp) => {
     try {
       setMatrixError('');
       const m = buildMatrix(matrixSize);
+      const { math } = await import('@/lib/engine');
       const mathMatrix = math.matrix(m);
       switch (op) {
         case 'det': {

@@ -19,6 +19,7 @@ import type { InputMode } from './types';
 import { normalizeSymbols } from './symbols';
 import { preprocessForMode } from './parser';
 import { math } from './mathInstance';
+import { getResultPrecision } from './formatDefaults';
 
 /* LaTeX conversion only ever PARSES expressions (`math.parse(...).toTex`)
  * and formats values (`math.format`) — it never evaluates with a scope,
@@ -26,23 +27,9 @@ import { math } from './mathInstance';
  * semantics (e.g. the log/ln overrides) identical to the evaluator. */
 
 /**
- * Module-level result precision (significant digits) used by `formatNumber`
- * when rounding plain numeric results.
- *
- * Pure library file (no React) so it cannot read the settingsStore directly.
- * Workbench mounts a `useEffect` that calls `setResultPrecision(...)` with
- * the value of `advancedResultPrecision` whenever that setting changes,
- * keeping numeric output precision in sync with the user's
- * "高级 → 结果有效数字位数".
+ * Result precision lives in `formatDefaults.ts` (mathjs-free) so the workbench
+ * shell can configure it without importing this module (which pulls mathjs).
  */
-let resultPrecision = 10;
-
-/** Update the module-level result precision used by `formatNumber` when
- * rounding plain numeric results. Called from a React effect in Workbench. */
-export function setResultPrecision(n: number): void {
-  if (!Number.isFinite(n)) return;
-  resultPrecision = Math.max(2, Math.min(15, Math.round(n)));
-}
 
 /* ------------------------------------------------------------------ *
  * formatNumber — smart scalar formatter
@@ -73,7 +60,7 @@ export function formatNumber(n: number): string {
   }
 
   // Default: round to the configured significant digits, strip trailing zeros.
-  const fixed = parseFloat(n.toPrecision(resultPrecision)).toString();
+  const fixed = parseFloat(n.toPrecision(getResultPrecision())).toString();
   return fixed;
 }
 

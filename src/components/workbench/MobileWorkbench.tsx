@@ -19,9 +19,11 @@ import {
   PencilRuler,
 } from 'lucide-react';
 import { TitleBar } from '@/components/workbench/layout/TitleBar';
-import { EditorPanel } from '@/components/workbench/layout/EditorPanel';
-import { PreviewPanel } from '@/components/workbench/layout/PreviewPanel';
-import { SidePanel } from '@/components/workbench/layout/SidePanel';
+import {
+  LazyEditorPanel,
+  LazyPreviewPanel,
+  LazySidePanel,
+} from '@/components/workbench/layout/LazyPanels';
 import { useAIContextStore } from '@/lib/store/aiContextStore';
 import { cn } from '@/lib/utils';
 
@@ -95,9 +97,9 @@ export function MobileWorkbench() {
                 <StudioHome />
               </Suspense>
             )}
-            {tab === 'editor' && <EditorPanel />}
-            {tab === 'preview' && <PreviewPanel />}
-            {tab === 'side' && <SidePanel onClose={() => setTab('home')} />}
+            {tab === 'editor' && <LazyEditorPanel />}
+            {tab === 'preview' && <LazyPreviewPanel />}
+            {tab === 'side' && <LazySidePanel onClose={() => setTab('home')} />}
             {tab === 'canvas' && (
               <Suspense
                 fallback={

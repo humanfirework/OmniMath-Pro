@@ -12,7 +12,6 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Sigma, X, ArrowRight, Check, Copy, AlertCircle } from 'lucide-react';
 import { useWorkbenchStore } from '@/lib/store/workbench';
-import { evaluateExpression } from '@/lib/engine';
 import { t, useLocale } from '@/lib/i18n';
 import { cn } from '@/lib/utils';
 
@@ -92,8 +91,10 @@ export function GlobalCalcBar() {
     }
   }, [open]);
 
-  const run = useCallback(() => {
+  const run = useCallback(async () => {
     if (!value.trim()) return;
+    // 求值引擎按需加载，避免 mathjs 进入首屏。
+    const { evaluateExpression } = await import('@/lib/engine');
     const r = evaluateExpression(value, inputMode);
     if (r.success) {
       setResult(r.result);

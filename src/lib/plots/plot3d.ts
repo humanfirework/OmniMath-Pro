@@ -19,29 +19,16 @@
 
 import { getEvalScope } from '@/lib/engine/mathInstance';
 import { compileCached } from '@/lib/engine/compileCache';
+import { getDefault3DResolution } from './plotDefaults';
 
 /* ------------------------------------------------------------------ */
 /*  Types                                                             */
 /* ------------------------------------------------------------------ */
 
 /**
- * Module-level default 3D mesh resolution.
- *
- * Pure library file (no React) so it cannot read the settingsStore directly.
- * Workbench mounts a `useEffect` that calls `setDefault3DResolution(...)`
- * with the value of `advancedPlot3dResolution` whenever that setting
- * changes, keeping the 3D grid density in sync with the user's
- * "高级 → 3D 曲面网格分辨率".
+ * Default 3D mesh resolution lives in `plotDefaults.ts` (mathjs-free) so the
+ * workbench shell can configure it without importing this engine module.
  */
-let default3DResolution = 60;
-
-/** Update the module-level default 3D mesh resolution used by
- * `sampleSurface` / `trySampleSurface` when no explicit resolution is
- * passed. Called from a React effect in Workbench. */
-export function setDefault3DResolution(n: number): void {
-  if (!Number.isFinite(n)) return;
-  default3DResolution = Math.max(2, Math.min(200, Math.round(n)));
-}
 
 /**
  * A sampled triangle mesh for a 3D surface, ready to feed into a
@@ -165,7 +152,7 @@ export function sampleSurface(
   expr: string,
   xRange: [number, number],
   yRange: [number, number],
-  resolution = default3DResolution,
+  resolution = getDefault3DResolution(),
   color = '#2dd4bf',
 ): Surface3DData {
   // Defensive: reject malformed ranges so we never produce NaN vertices
@@ -330,7 +317,7 @@ export function trySampleSurface(
   expr: string,
   xRange: [number, number],
   yRange: [number, number],
-  resolution = default3DResolution,
+  resolution = getDefault3DResolution(),
   color = '#2dd4bf',
 ): { data: Surface3DData | null; error: string | null } {
   try {

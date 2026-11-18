@@ -3,7 +3,6 @@ import type { InputMode } from '@/lib/engine/types';
 import type { Locale } from '@/lib/i18n';
 import { setLocale as setI18nLocale } from '@/lib/i18n';
 import type { CurveSetData } from '@/components/workbench/plots/Plot2DCanvas';
-import { deleteScopeVar, resetScope, syncScope, math } from '@/lib/engine/mathInstance';
 import { useSettingsStore } from './settingsStore';
 
 export interface CalculationResult {
@@ -340,6 +339,19 @@ function loadInitial(): Partial<WorkbenchState> {
 let saveTimer: ReturnType<typeof setTimeout> | null = null;
 
 /**
+ * mathjs 运行时约 1.4 MB，而首屏（Studio 首页）完全用不到它。store 里只有三处
+ * 需要碰引擎作用域（恢复变量、删除变量、清空变量），统一改为按需加载，避免
+ * 把 mathjs 拖进首屏 chunk。
+ */
+type MathEngineModule = typeof import('@/lib/engine/mathInstance');
+let enginePromise: Promise<MathEngineModule> | null = null;
+
+function loadEngine(): Promise<MathEngineModule> {
+  enginePromise ??= import('@/lib/engine/mathInstance');
+  return enginePromise;
+}
+
+/**
  * Revive a JSON-deserialized variable value back into something mathjs
  * understands. mathjs classes (Matrix / Complex / Unit / ...) carry a
  * `mathjs` class tag produced by their `toJSON()` and are restored via
@@ -347,12 +359,15 @@ let saveTimer: ReturnType<typeof setTimeout> | null = null;
  * evaluator stores them as the placeholder string `'<function>'`) and
  * are skipped — the user re-defines them by re-running the script.
  */
-function reviveStoredValue(value: unknown): unknown {
+function reviveStoredValue(
+  reviver: (key: string, value: unknown) => unknown,
+  value: unknown,
+): unknown {
   if (value === null || value === undefined) return undefined;
   if (typeof value === 'string' && value === '<function>') return undefined;
   if (typeof value === 'object' && 'mathjs' in (value as Record<string, unknown>)) {
     try {
-      return (math.reviver as (key: string, v: unknown) => unknown)('', value);
+      return reviver('', value);
     } catch {
       return undefined;
     }
@@ -454,12 +469,12 @@ export const useWorkbenchStore = create<WorkbenchState>((set, get) => ({
     });
     // Keep the engine scope in sync — otherwise deleted variables keep
     // evaluating in plots / console until the next page reload.
-    deleteScopeVar(name);
+    void loadEngine().then((m) => m.deleteScopeVar(name)).catch(() => {});
     get().saveToStorage();
   },
   clearVariables: () => {
     set({ variables: {} });
-    resetScope();
+    void loadEngine().then((m) => m.resetScope()).catch(() => {});
     get().saveToStorage();
   },
 
@@ -614,22 +629,30 @@ export const useWorkbenchStore = create<WorkbenchState>((set, get) => ({
       // page reload (previously the panel showed them but mathjs could
       // not evaluate them until re-assigned).
       if (initial.variables || initial.plotParams) {
-        const revived: Record<string, unknown> = {};
-        // 先放 2D 自由参数的滑块值（低优先级）……
-        if (initial.plotParams) {
-          for (const [name, p] of Object.entries(initial.plotParams)) {
-            revived[name] = p.value;
-          }
-        }
-        // ……再放用户变量（高优先级，同名时覆盖参数 —— 已定义变量
-        // 本就不会出现在自由参数列表中）。
-        if (initial.variables) {
-          for (const [name, entry] of Object.entries(initial.variables)) {
-            const v = reviveStoredValue((entry as VariableEntry).value);
-            if (v !== undefined) revived[name] = v;
-          }
-        }
-        syncScope(revived);
+        const storedVariables = initial.variables;
+        const storedPlotParams = initial.plotParams;
+        void loadEngine()
+          .then(({ math, syncScope }) => {
+            const revived: Record<string, unknown> = {};
+            // 先放 2D 自由参数的滑块值（低优先级）……
+            if (storedPlotParams) {
+              for (const [name, p] of Object.entries(storedPlotParams)) {
+                revived[name] = p.value;
+              }
+            }
+            // ……再放用户变量（高优先级，同名时覆盖参数 —— 已定义变量
+            // 本就不会出现在自由参数列表中）。
+            if (storedVariables) {
+              for (const [name, entry] of Object.entries(storedVariables)) {
+                const v = reviveStoredValue(math.reviver, (entry as VariableEntry).value);
+                if (v !== undefined) revived[name] = v;
+              }
+            }
+            syncScope(revived);
+          })
+          .catch(() => {
+            // 引擎加载失败时保留面板里的变量显示，至少不阻塞启动。
+          });
       }
     }
   },

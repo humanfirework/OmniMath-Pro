@@ -32,18 +32,20 @@ import {
 import { useWorkbenchStore } from '@/lib/store/workbench';
 import { useLayoutStore } from '@/lib/store/layoutStore';
 import { useSettingsStore } from '@/lib/store/settingsStore';
-import { setDefaultSampleCount } from '@/lib/plots/plot2d';
-import { setDefault3DResolution } from '@/lib/plots/plot3d';
-import { setResultPrecision } from '@/lib/engine/latex';
+import { setDefaultSampleCount, setDefault3DResolution } from '@/lib/plots/plotDefaults';
+import { setResultPrecision } from '@/lib/engine/formatDefaults';
 import { inTauri } from '@/lib/tauri';
 import { setLocale as setI18nLocale, getLocale, t, useLocale } from '@/lib/i18n';
 import { useIsMobile } from '@/hooks/use-mobile';
 import { useCoarsePointer } from '@/hooks/use-coarse-pointer';
 import { TitleBar } from '@/components/workbench/layout/TitleBar';
 import { ActivityBar } from '@/components/workbench/layout/ActivityBar';
-import { SidePanel } from '@/components/workbench/layout/SidePanel';
-import { EditorPanel } from '@/components/workbench/layout/EditorPanel';
-import { PreviewPanel } from '@/components/workbench/layout/PreviewPanel';
+import {
+  LazyEditorPanel,
+  LazyPreviewPanel,
+  LazySettingsPanel,
+  LazySidePanel,
+} from '@/components/workbench/layout/LazyPanels';
 import { StatusBar } from '@/components/workbench/layout/StatusBar';
 import { CommandPalette } from '@/components/workbench/panels/CommandPalette';
 import { GlobalCalcBar } from '@/components/workbench/panels/GlobalCalcBar';
@@ -52,7 +54,6 @@ import { RunResultsHost } from '@/components/workbench/runresults/RunResultsHost
 import { MobileWorkbench } from '@/components/workbench/MobileWorkbench';
 import { OnboardingOverlay } from '@/components/workbench/OnboardingOverlay';
 import { PracticeGuide } from '@/components/workbench/PracticeGuide';
-import { SettingsPanel } from '@/components/workbench/panels/SettingsPanel';
 import { ErrorBoundary } from '@/components/ErrorBoundary';
 import { useShortcutsStore, SHORTCUTS_KEY } from '@/lib/store/shortcutsStore';
 import { useGlobalShortcuts, registerShortcutHandler } from '@/lib/hooks/useGlobalShortcuts';
@@ -501,7 +502,7 @@ export function Workbench() {
           <GlobalCalcBar />
           <FloatingCalculator />
           <RunResultsHost />
-          <SettingsPanel />
+          <LazySettingsPanel />
           <OnboardingOverlay />
         </>
       );
@@ -513,7 +514,7 @@ export function Workbench() {
         <GlobalCalcBar />
         <FloatingCalculator />
         <RunResultsHost />
-        <SettingsPanel />
+        <LazySettingsPanel />
         <OnboardingOverlay />
       </>
     );
@@ -563,7 +564,7 @@ export function Workbench() {
                     <StudioHome />
                   </Suspense>
                 ) : (
-                  <PreviewPanel />
+                  <LazyPreviewPanel />
                 )}
               </ErrorBoundary>
             </div>
@@ -587,7 +588,7 @@ export function Workbench() {
               <>
                 <ResizablePanel defaultSize={20} minSize={12} maxSize={40} id="fs-side" order={1}>
                   <ErrorBoundary>
-                    <SidePanel />
+                    <LazySidePanel />
                   </ErrorBoundary>
                 </ResizablePanel>
                 <ResizableHandle withHandle className="data-[resize-handle-active]:bg-primary/60" />
@@ -602,7 +603,7 @@ export function Workbench() {
                   order={2}
                 >
                   <ErrorBoundary>
-                    <EditorPanel />
+                    <LazyEditorPanel />
                   </ErrorBoundary>
                 </ResizablePanel>
                 <ResizableHandle withHandle className="data-[resize-handle-active]:bg-primary/60" />
@@ -640,7 +641,7 @@ export function Workbench() {
               <>
                 <ResizablePanel defaultSize={25} minSize={12} maxSize={40} id="side-only-panel" order={1}>
                   <ErrorBoundary>
-                    <SidePanel />
+                    <LazySidePanel />
                   </ErrorBoundary>
                 </ResizablePanel>
                 <ResizableHandle withHandle className="data-[resize-handle-active]:bg-primary/60" />
@@ -699,7 +700,7 @@ export function Workbench() {
                   order={1}
                 >
                   <ErrorBoundary>
-                    <SidePanel />
+                    <LazySidePanel />
                   </ErrorBoundary>
                 </ResizablePanel>
                 <ResizableHandle withHandle className="data-[resize-handle-active]:bg-primary/60" />
@@ -725,7 +726,7 @@ export function Workbench() {
                   order={1}
                 >
                   <ErrorBoundary>
-                    <EditorPanel />
+                    <LazyEditorPanel />
                   </ErrorBoundary>
                 </ResizablePanel>
                 <ResizableHandle withHandle className="data-[resize-handle-active]:bg-primary/60" />
@@ -737,7 +738,7 @@ export function Workbench() {
                   order={2}
                 >
                   <ErrorBoundary>
-                    <PreviewPanel />
+                    <LazyPreviewPanel />
                   </ErrorBoundary>
                 </ResizablePanel>
               </ResizablePanelGroup>
@@ -757,7 +758,7 @@ export function Workbench() {
                   order={1}
                 >
                   <ErrorBoundary>
-                    <SidePanel />
+                    <LazySidePanel />
                   </ErrorBoundary>
                 </ResizablePanel>
                 <ResizableHandle withHandle className="data-[resize-handle-active]:bg-primary/60" />
@@ -774,7 +775,7 @@ export function Workbench() {
                 order={2}
               >
                 <ErrorBoundary>
-                  <EditorPanel />
+                  <LazyEditorPanel />
                 </ErrorBoundary>
               </ResizablePanel>
             )}
@@ -791,7 +792,7 @@ export function Workbench() {
                 order={3}
               >
                 <ErrorBoundary>
-                  <PreviewPanel />
+                  <LazyPreviewPanel />
                 </ErrorBoundary>
               </ResizablePanel>
             )}
@@ -808,7 +809,7 @@ export function Workbench() {
       <GlobalCalcBar />
       <RunResultsHost />
       <FloatingCalculator />
-      <SettingsPanel />
+      <LazySettingsPanel />
       <OnboardingOverlay />
       <PracticeGuide />
     </motion.div>

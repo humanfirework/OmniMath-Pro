@@ -25,6 +25,7 @@
 
 import { getEvalScope } from '@/lib/engine/mathInstance';
 import { compileCached } from '@/lib/engine/compileCache';
+import { getDefaultSampleCount } from './plotDefaults';
 
 // Re-export the smart-range algorithm so callers can import everything
 // from a single module (`@/lib/plots/plot2d`).
@@ -63,22 +64,10 @@ export const DEFAULT_POLAR_THETA_RANGE: [number, number] = [0, Math.PI * 2];
 export const DEFAULT_PARAMETRIC_T_RANGE: [number, number] = [-10, 10];
 
 /**
- * Module-level default sample count for 2D curve sampling.
- *
- * Pure library file (no React) so it cannot read the settingsStore directly.
- * Workbench mounts a `useEffect` that calls `setDefaultSampleCount(...)` with
- * the value of `advancedPlotSamples` whenever that setting changes, keeping
- * the sampling density in sync with the user's "高级 → 2D 曲线采样点数".
+ * Default sample count lives in `plotDefaults.ts` (mathjs-free) so the
+ * workbench shell can configure it without importing this engine module —
+ * importing it here would pull mathjs into the initial bundle.
  */
-let defaultSampleCount = 800;
-
-/** Update the module-level default sample count used by `sampleFunction` /
- * `samplePolar` / `sampleParametric` / `sampleCurve` when no explicit count
- * is passed. Called from a React effect in Workbench. */
-export function setDefaultSampleCount(n: number): void {
-  if (!Number.isFinite(n)) return;
-  defaultSampleCount = Math.max(2, Math.min(2000, Math.round(n)));
-}
 
 /**
  * Canvas padding (screen pixels) shared between Plot2DCanvas and RegionZoom
@@ -281,7 +270,7 @@ export function sampleFunction(
   expr: string,
   xRange: [number, number],
   plotType: Plot2DType = 'cartesian',
-  count = defaultSampleCount,
+  count = getDefaultSampleCount(),
 ): PlotSample[] {
   if (!expr || !expr.trim()) return [];
   // Defensive: reject malformed ranges so downstream code never hits a
@@ -393,7 +382,7 @@ export function samplePolar(
   expr: string,
   thetaMin: number,
   thetaMax: number,
-  count = defaultSampleCount,
+  count = getDefaultSampleCount(),
 ): PlotSample[] {
   if (!expr || !expr.trim()) return [];
   if (
@@ -462,7 +451,7 @@ export function sampleParametric(
   exprY: string,
   tMin: number,
   tMax: number,
-  count = defaultSampleCount,
+  count = getDefaultSampleCount(),
 ): PlotSample[] {
   if (!exprX || !exprX.trim() || !exprY || !exprY.trim()) return [];
   if (
@@ -517,7 +506,7 @@ export function sampleParametric(
 export function sampleCurve(
   spec: Curve2DSpec,
   xRange: [number, number],
-  count = defaultSampleCount,
+  count = getDefaultSampleCount(),
 ): PlotSample[] {
   const opts: AdaptiveOptions = {
     // Map the user-facing sample count onto the adaptive budget: the coarse
