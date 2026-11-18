@@ -133,7 +133,7 @@ export function Plot3DPanel() {
   const [autoRotate, setAutoRotate] = useState(false);
   const [colorMode, setColorMode] = useState<'height' | 'solid'>('height');
   const [upAxis, setUpAxis] = useState<'y' | 'z'>('y');
-  const [showControls, setShowControls] = useState(true);
+  const [showControls, setShowControls] = useState(false);
   const [resetSignal, setResetSignal] = useState(0);
   const [expandOpen, setExpandOpen] = useState(false);
 
