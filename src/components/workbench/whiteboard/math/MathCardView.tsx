@@ -13,6 +13,7 @@ import { GripHorizontal, X } from 'lucide-react';
 import type { RecognizedGlyph } from '@/lib/mathnotes/recognize';
 import type { PlotSample } from '@/lib/mathnotes/expression';
 import { sampleExpression } from '@/lib/mathnotes/expression';
+import { panRange, zoomRangeAt } from '@/lib/plots/plotRange';
 import { FormulaRenderer } from '@/components/workbench/FormulaRenderer';
 import { HandwritingText } from './HandwritingText';
 import { cn } from '@/lib/utils';
@@ -159,10 +160,27 @@ export interface MathPlotProps {
   onRangeChange?: (range: [number, number]) => void;
 }
 
-/** A small interactive Cartesian plot. Zoom re-samples the expression. */
+/** A small interactive Cartesian plot. Drag pans, wheel zooms (re-samples). */
 export function MathPlot({ samples, range, className, onRangeChange }: MathPlotProps) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const wrapRef = useRef<HTMLDivElement>(null);
+  // 拖动平移：记录起点与按下时的范围，移动时只做纯函数换算，避免累积误差。
+  const panRef = useRef<{
+    pointerId: number;
+    startX: number;
+    startRange: [number, number];
+  } | null>(null);
+  const panRafRef = useRef<number | null>(null);
+  const pendingRangeRef = useRef<[number, number] | null>(null);
+
+  // 平移时每帧最多重采样一次（父组件会重新采 600 点），避免指针事件频率
+  // 高于屏幕刷新导致移动端掉帧。
+  useEffect(() => {
+    return () => {
+      if (panRafRef.current !== null) cancelAnimationFrame(panRafRef.current);
+      panRafRef.current = null;
+    };
+  }, []);
 
   useEffect(() => {
     const canvas = canvasRef.current;
@@ -182,19 +200,53 @@ export function MathPlot({ samples, range, className, onRangeChange }: MathPlotP
     const rect = e.currentTarget.getBoundingClientRect();
     const px = Math.max(0, Math.min(1, (e.clientX - rect.left) / Math.max(1, rect.width)));
     const factor = e.deltaY > 0 ? 1.2 : 1 / 1.2;
-    const [a, b] = range;
-    const span = Math.max(0.05, Math.min(1e6, (b - a) * factor));
-    const center = a + (b - a) * px;
-    onRangeChange([center - span * px, center + span * (1 - px)]);
+    onRangeChange(zoomRangeAt(range, px, factor));
+  };
+
+  const handlePointerDown = (e: React.PointerEvent<HTMLDivElement>) => {
+    if (!onRangeChange) return;
+    e.stopPropagation();
+    e.currentTarget.setPointerCapture(e.pointerId);
+    panRef.current = { pointerId: e.pointerId, startX: e.clientX, startRange: range };
+  };
+
+  const handlePointerMove = (e: React.PointerEvent<HTMLDivElement>) => {
+    const pan = panRef.current;
+    if (!pan || pan.pointerId !== e.pointerId || !onRangeChange) return;
+    e.stopPropagation();
+    const rect = e.currentTarget.getBoundingClientRect();
+    const delta = (e.clientX - pan.startX) / Math.max(1, rect.width);
+    pendingRangeRef.current = panRange(pan.startRange, delta);
+    if (panRafRef.current !== null) return;
+    panRafRef.current = requestAnimationFrame(() => {
+      panRafRef.current = null;
+      const next = pendingRangeRef.current;
+      pendingRangeRef.current = null;
+      if (next) onRangeChange(next);
+    });
+  };
+
+  const handlePointerUp = (e: React.PointerEvent<HTMLDivElement>) => {
+    if (panRef.current?.pointerId !== e.pointerId) return;
+    e.stopPropagation();
+    panRef.current = null;
   };
 
   return (
     <div
       ref={wrapRef}
-      className={cn('relative touch-none', className)}
+      className={cn(
+        'relative touch-none',
+        onRangeChange && 'cursor-grab active:cursor-grabbing',
+        className,
+      )}
       onWheel={handleWheel}
+      onPointerDown={handlePointerDown}
+      onPointerMove={handlePointerMove}
+      onPointerUp={handlePointerUp}
+      onPointerCancel={handlePointerUp}
       onDoubleClick={() => onRangeChange?.([-10, 10])}
-      title={onRangeChange ? '滚轮缩放 · 双击重置范围' : undefined}
+      title={onRangeChange ? '拖动平移 · 滚轮缩放 · 双击重置范围' : undefined}
     >
       <canvas ref={canvasRef} className="block size-full" />
     </div>
