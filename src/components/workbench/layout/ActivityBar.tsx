@@ -357,11 +357,6 @@ export function ActivityBar() {
               )}
             >
               <Icon className="size-[18px]" strokeWidth={2} />
-              {id === 'whiteboard' && (
-                <span className="pointer-events-none absolute -right-0.5 -top-0.5 rounded border border-amber-500/40 bg-amber-500/10 px-0.5 text-[7px] font-bold leading-3 text-amber-600 dark:text-amber-400">
-                  β
-                </span>
-              )}
               {isActive && (
                 <motion.span
                   layoutId="activity-indicator"
