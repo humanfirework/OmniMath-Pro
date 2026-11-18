@@ -9,7 +9,7 @@
  *  - Bottom: StatusBar
  */
 
-import { lazy, Suspense, useState } from 'react';
+import { lazy, Suspense, useEffect, useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
   Code2,
@@ -22,6 +22,7 @@ import { TitleBar } from '@/components/workbench/layout/TitleBar';
 import { EditorPanel } from '@/components/workbench/layout/EditorPanel';
 import { PreviewPanel } from '@/components/workbench/layout/PreviewPanel';
 import { SidePanel } from '@/components/workbench/layout/SidePanel';
+import { useAIContextStore } from '@/lib/store/aiContextStore';
 import { cn } from '@/lib/utils';
 
 type MobileTab = 'home' | 'editor' | 'preview' | 'side' | 'canvas';
@@ -49,6 +50,25 @@ const StudioHome = lazy(() =>
 export function MobileWorkbench() {
   // Phone opens on the canvas: this is a handwriting-first app, not an IDE.
   const [tab, setTab] = useState<MobileTab>('canvas');
+
+  // AI 请求从编辑器 / 结果发起时，答案在「预览」里的 AI 标签：
+  // 手机上自动切过去，避免用户以为没有反应。
+  const promptSeq = useAIContextStore((s) => s.promptSeq);
+  useEffect(() => {
+    if (promptSeq > 0) setTab('preview');
+  }, [promptSeq]);
+
+  // 选区「画图」等动作也可以请求切到预览（桌面端没有监听者，事件无副作用）。
+  useEffect(() => {
+    const handler = (e: Event) => {
+      const next = (e as CustomEvent<string>).detail;
+      if (next === 'home' || next === 'editor' || next === 'preview' || next === 'side' || next === 'canvas') {
+        setTab(next);
+      }
+    };
+    window.addEventListener('omnimath:mobile-tab', handler);
+    return () => window.removeEventListener('omnimath:mobile-tab', handler);
+  }, []);
 
   return (
     <div className="h-[100dvh] w-screen flex flex-col overflow-hidden bg-background text-foreground">

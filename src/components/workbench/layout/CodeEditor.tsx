@@ -536,6 +536,8 @@ export function CodeEditor({
           });
         });
         store.setActivePreviewTab('plot2d');
+        // 手机端：切到「预览」标签，曲线才看得见（桌面端无监听者）。
+        window.dispatchEvent(new CustomEvent('omnimath:mobile-tab', { detail: 'preview' }));
         toast.success(
           expressions.length === 1
             ? `已绘制 ${expressions[0]}`

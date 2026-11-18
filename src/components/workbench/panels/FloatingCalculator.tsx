@@ -14,6 +14,8 @@ import { evaluateExpression, math } from '@/lib/engine';
 import { cn } from '@/lib/utils';
 import { useT } from '@/lib/i18n';
 import { saveTextToFile } from '@/lib/nativeExport';
+import { useWorkbenchStore } from '@/lib/store/workbench';
+import { useIsMobile } from '@/hooks/use-mobile';
 
 type CalcMode = 'basic' | 'scientific' | 'programmer' | 'linalg' | 'converter';
 type ConverterCategory = 'length' | 'weight' | 'temperature' | 'area' | 'volume' | 'time';
@@ -224,6 +226,12 @@ export function FloatingCalculator() {
   const [expression, setExpression] = useState('');
   const [justEvaluated, setJustEvaluated] = useState(false);
   const [copied, setCopied] = useState(false);
+
+  // 手机端 AI 面板底部就是输入框与发送键：悬浮计算器会压在上面，
+  // 因此在 AI 标签激活时收起入口（面板已打开则保持，避免把用户困住）。
+  const isMobile = useIsMobile();
+  const activePreviewTab = useWorkbenchStore((s) => s.activePreviewTab);
+  const hideFab = isMobile && activePreviewTab === 'ai' && !open;
 
   // 科学模式函数分区折叠状态（按分类收缩/展开，功能多时更清爽）。
   // 默认所有分区都是「收起」的 —— 打开即折叠，避免一开始就排满一长屏；
@@ -1235,6 +1243,7 @@ export function FloatingCalculator() {
   return (
     <>
       {/* Toggle button (fixed corner, draggable) */}
+      {!hideFab && (
       <button
         ref={fabRef}
         type="button"
@@ -1256,6 +1265,7 @@ export function FloatingCalculator() {
       >
         <Calculator className="size-5" />
       </button>
+      )}
 
       <AnimatePresence>
         {open && (
