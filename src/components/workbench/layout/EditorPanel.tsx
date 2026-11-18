@@ -412,6 +412,11 @@ export function EditorPanel() {
           setActivePreviewTab('log');
         } else if (matrixSeen) {
           setActivePreviewTab('formula');
+        } else if (resultCount === 1) {
+          // 单个数值/赋值结果：切到公式页。
+          // 否则用户停在「绘图 / 3D」页运行 11*11 时，右侧没有任何变化，
+          // 会误以为没有运行成功。
+          setActivePreviewTab('formula');
         }
 
         // ── P2-1: 运行到独立面板 ─────────────────────────────────────
