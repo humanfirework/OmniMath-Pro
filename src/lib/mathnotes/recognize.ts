@@ -899,17 +899,62 @@ function tokenText(g: RecognizedGlyph): string {
 export function buildRecognizedText(glyphs: RecognizedGlyph[]): string {
   let out = '';
   let prev: RecognizedGlyph | null = null;
-  for (const g of glyphs) {
-    if (g.char === '?' && !g.text) continue;
-    const token = tokenText(g);
-    if (g.superscript) {
-      out += `^${/^[0-9a-zA-Z]$/.test(token) ? token : `(${token})`}`;
-      prev = g;
+  let i = 0;
+  while (i < glyphs.length) {
+    const g = glyphs[i];
+    if (g.char === '?' && !g.text) {
+      i++;
       continue;
     }
+    if (g.superscript) {
+      // Consecutive superscript glyphs belong to one exponent (x²³ → x^(23),
+      // not x^2^3).
+      const parts: string[] = [];
+      let j = i;
+      while (j < glyphs.length && glyphs[j].superscript) {
+        if (!(glyphs[j].char === '?' && !glyphs[j].text)) parts.push(tokenText(glyphs[j]));
+        j++;
+      }
+      const joined = parts.join('');
+      if (joined) {
+        out += `^${/^[0-9a-zA-Z]$/.test(joined) ? joined : `(${joined})`}`;
+        prev = glyphs[j - 1];
+      }
+      i = j;
+      continue;
+    }
+    const token = tokenText(g);
     if (prev && needsMultiplication(prev, g)) out += '*';
     out += token;
     prev = g;
+    i++;
+  }
+  return out;
+}
+
+/**
+ * Human-readable display string. Consecutive superscript glyphs are grouped
+ * into one caret so x²³ shows as x^(23) instead of x^2^3.
+ */
+export function buildRecognizedDisplay(glyphs: RecognizedGlyph[]): string {
+  let out = '';
+  let i = 0;
+  while (i < glyphs.length) {
+    const g = glyphs[i];
+    if (g.superscript) {
+      const parts: string[] = [];
+      let j = i;
+      while (j < glyphs.length && glyphs[j].superscript) {
+        parts.push(glyphs[j].displayChar);
+        j++;
+      }
+      const joined = parts.join('');
+      out += joined.length <= 1 ? `^${joined}` : `^(${joined})`;
+      i = j;
+      continue;
+    }
+    out += g.displayChar;
+    i++;
   }
   return out;
 }
@@ -1157,9 +1202,7 @@ export function applyRadicalLayout(
     const inner = indices.map((i) => glyphs[i]);
     const innerText = buildRecognizedText(inner);
     if (!innerText) continue;
-    const innerDisplay = inner
-      .map((g) => (g.superscript ? `^${g.displayChar}` : g.displayChar))
-      .join('');
+    const innerDisplay = buildRecognizedDisplay(inner);
     const confidence =
       inner.reduce((sum, g) => sum + g.confidence, 0) / inner.length;
 
@@ -1227,6 +1270,8 @@ export function recognizeMathInk(strokes: RecognitionStroke[]): MathRecognitionR
   }
 
   const glyphs: RecognizedGlyph[] = [];
+  // Last non-superscript glyph — the baseline a new exponent is compared to.
+  let superscriptBase: RecognizedGlyph | null = null;
   for (const group of groups) {
     const raster = rasterizeGlyph(group.strokes);
     if (!raster) continue;
@@ -1240,14 +1285,17 @@ export function recognizeMathInk(strokes: RecognitionStroke[]): MathRecognitionR
     // Preferred display for multiplication.
     const displayChar = char === '*' ? '×' : char;
 
-    // Superscript: clearly above the previous glyph and smaller.
+    // Superscript: clearly above the baseline glyph and smaller. Using the
+    // baseline (not just the previous glyph) lets multi-digit exponents like
+    // x²³ keep both digits in the exponent.
     let superscript = false;
     const prev = glyphs[glyphs.length - 1];
-    if (prev && group.height > 0 && prev.bbox.y1 - prev.bbox.y0 > 0) {
-      const prevHeight = prev.bbox.y1 - prev.bbox.y0;
-      const prevCenterY = (prev.bbox.y0 + prev.bbox.y1) / 2;
-      const above = group.centerY < prevCenterY - prevHeight * 0.28;
-      const smaller = group.height < prevHeight * 0.85;
+    const base = superscriptBase ?? prev;
+    if (base && group.height > 0 && base.bbox.y1 - base.bbox.y0 > 0) {
+      const baseHeight = base.bbox.y1 - base.bbox.y0;
+      const baseCenterY = (base.bbox.y0 + base.bbox.y1) / 2;
+      const above = group.centerY < baseCenterY - baseHeight * 0.28;
+      const smaller = group.height < baseHeight * 0.85;
       superscript = above && smaller;
     }
 
@@ -1256,7 +1304,7 @@ export function recognizeMathInk(strokes: RecognitionStroke[]): MathRecognitionR
       char = '.';
     }
 
-    glyphs.push({
+    const glyph: RecognizedGlyph = {
       char,
       displayChar: char === '*' ? '×' : displayChar,
       confidence: superscript ? cls.confidence * 0.9 : cls.confidence,
@@ -1265,7 +1313,9 @@ export function recognizeMathInk(strokes: RecognitionStroke[]): MathRecognitionR
       bbox: group.bbox,
       superscript,
       strokes: group.strokes,
-    });
+    };
+    if (!glyph.superscript) superscriptBase = glyph;
+    glyphs.push(glyph);
   }
 
   const layoutGlyphs = applyRadicalLayout(buildFractionLayout(glyphs), radicals);
@@ -1275,9 +1325,7 @@ export function recognizeMathInk(strokes: RecognitionStroke[]): MathRecognitionR
   const text = rawText
     .replace(/^\*(?=[+\-/^()]|$)/, 'x')
     .replace(/=\*(?=[+\-/^()]|$)/g, '=x');
-  const display = layoutGlyphs
-    .map((g) => (g.superscript ? `^${g.displayChar}` : g.displayChar))
-    .join('');
+  const display = buildRecognizedDisplay(layoutGlyphs);
   const confidence =
     glyphs.length > 0
       ? glyphs.reduce((sum, g) => sum + g.confidence, 0) / glyphs.length

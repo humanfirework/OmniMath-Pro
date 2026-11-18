@@ -3,6 +3,7 @@ import {
   addUserGlyphSamples,
   applyRadicalLayout,
   buildFractionLayout,
+  buildRecognizedDisplay,
   buildRecognizedText,
   classifyGlyphGeometry,
   clearUserGlyphBank,
@@ -353,5 +354,20 @@ describe('buildRecognizedText', () => {
     expect(
       buildRecognizedText([glyph('y'), glyph('='), glyph('x'), glyph('3', true)]),
     ).toBe('y=x^3');
+  });
+
+  it('groups consecutive superscripts into one exponent', () => {
+    expect(
+      buildRecognizedText([glyph('x'), glyph('2', true), glyph('3', true)]),
+    ).toBe('x^(23)');
+    expect(
+      buildRecognizedDisplay([glyph('x'), glyph('2', true), glyph('3', true)]),
+    ).toBe('x^(23)');
+  });
+
+  it('keeps multiplication after an exponent', () => {
+    expect(
+      buildRecognizedText([glyph('x'), glyph('2', true), glyph('y')]),
+    ).toBe('x^2*y');
   });
 });
