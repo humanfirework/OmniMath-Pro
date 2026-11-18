@@ -61,7 +61,7 @@ import {
   AlertTriangle,
   HardDriveDownload,
   Upload,
-  CloudOff,
+  Cloud,
 } from 'lucide-react';
 import { useWorkbenchStore } from '@/lib/store/workbench';
 import { useLayoutStore, LAYOUT_KEY } from '@/lib/store/layoutStore';
@@ -88,6 +88,12 @@ import {
   snapshotFilename,
   snapshotSize,
 } from '@/lib/sync/snapshot';
+import {
+  chooseSyncFolder,
+  getSyncFolder,
+  pullFromSyncFolder,
+  pushToSyncFolder,
+} from '@/lib/sync/folder';
 import { toast } from 'sonner';
 
 type Category = 'appearance' | 'editor' | 'layout' | 'data' | 'backup' | 'export' | 'language' | 'shortcuts' | 'advanced' | 'about';
@@ -172,6 +178,8 @@ export function SettingsPanel() {
   const [backupInfo, setBackupInfo] = useState<{ keys: number; bytes: number; at: string } | null>(null);
   const [importing, setImporting] = useState(false);
   const backupFileRef = useRef<HTMLInputElement>(null);
+  const [syncFolder, setSyncFolderState] = useState<string | null>(() => getSyncFolder());
+  const [folderBusy, setFolderBusy] = useState(false);
 
   useEffect(() => {
     loadSettings();
@@ -233,6 +241,55 @@ export function SettingsPanel() {
     } finally {
       setImporting(false);
       if (backupFileRef.current) backupFileRef.current.value = '';
+    }
+  };
+
+  const handleChooseSyncFolder = async () => {
+    try {
+      const folder = await chooseSyncFolder();
+      if (folder) {
+        setSyncFolderState(folder);
+        toast.success('已选择同步文件夹');
+      }
+    } catch (err) {
+      toast.error('无法选择文件夹', { description: (err as Error).message });
+    }
+  };
+
+  const handlePushToFolder = async () => {
+    setFolderBusy(true);
+    try {
+      const result = await pushToSyncFolder();
+      setBackupInfo({
+        keys: result.keys,
+        bytes: result.bytes,
+        at: new Date().toLocaleString(),
+      });
+      toast.success(`已写入 ${result.keys} 项数据`, { description: result.path });
+    } catch (err) {
+      toast.error('写入同步文件夹失败', { description: (err as Error).message });
+    } finally {
+      setFolderBusy(false);
+    }
+  };
+
+  const handlePullFromFolder = async () => {
+    setFolderBusy(true);
+    try {
+      const result = await pullFromSyncFolder(importMode);
+      toast.success(
+        importMode === 'replace'
+          ? `已从文件夹恢复 ${result.written} 项数据`
+          : `已合并 ${result.written} 项，保留 ${result.skipped} 项本机数据`,
+        { description: '即将重新载入界面…', duration: 2200 },
+      );
+      setTimeout(() => {
+        if (typeof window !== 'undefined') window.location.reload();
+      }, 900);
+    } catch (err) {
+      toast.error('读取同步文件夹失败', { description: (err as Error).message });
+    } finally {
+      setFolderBusy(false);
     }
   };
 
@@ -715,14 +772,60 @@ export function SettingsPanel() {
                 </div>
 
                 <div className="rounded-lg border border-dashed border-border/70 p-3.5">
-                  <div className="flex items-center gap-2 text-xs font-semibold text-muted-foreground">
-                    <CloudOff className="size-3.5" />
-                    云端同步（规划中）
+                  <div className="flex items-center gap-2 text-xs font-semibold">
+                    <Cloud className="size-3.5 text-primary" />
+                    同步文件夹
                   </div>
                   <p className="mt-1.5 text-[11px] leading-relaxed text-muted-foreground">
-                    WebDAV / S3 快照同步正在接入。当前版本可先用备份文件跨设备迁移；
-                    后续将支持按记录合并多端笔记与白板。
+                    把快照写入 OneDrive / iCloud Drive / Dropbox / Syncthing 等已同步的文件夹，
+                    另一台设备读取同一文件即可互通；不需要账号或服务器。
                   </p>
+                  {inTauri() ? (
+                    <>
+                      <div
+                        className="mt-2 truncate rounded-md bg-muted/40 px-2 py-1.5 font-mono text-[10.5px] text-muted-foreground"
+                        title={syncFolder ?? ''}
+                      >
+                        {syncFolder ?? '未选择文件夹'}
+                      </div>
+                      <div className="mt-2 flex flex-wrap items-center gap-2">
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          onClick={() => void handleChooseSyncFolder()}
+                          className="gap-1.5"
+                        >
+                          <HardDriveDownload className="size-3.5" />
+                          选择文件夹
+                        </Button>
+                        <Button
+                          size="sm"
+                          disabled={!syncFolder || folderBusy}
+                          onClick={() => void handlePushToFolder()}
+                          className="gap-1.5"
+                        >
+                          <RefreshCw className={cn('size-3.5', folderBusy && 'animate-spin')} />
+                          写入快照
+                        </Button>
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          disabled={!syncFolder || folderBusy}
+                          onClick={() => void handlePullFromFolder()}
+                          className="gap-1.5"
+                        >
+                          读取并{importMode === 'replace' ? '恢复' : '合并'}
+                        </Button>
+                      </div>
+                      <p className="mt-2 text-[10px] text-muted-foreground">
+                        读取时使用上方选择的「合并 / 覆盖恢复」方式。
+                      </p>
+                    </>
+                  ) : (
+                    <p className="mt-2 text-[11px] text-muted-foreground">
+                      桌面版支持同步文件夹；网页版请使用上方的导出 / 导入。
+                    </p>
+                  )}
                 </div>
               </motion.div>
             )}
