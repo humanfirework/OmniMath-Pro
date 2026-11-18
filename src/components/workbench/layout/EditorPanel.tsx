@@ -69,33 +69,14 @@ import { SymbolPalette } from '@/components/workbench/SymbolPalette';
 import { FormulaRenderer } from '@/components/workbench/FormulaRenderer';
 import { DemosPanel } from '@/components/workbench/plots/DemosPanel';
 
-const DEFAULT_SCRIPT = `# OmniMath Pro — 演示脚本
-# 按 Enter 运行，Shift+Enter 换行；用 --- 分隔独立计算块
-# 自动识别坐标系：r = f(θ) 是极坐标，含 x 的表达式是直角坐标
+const DEFAULT_SCRIPT = `# 输入表达式，按 Enter 运行（Shift+Enter 换行）
+# 用 --- 分隔独立计算块；含 x 的表达式自动画图
 
-# ── 曼陀罗 Logo 花环（极坐标玫瑰曲线双层叠加）──
-# r = A|cos(nθ)|^(1/s) + B|cos(n(θ−π/(2n)))|^(1/s)
-r = 2.4*abs(cos(4*theta))^(0.5) + 1.4*abs(cos(4*(theta - pi/8)))^(0.5)
-
-# ── 直角坐标（自动识别为 y = f(x)）──
 sin(x) * cos(x)
-
-# ── 符号积分与方程求解 ──
 integrate(x^2 * e^x, x)
-solve(x^2 - 5*x + 6, x)
-
-# ── 矩阵运算 ──
-A = [2, 1; 1, 3]
-det(A)
-inv(A)
 
 ---
-
-# 新的计算块（上方变量已重置）
-# ── 3D 曲面绘图 ──
-plot3d(sin(x)*cos(y))
-
-# ── 心形线（极坐标）：r = 2(1 + cosθ) ──
+# 极坐标：r = 2(1 + cosθ)
 r = 2*(1 + cos(theta))`;
 
 const MODES: Array<{ id: InputMode; labelKey: 'editorModeSimple' | 'editorModePython' | 'editorModeMatlab' }> = [
