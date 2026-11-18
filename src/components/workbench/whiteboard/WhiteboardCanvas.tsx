@@ -764,11 +764,37 @@ export function WhiteboardCanvas() {
         if (selectedIds.length === 0) return;
         e.preventDefault();
         handleDeleteSelected();
+        return;
+      }
+      if (selectedIds.length > 0) {
+        if (e.key === '+' || e.key === '=') {
+          e.preventDefault();
+          handleScaleSelection(1.1);
+        } else if (e.key === '-' || e.key === '_') {
+          e.preventDefault();
+          handleScaleSelection(0.9);
+        } else if (e.key === '[') {
+          e.preventDefault();
+          handleRotateSelection(-15);
+        } else if (e.key === ']') {
+          e.preventDefault();
+          handleRotateSelection(15);
+        } else if (e.key === 'Escape') {
+          e.preventDefault();
+          setSelectedIds([]);
+        }
       }
     };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
-  }, [selectedIds, handleUndo, handleRedo, handleDeleteSelected]);
+  }, [
+    selectedIds,
+    handleUndo,
+    handleRedo,
+    handleDeleteSelected,
+    handleScaleSelection,
+    handleRotateSelection,
+  ]);
 
   const zoomAt = useCallback((factor: number, clientX?: number, clientY?: number) => {
     inkRef.current?.zoomAt(factor, clientX, clientY);
@@ -1422,7 +1448,7 @@ export function WhiteboardCanvas() {
           {mathCards.length > 0 ? ` · ${mathCards.length} 个结果卡` : ''}
         </span>
         <span className="hidden shrink-0 sm:block">
-          提示：数学模式下可手写算式或 y=x³，结果卡可拖动、图上滚轮缩放
+          选中后 +/− 缩放 · [ ] 旋转 · 数学模式手写 y=x³ 自动出图
         </span>
       </div>
     </div>
