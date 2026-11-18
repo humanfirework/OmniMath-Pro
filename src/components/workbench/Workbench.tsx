@@ -20,7 +20,7 @@
  * - Mount effects: loadFromStorage(), apply theme class, set i18n locale.
  */
 
-import { lazy, Suspense, useEffect, useState } from 'react';
+import { lazy, Suspense, useCallback, useEffect, useState } from 'react';
 import { motion } from 'framer-motion';
 import { PanelLeftClose, PanelRight, PanelRightOpen, LayoutTemplate } from 'lucide-react';
 import { getCurrentWindow } from '@tauri-apps/api/window';
@@ -127,7 +127,15 @@ function fullScreenLabel(vm: ViewMode): string {
 }
 
 /** 右侧并排视图：带一个轻量标题栏，关闭后回到普通工作台。 */
-function FullScreenPanel({ viewMode, onClose }: { viewMode: ViewMode; onClose: () => void }) {
+function FullScreenPanel({
+  viewMode,
+  onClose,
+  onFocus,
+}: {
+  viewMode: ViewMode;
+  onClose: () => void;
+  onFocus?: () => void;
+}) {
   return (
     <div className="h-full w-full flex flex-col min-h-0 bg-background">
       <div className="shrink-0 h-9 flex items-center gap-2 border-b border-border/60 bg-card/40 px-3">
@@ -135,6 +143,16 @@ function FullScreenPanel({ viewMode, onClose }: { viewMode: ViewMode; onClose: (
         <span className="text-xs font-medium text-foreground/80">{fullScreenLabel(viewMode)}</span>
         <span className="text-[10px] text-muted-foreground">并排视图</span>
         <div className="flex-1" />
+        {onFocus && (
+          <button
+            type="button"
+            onClick={onFocus}
+            className="h-6 rounded px-2 text-[10px] text-muted-foreground hover:bg-accent/60 hover:text-foreground transition-colors"
+            title="收起其他面板，全宽显示当前视图"
+          >
+            专注
+          </button>
+        )}
         <button
           type="button"
           onClick={onClose}
@@ -220,6 +238,21 @@ export function Workbench() {
   const sidePanelCollapsed = useWorkbenchStore((s) => s.sidePanelCollapsed);
   const viewMode = useWorkbenchStore((s) => s.viewMode);
   const setViewMode = useWorkbenchStore((s) => s.setViewMode);
+  /** View to restore when leaving focus mode (focus is stored as a viewMode). */
+  const [focusView, setFocusView] = useState<ViewMode | null>(null);
+
+  const enterFocus = useCallback(
+    (view: ViewMode = viewMode) => {
+      if (view !== 'focus') setFocusView(view);
+      setViewMode('focus');
+    },
+    [viewMode, setViewMode],
+  );
+
+  const exitFocus = useCallback(() => {
+    setViewMode(focusView && focusView !== 'focus' ? focusView : 'workbench');
+    setFocusView(null);
+  }, [focusView, setViewMode]);
   const activityBarPosition = useWorkbenchStore((s) => s.activityBarPosition);
   const editorVisible = useWorkbenchStore((s) => s.editorVisible);
   const previewVisible = useWorkbenchStore((s) => s.previewVisible);
@@ -351,7 +384,8 @@ export function Workbench() {
   useEffect(() => {
     const unregs: Array<() => void> = [];
     unregs.push(registerShortcutHandler('focusMode', () => {
-      setViewMode(viewMode !== 'focus' ? 'focus' : 'workbench');
+      if (viewMode === 'focus') exitFocus();
+      else enterFocus();
     }));
     unregs.push(registerShortcutHandler('toggleSidebar', () => {
       toggleSidePanel();
@@ -380,7 +414,7 @@ export function Workbench() {
       setEditorFontSize(14);
     }));
     return () => unregs.forEach((u) => u());
-  }, [viewMode, setViewMode, toggleSidePanel, setSettingsOpen, setCommandPaletteOpen, setEditorContent, setPreviewVisible, previewVisible, editorFontSize, setEditorFontSize]);
+  }, [viewMode, enterFocus, exitFocus, toggleSidePanel, setSettingsOpen, setCommandPaletteOpen, setEditorContent, setPreviewVisible, previewVisible, editorFontSize, setEditorFontSize]);
 
   // 符号面板快捷键：Ctrl/Cmd + / 切换符号面板展开/折叠。
   // 编辑器内 Ctrl+/ 仍由 CodeMirror 用于行注释，故仅当焦点不在
@@ -430,23 +464,41 @@ export function Workbench() {
         {activityBarPosition === 'left' && viewMode !== 'focus' && <ActivityBar />}
 
         {viewMode === 'focus' ? (
-          /* 专注模式：收起活动栏 / 侧栏 / 编辑器，只留主工作区。 */
-          <div className="flex-1 min-w-0 min-h-0 relative bg-background">
-            <ErrorBoundary>
-              <PreviewPanel />
-            </ErrorBoundary>
-            <div className="pointer-events-none absolute left-3 top-3 z-20 flex items-center gap-2">
-              <span className="rounded-full border border-border/60 bg-background/80 px-2 py-0.5 text-[10px] text-muted-foreground backdrop-blur">
+          /* 专注模式：收起活动栏 / 侧栏 / 编辑器，只留当前主工作区。 */
+          <div className="flex-1 min-w-0 min-h-0 flex flex-col bg-background">
+            <div className="shrink-0 h-8 flex items-center gap-2 border-b border-border/60 bg-card/40 px-3">
+              <span className="rounded border border-primary/30 bg-primary/10 px-1.5 py-0.5 text-[9.5px] font-medium text-primary">
                 专注模式
               </span>
+              <span className="text-[11px] text-muted-foreground">
+                {focusView && isFullScreenView(focusView)
+                  ? fullScreenLabel(focusView)
+                  : focusView === 'home'
+                    ? '工作台首页'
+                    : '预览'}
+              </span>
+              <div className="flex-1" />
+              <button
+                type="button"
+                onClick={exitFocus}
+                className="h-6 rounded px-2 text-[10px] text-muted-foreground transition-colors hover:bg-accent/60 hover:text-foreground"
+              >
+                退出专注 · F11
+              </button>
             </div>
-            <button
-              type="button"
-              onClick={() => setViewMode('workbench')}
-              className="absolute right-3 top-3 z-20 h-7 rounded-lg border border-border/60 bg-background/90 px-2.5 text-[10px] text-muted-foreground shadow-sm backdrop-blur transition-colors hover:bg-accent/60 hover:text-foreground"
-            >
-              退出专注 · F11
-            </button>
+            <div className="flex-1 min-h-0 relative">
+              <ErrorBoundary>
+                {focusView && isFullScreenView(focusView) ? (
+                  <FullScreenViews activeViewMode={focusView} />
+                ) : focusView === 'home' ? (
+                  <Suspense fallback={<ViewLoading />}>
+                    <StudioHome />
+                  </Suspense>
+                ) : (
+                  <PreviewPanel />
+                )}
+              </ErrorBoundary>
+            </div>
           </div>
         ) : viewMode === 'home' ? (
           <div className="flex-1 min-w-0 min-h-0">
@@ -504,7 +556,11 @@ export function Workbench() {
               id="fs-panel"
               order={3}
             >
-              <FullScreenPanel viewMode={viewMode} onClose={() => setViewMode('workbench')} />
+              <FullScreenPanel
+                viewMode={viewMode}
+                onClose={() => setViewMode('workbench')}
+                onFocus={() => enterFocus(viewMode)}
+              />
             </ResizablePanel>
           </ResizablePanelGroup>
         ) : !editorVisible && !previewVisible ? (
