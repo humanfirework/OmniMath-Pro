@@ -46,6 +46,7 @@ import {
   Lasso,
   Highlighter,
   PenLine,
+  Sigma,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { t, useLocale } from '@/lib/i18n';
@@ -56,6 +57,10 @@ import { PEN_COLORS, PEN_ERASER_SIZES, PEN_WIDTHS } from '@/lib/ink/presets';
 import { hitTestInk, translateInk } from '@/lib/ink/hitTest';
 import { applyEraser, type EraserMode } from '@/lib/ink/eraser';
 import type { InkBrush, InkStroke, InkView } from '@/lib/ink/types';
+import { getGlyphTemplates, recognizeMathInk } from '@/lib/mathnotes/recognize';
+import { evaluateMathNote } from '@/lib/mathnotes/expression';
+import { MathCardView, type MathCard } from './math/MathCardView';
+import { MathNotePanel, type MathNoteDraft } from './math/MathNotePanel';
 
 type Tool = 'pen' | 'eraser' | 'select' | 'lasso';
 type Background = 'dot' | 'grid' | 'ruled' | 'blank';
@@ -102,6 +107,29 @@ const ERASER_SIZES = [12, 24, 48, 80];
 const PIXEL_CELL = 28;
 
 const STORAGE_KEY = 'omnimath-whiteboard-v1';
+const MATH_CARDS_KEY = 'omnimath-math-cards-v1';
+
+function loadMathCards(): MathCard[] {
+  if (typeof window === 'undefined') return [];
+  try {
+    const raw = localStorage.getItem(MATH_CARDS_KEY);
+    if (!raw) return [];
+    const parsed = JSON.parse(raw);
+    if (!Array.isArray(parsed)) return [];
+    return parsed.filter(
+      (c): c is MathCard =>
+        !!c &&
+        typeof c.id === 'string' &&
+        typeof c.x === 'number' &&
+        typeof c.y === 'number' &&
+        (c.kind === 'number' || c.kind === 'plot') &&
+        typeof c.expression === 'string' &&
+        Array.isArray(c.range),
+    );
+  } catch {
+    return [];
+  }
+}
 
 const BACKGROUNDS: { id: Background; icon: typeof Grid3x3; label: string }[] = [
   { id: 'dot', icon: CircleDot, label: '点阵' },
@@ -296,11 +324,35 @@ export function WhiteboardCanvas() {
     }
   });
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
+  const [mathMode, setMathMode] = useState(false);
+  const [mathDraft, setMathDraft] = useState<MathNoteDraft | null>(null);
+  const [mathCards, setMathCards] = useState<MathCard[]>(loadMathCards);
 
   const inkRef = useRef<InkCanvasHandle>(null);
   const strokesRef = useRef(strokes);
   strokesRef.current = strokes;
   const [view, setView] = useState<InkView>({ k: 1, x: 0, y: 0 });
+
+  const mathModeRef = useRef(mathMode);
+  mathModeRef.current = mathMode;
+  const mathTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const lastMathIndexRef = useRef(0);
+  const mathAnchorRef = useRef({ x: 0, y: 0 });
+
+  useEffect(() => {
+    return () => {
+      if (mathTimerRef.current) clearTimeout(mathTimerRef.current);
+    };
+  }, []);
+
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    try {
+      localStorage.setItem(MATH_CARDS_KEY, JSON.stringify(mathCards));
+    } catch {
+      // ignore storage errors
+    }
+  }, [mathCards]);
 
   useEffect(() => {
     if (typeof window === 'undefined') return;
@@ -318,6 +370,135 @@ export function WhiteboardCanvas() {
     setRedoStack([]);
   }, []);
 
+  /**
+   * Recognize the ink written since the last recognition pass.
+   * Runs ~1s after the pen stops — accuracy first, then latency.
+   */
+  const recognizeMathFromInk = useCallback(() => {
+    if (!mathModeRef.current) return;
+    const all = strokesRef.current;
+    const start = Math.min(lastMathIndexRef.current, all.length);
+    let slice = all.slice(start).filter((s) => !s.shape && !s.pixel);
+    if (slice.length === 0) return;
+    if (slice.length > 40) slice = slice.slice(-40);
+
+    let x0 = Infinity;
+    let y0 = Infinity;
+    let x1 = -Infinity;
+    let y1 = -Infinity;
+    for (const s of slice) {
+      for (const p of s.points) {
+        if (!Number.isFinite(p.x) || !Number.isFinite(p.y)) continue;
+        if (p.x < x0) x0 = p.x;
+        if (p.y < y0) y0 = p.y;
+        if (p.x > x1) x1 = p.x;
+        if (p.y > y1) y1 = p.y;
+      }
+    }
+    if (!Number.isFinite(x0)) return;
+    mathAnchorRef.current = { x: x1 + 18, y: y0 };
+
+    const rec = recognizeMathInk(slice.map((s) => ({ points: s.points })));
+    lastMathIndexRef.current = all.length;
+    const evaluation = rec.text ? evaluateMathNote(rec.text) : null;
+    setMathDraft({
+      text: rec.text,
+      display: rec.display,
+      glyphs: rec.glyphs,
+      confidence: rec.confidence,
+      error: rec.text
+        ? evaluation && !evaluation.ok
+          ? evaluation.error
+          : undefined
+        : rec.error ?? '没有识别到公式，可重试或直接输入',
+    });
+  }, []);
+
+  const scheduleMathRecognition = useCallback(
+    (delay = 1000) => {
+      if (!mathModeRef.current) return;
+      if (mathTimerRef.current) clearTimeout(mathTimerRef.current);
+      mathTimerRef.current = setTimeout(() => {
+        mathTimerRef.current = null;
+        recognizeMathFromInk();
+      }, delay);
+    },
+    [recognizeMathFromInk],
+  );
+
+  const toggleMathMode = useCallback(() => {
+    const next = !mathModeRef.current;
+    mathModeRef.current = next;
+    setMathMode(next);
+    lastMathIndexRef.current = strokesRef.current.length;
+    if (next) {
+      // Warm the font templates while the user is still writing.
+      const warm = () => getGlyphTemplates();
+      const w = window as typeof window & {
+        requestIdleCallback?: (cb: () => void, opts?: { timeout: number }) => number;
+      };
+      if (w.requestIdleCallback) w.requestIdleCallback(warm, { timeout: 2000 });
+      else setTimeout(warm, 400);
+    } else {
+      if (mathTimerRef.current) {
+        clearTimeout(mathTimerRef.current);
+        mathTimerRef.current = null;
+      }
+      setMathDraft(null);
+    }
+  }, []);
+
+  const handleInsertMath = useCallback(
+    (text: string) => {
+      const evaluation = evaluateMathNote(text);
+      if (!evaluation.ok) return;
+      const anchor = mathAnchorRef.current;
+      const card: MathCard = {
+        id: `m-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
+        x: anchor.x,
+        y: anchor.y,
+        kind: evaluation.kind === 'plot' ? 'plot' : 'number',
+        expression: evaluation.expression,
+        display: text,
+        latex: evaluation.latex,
+        valueText: evaluation.valueText,
+        range: evaluation.plot?.range ?? [-10, 10],
+        samples: evaluation.plot?.samples,
+        glyphs: mathDraft?.glyphs,
+        createdAt: Date.now(),
+      };
+      setMathCards((prev) => [...prev, card]);
+      setMathDraft(null);
+    },
+    [mathDraft],
+  );
+
+  const updateMathCard = useCallback((next: MathCard) => {
+    setMathCards((prev) => prev.map((c) => (c.id === next.id ? next : c)));
+  }, []);
+
+  const deleteMathCard = useCallback((id: string) => {
+    setMathCards((prev) => prev.filter((c) => c.id !== id));
+  }, []);
+
+  const handleMathRetry = useCallback(() => {
+    lastMathIndexRef.current = 0;
+    recognizeMathFromInk();
+  }, [recognizeMathFromInk]);
+
+  const openManualMath = useCallback(() => {
+    mathAnchorRef.current = {
+      x: (400 - view.x) / Math.max(0.05, view.k),
+      y: (260 - view.y) / Math.max(0.05, view.k),
+    };
+    setMathDraft({
+      text: '',
+      display: '',
+      glyphs: [],
+      confidence: 1,
+    });
+  }, [view]);
+
   const handleStrokeEnd = useCallback(
     (stroke: InkStroke): boolean => {
       if (stroke.shape) {
@@ -331,9 +512,10 @@ export function WhiteboardCanvas() {
         stroke.recognized = recognizeShape(stroke.points);
       }
       commitStrokes([...strokesRef.current, { ...stroke, points: [...stroke.points] }]);
+      if (!stroke.pixel) scheduleMathRecognition();
       return true;
     },
-    [recognize, commitStrokes],
+    [recognize, commitStrokes, scheduleMathRecognition],
   );
 
   const handleEraseEnd = useCallback(
@@ -341,6 +523,7 @@ export function WhiteboardCanvas() {
       const { next, changed } = applyEraser(strokesRef.current, stroke, eraserMode);
       if (!changed) return false;
       commitStrokes(next);
+      lastMathIndexRef.current = 0;
       setSelectedIds([]);
       return true;
     },
@@ -404,6 +587,7 @@ export function WhiteboardCanvas() {
     setUndoStack(u.slice(0, -1));
     setRedoStack([...redoStackRef.current, strokesRef.current].slice(-50));
     setStrokes(prev);
+    lastMathIndexRef.current = 0;
     setSelectedIds([]);
   }, []);
 
@@ -414,12 +598,14 @@ export function WhiteboardCanvas() {
     setRedoStack(r.slice(0, -1));
     setUndoStack([...undoStackRef.current, strokesRef.current].slice(-50));
     setStrokes(next);
+    lastMathIndexRef.current = 0;
     setSelectedIds([]);
   }, []);
 
   const handleClear = useCallback(() => {
     if (strokesRef.current.length === 0) return;
     commitStrokes([]);
+    lastMathIndexRef.current = 0;
     setSelectedIds([]);
   }, [commitStrokes]);
 
@@ -578,6 +764,25 @@ export function WhiteboardCanvas() {
           aria-label="eraser"
         >
           <Eraser className="size-3.5" />
+        </button>
+
+        <div className="w-px h-5 bg-border/60" />
+
+        {/* Math notes: handwrite → recognize → calculate / plot */}
+        <button
+          type="button"
+          onClick={toggleMathMode}
+          className={cn(
+            'grid place-items-center size-7 rounded-md transition-colors',
+            mathMode
+              ? 'bg-primary/15 text-primary'
+              : 'text-muted-foreground hover:text-foreground hover:bg-accent/60',
+          )}
+          aria-label="数学模式"
+          aria-pressed={mathMode}
+          title="数学模式：写完停 1 秒自动识别公式，计算或绘制函数图像"
+        >
+          <Sigma className="size-3.5" />
         </button>
 
         <div className="w-px h-5 bg-border/60" />
@@ -874,6 +1079,42 @@ export function WhiteboardCanvas() {
           hitTest={handleHitTest}
         />
 
+        {/* Vector math cards (calculations / live graphs) */}
+        {mathCards.map((card) => (
+          <MathCardView
+            key={card.id}
+            card={card}
+            view={view}
+            onChange={updateMathCard}
+            onDelete={deleteMathCard}
+          />
+        ))}
+
+        {mathDraft && (
+          <MathNotePanel
+            draft={mathDraft}
+            onChange={(text) => setMathDraft((prev) => (prev ? { ...prev, text } : prev))}
+            onRetry={handleMathRetry}
+            onInsert={handleInsertMath}
+            onClose={() => setMathDraft(null)}
+          />
+        )}
+
+        {mathMode && !mathDraft && (
+          <div className="pointer-events-none absolute left-3 top-3 z-20 flex items-center gap-1.5 rounded-full border border-border/60 bg-background/85 px-2.5 py-1 text-[10px] text-muted-foreground shadow-sm backdrop-blur">
+            <Sigma className="size-3 text-primary" />
+            <span>数学模式 · 写完停 1 秒识别</span>
+            <button
+              type="button"
+              onClick={openManualMath}
+              onPointerDown={(e) => e.stopPropagation()}
+              className="pointer-events-auto rounded-full border border-border/60 px-1.5 py-0.5 text-[9.5px] hover:bg-accent hover:text-foreground"
+            >
+              手动输入
+            </button>
+          </div>
+        )}
+
         {coarse && (
           <PenDock
             tool={tool}
@@ -956,8 +1197,10 @@ export function WhiteboardCanvas() {
                 : '选择'}
           {selectedIds.length > 0 ? ` · 已选 ${selectedIds.length}` : ''} · 识别{' '}
           {recognize ? '开' : '关'} · 背景 {BACKGROUNDS.find((b) => b.id === background)?.label}
+          {mathMode ? ' · 数学模式（停笔 1 秒识别）' : ''}
+          {mathCards.length > 0 ? ` · ${mathCards.length} 个结果卡` : ''}
         </span>
-        <span>提示：使用工具栏的撤销 / 重做 / 清空按钮</span>
+        <span>提示：数学模式下可手写算式或 y=x³，结果卡可拖动、图上滚轮缩放</span>
       </div>
     </div>
   );
