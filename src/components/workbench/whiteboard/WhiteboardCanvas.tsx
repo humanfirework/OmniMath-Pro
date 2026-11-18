@@ -295,14 +295,35 @@ export function WhiteboardCanvas() {
     }
   }, [mathCards]);
 
+  // 笔画落盘改为防抖：大画布每落一笔就同步序列化 + 写 localStorage 会占用
+  // 主线程；这里合并连续改动，并在卸载 / 页面隐藏前 flush，保证不丢最后一笔。
+  const latestBoardRef = useRef({ strokes, background });
   useEffect(() => {
+    latestBoardRef.current = { strokes, background };
+  }, [strokes, background]);
+
+  const persistBoard = useCallback(() => {
     if (typeof window === 'undefined') return;
     try {
-      localStorage.setItem(STORAGE_KEY, JSON.stringify({ strokes, background }));
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(latestBoardRef.current));
     } catch {
       // storage full or serialization error — don't crash the board
     }
-  }, [strokes, background]);
+  }, []);
+
+  useEffect(() => {
+    const timer = setTimeout(persistBoard, 350);
+    return () => clearTimeout(timer);
+  }, [strokes, background, persistBoard]);
+
+  useEffect(() => {
+    const flush = () => persistBoard();
+    window.addEventListener('pagehide', flush);
+    return () => {
+      window.removeEventListener('pagehide', flush);
+      flush();
+    };
+  }, [persistBoard]);
 
   /** 提交一次动作：旧状态压入撤销栈（最多 50 步），清空重做栈。 */
   const commitStrokes = useCallback((next: Stroke[]) => {

@@ -183,7 +183,9 @@ export function StudioHome() {
 
   return (
     <div className="h-full w-full overflow-auto bg-background">
-      <div className="mx-auto flex max-w-6xl flex-col gap-8 px-5 py-8 sm:px-8">
+      {/* 手机端底部有悬浮计算器 FAB：多留一段底部空白，
+          滚到底时最后一张卡片不会被 FAB 长期压住。 */}
+      <div className="mx-auto flex max-w-6xl flex-col gap-8 px-5 pt-8 pb-28 sm:px-8 md:pb-8">
         <header className="flex flex-wrap items-start justify-between gap-4">
           <div className="flex items-start gap-3">
             <div className="grid size-11 place-items-center rounded-2xl bg-primary/10 text-foreground">
