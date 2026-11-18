@@ -42,11 +42,19 @@ import {
   ZoomIn,
   ZoomOut,
   Maximize2,
+  MousePointer2,
+  Lasso,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { t, useLocale } from '@/lib/i18n';
+import { InkCanvas, type InkCanvasHandle } from './InkCanvas';
+import { PenDock } from './PenDock';
+import { useCoarsePointer } from '@/hooks/use-coarse-pointer';
+import { PEN_COLORS, PEN_ERASER_SIZES, PEN_WIDTHS } from '@/lib/ink/presets';
+import { hitTestInk, translateInk } from '@/lib/ink/hitTest';
+import type { InkStroke, InkView } from '@/lib/ink/types';
 
-type Tool = 'pen' | 'eraser';
+type Tool = 'pen' | 'eraser' | 'select' | 'lasso';
 type Background = 'dot' | 'grid' | 'ruled' | 'blank';
 type ShapeId = 'line' | 'rect' | 'triangle' | 'circle' | 'axes';
 
@@ -63,9 +71,9 @@ interface Stroke {
   points: Point[];
   color: string;
   width: number;
-  style: Tool;
+  style: 'pen' | 'eraser';
   recognized?: 'circle' | 'rectangle' | 'triangle' | 'line' | null;
-  /** 像素画笔画：每个 point 是一个被吸附到网格的像素格（渲染为实心方块）。 */
+    /** 像素画笔画：每个 point 是一个被吸附到网格的像素格（渲染为实心方块）。 */
   pixel?: boolean;
   /** 图形工具笔画：用起始点/结束点渲染直线/矩形/三角/圆/坐标轴。 */
   shape?: ShapeId;
@@ -156,47 +164,6 @@ function minMax(values: number[]): [number, number] {
   return [min, max];
 }
 
-/** Build an SVG path `d` string from a stroke's points. */
-function strokeToPath(stroke: Stroke): string {
-  const pts = stroke.points;
-  if (pts.length === 0) return '';
-  if (pts.length === 1) {
-    return `M ${pts[0].x} ${pts[0].y} l 0.01 0`;
-  }
-  if (stroke.recognized === 'line' && pts.length >= 2) {
-    return `M ${pts[0].x} ${pts[0].y} L ${pts[pts.length - 1].x} ${pts[pts.length - 1].y}`;
-  }
-  if (stroke.recognized === 'rectangle' && pts.length >= 2) {
-    const [x0, x1] = minMax(pts.map((p) => p.x));
-    const [y0, y1] = minMax(pts.map((p) => p.y));
-    return `M ${x0} ${y0} L ${x1} ${y0} L ${x1} ${y1} L ${x0} ${y1} Z`;
-  }
-  if (stroke.recognized === 'circle' && pts.length >= 3) {
-    const [x0, x1] = minMax(pts.map((p) => p.x));
-    const [y0, y1] = minMax(pts.map((p) => p.y));
-    const cx = (x0 + x1) / 2;
-    const cy = (y0 + y1) / 2;
-    const rx = (x1 - x0) / 2;
-    const ry = (y1 - y0) / 2;
-    return `M ${cx - rx} ${cy} a ${rx} ${ry} 0 1 0 ${rx * 2} 0 a ${rx} ${ry} 0 1 0 ${-rx * 2} 0 Z`;
-  }
-  if (stroke.recognized === 'triangle' && pts.length >= 3) {
-    const [x0, x1] = minMax(pts.map((p) => p.x));
-    const [y0, y1] = minMax(pts.map((p) => p.y));
-    // Equilateral-ish triangle inscribed in bbox: top-center, bottom-left, bottom-right
-    const cx = (x0 + x1) / 2;
-    return `M ${cx} ${y0} L ${x1} ${y1} L ${x0} ${y1} Z`;
-  }
-  // default: smoothed polyline (Catmull-Rom-ish)
-  let d = `M ${pts[0].x} ${pts[0].y}`;
-  for (let i = 1; i < pts.length - 1; i++) {
-    const midX = (pts[i].x + pts[i + 1].x) / 2;
-    const midY = (pts[i].y + pts[i + 1].y) / 2;
-    d += ` Q ${pts[i].x} ${pts[i].y} ${midX} ${midY}`;
-  }
-  return d;
-}
-
 /**
  * 判断一点是否落在橡皮「扫过区域」半径 r 内。
  * 同时检查橡皮的每个点以及相邻点之间的线段（橡皮移动快、事件稀疏时，
@@ -269,137 +236,6 @@ function applyEraser(strokes: Stroke[], eraser: Stroke): { next: Stroke[]; chang
     }
   }
   return { next: result, changed };
-}
-
-/** 像素画笔画：每个 point 占据一个 PIXEL_CELL 大小的实心方块。 */
-function renderPixelCells(stroke: Stroke, color: string) {
-  return (
-    <g>
-      {stroke.points.map((p, i) => (
-        <rect key={i} x={p.x} y={p.y} width={PIXEL_CELL} height={PIXEL_CELL} fill={color} />
-      ))}
-    </g>
-  );
-}
-
-/** 图形工具笔画：用起点/终点渲染直线/矩形/三角/圆/坐标轴。 */
-function renderShapeElement(stroke: Stroke, color: string) {
-  const pts = stroke.points;
-  if (pts.length < 2) return null;
-  const a = pts[0];
-  const b = pts[pts.length - 1];
-  const x0 = Math.min(a.x, b.x);
-  const x1 = Math.max(a.x, b.x);
-  const y0 = Math.min(a.y, b.y);
-  const y1 = Math.max(a.y, b.y);
-  const w = x1 - x0;
-  const h = y1 - y0;
-  const cx = (x0 + x1) / 2;
-  const cy = (y0 + y1) / 2;
-  const sw = stroke.width;
-
-  switch (stroke.shape) {
-    case 'line':
-      return (
-        <line x1={a.x} y1={a.y} x2={b.x} y2={b.y} stroke={color} strokeWidth={sw} strokeLinecap="round" />
-      );
-    case 'rect':
-      return <rect x={x0} y={y0} width={w} height={h} fill={`${color}22`} stroke={color} strokeWidth={sw} />;
-    case 'triangle':
-      return (
-        <polygon points={`${cx},${y0} ${x1},${y1} ${x0},${y1}`} fill={`${color}22`} stroke={color} strokeWidth={sw} />
-      );
-    case 'circle':
-      return (
-        <ellipse cx={cx} cy={cy} rx={w / 2} ry={h / 2} fill={`${color}22`} stroke={color} strokeWidth={sw} />
-      );
-    case 'axes': {
-      // 坐标轴：以拖拽框中心为原点，向四边画出带箭头与刻度的 X/Y 轴。
-      const tick = 6;
-      const ticks = [...Array(5)].map((_, i) => (i - 2) * 0.25);
-      return (
-        <g stroke={color} strokeWidth={sw} strokeLinecap="round">
-          {/* X 轴 */}
-          <line x1={x0} y1={cy} x2={x1} y2={cy} />
-          <polygon points={`${x1},${cy} ${x1 - 8},${cy - 4} ${x1 - 8},${cy + 4}`} fill={color} stroke="none" />
-          {/* Y 轴 */}
-          <line x1={cx} y1={y1} x2={cx} y2={y0} />
-          <polygon points={`${cx},${y0} ${cx - 4},${y0 + 8} ${cx + 4},${y0 + 8}`} fill={color} stroke="none" />
-          {/* 刻度 */}
-          {ticks.map((u, i) => (
-            <g key={i}>
-              <line x1={cx + u * w} y1={cy - tick} x2={cx + u * w} y2={cy + tick} />
-              <line x1={cx - tick} y1={cy - u * h} x2={cx + tick} y2={cy - u * h} />
-            </g>
-          ))}
-        </g>
-      );
-    }
-    default:
-      return null;
-  }
-}
-
-/**
- * 把一条笔画渲染成 SVG 元素：
- *  - 像素画 → 方块网格。
- *  - 图形工具 → 直线/矩形/三角/圆/坐标轴。
- *  - 已识别的标准形（圆/矩形/三角形/直线）→ 单条 path（带填充）。
- *  - 自由笔迹 → 逐点变宽的 line 段（速度压感真实可见）。
- *  - 历史数据里的旧「橡皮笔画」用背景色渲染（兼容旧持久化数据）。
- */
-function strokeElements(stroke: Stroke) {
-  const pts = stroke.points;
-  const color = stroke.style === 'eraser' ? 'var(--background, #fff)' : stroke.color;
-  if (stroke.pixel) return renderPixelCells(stroke, color);
-  if (stroke.shape) return renderShapeElement(stroke, color);
-  if (pts.length < 2) {
-    return (
-      <path
-        d={strokeToPath(stroke)}
-        stroke={color}
-        strokeWidth={stroke.width}
-        fill="none"
-        strokeLinecap="round"
-        strokeLinejoin="round"
-        vectorEffect="non-scaling-stroke"
-      />
-    );
-  }
-  if (stroke.recognized) {
-    return (
-      <path
-        d={strokeToPath(stroke)}
-        stroke={color}
-        strokeWidth={stroke.width}
-        fill={stroke.style === 'eraser' ? 'transparent' : `${stroke.color}22`}
-        strokeLinecap="round"
-        strokeLinejoin="round"
-        vectorEffect="non-scaling-stroke"
-      />
-    );
-  }
-  return (
-    <g>
-      {pts.slice(0, -1).map((a, i) => {
-        const b = pts[i + 1];
-        const w = ((a.w ?? stroke.width) + (b.w ?? stroke.width)) / 2;
-        return (
-          <line
-            key={i}
-            x1={a.x}
-            y1={a.y}
-            x2={b.x}
-            y2={b.y}
-            stroke={color}
-            strokeWidth={w}
-            strokeLinecap="round"
-            vectorEffect="non-scaling-stroke"
-          />
-        );
-      })}
-    </g>
-  );
 }
 
 /** Heuristic shape recognition. */
@@ -486,8 +322,9 @@ function pointToSegmentDist(p: Point, a: Point, b: Point): number {
 
 export function WhiteboardCanvas() {
   useLocale();
-  // Persist strokes & background to localStorage so they survive viewMode switches
-  // (the component unmounts when leaving the whiteboard view).
+  const coarse = useCoarsePointer();
+
+  // Persist strokes & background to localStorage so they survive viewMode switches.
   const [strokes, setStrokes] = useState<Stroke[]>(() => {
     if (typeof window === 'undefined') return [];
     try {
@@ -502,27 +339,18 @@ export function WhiteboardCanvas() {
   });
   const [redoStack, setRedoStack] = useState<Stroke[][]>([]);
   const [undoStack, setUndoStack] = useState<Stroke[][]>([]);
-  // 当前正在绘制的笔画：独立于已提交的 strokes，避免绘制过程中污染 undo 快照。
-  const [liveStroke, setLiveStroke] = useState<Stroke | null>(null);
-  // 撤销/重做栈的引用镜像，供事件回调在不重建闭包的情况下读取最新值。
   const undoStackRef = useRef<Stroke[][]>(undoStack);
   const redoStackRef = useRef<Stroke[][]>(redoStack);
   undoStackRef.current = undoStack;
   redoStackRef.current = redoStack;
+
   const [tool, setTool] = useState<Tool>('pen');
-  const [color, setColor] = useState<string>(PRESET_COLORS[0]);
-  const [width, setWidth] = useState<number>(PRESET_WIDTHS[1]);
+  const [color, setColor] = useState<string>(PEN_COLORS[0]);
+  const [width, setWidth] = useState<number>(PEN_WIDTHS[1]);
   const [recognize, setRecognize] = useState<boolean>(false);
-  // 像素画模式：开启后把笔迹吸附到固定网格，绘制像素点。
   const [pixelMode, setPixelMode] = useState<boolean>(false);
-  // 橡皮擦尺寸（直径），独立于笔宽，可调。
-  const [eraserSize, setEraserSize] = useState<number>(ERASER_SIZES[1]);
-  // 图形工具：直线/矩形/三角/圆/坐标轴（null 表示自由绘制）。
+  const [eraserSize, setEraserSize] = useState<number>(PEN_ERASER_SIZES[1]);
   const [shapeTool, setShapeTool] = useState<ShapeId | null>(null);
-  // 橡皮擦范围指示器的光标位置（rAF 批处理更新）。
-  const [eraserCursor, setEraserCursor] = useState<{ x: number; y: number } | null>(null);
-  const eraserCursorRef = useRef<{ x: number; y: number } | null>(null);
-  const eraserCursorRaf = useRef(false);
   const [background, setBackground] = useState<Background>(() => {
     if (typeof window === 'undefined') return 'dot' as Background;
     try {
@@ -536,244 +364,104 @@ export function WhiteboardCanvas() {
       return 'dot' as Background;
     }
   });
+  const [selectedIds, setSelectedIds] = useState<string[]>([]);
 
-  const drawingRef = useRef(false);
-  const currentStrokeRef = useRef<Stroke | null>(null);
-  const svgRef = useRef<SVGSVGElement>(null);
-  const strokesRef = useRef(strokes); // mirror for use in callbacks without re-creating them
+  const inkRef = useRef<InkCanvasHandle>(null);
+  const strokesRef = useRef(strokes);
   strokesRef.current = strokes;
-  // 缩放/平移：{ k: scale, x: translateX, y: translateY }，内容组 transform = translate(x,y) scale(k)。
-  const [view, setView] = useState({ k: 1, x: 0, y: 0 });
-  const viewRef = useRef(view);
-  viewRef.current = view;
-  // 中键拖拽平移状态。
-  const panningRef = useRef(false);
-  const panStartRef = useRef({ x: 0, y: 0, vx: 0, vy: 0 });
-  const MIN_K = 0.25;
-  const MAX_K = 8;
+  const [view, setView] = useState<InkView>({ k: 1, x: 0, y: 0 });
 
-  // Persist strokes + background whenever they change.
   useEffect(() => {
     if (typeof window === 'undefined') return;
     try {
       localStorage.setItem(STORAGE_KEY, JSON.stringify({ strokes, background }));
     } catch {
-      // storage full or serialization error — silently ignore (don't crash)
+      // storage full or serialization error — don't crash the board
     }
   }, [strokes, background]);
 
-  const getSvgPoint = useCallback((clientX: number, clientY: number): Point => {
-    const svg = svgRef.current;
-    if (!svg) return { x: 0, y: 0 };
-    const rect = svg.getBoundingClientRect();
-    const v = viewRef.current;
-    // 内容组 transform = translate(v.x, v.y) scale(v.k)，做逆变换回到用户坐标。
-    return {
-      x: (clientX - rect.left - v.x) / v.k,
-      y: (clientY - rect.top - v.y) / v.k,
-      t: Date.now(),
-    };
-  }, []);
-
-  /**
-   * 提交一次「动作」：把当前笔画列表压入撤销栈，更新为 next，并清空重做栈。
-   * 所有会改变笔画数据的操作（绘制完成 / 擦除 / 清空）都经由它，保证撤销/重做一致。
-   */
+  /** 提交一次动作：旧状态压入撤销栈（最多 50 步），清空重做栈。 */
   const commitStrokes = useCallback((next: Stroke[]) => {
-    setUndoStack((u) => [...u, strokesRef.current]);
+    setUndoStack((u) => [...u, strokesRef.current].slice(-50));
     setStrokes(next);
     setRedoStack([]);
   }, []);
 
-  const handlePointerDown = useCallback(
-    (e: React.PointerEvent<SVGSVGElement>) => {
-      // 中键拖拽 = 平移画布（缩放/平移导航，不影响画笔）。
-      if (e.button === 1) {
-        panningRef.current = true;
-        panStartRef.current = { x: e.clientX, y: e.clientY, vx: viewRef.current.x, vy: viewRef.current.y };
-        try {
-          svgRef.current?.setPointerCapture(e.pointerId);
-        } catch {
-          /* ignore */
-        }
-        e.preventDefault();
-        return;
-      }
-      e.preventDefault();
-      // setPointerCapture can throw on some browsers if pointerId is invalid
-      // (e.g. pointercancel already fired). Wrap in try/catch to be safe.
-      try {
-        svgRef.current?.setPointerCapture(e.pointerId);
-      } catch {
-        /* ignore — drawing will still work via pointermove */
-      }
-      drawingRef.current = true;
-      const p = getSvgPoint(e.clientX, e.clientY);
-      // 激活工具：图形工具优先于笔/橡皮；否则按 tool。
-      const activeTool: Tool = shapeTool ? 'pen' : tool;
-      const strokeWidth = activeTool === 'eraser' ? eraserSize : width;
-      const isPixel = pixelMode && activeTool === 'pen' && !shapeTool;
-      const point: Point =
-        isPixel && p.x >= 0 && p.y >= 0
-          ? {
-              x: Math.floor(p.x / PIXEL_CELL) * PIXEL_CELL,
-              y: Math.floor(p.y / PIXEL_CELL) * PIXEL_CELL,
-              w: PIXEL_CELL,
-            }
-          : { ...p, w: strokeWidth };
-      const stroke: Stroke = {
-        id: makeId(),
-        points: [point],
-        color,
-        width: strokeWidth,
-        style: activeTool,
-        recognized: null,
-        pixel: isPixel,
-        shape: shapeTool ?? undefined,
-      };
-      currentStrokeRef.current = stroke;
-      // 橡皮不用实时预览（擦除在 pointerup 一次性结算），避免临时用背景色
-      // 覆盖网格/像素格，造成「擦了网格」的错觉。橡皮范围由光标圆环指示。
-      if (activeTool !== 'eraser') {
-        setLiveStroke({ ...stroke, points: stroke.points });
-      }
-    },
-    [color, width, tool, eraserSize, pixelMode, shapeTool, getSvgPoint],
-  );
-
-  // rAF batching: avoid creating new arrays on every pointermove event
-  const rafPendingRef = useRef(false);
-  const handlePointerMove = useCallback(
-    (e: React.PointerEvent<SVGSVGElement>) => {
-      // 平移模式：更新 view 的 translate。
-      if (panningRef.current) {
-        const s = panStartRef.current;
-        setView((v) => ({
-          ...v,
-          x: s.vx + (e.clientX - s.x),
-          y: s.vy + (e.clientY - s.y),
-        }));
-        return;
-      }
-      const p = getSvgPoint(e.clientX, e.clientY);
-      // 橡皮范围指示：仅橡皮工具时跟踪光标（rAF 批处理，避免每帧重渲染）。
-      if (tool === 'eraser' && !shapeTool) {
-        eraserCursorRef.current = { x: p.x, y: p.y };
-        if (!eraserCursorRaf.current) {
-          eraserCursorRaf.current = true;
-          requestAnimationFrame(() => {
-            eraserCursorRaf.current = false;
-            setEraserCursor(eraserCursorRef.current);
-          });
-        }
-      }
-      if (!drawingRef.current || !currentStrokeRef.current) return;
-      const stroke = currentStrokeRef.current;
-      // 图形工具：保留起点，仅更新终点（拖拽实时预览）。
+  const handleStrokeEnd = useCallback(
+    (stroke: InkStroke): boolean => {
       if (stroke.shape) {
-        const pts = stroke.points;
-        if (pts.length === 0) return;
-        stroke.points = [pts[0], { x: p.x, y: p.y, t: p.t }];
-        setLiveStroke({ ...stroke, points: stroke.points });
-        return;
+        const a = stroke.points[0];
+        const b = stroke.points[stroke.points.length - 1];
+        if (stroke.points.length < 2 || Math.hypot(b.x - a.x, b.y - a.y) <= 2) return false;
+        commitStrokes([...strokesRef.current, { ...stroke, points: [...stroke.points] }]);
+        return true;
       }
-      // 像素画：吸附到网格，进入新格子时才记录，避免重复格子导致卡顿。
-      if (stroke.pixel) {
-        const cellX = Math.floor(p.x / PIXEL_CELL) * PIXEL_CELL;
-        const cellY = Math.floor(p.y / PIXEL_CELL) * PIXEL_CELL;
-        const last = stroke.points[stroke.points.length - 1];
-        if (last.x === cellX && last.y === cellY) return;
-        // 两点跨度超过一格时用 Bresenham 补全中间格子，避免快速拖动「断触」。
-        const lastCellX = Math.floor(last.x / PIXEL_CELL);
-        const lastCellY = Math.floor(last.y / PIXEL_CELL);
-        const curCellX = Math.floor(p.x / PIXEL_CELL);
-        const curCellY = Math.floor(p.y / PIXEL_CELL);
-        if (Math.abs(curCellX - lastCellX) > 1 || Math.abs(curCellY - lastCellY) > 1) {
-          const bridge = bresenhamCells(lastCellX, lastCellY, curCellX, curCellY);
-          for (const c of bridge.slice(1)) {
-            stroke.points.push({ x: c.x * PIXEL_CELL, y: c.y * PIXEL_CELL, w: PIXEL_CELL });
-          }
-        } else {
-          stroke.points.push({ x: cellX, y: cellY, w: PIXEL_CELL });
-        }
-        setLiveStroke({ ...stroke, points: stroke.points });
-        return;
+      if (recognize && stroke.points.length >= 2 && !stroke.pixel) {
+        stroke.recognized = recognizeShape(stroke.points);
       }
-      const last = stroke.points[stroke.points.length - 1];
-      if (Math.hypot(p.x - last.x, p.y - last.y) < 1.5) return;
-      // 速度 → 逐点压感宽度：写快时变细、写慢时变粗（限制在半个基础宽度范围内）。
-      if (p.t && last.t) {
-        const dt = Math.max(8, p.t - last.t);
-        const dist = Math.hypot(p.x - last.x, p.y - last.y);
-        const velocity = dist / dt;
-        const dynamicW = Math.max(1, stroke.width * (1 - Math.min(0.5, velocity * 0.04)));
-        p.w = (last.w ?? stroke.width) * 0.5 + dynamicW * 0.5;
-      } else {
-        p.w = last.w ?? stroke.width;
-      }
-      // Mutate ref directly (no React re-render per point)
-      stroke.points.push(p);
-
-      // Batch React state update via rAF — one re-render per frame max.
-      // liveStroke 与 currentStrokeRef 共享同一个 points 数组，只替换对象引用即可触发重绘。
-      if (!rafPendingRef.current) {
-        rafPendingRef.current = true;
-        requestAnimationFrame(() => {
-          rafPendingRef.current = false;
-          const s = currentStrokeRef.current;
-          if (!s) return;
-          setLiveStroke({ ...s, points: s.points });
-        });
-      }
+      commitStrokes([...strokesRef.current, { ...stroke, points: [...stroke.points] }]);
+      return true;
     },
-    [getSvgPoint, tool, shapeTool],
+    [recognize, commitStrokes],
   );
 
-  const handlePointerUp = useCallback(() => {
-    if (panningRef.current) {
-      panningRef.current = false;
-      return;
-    }
-    if (!drawingRef.current || !currentStrokeRef.current) return;
-    drawingRef.current = false;
-    const stroke = currentStrokeRef.current;
-    currentStrokeRef.current = null;
-    setLiveStroke(null);
+  const handleEraseEnd = useCallback(
+    (stroke: InkStroke): boolean => {
+      const { next, changed } = applyEraser(strokesRef.current, stroke);
+      if (!changed) return false;
+      commitStrokes(next);
+      setSelectedIds([]);
+      return true;
+    },
+    [commitStrokes],
+  );
 
-    if (stroke.style === 'eraser') {
-      // 真正的橡皮：沿橡皮路径切断/擦除被触达的笔画（支持部分擦除）。
-      // 只要删除了任何点（changed=true）就提交，避免只擦末端却因数量不变而不提交。
-      const current = strokesRef.current;
-      const { next, changed } = applyEraser(current, stroke);
-      if (changed) commitStrokes(next);
-      return;
-    }
+  const handleSelect = useCallback((ids: string[]) => {
+    setSelectedIds(ids);
+  }, []);
 
-    // 图形工具：起点与终点过于接近视为误触，忽略。
-    if (stroke.shape) {
-      const a = stroke.points[0];
-      const b = stroke.points[stroke.points.length - 1];
-      if (stroke.points.length >= 2 && Math.hypot(b.x - a.x, b.y - a.y) > 2) {
-        commitStrokes([...strokesRef.current, { ...stroke, points: [...stroke.points] }]);
-      }
-      return;
-    }
+  const handleMoveEnd = useCallback(
+    (dx: number, dy: number, ids: string[]) => {
+      if ((dx === 0 && dy === 0) || ids.length === 0) return;
+      const idSet = new Set(ids);
+      commitStrokes(
+        strokesRef.current.map((s) => (idSet.has(s.id) ? translateInk(s, dx, dy) : s)),
+      );
+    },
+    [commitStrokes],
+  );
 
-    if (recognize && stroke.points.length >= 2 && !stroke.pixel) {
-      stroke.recognized = recognizeShape(stroke.points);
-    }
-    // 提交：把这条笔画加入列表，并把此前状态压入撤销栈。
-    commitStrokes([...strokesRef.current, { ...stroke, points: [...stroke.points] }]);
-  }, [recognize, commitStrokes]);
+  const handleViewChange = useCallback((next: InkView) => {
+    setView(next);
+  }, []);
 
-  // 快照式撤销：从撤销栈顶恢复，同时把当前状态压入重做栈（不嵌套 setState）。
+  const handleHitTest = useCallback(
+    (point: { x: number; y: number }, k: number): string | null =>
+      hitTestInk(strokesRef.current, point, 6, k),
+    [],
+  );
+
+  // 工具切换同步下发给引擎，不依赖 React effect 时序。
+  const selectTool = useCallback((next: Tool) => {
+    setShapeTool(null);
+    setTool(next);
+    inkRef.current?.setStyle({ tool: next, shapeTool: null });
+  }, []);
+
+  const selectShape = useCallback((next: ShapeId | null) => {
+    setShapeTool(next);
+    setTool('pen');
+    inkRef.current?.setStyle({ tool: 'pen', shapeTool: next });
+  }, []);
+
   const handleUndo = useCallback(() => {
     const u = undoStackRef.current;
     if (u.length === 0) return;
     const prev = u[u.length - 1];
     setUndoStack(u.slice(0, -1));
-    setRedoStack([...redoStackRef.current, strokesRef.current]);
+    setRedoStack([...redoStackRef.current, strokesRef.current].slice(-50));
     setStrokes(prev);
+    setSelectedIds([]);
   }, []);
 
   const handleRedo = useCallback(() => {
@@ -781,95 +469,62 @@ export function WhiteboardCanvas() {
     if (r.length === 0) return;
     const next = r[r.length - 1];
     setRedoStack(r.slice(0, -1));
-    setUndoStack([...undoStackRef.current, strokesRef.current]);
+    setUndoStack([...undoStackRef.current, strokesRef.current].slice(-50));
     setStrokes(next);
+    setSelectedIds([]);
   }, []);
 
   const handleClear = useCallback(() => {
     if (strokesRef.current.length === 0) return;
     commitStrokes([]);
+    setSelectedIds([]);
   }, [commitStrokes]);
 
-  /** 以屏幕坐标 (clientX, clientY) 为锚点缩放，保持光标下的内容位置不变。 */
-  const zoomAt = useCallback((factor: number, clientX?: number, clientY?: number) => {
-    const svg = svgRef.current;
-    const rect = svg?.getBoundingClientRect();
-    const px = clientX !== undefined && rect ? clientX - rect.left : rect ? rect.width / 2 : 0;
-    const py = clientY !== undefined && rect ? clientY - rect.top : rect ? rect.height / 2 : 0;
-    const v = viewRef.current;
-    const nextK = Math.min(MAX_K, Math.max(MIN_K, v.k * factor));
-    if (nextK === v.k) return;
-    // 保持锚点的用户坐标不变：screen = x + k*user  ⇒  newX = px - (nextK/k)*(px - x)
-    const ratio = nextK / v.k;
-    setView({
-      k: nextK,
-      x: px - (px - v.x) * ratio,
-      y: py - (py - v.y) * ratio,
-    });
-  }, []);
-
-  const handleWheel = useCallback(
-    (e: React.WheelEvent<SVGSVGElement>) => {
-      e.preventDefault();
-      const factor = e.deltaY < 0 ? 1.12 : 1 / 1.12;
-      zoomAt(factor, e.clientX, e.clientY);
-    },
-    [zoomAt],
-  );
-
-  const handleZoomReset = useCallback(() => setView({ k: 1, x: 0, y: 0 }), []);
-
-  const handleExport = useCallback(() => {
-    const svg = svgRef.current;
-    if (!svg) return;
-    const clone = svg.cloneNode(true) as SVGSVGElement;
-    const w = svg.clientWidth || 1200;
-    const h = svg.clientHeight || 800;
-    clone.setAttribute('width', String(w));
-    clone.setAttribute('height', String(h));
-    clone.setAttribute('xmlns', 'http://www.w3.org/2000/svg');
-    // 背景现在是 SVG pattern rect（随内容缩放）；导出时只需把根底色内联进 style，
-    // 让空白/像素模式也有底色，同时保留点阵/方格/横线 pattern。
-    const computedBg = getComputedStyle(document.documentElement).getPropertyValue('--background')?.trim() || '#ffffff';
-    clone.style.backgroundColor = computedBg;
-    const xml = new XMLSerializer().serializeToString(clone);
-    const blob = new Blob([xml], { type: 'image/svg+xml;charset=utf-8' });
-    const url = URL.createObjectURL(blob);
-    const img = new Image();
-    const cleanup = () => URL.revokeObjectURL(url);
-    img.onload = () => {
-      try {
-        const canvas = document.createElement('canvas');
-        canvas.width = w * 2;
-        canvas.height = h * 2;
-        const ctx = canvas.getContext('2d');
-        if (!ctx) {
-          cleanup();
-          return;
-        }
-        ctx.scale(2, 2);
-        const computedBg = getComputedStyle(document.documentElement).getPropertyValue('--background') || '#ffffff';
-        ctx.fillStyle = computedBg.trim() || '#ffffff';
-        ctx.fillRect(0, 0, w, h);
-        ctx.drawImage(img, 0, 0, w, h);
-        canvas.toBlob((b) => {
-          if (!b) return;
-          const dl = document.createElement('a');
-          dl.href = URL.createObjectURL(b);
-          dl.download = `omnimath-whiteboard-${Date.now()}.png`;
-          dl.click();
-          // Revoke the download URL after a short delay (allow click to start)
-          setTimeout(() => URL.revokeObjectURL(dl.href), 1000);
-        });
-      } finally {
-        cleanup();
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      const el = e.target as HTMLElement | null;
+      if (el && (el.tagName === 'INPUT' || el.tagName === 'TEXTAREA' || el.isContentEditable)) {
+        return;
+      }
+      if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'z') {
+        e.preventDefault();
+        if (e.shiftKey) handleRedo();
+        else handleUndo();
+        return;
+      }
+      if (e.key === 'Delete' || e.key === 'Backspace') {
+        if (selectedIds.length === 0) return;
+        e.preventDefault();
+        const selected = new Set(selectedIds);
+        commitStrokes(strokesRef.current.filter((s) => !selected.has(s.id)));
+        setSelectedIds([]);
       }
     };
-    img.onerror = cleanup;
-    img.src = url;
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [selectedIds, handleUndo, handleRedo, commitStrokes]);
+
+  const zoomAt = useCallback((factor: number, clientX?: number, clientY?: number) => {
+    inkRef.current?.zoomAt(factor, clientX, clientY);
   }, []);
 
-  const empty = strokes.length === 0 && !liveStroke;
+  const handleZoomReset = useCallback(() => {
+    setView({ k: 1, x: 0, y: 0 });
+    inkRef.current?.setView({ k: 1, x: 0, y: 0 });
+  }, []);
+
+  const handleExport = useCallback(async () => {
+    const blob = await inkRef.current?.exportPNG(2);
+    if (!blob) return;
+    const url = URL.createObjectURL(blob);
+    const dl = document.createElement('a');
+    dl.href = url;
+    dl.download = `omnimath-whiteboard-${Date.now()}.png`;
+    dl.click();
+    setTimeout(() => URL.revokeObjectURL(url), 1000);
+  }, []);
+
+  const empty = strokes.length === 0;
 
   const toolBtn = useMemo(
     () => ({
@@ -882,7 +537,12 @@ export function WhiteboardCanvas() {
   return (
     <div className="flex flex-col h-full bg-background">
       {/* Toolbar */}
-      <div className="shrink-0 flex items-center gap-1 px-3 py-2 border-b border-border/60 bg-card/40 backdrop-blur-sm flex-wrap">
+      <div
+        className={cn(
+          'shrink-0 flex items-center gap-1 px-3 py-2 border-b border-border/60 bg-card/40 backdrop-blur-sm',
+          coarse ? 'flex-nowrap overflow-x-auto [&>*]:shrink-0' : 'flex-wrap',
+        )}
+      >
         <div className="flex items-center gap-1 mr-2">
           <PencilRuler className="size-4 text-primary mr-1" />
           <span className="text-[12px] font-medium text-foreground/80">
@@ -896,10 +556,35 @@ export function WhiteboardCanvas() {
         {/* Tool toggle */}
         <button
           type="button"
-          onClick={() => {
-            setShapeTool(null);
-            setTool('pen');
-          }}
+          onClick={() => selectTool('select')}
+          className={cn(
+            'grid place-items-center size-7 rounded-md transition-colors',
+            tool === 'select'
+              ? 'bg-primary/15 text-primary'
+              : 'text-muted-foreground hover:text-foreground hover:bg-accent/60',
+          )}
+          aria-label="选择"
+          title="选择 / 拖动"
+        >
+          <MousePointer2 className="size-3.5" />
+        </button>
+        <button
+          type="button"
+          onClick={() => selectTool('lasso')}
+          className={cn(
+            'grid place-items-center size-7 rounded-md transition-colors',
+            tool === 'lasso'
+              ? 'bg-primary/15 text-primary'
+              : 'text-muted-foreground hover:text-foreground hover:bg-accent/60',
+          )}
+          aria-label="套圈"
+          title="套圈选择（圈住多个对象后可一起拖动或删除）"
+        >
+          <Lasso className="size-3.5" />
+        </button>
+        <button
+          type="button"
+          onClick={() => selectTool('pen')}
           className={cn(
             'grid place-items-center size-7 rounded-md transition-colors',
             toolBtn.pen && !shapeTool
@@ -912,10 +597,7 @@ export function WhiteboardCanvas() {
         </button>
         <button
           type="button"
-          onClick={() => {
-            setShapeTool(null);
-            setTool('eraser');
-          }}
+          onClick={() => selectTool('eraser')}
           className={cn(
             'grid place-items-center size-7 rounded-md transition-colors',
             toolBtn.eraser && !shapeTool
@@ -935,10 +617,7 @@ export function WhiteboardCanvas() {
             <button
               key={id}
               type="button"
-              onClick={() => {
-                setShapeTool(shapeTool === id ? null : id);
-                setTool('pen');
-              }}
+              onClick={() => selectShape(shapeTool === id ? null : id)}
               className={cn(
                 'grid place-items-center size-6 rounded transition-colors',
                 shapeTool === id
@@ -959,9 +638,11 @@ export function WhiteboardCanvas() {
         <button
           type="button"
           onClick={() => {
-            setPixelMode((m) => !m);
-            setShapeTool(null);
-            setTool('pen');
+            const next = !pixelMode;
+            setPixelMode(next);
+            selectShape(null);
+            selectTool('pen');
+            inkRef.current?.setStyle({ pixelMode: next });
           }}
           className={cn(
             'inline-flex items-center gap-1 h-7 px-2 rounded-md text-[11px] transition-colors',
@@ -980,11 +661,14 @@ export function WhiteboardCanvas() {
 
         {/* Color picker */}
         <div className="flex items-center gap-1">
-          {PRESET_COLORS.map((c) => (
+          {PEN_COLORS.map((c) => (
             <button
               key={c}
               type="button"
-              onClick={() => setColor(c)}
+              onClick={() => {
+                setColor(c);
+                inkRef.current?.setStyle({ color: c });
+              }}
               className={cn(
                 'size-5 rounded-full border transition-all',
                 color === c
@@ -1002,11 +686,14 @@ export function WhiteboardCanvas() {
         {/* Width / Eraser size */}
         {tool === 'eraser' && !shapeTool ? (
           <div className="flex items-center gap-1">
-            {ERASER_SIZES.map((s) => (
+            {PEN_ERASER_SIZES.map((s) => (
               <button
                 key={s}
                 type="button"
-                onClick={() => setEraserSize(s)}
+                onClick={() => {
+                  setEraserSize(s);
+                  inkRef.current?.setStyle({ eraserSize: s });
+                }}
                 className={cn(
                   'grid place-items-center size-7 rounded-md transition-colors',
                   eraserSize === s
@@ -1029,11 +716,14 @@ export function WhiteboardCanvas() {
           </div>
         ) : (
           <div className="flex items-center gap-1">
-            {PRESET_WIDTHS.map((w) => (
+            {PEN_WIDTHS.map((w) => (
               <button
                 key={w}
                 type="button"
-                onClick={() => setWidth(w)}
+                onClick={() => {
+                  setWidth(w);
+                  inkRef.current?.setStyle({ width: w });
+                }}
                 className={cn(
                   'grid place-items-center size-7 rounded-md transition-colors',
                   width === w
@@ -1077,7 +767,10 @@ export function WhiteboardCanvas() {
             <button
               key={id}
               type="button"
-              onClick={() => setBackground(id)}
+              onClick={() => {
+                setBackground(id);
+                inkRef.current?.setStyle({ background: id });
+              }}
               className={cn(
                 'grid place-items-center size-6 rounded transition-colors',
                 background === id
@@ -1129,7 +822,7 @@ export function WhiteboardCanvas() {
         <button
           type="button"
           onClick={handleUndo}
-          disabled={strokes.length === 0}
+          disabled={undoStack.length === 0}
           className="grid place-items-center size-7 rounded-md text-muted-foreground hover:text-foreground hover:bg-accent/60 transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
           aria-label="undo"
         >
@@ -1167,79 +860,63 @@ export function WhiteboardCanvas() {
 
       {/* Canvas */}
       <div className="flex-1 min-h-0 relative overflow-hidden">
-        <svg
-          ref={svgRef}
-          className="absolute inset-0 w-full h-full touch-none cursor-crosshair"
-          style={{
-            // 只保留主题底色；点阵/方格/横线背景改为 SVG pattern，随缩放/平移一起变换。
-            backgroundColor: 'var(--background, #fff)',
-          }}
-          onWheel={handleWheel}
-          onPointerDown={handlePointerDown}
-          onPointerMove={handlePointerMove}
-          onPointerUp={handlePointerUp}
-          onPointerLeave={handlePointerUp}
-        >
-          <defs>
-            {/* 背景图案：放在用户坐标系内，随内容一起缩放/平移，避免「背景不缩放」的错位感。 */}
-            <pattern id="bg-dot" width="20" height="20" patternUnits="userSpaceOnUse">
-              <circle cx="10" cy="10" r="1.5" fill="oklch(0.55 0 0 / 0.28)" />
-            </pattern>
-            <pattern id="bg-grid" width="20" height="20" patternUnits="userSpaceOnUse">
-              <path d="M 20 0 L 0 0 0 20" fill="none" stroke="oklch(0.55 0 0 / 0.16)" strokeWidth="1" />
-            </pattern>
-            <pattern id="bg-ruled" width="20" height="24" patternUnits="userSpaceOnUse">
-              <path d="M 0 24 L 20 24" fill="none" stroke="oklch(0.55 0 0 / 0.18)" strokeWidth="1" />
-            </pattern>
-            {/* 像素画网格：开启像素模式时显示网格线，便于对齐像素点。 */}
-            <pattern id="pixelGrid" width={PIXEL_CELL} height={PIXEL_CELL} patternUnits="userSpaceOnUse">
-              <path
-                d={`M ${PIXEL_CELL} 0 L 0 0 0 ${PIXEL_CELL}`}
-                fill="none"
-                stroke="oklch(0.55 0 0 / 0.16)"
-                strokeWidth="1"
-              />
-            </pattern>
-          </defs>
+        <InkCanvas
+          ref={inkRef}
+          className="absolute inset-0"
+          strokes={strokes}
+          tool={tool}
+          shapeTool={shapeTool}
+          color={color}
+          width={width}
+          eraserSize={eraserSize}
+          pixelMode={pixelMode}
+          background={background}
+          selectedIds={selectedIds}
+          onStrokeEnd={handleStrokeEnd}
+          onEraseEnd={handleEraseEnd}
+          onSelect={handleSelect}
+          onMoveEnd={handleMoveEnd}
+          onViewChange={handleViewChange}
+          hitTest={handleHitTest}
+        />
 
-          {/* 可缩放/平移的内容组：transform = translate(x,y) scale(k)。 */}
-          <g transform={`translate(${view.x},${view.y}) scale(${view.k})`}>
-            {/* 背景层：非像素模式且非空白时绘制 CSS 同款 pattern（覆盖足够大的范围）。 */}
-            {!pixelMode && background !== 'blank' && (
-              <rect
-                x="-10000"
-                y="-10000"
-                width="20000"
-                height="20000"
-                fill={`url(#bg-${background})`}
-                pointerEvents="none"
-              />
-            )}
-            {/* 像素网格：开启像素模式时叠加（此时已强制隐藏上面的 pattern，不重叠）。 */}
-            {pixelMode && (
-              <rect x="-10000" y="-10000" width="20000" height="20000" fill="url(#pixelGrid)" pointerEvents="none" />
-            )}
-            {strokes.map((stroke) => (
-              <g key={stroke.id}>{strokeElements(stroke)}</g>
-            ))}
-            {liveStroke && <g>{strokeElements(liveStroke)}</g>}
-            {/* 橡皮擦范围指示器：显示当前橡皮的擦除直径（用户坐标，随缩放缩放）。
-                仅用虚线描边，不加半透明填充，避免看起来像「把网格擦淡/擦掉」。 */}
-            {eraserCursor && tool === 'eraser' && !shapeTool && (
-              <circle
-                cx={eraserCursor.x}
-                cy={eraserCursor.y}
-                r={eraserSize / 2}
-                fill="none"
-                stroke="var(--primary, #0ea5e9)"
-                strokeWidth="1.5"
-                strokeDasharray="4 3"
-                vectorEffect="non-scaling-stroke"
-                pointerEvents="none"
-              />
-            )}
-          </g>
-        </svg>
+        {coarse && (
+          <PenDock
+            tool={tool}
+            onTool={selectTool}
+            color={color}
+            onColor={(c) => {
+              setColor(c);
+              inkRef.current?.setStyle({ color: c });
+            }}
+            width={width}
+            onWidth={(w) => {
+              setWidth(w);
+              inkRef.current?.setStyle({ width: w });
+            }}
+            eraserSize={eraserSize}
+            onEraserSize={(s) => {
+              setEraserSize(s);
+              inkRef.current?.setStyle({ eraserSize: s });
+            }}
+            shapeTool={shapeTool}
+            onShapeTool={selectShape}
+            pixelMode={pixelMode}
+            onPixelMode={(next) => {
+              setPixelMode(next);
+              selectShape(null);
+              selectTool('pen');
+              inkRef.current?.setStyle({ pixelMode: next });
+            }}
+            onUndo={handleUndo}
+            onRedo={handleRedo}
+            canUndo={undoStack.length > 0}
+            canRedo={redoStack.length > 0}
+            onClear={handleClear}
+            onExport={handleExport}
+          />
+        )}
+
 
         {/* Empty state hint */}
         {empty && (
@@ -1267,7 +944,10 @@ export function WhiteboardCanvas() {
       {/* Status bar */}
       <div className="shrink-0 flex items-center justify-between px-3 py-1 border-t border-border/60 bg-card/30 text-[11px] text-muted-foreground">
         <span>
-          {strokes.length} 笔 · {tool === 'pen' ? '钢笔' : '橡皮'} · 识别 {recognize ? '开' : '关'} · 背景 {BACKGROUNDS.find((b) => b.id === background)?.label}
+          {strokes.length} 笔 ·{' '}
+          {tool === 'pen' ? '钢笔' : tool === 'eraser' ? '橡皮' : tool === 'lasso' ? '套圈' : '选择'}
+          {selectedIds.length > 0 ? ` · 已选 ${selectedIds.length}` : ''} · 识别{' '}
+          {recognize ? '开' : '关'} · 背景 {BACKGROUNDS.find((b) => b.id === background)?.label}
         </span>
         <span>提示：使用工具栏的撤销 / 重做 / 清空按钮</span>
       </div>

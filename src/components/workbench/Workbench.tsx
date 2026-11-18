@@ -38,6 +38,7 @@ import { setResultPrecision } from '@/lib/engine/latex';
 import { inTauri } from '@/lib/tauri';
 import { setLocale as setI18nLocale, getLocale, t, useLocale } from '@/lib/i18n';
 import { useIsMobile } from '@/hooks/use-mobile';
+import { useCoarsePointer } from '@/hooks/use-coarse-pointer';
 import { TitleBar } from '@/components/workbench/layout/TitleBar';
 import { ActivityBar } from '@/components/workbench/layout/ActivityBar';
 import { SidePanel } from '@/components/workbench/layout/SidePanel';
@@ -96,6 +97,57 @@ function ViewLoading() {
 
 /** 全屏视图列表（按 ActivityBar 中「全屏视图」的生命周期保持一致）。 */
 const FULLSCREEN_VIEWS: ViewMode[] = ['pipeline', 'whiteboard', 'linalg', 'solver', 'stats', 'control', 'education'];
+
+function isFullScreenView(vm: ViewMode): boolean {
+  return FULLSCREEN_VIEWS.includes(vm);
+}
+
+function fullScreenLabel(vm: ViewMode): string {
+  switch (vm) {
+    case 'pipeline':
+      return t('abPipeline');
+    case 'whiteboard':
+      return t('abWhiteboard');
+    case 'linalg':
+      return t('abLinalg');
+    case 'solver':
+      return t('abSolver');
+    case 'stats':
+      return t('abStats');
+    case 'control':
+      return t('abControl');
+    case 'education':
+      return t('abEducation');
+    default:
+      return '';
+  }
+}
+
+/** 右侧并排视图：带一个轻量标题栏，关闭后回到普通工作台。 */
+function FullScreenPanel({ viewMode, onClose }: { viewMode: ViewMode; onClose: () => void }) {
+  return (
+    <div className="h-full w-full flex flex-col min-h-0 bg-background">
+      <div className="shrink-0 h-9 flex items-center gap-2 border-b border-border/60 bg-card/40 px-3">
+        <span className="size-1.5 rounded-full bg-primary" />
+        <span className="text-xs font-medium text-foreground/80">{fullScreenLabel(viewMode)}</span>
+        <span className="text-[10px] text-muted-foreground">并排视图</span>
+        <div className="flex-1" />
+        <button
+          type="button"
+          onClick={onClose}
+          className="h-6 rounded px-2 text-[10px] text-muted-foreground hover:bg-accent/60 hover:text-foreground transition-colors"
+        >
+          关闭
+        </button>
+      </div>
+      <div className="flex-1 min-h-0 relative">
+        <ErrorBoundary>
+          <FullScreenViews activeViewMode={viewMode} />
+        </ErrorBoundary>
+      </div>
+    </div>
+  );
+}
 
 /**
  * 全屏视图容器 —— 保持挂载策略（防止切换视图时数据丢失）。
@@ -344,6 +396,10 @@ export function Workbench() {
   }, [symbolPaletteOpen, setSymbolPaletteOpen]);
 
   const isMobile = useIsMobile();
+  const coarsePointer = useCoarsePointer();
+  // 平板打开白板时收起编辑器/侧栏，让画布吃满屏幕。
+  const focusWhiteboard = coarsePointer && viewMode === 'whiteboard';
+  const showFsSide = !sidePanelCollapsed && viewMode !== 'focus' && !focusWhiteboard;
 
   if (isMobile) {
     return (
@@ -370,11 +426,57 @@ export function Workbench() {
       <div className="flex-1 flex min-h-0">
         {activityBarPosition === 'left' && <ActivityBar />}
 
-        {viewMode === 'pipeline' || viewMode === 'whiteboard' || viewMode === 'linalg' || viewMode === 'solver' || viewMode === 'stats' || viewMode === 'control' || viewMode === 'education' ? (
-          /* 全屏视图（pipeline / whiteboard / linalg / solver / stats）。
-             关键修复：与 SidePanel 相同，访问过的全屏视图始终保持挂载，仅用 CSS
-             隐藏非激活视图，避免切换时组件卸载导致用户数据（矩阵/方程/结果等）丢失归零。 */
-          <FullScreenViews activeViewMode={viewMode} />
+        {isFullScreenView(viewMode) ? (
+          /* 并排工作区：侧栏 | 编辑器 | 视图。编辑器不再被整页替换。 */
+          <ResizablePanelGroup
+            direction="horizontal"
+            autoSaveId="omnimath-side-fs-v1"
+            className="flex-1 min-w-0"
+          >
+            {showFsSide && (
+              <>
+                <ResizablePanel defaultSize={20} minSize={12} maxSize={40} id="fs-side" order={1}>
+                  <ErrorBoundary>
+                    <SidePanel />
+                  </ErrorBoundary>
+                </ResizablePanel>
+                <ResizableHandle withHandle className="data-[resize-handle-active]:bg-primary/60" />
+              </>
+            )}
+            {editorVisible && !focusWhiteboard && (
+              <>
+                <ResizablePanel
+                  defaultSize={showFsSide ? 35 : 38}
+                  minSize={20}
+                  id="fs-editor"
+                  order={2}
+                >
+                  <ErrorBoundary>
+                    <EditorPanel />
+                  </ErrorBoundary>
+                </ResizablePanel>
+                <ResizableHandle withHandle className="data-[resize-handle-active]:bg-primary/60" />
+              </>
+            )}
+            <ResizablePanel
+              defaultSize={
+                focusWhiteboard
+                  ? 100
+                  : editorVisible
+                    ? showFsSide
+                      ? 45
+                      : 62
+                    : showFsSide
+                      ? 80
+                      : 100
+              }
+              minSize={30}
+              id="fs-panel"
+              order={3}
+            >
+              <FullScreenPanel viewMode={viewMode} onClose={() => setViewMode('workbench')} />
+            </ResizablePanel>
+          </ResizablePanelGroup>
         ) : !editorVisible && !previewVisible ? (
           /* Plain layout when both main panels are hidden — avoids empty resizable group. */
           <ResizablePanelGroup direction="horizontal" autoSaveId="omnimath-side-only" className="flex-1 min-w-0">
