@@ -46,6 +46,13 @@ import {
   TooltipContent,
   TooltipTrigger,
 } from '@/components/ui/tooltip';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select';
 import { useWorkbenchStore, STORAGE_KEY } from '@/lib/store/workbench';
 import { useFileSystemStore } from '@/lib/store/fileSystemStore';
 import { useSettingsStore } from '@/lib/store/settingsStore';
@@ -69,7 +76,7 @@ import { SymbolPalette } from '@/components/workbench/SymbolPalette';
 import { FormulaRenderer } from '@/components/workbench/FormulaRenderer';
 import { DemosPanel } from '@/components/workbench/plots/DemosPanel';
 
-const DEFAULT_SCRIPT = `# 输入表达式，按 Ctrl+Enter 运行（或点右上角「运行」）
+const DEFAULT_SCRIPT = `# 按 Ctrl+Enter 运行（手机点右上角「运行」）
 # 用 --- 分隔独立计算块；含 x 的表达式自动画图
 
 sin(x) * cos(x)
@@ -504,48 +511,70 @@ export function EditorPanel() {
   /* ─── Render ───────────────────────────────────────────────────── */
   return (
     <div className="flex flex-col h-full bg-background/60">
-      {/* Toolbar */}
-      <div className="shrink-0 h-9 flex items-center justify-between px-2.5 gap-2 border-b border-border/60 bg-background/40">
+      {/* Toolbar —— @container：面板被拖窄或平板竖屏时按容器宽度收缩，
+          避免模式切换、统计、操作按钮互相重叠。 */}
+      <div className="@container shrink-0 h-9 flex items-center justify-between px-2.5 gap-2 border-b border-border/60 bg-background/40">
         {/* Left: label + mode switch */}
         <div className="flex items-center gap-2 min-w-0">
           {/* 代码 / Demos 输入界面切换已上移到顶栏 TitleBar，此处不再重复，避免工具栏拥挤 */}
-          <div className="flex items-center gap-1.5">
+          <div className="flex items-center gap-1.5 shrink-0">
             <FileCode2 className="size-3.5 text-primary" />
-            <span className="text-[11.5px] font-semibold tracking-tight hidden sm:inline">
+            <span className="text-[11.5px] font-semibold tracking-tight hidden @[360px]:inline">
               {t('editorTitle')}
             </span>
           </div>
           {/* Mode switcher —— 仅在代码编辑器模式下显示；
-              Demos 模式下隐藏 简单/Python/MATLAB，界面更简洁。 */}
+              Demos 模式下隐藏 简单/Python/MATLAB，界面更简洁。
+              窄容器用下拉框替代三段按钮，避免挤压。 */}
           {inputView === 'code' && (
-            <div className="flex items-center gap-0.5 p-0.5 rounded-md bg-muted/60 border border-border/60">
-              {MODES.map((m) => (
-                <Tooltip key={m.id}>
-                  <TooltipTrigger asChild>
-                    <button
-                      type="button"
-                      onClick={() => setInputMode(m.id)}
-                      className={cn(
-                        'h-5 px-2 text-[10.5px] rounded transition-all font-medium',
-                        inputMode === m.id
-                          ? 'bg-primary/15 text-primary shadow-sm'
-                          : 'text-muted-foreground hover:text-foreground',
-                      )}
-                    >
+            <>
+              <div className="hidden @[430px]:flex items-center gap-0.5 p-0.5 rounded-md bg-muted/60 border border-border/60">
+                {MODES.map((m) => (
+                  <Tooltip key={m.id}>
+                    <TooltipTrigger asChild>
+                      <button
+                        type="button"
+                        onClick={() => setInputMode(m.id)}
+                        className={cn(
+                          'h-5 px-2 text-[10.5px] rounded transition-all font-medium',
+                          inputMode === m.id
+                            ? 'bg-primary/15 text-primary shadow-sm'
+                            : 'text-muted-foreground hover:text-foreground',
+                        )}
+                      >
+                        {t(m.labelKey)}
+                      </button>
+                    </TooltipTrigger>
+                    <TooltipContent side="bottom" className="max-w-[200px]">
+                      {MODE_DESCRIPTION[m.id]}
+                    </TooltipContent>
+                  </Tooltip>
+                ))}
+              </div>
+              <Select
+                value={inputMode}
+                onValueChange={(v) => setInputMode(v as InputMode)}
+              >
+                <SelectTrigger
+                  className="flex @[430px]:hidden h-6 w-[82px] px-2 text-[10.5px] rounded-md bg-muted/60 border-border/60"
+                  aria-label={t('editorTitle')}
+                >
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {MODES.map((m) => (
+                    <SelectItem key={m.id} value={m.id} className="text-[11px]">
                       {t(m.labelKey)}
-                    </button>
-                  </TooltipTrigger>
-                  <TooltipContent side="bottom" className="max-w-[200px]">
-                    {MODE_DESCRIPTION[m.id]}
-                  </TooltipContent>
-                </Tooltip>
-              ))}
-            </div>
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </>
           )}
         </div>
 
-        {/* Center: stats */}
-        <div className="hidden md:flex items-center gap-2 text-[10.5px] text-muted-foreground font-mono">
+        {/* Center: stats（窄容器隐藏，优先保证编辑与运行） */}
+        <div className="hidden @[520px]:flex items-center gap-2 text-[10.5px] text-muted-foreground font-mono">
           <span>{lineCount} {t('editorLines')}</span>
           <span className="text-border">|</span>
           <span>{varCount} {t('editorVars')}</span>
@@ -580,7 +609,7 @@ export function EditorPanel() {
                 type="button"
                 onClick={handleReset}
                 aria-label={t('editorReset')}
-                className="grid place-items-center size-7 rounded-md text-muted-foreground hover:bg-accent hover:text-foreground transition-colors"
+                className="hidden @[420px]:grid place-items-center size-7 rounded-md text-muted-foreground hover:bg-accent hover:text-foreground transition-colors"
               >
                 <Eraser className="size-3.5" />
               </button>
@@ -593,7 +622,7 @@ export function EditorPanel() {
                 type="button"
                 onClick={handleClear}
                 aria-label={t('editorClear')}
-                className="grid place-items-center size-7 rounded-md text-muted-foreground hover:bg-accent hover:text-foreground transition-colors"
+                className="hidden @[420px]:grid place-items-center size-7 rounded-md text-muted-foreground hover:bg-accent hover:text-foreground transition-colors"
               >
                 <Trash2 className="size-3.5" />
               </button>
@@ -641,7 +670,7 @@ export function EditorPanel() {
                     </motion.span>
                   )}
                 </AnimatePresence>
-                <span>{t('editorRun')}</span>
+                <span className="hidden @[360px]:inline">{t('editorRun')}</span>
               </motion.button>
             </TooltipTrigger>
             <TooltipContent side="bottom">
