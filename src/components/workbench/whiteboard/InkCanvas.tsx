@@ -23,6 +23,7 @@ export interface InkCanvasHandle {
   getView: () => InkView;
   setStyle: (patch: Partial<InkStyle>) => void;
   exportPNG: (scale?: number) => Promise<Blob | null>;
+  setLatencyProbe: (enabled: boolean) => void;
 }
 
 export interface InkCanvasProps {
@@ -43,6 +44,7 @@ export interface InkCanvasProps {
   onMoveEnd: (dx: number, dy: number, ids: string[]) => void;
   onViewChange: (view: InkView) => void;
   hitTest: (point: { x: number; y: number }, k: number) => string | null;
+  onLatency?: (ms: number) => void;
 
   className?: string;
 }
@@ -65,6 +67,7 @@ export const InkCanvas = forwardRef<InkCanvasHandle, InkCanvasProps>(function In
       onMoveEnd: (dx, dy, ids) => propsRef.current.onMoveEnd(dx, dy, ids),
       onViewChange: (view) => propsRef.current.onViewChange(view),
       hitTest: (point, k) => propsRef.current.hitTest(point, k),
+      onLatency: (ms) => propsRef.current.onLatency?.(ms),
     });
     engineRef.current = engine;
 
@@ -130,6 +133,7 @@ export const InkCanvas = forwardRef<InkCanvasHandle, InkCanvasProps>(function In
       getView: () => engineRef.current?.getView() ?? { k: 1, x: 0, y: 0 },
       setStyle: (patch) => engineRef.current?.setStyle(patch),
       exportPNG: (scale) => engineRef.current?.exportPNG(scale) ?? Promise.resolve(null),
+      setLatencyProbe: (enabled) => engineRef.current?.setLatencyProbe(enabled),
     }),
     [],
   );

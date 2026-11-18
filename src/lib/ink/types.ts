@@ -81,6 +81,8 @@ export interface InkEngineCallbacks {
   onViewChange: (view: InkView) => void;
   /** 命中测试：返回最上层对象 id。 */
   hitTest: (point: { x: number; y: number }, k: number) => string | null;
+  /** 笔迹延迟采样：输入事件时间戳 → 下一帧开始（毫秒）。 */
+  onLatency?: (ms: number) => void;
 }
 
 let idSeq = 0;

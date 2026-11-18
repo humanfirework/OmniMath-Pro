@@ -110,6 +110,7 @@ export class InkEngine {
   private selectionColor = '#0ea5e9';
 
   private drawing = false;
+  private latencyProbe = false;
   private live: InkStroke | null = null;
   private liveDrawn = 0;
   private optimistic: InkStroke | null = null;
@@ -204,6 +205,11 @@ export class InkEngine {
       this.updateCursor();
     }
     this.scheduleOverlay();
+  }
+
+  /** Enable/disable per-move latency sampling (diagnostics only). */
+  setLatencyProbe(enabled: boolean): void {
+    this.latencyProbe = enabled;
   }
 
   setStrokes(strokes: InkStroke[]): void {
@@ -639,6 +645,15 @@ export class InkEngine {
     this.beginStroke(e);
   };
 
+  private sampleLatency(e: PointerEvent): void {
+    if (!this.latencyProbe || !this.opts.onLatency || e.timeStamp <= 0) return;
+    const start = e.timeStamp;
+    requestAnimationFrame(() => {
+      const ms = performance.now() - start;
+      if (ms >= 0 && ms < 250) this.opts.onLatency?.(ms);
+    });
+  }
+
   private onPointerMove = (e: PointerEvent): void => {
     if (this.destroyed) return;
 
@@ -681,6 +696,7 @@ export class InkEngine {
 
     if (this.drawing) {
       this.extendStroke(e);
+      this.sampleLatency(e);
       return;
     }
 

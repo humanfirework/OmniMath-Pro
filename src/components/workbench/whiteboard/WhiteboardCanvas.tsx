@@ -51,6 +51,7 @@ import {
   RotateCw,
   MoreHorizontal,
   Check,
+  Timer,
 } from 'lucide-react';
 import {
   DropdownMenu,
@@ -69,6 +70,7 @@ import { PEN_COLORS, PEN_ERASER_SIZES, PEN_WIDTHS } from '@/lib/ink/presets';
 import { hitTestInk, translateInk } from '@/lib/ink/hitTest';
 import { applyEraser, type EraserMode } from '@/lib/ink/eraser';
 import { rotateSelection, scaleSelection } from '@/lib/ink/transform';
+import { summarizeLatency, type LatencyStats } from '@/lib/ink/latency';
 import type { InkBrush, InkStroke, InkView } from '@/lib/ink/types';
 import { getGlyphTemplates, recognizeMathInk, addUserGlyphSamples } from '@/lib/mathnotes/recognize';
 import { evaluateMathNote } from '@/lib/mathnotes/expression';
@@ -349,6 +351,12 @@ export function WhiteboardCanvas() {
   const [mathMode, setMathMode] = useState(false);
   const [mathDraft, setMathDraft] = useState<MathNoteDraft | null>(null);
   const [mathCards, setMathCards] = useState<MathCard[]>(loadMathCards);
+  const [latencyProbe, setLatencyProbeOn] = useState(false);
+  const [latencyStats, setLatencyStats] = useState<LatencyStats>({
+    count: 0, avg: 0, p95: 0, max: 0, min: 0,
+  });
+  const latencySamplesRef = useRef<number[]>([]);
+  const latencyTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const inkRef = useRef<InkCanvasHandle>(null);
   const strokesRef = useRef(strokes);
@@ -364,6 +372,7 @@ export function WhiteboardCanvas() {
   useEffect(() => {
     return () => {
       if (mathTimerRef.current) clearTimeout(mathTimerRef.current);
+      if (latencyTimerRef.current) clearTimeout(latencyTimerRef.current);
     };
   }, []);
 
@@ -581,6 +590,30 @@ export function WhiteboardCanvas() {
       confidence: 1,
     });
   }, [view]);
+
+  const handleLatencySample = useCallback((ms: number) => {
+    const samples = latencySamplesRef.current;
+    samples.push(ms);
+    if (samples.length > 240) samples.shift();
+    if (!latencyTimerRef.current) {
+      latencyTimerRef.current = setTimeout(() => {
+        latencyTimerRef.current = null;
+        setLatencyStats(summarizeLatency(latencySamplesRef.current));
+      }, 250);
+    }
+  }, []);
+
+  const resetLatency = useCallback(() => {
+    latencySamplesRef.current = [];
+    setLatencyStats({ count: 0, avg: 0, p95: 0, max: 0, min: 0 });
+  }, []);
+
+  const toggleLatencyProbe = useCallback(() => {
+    const next = !latencyProbe;
+    setLatencyProbeOn(next);
+    inkRef.current?.setLatencyProbe(next);
+    resetLatency();
+  }, [latencyProbe, resetLatency]);
 
   const handleStrokeEnd = useCallback(
     (stroke: InkStroke): boolean => {
@@ -1055,6 +1088,14 @@ export function WhiteboardCanvas() {
               <span>形状识别</span>
               {recognize && <Check className="ml-auto size-3 text-primary" />}
             </DropdownMenuItem>
+            <DropdownMenuItem
+              onClick={toggleLatencyProbe}
+              className="gap-2 text-[11.5px]"
+            >
+              <Timer className="size-3.5" />
+              <span>笔迹延迟测试</span>
+              {latencyProbe && <Check className="ml-auto size-3 text-primary" />}
+            </DropdownMenuItem>
 
             <DropdownMenuSeparator />
             <DropdownMenuLabel className="text-[10px] uppercase tracking-wide text-muted-foreground">
@@ -1170,6 +1211,7 @@ export function WhiteboardCanvas() {
           onMoveEnd={handleMoveEnd}
           onViewChange={handleViewChange}
           hitTest={handleHitTest}
+          onLatency={handleLatencySample}
         />
 
         {/* Vector math cards (calculations / live graphs) */}
@@ -1204,6 +1246,34 @@ export function WhiteboardCanvas() {
               className="pointer-events-auto rounded-full border border-border/60 px-1.5 py-0.5 text-[9.5px] hover:bg-accent hover:text-foreground"
             >
               手动输入
+            </button>
+          </div>
+        )}
+
+        {latencyProbe && (
+          <div className="absolute right-3 top-3 z-20 w-48 rounded-lg border border-border/60 bg-background/90 px-2.5 py-2 text-[10px] shadow-lg backdrop-blur">
+            <div className="flex items-center gap-1.5 font-medium text-foreground/85">
+              <Timer className="size-3 text-primary" />
+              笔迹延迟
+              <span className="ml-auto text-[9px] font-normal text-muted-foreground">
+                {latencyStats.count} 次
+              </span>
+            </div>
+            <div className="mt-1 font-mono text-foreground/80">
+              平均 {latencyStats.avg.toFixed(1)}ms · P95 {latencyStats.p95.toFixed(1)}ms
+            </div>
+            <div className="font-mono text-muted-foreground">
+              最大 {latencyStats.max.toFixed(1)}ms
+            </div>
+            <div className="mt-1 text-[9px] leading-snug text-muted-foreground">
+              输入事件 → 下一帧；请在真实触控笔上书写测试
+            </div>
+            <button
+              type="button"
+              onClick={resetLatency}
+              className="mt-1.5 rounded border border-border/60 px-1.5 py-0.5 text-[9px] text-muted-foreground hover:bg-accent hover:text-foreground"
+            >
+              重置
             </button>
           </div>
         )}
