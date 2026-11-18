@@ -753,6 +753,9 @@ export function WhiteboardCanvas() {
             {t('abWhiteboard')}
           </span>
         </div>
+        {/* 触屏设备底部已有 PenDock：顶部不再重复工具与颜色，保持一行清爽 */}
+        {!coarse && (
+          <>
         <div className="w-px h-5 bg-border/60" />
         {/* Tool toggle */}
         <button
@@ -839,6 +842,8 @@ export function WhiteboardCanvas() {
         </button>
 
         <div className="w-px h-5 bg-border/60" />
+          </>
+        )}
 
         {/* Math notes: handwrite → recognize → calculate / plot */}
         <button
@@ -857,6 +862,8 @@ export function WhiteboardCanvas() {
           <Sigma className="size-3.5" />
         </button>
 
+        {!coarse && (
+          <>
         <div className="w-px h-5 bg-border/60" />
 
         {/* Color picker */}
@@ -961,6 +968,8 @@ export function WhiteboardCanvas() {
               </button>
             ))}
           </div>
+        )}
+          </>
         )}
 
         <div className="flex-1" />
