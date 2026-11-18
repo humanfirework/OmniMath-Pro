@@ -40,7 +40,8 @@ const WhiteboardCanvas = lazy(() =>
 );
 
 export function MobileWorkbench() {
-  const [tab, setTab] = useState<MobileTab>('editor');
+  // Phone opens on the canvas: this is a handwriting-first app, not an IDE.
+  const [tab, setTab] = useState<MobileTab>('canvas');
 
   return (
     <div className="h-[100dvh] w-screen flex flex-col overflow-hidden bg-background text-foreground">
