@@ -74,7 +74,7 @@ import { summarizeLatency, type LatencyStats } from '@/lib/ink/latency';
 import type { InkBrush, InkStroke, InkView } from '@/lib/ink/types';
 import { getGlyphTemplates, recognizeMathInk, addUserGlyphSamples } from '@/lib/mathnotes/recognize';
 import { evaluateMathNote } from '@/lib/mathnotes/expression';
-import { classifyWithFourier } from '@/lib/vision/shapeFourier';
+import { recognizeShape } from '@/lib/ink/shapeRecognize';
 import { MathCardView, type MathCard } from './math/MathCardView';
 import { MathNotePanel, type MathNoteDraft } from './math/MathNotePanel';
 
@@ -200,107 +200,6 @@ function bresenhamCells(x0: number, y0: number, x1: number, y1: number): { x: nu
   return cells;
 }
 
-/** Reduce-based min/max — safe for very large arrays (no stack overflow). */
-function minMax(values: number[]): [number, number] {
-  let min = Infinity;
-  let max = -Infinity;
-  for (const v of values) {
-    if (v < min) min = v;
-    if (v > max) max = v;
-  }
-  return [min, max];
-}
-
-/** Heuristic shape recognition. */
-function recognizeShape(points: Point[]): Stroke['recognized'] {
-  if (points.length < 4) {
-    return points.length === 2 ? 'line' : null;
-  }
-  const [x0, x1] = minMax(points.map((p) => p.x));
-  const [y0, y1] = minMax(points.map((p) => p.y));
-  const w = x1 - x0;
-  const h = y1 - y0;
-  if (w < 4 && h < 4) return null;
-
-  const start = points[0];
-  const end = points[points.length - 1];
-  // 闭合判定：同时用「首尾距离 / 外接框对角」与「首尾距离 / 总周长」两个比例，
-  // 任一满足即视为闭合。原先只用 closingDist < max(w,h)*0.25，对手抖画的圆
-  // 过严，导致"画圆识别成线"。放宽后圆/椭圆/闭合多边形都能被正确识别。
-  const diag = Math.hypot(w, h) || 1;
-  const scale = Math.max(w, h) || 1;
-  const closingDist = Math.hypot(end.x - start.x, end.y - start.y);
-  let perimeter = 0;
-  for (let i = 1; i < points.length; i++) {
-    perimeter += Math.hypot(points[i].x - points[i - 1].x, points[i].y - points[i - 1].y);
-  }
-  const isClosed =
-    closingDist < scale * 0.45 ||
-    (perimeter > 0 && closingDist / perimeter < 0.12) ||
-    closingDist < diag * 0.3;
-  if (!isClosed) {
-    return 'line';
-  }
-
-  const cx = (x0 + x1) / 2;
-  const cy = (y0 + y1) / 2;
-  const rx = w / 2;
-  const ry = h / 2;
-  if (rx < 2 || ry < 2) return 'line';
-
-  // 离心率（椭圆接近圆则判圆）：ecc = |rx - ry| / max(rx, ry)。
-  const ecc = Math.abs(rx - ry) / Math.max(rx, ry, 1e-6);
-
-  let rectErr = 0;
-  let circErr = 0;
-  let triErr = 0;
-  for (const p of points) {
-    const dx = Math.max(x0 - p.x, 0, p.x - x1);
-    const dy = Math.max(y0 - p.y, 0, p.y - y1);
-    rectErr += Math.hypot(dx, dy);
-    const nx = (p.x - cx) / rx;
-    const ny = (p.y - cy) / ry;
-    circErr += Math.abs(Math.hypot(nx, ny) - 1);
-    // Triangle fit: distance to the triangle (cx,y0)-(x1,y1)-(x0,y1)
-    triErr += pointToTriangleDist(p, { x: cx, y: y0 }, { x: x1, y: y1 }, { x: x0, y: y1 });
-  }
-  rectErr /= points.length;
-  circErr /= points.length;
-  triErr /= points.length;
-
-  // 圆：误差最小 + 离心率不高（椭圆也倾向判圆，避免手画不圆被误判为线/矩形）。
-  if (circErr < rectErr && circErr < triErr && circErr < 0.22 && ecc < 0.55) return 'circle';
-  if (rectErr < circErr && rectErr < triErr && rectErr < 12) return 'rectangle';
-  if (triErr < circErr && triErr < rectErr && triErr < 14) return 'triangle';
-
-  // Fallback: Fourier descriptors (rotation/scale invariant) handle the
-  // ambiguous cases the distance heuristics above cannot separate.
-  const fourier = classifyWithFourier(points);
-  if (fourier.confidence >= 0.55) {
-    if (fourier.shape === 'ellipse') return 'circle';
-    return fourier.shape;
-  }
-  return null;
-}
-
-function pointToTriangleDist(p: Point, a: Point, b: Point, c: Point): number {
-  // minimum distance from p to any of the 3 edges
-  const d1 = pointToSegmentDist(p, a, b);
-  const d2 = pointToSegmentDist(p, b, c);
-  const d3 = pointToSegmentDist(p, c, a);
-  return Math.min(d1, d2, d3);
-}
-
-function pointToSegmentDist(p: Point, a: Point, b: Point): number {
-  const dx = b.x - a.x;
-  const dy = b.y - a.y;
-  const len2 = dx * dx + dy * dy;
-  if (len2 === 0) return Math.hypot(p.x - a.x, p.y - a.y);
-  let t = ((p.x - a.x) * dx + (p.y - a.y) * dy) / len2;
-  t = Math.max(0, Math.min(1, t));
-  return Math.hypot(p.x - (a.x + t * dx), p.y - (a.y + t * dy));
-}
-
 export function WhiteboardCanvas() {
   useLocale();
   const coarse = useCoarsePointer();
@@ -330,7 +229,10 @@ export function WhiteboardCanvas() {
   const [eraserMode, setEraserMode] = useState<EraserMode>('partial');
   const [color, setColor] = useState<string>(PEN_COLORS[0]);
   const [width, setWidth] = useState<number>(PEN_WIDTHS[1]);
-  const [recognize, setRecognize] = useState<boolean>(false);
+  // 形状识别默认开启：画布空状态明确写着「圆、矩形、三角形和直线会被
+  // 自动识别」，默认关闭会让用户以为功能失效。识别只是给笔迹打标签并在
+  // 渲染时美化，不会改变笔迹的几何语义，可随时在「更多」里关闭。
+  const [recognize, setRecognize] = useState<boolean>(true);
   const [pixelMode, setPixelMode] = useState<boolean>(false);
   const [eraserSize, setEraserSize] = useState<number>(PEN_ERASER_SIZES[1]);
   const [shapeTool, setShapeTool] = useState<ShapeId | null>(null);
