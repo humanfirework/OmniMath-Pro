@@ -935,12 +935,26 @@ export function buildFractionLayout(glyphs: RecognizedGlyph[]): RecognizedGlyph[
   const consumed = new Set<number>();
   const tokens = new Map<number, RecognizedGlyph>();
 
+  // 候选分数条按宽度从大到小处理：外层分数条通常更宽，先建立外层 token，
+  // 再递归识别分子/分母中的嵌套分数（(1/2)/(3/4)）。
+  const barCandidates: number[] = [];
   for (let i = 0; i < glyphs.length; i++) {
     const bar = glyphs[i];
-    if (consumed.has(i) || bar.superscript || bar.text || bar.char !== '-') continue;
+    if (bar.superscript || bar.text || bar.char !== '-') continue;
     const barWidth = bar.bbox.x1 - bar.bbox.x0;
     const barHeight = bar.bbox.y1 - bar.bbox.y0;
     if (barWidth < medianWidth * 1.5 || barHeight > medianHeight * 0.45) continue;
+    barCandidates.push(i);
+  }
+  barCandidates.sort(
+    (a, b) =>
+      glyphs[b].bbox.x1 - glyphs[b].bbox.x0 - (glyphs[a].bbox.x1 - glyphs[a].bbox.x0),
+  );
+
+  for (const i of barCandidates) {
+    if (consumed.has(i)) continue;
+    const bar = glyphs[i];
+    const barWidth = bar.bbox.x1 - bar.bbox.x0;
 
     const tol = Math.max(4, medianHeight * 0.22);
     const above: number[] = [];
@@ -948,9 +962,11 @@ export function buildFractionLayout(glyphs: RecognizedGlyph[]): RecognizedGlyph[
     for (let j = 0; j < glyphs.length; j++) {
       if (j === i || consumed.has(j)) continue;
       const g = glyphs[j];
-      if (g.char === '-' || g.text || g.char === '?') continue;
+      if (g.text || g.char === '?') continue;
       const cx = (g.bbox.x0 + g.bbox.x1) / 2;
       if (cx < bar.bbox.x0 - barWidth * 0.2 || cx > bar.bbox.x1 + barWidth * 0.2) continue;
+      // 分子/分母内部可能还有分数条（嵌套分数），因此 '-' 也要参与分组，
+      // 交给递归的 buildFractionLayout 再判断它是不是分数条。
       if (g.bbox.y1 <= bar.bbox.y0 + tol) above.push(j);
       else if (g.bbox.y0 >= bar.bbox.y1 - tol) below.push(j);
     }
@@ -959,8 +975,13 @@ export function buildFractionLayout(glyphs: RecognizedGlyph[]): RecognizedGlyph[
     above.sort((a, b) => glyphs[a].bbox.x0 - glyphs[b].bbox.x0);
     below.sort((a, b) => glyphs[a].bbox.x0 - glyphs[b].bbox.x0);
     // Fraction parts are positioned by the bar, not by a superscript baseline.
-    const numGlyphs = above.map((j) => ({ ...glyphs[j], superscript: false }));
-    const denGlyphs = below.map((j) => ({ ...glyphs[j], superscript: false }));
+    // 递归处理分子/分母内部的分数条，支持 (1/2)/(3/4) 这类嵌套分数。
+    const numGlyphs = buildFractionLayout(
+      above.map((j) => ({ ...glyphs[j], superscript: false })),
+    );
+    const denGlyphs = buildFractionLayout(
+      below.map((j) => ({ ...glyphs[j], superscript: false })),
+    );
     const numText = buildRecognizedText(numGlyphs);
     const denText = buildRecognizedText(denGlyphs);
     if (!numText || !denText) continue;
@@ -971,23 +992,42 @@ export function buildFractionLayout(glyphs: RecognizedGlyph[]): RecognizedGlyph[
     const parts = [...above, ...below].map((j) => glyphs[j]);
     const confidence =
       parts.reduce((sum, g) => sum + g.confidence, bar.confidence) / (parts.length + 1);
+    const fractionBBox = {
+      x0: Math.min(bar.bbox.x0, ...parts.map((g) => g.bbox.x0)),
+      y0: Math.min(bar.bbox.y0, ...parts.map((g) => g.bbox.y0)),
+      x1: Math.max(bar.bbox.x1, ...parts.map((g) => g.bbox.x1)),
+      y1: Math.max(bar.bbox.y1, ...parts.map((g) => g.bbox.y1)),
+    };
 
     tokens.set(i, {
       char: tokenTextValue,
       displayChar: `${numDisplay}/${denDisplay}`,
       text: tokenTextValue,
       confidence,
-      bbox: {
-        x0: bar.bbox.x0,
-        y0: Math.min(bar.bbox.y0, ...above.map((j) => glyphs[j].bbox.y0)),
-        x1: bar.bbox.x1,
-        y1: Math.max(bar.bbox.y1, ...below.map((j) => glyphs[j].bbox.y1)),
-      },
+      bbox: fractionBBox,
       superscript: false,
       reason: 'fraction',
       strokes: bar.strokes,
     });
     for (const j of [...above, ...below]) consumed.add(j);
+    // 外包分数的 bbox 内的其它分数条（嵌套分数的分子/分母条）归外包分数消费，
+    // 避免它们再作为独立分数输出一份。
+    for (let j = 0; j < glyphs.length; j++) {
+      if (j === i || consumed.has(j)) continue;
+      const g = glyphs[j];
+      if (g.char !== '-' || g.text) continue;
+      const cx = (g.bbox.x0 + g.bbox.x1) / 2;
+      const cy = (g.bbox.y0 + g.bbox.y1) / 2;
+      if (
+        cx >= fractionBBox.x0 - tol &&
+        cx <= fractionBBox.x1 + tol &&
+        cy >= fractionBBox.y0 - tol &&
+        cy <= fractionBBox.y1 + tol
+      ) {
+        consumed.add(j);
+        tokens.delete(j);
+      }
+    }
   }
 
   if (tokens.size === 0) return glyphs;

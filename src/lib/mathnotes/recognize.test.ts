@@ -228,6 +228,20 @@ describe('fraction layout', () => {
     fraction.text = '(1)/(2)';
     expect(buildRecognizedText([fraction, at('x', 40, 0, 52, 30)])).toBe('(1)/(2)*x');
   });
+
+  it('supports nested fractions', () => {
+    const glyphs = [
+      at('1', 0, 0, 12, 20),
+      at('-', -2, 28, 30, 31),
+      at('2', 0, 38, 12, 58),
+      at('-', -6, 78, 70, 82),
+      at('3', 0, 90, 12, 120),
+    ];
+    const layout = buildFractionLayout(glyphs);
+    expect(layout).toHaveLength(1);
+    expect(layout[0].text).toBe('((1)/(2))/(3)');
+    expect(layout[0].displayChar).toBe('1/2/3');
+  });
 });
 
 describe('buildRecognizedText', () => {
