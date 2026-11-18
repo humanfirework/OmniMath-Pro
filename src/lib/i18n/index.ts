@@ -174,6 +174,7 @@ export interface TranslationDict {
   abFormulas: string;
   abPipeline: string;
   abWhiteboard: string;
+  abHome: string;
   abPixelMode: string;
   abEducation: string;
   abLayoutMenu: string;
@@ -1472,6 +1473,7 @@ const zhCN: TranslationDict = {
   abFormulas: "公式库",
   abPipeline: "流水线",
   abWhiteboard: "白板",
+  abHome: "工作台首页",
   abPixelMode: "像素画模式：笔迹吸附到网格，绘制像素点",
   abEducation: "学习陪伴",
   abLayoutMenu: "布局选项",
@@ -2758,6 +2760,7 @@ const en: TranslationDict = {
   abFormulas: "Formula Library",
   abPipeline: "Pipeline",
   abWhiteboard: "Whiteboard",
+  abHome: "Workspace Home",
   abPixelMode: "Pixel mode: snap strokes to a grid and draw pixels",
   abEducation: "Learning Companion",
   abLayoutMenu: "Layout Options",

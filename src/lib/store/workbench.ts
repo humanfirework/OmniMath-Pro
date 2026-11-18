@@ -68,7 +68,17 @@ export interface VariableEntry {
 export type SidePanelTab = 'history' | 'variables' | 'formulas' | 'linalg' | 'solver' | 'files' | 'stats';
 export type PreviewTab = 'formula' | 'plot2d' | 'plot3d' | 'log' | 'pipeline' | 'ai';
 export type Theme = 'dark' | 'light';
-export type ViewMode = 'workbench' | 'pipeline' | 'whiteboard' | 'focus' | 'linalg' | 'solver' | 'stats' | 'control' | 'education';
+export type ViewMode =
+  | 'workbench'
+  | 'home'
+  | 'pipeline'
+  | 'whiteboard'
+  | 'focus'
+  | 'linalg'
+  | 'solver'
+  | 'stats'
+  | 'control'
+  | 'education';
 export type ActivityBarPosition = 'left' | 'right';
 
 interface WorkbenchState {

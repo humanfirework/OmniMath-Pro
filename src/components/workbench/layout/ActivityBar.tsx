@@ -50,6 +50,7 @@ import {
   BarChart3,
   CircleGauge,
   GraduationCap,
+  House,
 } from 'lucide-react';
 import {
   Tooltip,
@@ -73,6 +74,7 @@ import type { TranslationDict } from '@/lib/i18n';
 
 type ActivityItemId =
   | SidePanelTab
+  | 'home'
   | 'solver'
   | 'control'
   | 'pipeline'
@@ -91,6 +93,7 @@ interface RegistryEntry {
 }
 
 const ACTIVITY_REGISTRY: Record<ActivityItemId, RegistryEntry> = {
+  home: { icon: House, labelKey: 'abHome' },
   history: { icon: Clock, labelKey: 'abHistory' },
   variables: { icon: Variable, labelKey: 'abVariables' },
   files: { icon: FileCode2, labelKey: 'abFiles' },
@@ -110,7 +113,7 @@ const ACTIVITY_REGISTRY: Record<ActivityItemId, RegistryEntry> = {
 };
 
 /** Group 1: data / basic panels */
-const GROUP_1_IDS: ActivityItemId[] = ['files', 'history', 'variables'];
+const GROUP_1_IDS: ActivityItemId[] = ['home', 'files', 'history', 'variables'];
 /** Group 2: theory / core math */
 const GROUP_2_IDS: ActivityItemId[] = ['stats', 'solver', 'linalg', 'control', 'formulas'];
 /** Group 3: creative / extensions */
@@ -324,7 +327,7 @@ export function ActivityBar() {
     }
 
     // ── View-mode switches ──
-    if (['solver', 'control', 'pipeline', 'whiteboard', 'linalg', 'stats', 'education'].includes(id)) {
+    if (['home', 'solver', 'control', 'pipeline', 'whiteboard', 'linalg', 'stats', 'education'].includes(id)) {
       const isActive = viewMode === id;
       return wrapper(
         <Tooltip delayDuration={200}>

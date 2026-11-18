@@ -67,8 +67,11 @@ const NodePipeline = lazy(() =>
 const WhiteboardCanvas = lazy(() =>
   import('@/components/workbench/whiteboard/WhiteboardCanvas').then((m) => ({ default: m.WhiteboardCanvas })),
 );
-const LinearAlgebraWorkbench = lazy(() =>
-  import('@/components/workbench/panels/LinearAlgebraWorkbench').then((m) => ({ default: m.LinearAlgebraWorkbench })),
+const StudioHome = lazy(() =>
+  import('@/components/workbench/studio/StudioHome').then((m) => ({ default: m.StudioHome })),
+);
+const LinalgStudio = lazy(() =>
+  import('@/components/workbench/studio/LinalgStudio').then((m) => ({ default: m.LinalgStudio })),
 );
 const SolverWorkbench = lazy(() =>
   import('@/components/workbench/panels/SolverWorkbench').then((m) => ({ default: m.SolverWorkbench })),
@@ -176,7 +179,7 @@ function FullScreenViews({ activeViewMode }: { activeViewMode: ViewMode }) {
       case 'whiteboard':
         return <WhiteboardCanvas />;
       case 'linalg':
-        return <LinearAlgebraWorkbench />;
+        return <LinalgStudio />;
       case 'solver':
         return <SolverWorkbench />;
       case 'stats':
@@ -426,7 +429,15 @@ export function Workbench() {
       <div className="flex-1 flex min-h-0">
         {activityBarPosition === 'left' && <ActivityBar />}
 
-        {isFullScreenView(viewMode) ? (
+        {viewMode === 'home' ? (
+          <div className="flex-1 min-w-0 min-h-0">
+            <ErrorBoundary>
+              <Suspense fallback={<ViewLoading />}>
+                <StudioHome />
+              </Suspense>
+            </ErrorBoundary>
+          </div>
+        ) : isFullScreenView(viewMode) ? (
           /* 并排工作区：侧栏 | 编辑器 | 视图。编辑器不再被整页替换。 */
           <ResizablePanelGroup
             direction="horizontal"
