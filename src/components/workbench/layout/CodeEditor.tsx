@@ -15,7 +15,9 @@
  *     Ctrl+/=comment。运行不再抢占 Enter —— 多行脚本需要自然换行。
  */
 
-import { useEffect, useMemo, useRef } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { LineChart, MessageSquare, Wand2 } from 'lucide-react';
+import { toast } from 'sonner';
 import { EditorState, EditorSelection, Compartment, StateField } from '@codemirror/state';
 import { EditorView, keymap, lineNumbers, highlightActiveLine, highlightActiveLineGutter, hoverTooltip, showTooltip, placeholder as cmPlaceholder } from '@codemirror/view';
 import { defaultKeymap, historyKeymap, history, indentWithTab } from '@codemirror/commands';
@@ -28,8 +30,17 @@ import { tags as t } from '@lezer/highlight';
 import { math, KEYWORDS, FUNCTIONS, getFunctionInfo, MATLAB_STATEMENTS, type MathFnInfo } from '@/lib/editor/mathLanguage';
 import { checkSyntax } from '@/lib/editor/syntaxCheck';
 import { semanticDiagnostics } from '@/lib/editor/semanticCheck';
+import {
+  SELECTION_ACTIONS,
+  buildExplainPrompt,
+  buildSimplifyPrompt,
+  extractPlotExpressions,
+  type EditorSelectionAction,
+} from '@/lib/editor/selectionActions';
+import { DEFAULT_CARTESIAN_RANGE } from '@/lib/engine/types';
 import { useSettingsStore } from '@/lib/store/settingsStore';
 import { useWorkbenchStore } from '@/lib/store/workbench';
+import { cn } from '@/lib/utils';
 
 export interface CodeEditorProps {
   value: string;
@@ -60,6 +71,16 @@ export function CodeEditor({
   const onCursorChangeRef = useRef(onCursorChange);
   const wheelRafRef = useRef<number | null>(null);
   const langRef = useRef(language);
+
+  // 选区动作条：选中代码后浮在选区上方的一条窄工具（解释 / 简化 / 画图）。
+  // 坐标用视口坐标系 + position:fixed，避免被编辑器容器的 overflow:hidden 裁掉。
+  const [selectionBubble, setSelectionBubble] = useState<{
+    text: string;
+    left: number;
+    top: number;
+    placement: 'above' | 'below';
+  } | null>(null);
+  const bubbleRafRef = useRef<number | null>(null);
 
   const storeFontSize = useSettingsStore((s) => s.editorFontSize);
   const fontSize = fontSizeProp ?? storeFontSize;
@@ -258,6 +279,50 @@ export function CodeEditor({
       return [...syntax, ...semanticDiagnostics(view, known)];
     });
 
+    // 选区变化后（下一帧）计算动作条位置：横向居中于选区、纵向贴在选区上沿；
+    // 顶部空间不足时翻到选区下方。只读取几何，不修改文档。
+    const scheduleSelectionBubble = (view: EditorView) => {
+      if (bubbleRafRef.current !== null) cancelAnimationFrame(bubbleRafRef.current);
+      bubbleRafRef.current = requestAnimationFrame(() => {
+        bubbleRafRef.current = null;
+        const sel = view.state.selection.main;
+        const text = sel.empty ? '' : view.state.doc.sliceString(sel.from, sel.to);
+        if (!text.trim()) {
+          setSelectionBubble(null);
+          return;
+        }
+        const start = view.coordsAtPos(sel.from);
+        const end = view.coordsAtPos(sel.to);
+        if (!start) {
+          setSelectionBubble(null);
+          return;
+        }
+        const left = Math.min(start.left, end?.left ?? start.left);
+        const right = Math.max(start.right, end?.right ?? start.right);
+        const center = (left + right) / 2;
+        // 动作条约 165px 宽 / 30px 高：先夹在编辑器容器内，再兜底夹在视口内。
+        const BUBBLE_W = 165;
+        const BUBBLE_H = 30;
+        const rect = containerRef.current?.getBoundingClientRect();
+        const minLeft = Math.max(8, (rect?.left ?? 0) + 4);
+        const maxLeft = Math.min(
+          window.innerWidth - BUBBLE_W - 8,
+          (rect?.right ?? window.innerWidth) - BUBBLE_W - 4,
+        );
+        // 只有编辑器顶部真的放得下（不与工具栏/预览条重叠）才向上翻，
+        // 否则放到选区下方。
+        const above = start.top - 6 - BUBBLE_H >= Math.max((rect?.top ?? 0) + 2, 4);
+        setSelectionBubble({
+          text,
+          left: Math.min(Math.max(minLeft, center - BUBBLE_W / 2), Math.max(minLeft, maxLeft)),
+          top: above
+            ? start.top - 6
+            : Math.min(start.bottom + 6, window.innerHeight - BUBBLE_H - 8),
+          placement: above ? 'above' : 'below',
+        });
+      });
+    };
+
     const updateListener = EditorView.updateListener.of((update) => {
       if (update.docChanged) {
         onChangeRef.current(update.state.doc.toString());
@@ -266,6 +331,7 @@ export function CodeEditor({
         const pos = update.state.selection.main.head;
         const line = update.state.doc.lineAt(pos);
         onCursorChangeRef.current?.(line.number, pos - line.from + 1);
+        scheduleSelectionBubble(update.view);
       }
     });
 
@@ -336,6 +402,23 @@ export function CodeEditor({
     const view = new EditorView({ state, parent: containerRef.current });
     viewRef.current = view;
 
+    // 滚动 / 缩放窗口时重算动作条位置；点击动作条以外的区域则收起。
+    const handleGeometryChange = () => scheduleSelectionBubble(view);
+    view.scrollDOM.addEventListener('scroll', handleGeometryChange, { passive: true });
+    window.addEventListener('resize', handleGeometryChange);
+    const handlePointerDown = (e: PointerEvent) => {
+      const target = e.target as HTMLElement | null;
+      if (target?.closest('[data-cm-selection-actions]')) return;
+      setSelectionBubble(null);
+    };
+    document.addEventListener('pointerdown', handlePointerDown, true);
+    const handleFocusOut = (e: FocusEvent) => {
+      const next = e.relatedTarget as HTMLElement | null;
+      if (next?.closest('[data-cm-selection-actions]')) return;
+      setSelectionBubble(null);
+    };
+    view.dom.addEventListener('focusout', handleFocusOut);
+
     const handleWheel = (e: WheelEvent) => {
       if (e.ctrlKey || e.metaKey) {
         e.preventDefault();
@@ -355,6 +438,14 @@ export function CodeEditor({
 
     return () => {
       containerRef.current?.removeEventListener('wheel', handleWheel);
+      view.scrollDOM.removeEventListener('scroll', handleGeometryChange);
+      window.removeEventListener('resize', handleGeometryChange);
+      document.removeEventListener('pointerdown', handlePointerDown, true);
+      view.dom.removeEventListener('focusout', handleFocusOut);
+      if (bubbleRafRef.current !== null) {
+        cancelAnimationFrame(bubbleRafRef.current);
+        bubbleRafRef.current = null;
+      }
       view.destroy();
       viewRef.current = null;
     };
@@ -416,7 +507,95 @@ export function CodeEditor({
     return () => window.removeEventListener('omnimath-insert-symbol', handler);
   }, []);
 
-  return <div ref={containerRef} className="cm-editor-container h-full w-full overflow-hidden" />;
+  /* ─── 选区动作：解释 / 简化（AI）· 画图（本地） ─────────────── */
+  const runSelectionAction = useCallback(
+    (action: EditorSelectionAction) => {
+      const bubble = selectionBubble;
+      if (!bubble) return;
+
+      if (action === 'plot') {
+        const expressions = extractPlotExpressions(bubble.text);
+        if (expressions.length === 0) {
+          toast.error('选中的内容里没有可绘制的 f(x)', {
+            description: '选中 sin(x)、y = x^2 这样的表达式再试。',
+          });
+          return;
+        }
+        const PLOT_COLORS = ['#2dd4bf', '#fbbf24', '#fb7185', '#34d399', '#a78bfa', '#fb923c'];
+        const store = useWorkbenchStore.getState();
+        store.setPreviewVisible(true);
+        expressions.forEach((expression, i) => {
+          store.addPlot({
+            expression,
+            xRange: DEFAULT_CARTESIAN_RANGE,
+            yRange: [-50, 50],
+            color: PLOT_COLORS[i % PLOT_COLORS.length],
+            plotType: 'cartesian',
+            visible: true,
+          });
+        });
+        store.setActivePreviewTab('plot2d');
+        toast.success(
+          expressions.length === 1
+            ? `已绘制 ${expressions[0]}`
+            : `已绘制 ${expressions.length} 条曲线`,
+          { duration: 1600 },
+        );
+      } else {
+        const prompt =
+          action === 'explain'
+            ? buildExplainPrompt(bubble.text, language)
+            : buildSimplifyPrompt(bubble.text, language);
+        const store = useWorkbenchStore.getState();
+        // 回答出现在预览区的 AI 标签里：先让预览可见并切过去。
+        store.setPreviewVisible(true);
+        store.setActivePreviewTab('ai');
+        window.dispatchEvent(new CustomEvent<string>('omnimath:ai-explain', { detail: prompt }));
+      }
+
+      setSelectionBubble(null);
+      viewRef.current?.focus();
+    },
+    [selectionBubble, language],
+  );
+
+  const ACTION_ICONS = { explain: MessageSquare, simplify: Wand2, plot: LineChart } as const;
+
+  return (
+    <>
+      <div ref={containerRef} className="cm-editor-container h-full w-full overflow-hidden" />
+      {selectionBubble && (
+        <div
+          data-cm-selection-actions
+          role="toolbar"
+          aria-label="选中代码动作"
+          onMouseDown={(e) => e.preventDefault()}
+          style={{ left: selectionBubble.left, top: selectionBubble.top }}
+          className={cn(
+            'fixed z-[80] flex items-center gap-0.5 rounded-lg border border-border/70 bg-popover/95 p-0.5 shadow-lg shadow-black/10 backdrop-blur',
+            selectionBubble.placement === 'above' ? '-translate-y-full' : '',
+          )}
+        >
+          {SELECTION_ACTIONS.map((action) => {
+            const Icon = ACTION_ICONS[action.id];
+            return (
+              <button
+                key={action.id}
+                type="button"
+                title={action.title}
+                aria-label={action.title}
+                onClick={() => runSelectionAction(action.id)}
+                className="flex h-6 items-center gap-1 rounded-md px-1.5 text-[10.5px] font-medium text-muted-foreground transition-colors hover:bg-primary/10 hover:text-primary"
+              >
+                <Icon className="size-3" />
+                {action.label}
+              </button>
+            );
+          })}
+        </div>
+      )}
+    </>
+  );
 }
 
 /* ─── Helpers ──────────────────────────────────────────────────── */
