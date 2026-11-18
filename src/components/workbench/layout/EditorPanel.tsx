@@ -67,9 +67,10 @@ import { DEFAULT_CARTESIAN_RANGE } from '@/lib/engine/types';
 import { t, useLocale } from '@/lib/i18n';
 import { cn } from '@/lib/utils';
 import { toast } from 'sonner';
-import type { CalculationResult, PlotConfig } from '@/lib/store/workbench';
+import type { CalculationResult } from '@/lib/store/workbench';
 import { useRunResultsStore } from '@/lib/store/runResultsStore';
 import { sampleFunction, type Plot2DType } from '@/lib/plots/plot2d';
+import { buildPlotConfig } from '@/lib/plots/fromResult';
 import { CodeEditor } from '@/components/workbench/layout/CodeEditor';
 import { registerShortcutHandler } from '@/lib/hooks/useGlobalShortcuts';
 import { SymbolPalette } from '@/components/workbench/SymbolPalette';
@@ -383,15 +384,10 @@ export function EditorPanel() {
           if (result.plotExpression && result.plotType) {
             const color = PLOT_COLORS[plotColorIdx % PLOT_COLORS.length];
             plotColorIdx++;
-            const newPlot: Omit<PlotConfig, 'id'> = {
-              expression: result.plotExpression,
-              xRange: result.plotRange ?? DEFAULT_CARTESIAN_RANGE,
-              yRange: [-50, 50],
-              color,
-              plotType: result.plotType,
-              visible: true,
-            };
-            addPlot(newPlot);
+            // 3D 曲面的 yRange 是自变量 y 的定义域（不是屏幕 Y 轴），
+            // 这里统一由 buildPlotConfig 处理，2D / 3D 不再混用。
+            const newPlot = buildPlotConfig(result, color);
+            if (newPlot) addPlot(newPlot);
             // 收集 2D 绘图供独立面板使用（3D 曲面暂不入独立面板）。
             if (result.plotType !== 'surface3d') {
               runPlots.push({
