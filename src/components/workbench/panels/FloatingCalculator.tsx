@@ -1267,7 +1267,11 @@ export function FloatingCalculator() {
           // approaches (hover jitter), so it becomes nearly impossible to grab.
           // Only a shadow/color hover is used for feedback.
           'transition-[box-shadow,colors,background-color] duration-200 hover:shadow-xl hover:bg-primary/90',
-          fabPosition.x === -1 ? 'bottom-4 max-md:bottom-32 right-4' : 'left-0 top-0',
+          // 手机（含横屏 844×390）底部有 48px 标签栏：把默认位置抬高，
+          // 否则 FAB 会压住「预览」标签。桌面窗口仍停在右下角。
+          fabPosition.x === -1
+            ? cn('right-4', isMobile ? 'bottom-32' : 'bottom-4 max-md:bottom-32')
+            : 'left-0 top-0',
           fabDragging ? 'cursor-grabbing' : 'cursor-grab'
         )}
         style={fabPosition.x === -1 ? undefined : { transform: `translate3d(${fabPosition.x}px, ${fabPosition.y}px, 0)` }}

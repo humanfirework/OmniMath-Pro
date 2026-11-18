@@ -8,12 +8,16 @@ export function useIsMobile() {
   const [isMobile, setIsMobile] = React.useState<boolean>(false)
 
   React.useEffect(() => {
-    const mql = window.matchMedia(`(max-width: ${MOBILE_BREAKPOINT - 1}px)`)
+    // 横屏手机（例如 844×390）宽度会超过 768，但高度和指针类型仍然是手机：
+    // 若不单独判断，会掉进桌面三栏布局，390px 高度根本放不下。
+    const mql = window.matchMedia(
+      `(max-width: ${MOBILE_BREAKPOINT - 1}px), (max-height: 480px) and (pointer: coarse)`,
+    )
     const onChange = () => {
-      setIsMobile(window.innerWidth < MOBILE_BREAKPOINT)
+      setIsMobile(mql.matches)
     }
     mql.addEventListener("change", onChange)
-    setIsMobile(window.innerWidth < MOBILE_BREAKPOINT)
+    setIsMobile(mql.matches)
     return () => mql.removeEventListener("change", onChange)
   }, [])
 
