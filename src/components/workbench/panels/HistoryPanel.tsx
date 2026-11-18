@@ -300,6 +300,12 @@ export default function HistoryPanel() {
 
   const handleLoad = (input: string) => {
     setEditorContent(input);
+    // 让「载入编辑器」真的可见：桌面端若编辑器被隐藏则展开；手机端从侧栏
+    // 历史点击后直接切到编辑器标签（否则内容写进去了但用户看不到）。
+    const store = useWorkbenchStore.getState();
+    if (store.viewMode !== 'workbench') store.setViewMode('workbench');
+    store.setEditorVisible(true);
+    window.dispatchEvent(new CustomEvent('omnimath:mobile-tab', { detail: 'editor' }));
   };
 
   const groups = useMemo(() => groupByDay(filtered), [filtered]);
