@@ -14,7 +14,7 @@
  *   - useSettingsStore: 面板开关 + 导出默认设置
  */
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
   Dialog,
@@ -59,6 +59,9 @@ import {
   GraduationCap,
   Trash2,
   AlertTriangle,
+  HardDriveDownload,
+  Upload,
+  CloudOff,
 } from 'lucide-react';
 import { useWorkbenchStore } from '@/lib/store/workbench';
 import { useLayoutStore, LAYOUT_KEY } from '@/lib/store/layoutStore';
@@ -77,9 +80,17 @@ import { t, useLocale } from '@/lib/i18n';
 import type { TranslationDict } from '@/lib/i18n';
 import { cn } from '@/lib/utils';
 import { inTauri, setMinimizeToTray as syncMinimizeToTray } from '@/lib/tauri';
+import { saveTextToFile } from '@/lib/nativeExport';
+import {
+  applySnapshot,
+  collectSnapshot,
+  parseSnapshot,
+  snapshotFilename,
+  snapshotSize,
+} from '@/lib/sync/snapshot';
 import { toast } from 'sonner';
 
-type Category = 'appearance' | 'editor' | 'layout' | 'data' | 'export' | 'language' | 'shortcuts' | 'advanced' | 'about';
+type Category = 'appearance' | 'editor' | 'layout' | 'data' | 'backup' | 'export' | 'language' | 'shortcuts' | 'advanced' | 'about';
 
 // 版本号优先取构建期注入的 NEXT_PUBLIC_APP_VERSION（与 package.json 对齐），
 // 缺失时回退到 package.json 中的版本（0.1.4）。
@@ -156,6 +167,11 @@ export function SettingsPanel() {
     if (typeof window === 'undefined') return false;
     return localStorage.getItem('omnimath-minimize-tray') === 'true';
   });
+  // Workspace backup / restore
+  const [importMode, setImportMode] = useState<'merge' | 'replace'>('merge');
+  const [backupInfo, setBackupInfo] = useState<{ keys: number; bytes: number; at: string } | null>(null);
+  const [importing, setImporting] = useState(false);
+  const backupFileRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     loadSettings();
@@ -178,6 +194,46 @@ export function SettingsPanel() {
 
   const handleReset = () => {
     setResetConfirm(true);
+  };
+
+  const handleExportBackup = async () => {
+    const snap = collectSnapshot();
+    const size = snapshotSize(snap);
+    if (size.keys === 0) {
+      toast.error('没有可导出的本地数据');
+      return;
+    }
+    const ok = await saveTextToFile(JSON.stringify(snap, null, 2), {
+      defaultName: snapshotFilename(),
+      extensions: ['json'],
+    });
+    if (!ok) return;
+    setBackupInfo({ keys: size.keys, bytes: size.bytes, at: new Date().toLocaleString() });
+    toast.success(`已导出 ${size.keys} 项数据`, {
+      description: '可在另一台设备用「导入备份」恢复',
+    });
+  };
+
+  const handleImportBackup = async (file: File) => {
+    setImporting(true);
+    try {
+      const snap = parseSnapshot(await file.text());
+      const result = applySnapshot(snap, importMode);
+      toast.success(
+        importMode === 'replace'
+          ? `已恢复 ${result.written} 项数据`
+          : `已补全 ${result.written} 项数据，保留 ${result.skipped} 项现有数据`,
+        { description: '即将重新载入界面…', duration: 2200 },
+      );
+      setTimeout(() => {
+        if (typeof window !== 'undefined') window.location.reload();
+      }, 900);
+    } catch (err) {
+      toast.error('导入失败', { description: (err as Error).message });
+    } finally {
+      setImporting(false);
+      if (backupFileRef.current) backupFileRef.current.value = '';
+    }
   };
 
   const confirmReset = () => {
@@ -276,6 +332,7 @@ export function SettingsPanel() {
     { id: 'editor', labelKey: 'settingsEditor', icon: Code2 },
     { id: 'layout', labelKey: 'settingsLayout', icon: Layout },
     { id: 'data', label: '学习数据', icon: GraduationCap },
+    { id: 'backup', label: '备份与同步', icon: HardDriveDownload },
     { id: 'export', labelKey: 'settingsExport', icon: Download },
     { id: 'language', labelKey: 'settingsLanguage', icon: Languages },
     { id: 'shortcuts', labelKey: 'settingsShortcuts', icon: Keyboard },
@@ -577,6 +634,95 @@ export function SettingsPanel() {
                     <Trash2 className="size-3.5" />
                     清空学习数据
                   </Button>
+                </div>
+              </motion.div>
+            )}
+
+            {category === 'backup' && (
+              <motion.div
+                initial={{ opacity: 0, x: 8 }}
+                animate={{ opacity: 1, x: 0 }}
+                transition={{ duration: 0.15 }}
+                className="space-y-4"
+              >
+                <div className="rounded-lg border border-border/60 bg-muted/20 p-3.5">
+                  <div className="flex items-center gap-2 text-xs font-semibold">
+                    <HardDriveDownload className="size-3.5 text-primary" />
+                    本地快照备份
+                  </div>
+                  <p className="mt-1.5 text-[11px] leading-relaxed text-muted-foreground">
+                    备份包含笔记、白板、脚本、公式、设置与个人字形库；不包含 AI 密钥。
+                    在另一台设备导入即可迁移全部内容。
+                  </p>
+                  <div className="mt-3 flex flex-wrap items-center gap-2">
+                    <Button size="sm" onClick={() => void handleExportBackup()} className="gap-1.5">
+                      <HardDriveDownload className="size-3.5" />
+                      导出备份
+                    </Button>
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      disabled={importing}
+                      onClick={() => backupFileRef.current?.click()}
+                      className="gap-1.5"
+                    >
+                      <RefreshCw className={cn('size-3.5', importing && 'animate-spin')} />
+                      导入备份
+                    </Button>
+                    <input
+                      ref={backupFileRef}
+                      type="file"
+                      accept=".json,application/json"
+                      className="hidden"
+                      onChange={(e) => {
+                        const file = e.target.files?.[0];
+                        if (file) void handleImportBackup(file);
+                      }}
+                    />
+                  </div>
+
+                  <div className="mt-3 flex flex-wrap items-center gap-2">
+                    <span className="text-[11px] text-muted-foreground">导入方式</span>
+                    <RadioGroup
+                      value={importMode}
+                      onValueChange={(v) => setImportMode(v as 'merge' | 'replace')}
+                      className="flex items-center gap-3"
+                    >
+                      <label className="flex cursor-pointer items-center gap-1.5">
+                        <RadioGroupItem value="merge" id="backup-merge" />
+                        <span className="text-[11px]">合并（保留本机现有）</span>
+                      </label>
+                      <label className="flex cursor-pointer items-center gap-1.5">
+                        <RadioGroupItem value="replace" id="backup-replace" />
+                        <span className="text-[11px]">覆盖恢复</span>
+                      </label>
+                    </RadioGroup>
+                  </div>
+
+                  {importMode === 'replace' && (
+                    <div className="mt-2 flex items-start gap-1.5 rounded-md border border-amber-500/30 bg-amber-500/10 p-2 text-[10.5px] text-amber-600 dark:text-amber-400">
+                      <AlertTriangle className="mt-0.5 size-3 shrink-0" />
+                      覆盖恢复会先删除本机现有 OmniMath 数据（AI 密钥除外），建议先导出备份。
+                    </div>
+                  )}
+
+                  {backupInfo && (
+                    <p className="mt-2 text-[10.5px] text-muted-foreground">
+                      上次导出：{backupInfo.at} · {backupInfo.keys} 项 ·{' '}
+                      {(backupInfo.bytes / 1024).toFixed(1)} KB
+                    </p>
+                  )}
+                </div>
+
+                <div className="rounded-lg border border-dashed border-border/70 p-3.5">
+                  <div className="flex items-center gap-2 text-xs font-semibold text-muted-foreground">
+                    <CloudOff className="size-3.5" />
+                    云端同步（规划中）
+                  </div>
+                  <p className="mt-1.5 text-[11px] leading-relaxed text-muted-foreground">
+                    WebDAV / S3 快照同步正在接入。当前版本可先用备份文件跨设备迁移；
+                    后续将支持按记录合并多端笔记与白板。
+                  </p>
                 </div>
               </motion.div>
             )}
