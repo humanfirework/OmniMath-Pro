@@ -124,6 +124,8 @@ export function SettingsPanel() {
   const open = useSettingsStore((s) => s.open);
   const setOpen = useSettingsStore((s) => s.setOpen);
   const loadSettings = useSettingsStore((s) => s.loadFromStorage);
+  const cloudAutoCheck = useSettingsStore((s) => s.cloudAutoCheck);
+  const setCloudAutoCheck = useSettingsStore((s) => s.setCloudAutoCheck);
   const defaultExportDpi = useSettingsStore((s) => s.defaultExportDpi);
   const setDefaultExportDpi = useSettingsStore((s) => s.setDefaultExportDpi);
   const defaultFormulaFontSize = useSettingsStore((s) => s.defaultFormulaFontSize);
@@ -969,6 +971,21 @@ export function SettingsPanel() {
                         : '尚未上传备份'}
                     {' · '}读取时使用上方「合并 / 覆盖恢复」方式。
                   </p>
+                  <div className="mt-3 flex items-start justify-between gap-3 border-t border-border/50 pt-3">
+                    <div className="min-w-0">
+                      <div className="text-[11px] font-medium text-foreground/85">
+                        启动时检查云端更新
+                      </div>
+                      <p className="mt-0.5 text-[10px] leading-relaxed text-muted-foreground">
+                        有较新备份时提示合并，不会自动覆盖本机；需要先保存 Token。
+                      </p>
+                    </div>
+                    <Switch
+                      checked={cloudAutoCheck}
+                      onCheckedChange={setCloudAutoCheck}
+                      aria-label="启动时检查云端更新"
+                    />
+                  </div>
                   <p className="mt-1 text-[10px] text-muted-foreground">
                     在 github.com/settings/tokens 创建 Token，只需勾选 gist 权限。
                   </p>

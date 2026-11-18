@@ -13,6 +13,7 @@ import { collectSnapshotWithFiles } from './files';
 
 export const GIST_TOKEN_KEY = 'omnimath:sync:gistToken';
 export const GIST_ID_KEY = 'omnimath:sync:gistId';
+export const GIST_LAST_CHECK_KEY = 'omnimath:sync:gistCheckedAt';
 export const GIST_FILENAME = 'omnimath-workspace.json';
 export const GIST_DESCRIPTION = 'OmniMath 工作区备份';
 const API = 'https://api.github.com';
@@ -45,6 +46,18 @@ export function setGistToken(token: string): void {
 export function getStoredGistId(): string {
   if (typeof localStorage === 'undefined') return '';
   return localStorage.getItem(GIST_ID_KEY) ?? '';
+}
+
+/** 上一次成功检查 / 合并云端备份的时间（ISO 字符串）。 */
+export function getLastGistCheck(): string {
+  if (typeof localStorage === 'undefined') return '';
+  return localStorage.getItem(GIST_LAST_CHECK_KEY) ?? '';
+}
+
+export function setLastGistCheck(iso: string): void {
+  if (typeof localStorage === 'undefined') return;
+  if (iso) localStorage.setItem(GIST_LAST_CHECK_KEY, iso);
+  else localStorage.removeItem(GIST_LAST_CHECK_KEY);
 }
 
 function setStoredGistId(id: string): void {
@@ -197,6 +210,21 @@ export async function pushToGist(token = getGistToken()): Promise<GistResult> {
   setStoredGistId(json.id);
   return {
     gistId: json.id,
+    updatedAt: typeof json.updated_at === 'string' ? json.updated_at : undefined,
+  };
+}
+
+/** 只读取 Gist 的更新时间，用于启动时判断是否需要提示合并。 */
+export async function getGistUpdatedAt(
+  token = getGistToken(),
+): Promise<{ gistId: string; updatedAt?: string }> {
+  const gistId = getStoredGistId() || (await findBackupGist(token));
+  if (!gistId) throw new Error('还没有云端备份，请先上传一次');
+  const res = await apiFetch(`/gists/${gistId}`, token);
+  const json = (await res.json()) as { id?: unknown; updated_at?: unknown };
+  setStoredGistId(gistId);
+  return {
+    gistId,
     updatedAt: typeof json.updated_at === 'string' ? json.updated_at : undefined,
   };
 }

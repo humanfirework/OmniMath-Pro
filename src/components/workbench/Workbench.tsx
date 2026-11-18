@@ -57,6 +57,7 @@ import { PracticeGuide } from '@/components/workbench/PracticeGuide';
 import { ErrorBoundary } from '@/components/ErrorBoundary';
 import { useShortcutsStore, SHORTCUTS_KEY } from '@/lib/store/shortcutsStore';
 import { useGlobalShortcuts, registerShortcutHandler } from '@/lib/hooks/useGlobalShortcuts';
+import { useCloudAutoCheck } from '@/lib/hooks/useCloudAutoCheck';
 import { cn } from '@/lib/utils';
 import type { ViewMode } from '@/lib/store/workbench';
 
@@ -288,6 +289,8 @@ export function Workbench() {
   // 快捷键
   const loadShortcutsFromStorage = useShortcutsStore((s) => s.loadFromStorage);
   const setSettingsOpen = useSettingsStore((s) => s.setOpen);
+  const settingsOpen = useSettingsStore((s) => s.open);
+  const loadSettingsFromStorage = useSettingsStore((s) => s.loadFromStorage);
   // 编辑器字号（zoomIn/zoomOut/resetView 快捷键操作对象）
   const editorFontSize = useSettingsStore((s) => s.editorFontSize);
   const setEditorFontSize = useSettingsStore((s) => s.setEditorFontSize);
@@ -311,12 +314,17 @@ export function Workbench() {
 
   // 激活全局快捷键监听（在 Workbench 挂载一次）
   useGlobalShortcuts();
+  // 可选的启动云端检查：有较新备份时提示合并（不自动覆盖本机）。
+  useCloudAutoCheck();
 
   // Mount: load persisted state once + install global error guards.
   useEffect(() => {
     loadFromStorage();
     loadLayoutFromStorage();
     loadShortcutsFromStorage();
+    // 设置面板现在是按需挂载（不再常驻），持久化设置必须在应用启动时主动载入，
+    // 否则字号 / 白板偏好等要等用户打开设置面板才生效。
+    loadSettingsFromStorage();
 
     const onUnhandledRejection = (e: PromiseRejectionEvent) => {
       if (typeof console !== 'undefined') {
@@ -353,7 +361,7 @@ export function Workbench() {
       window.removeEventListener('dragover', onWindowDragOver);
       window.removeEventListener('drop', onWindowDrop);
     };
-  }, [loadFromStorage, loadLayoutFromStorage, loadShortcutsFromStorage]);
+  }, [loadFromStorage, loadLayoutFromStorage, loadShortcutsFromStorage, loadSettingsFromStorage]);
 
   // Sync i18n locale with the store locale.
   useEffect(() => {
@@ -509,7 +517,7 @@ export function Workbench() {
           <GlobalCalcBar />
           <FloatingCalculator />
           <RunResultsHost />
-          <LazySettingsPanel />
+          {settingsOpen && <LazySettingsPanel />}
           <OnboardingOverlay />
         </>
       );
@@ -521,7 +529,7 @@ export function Workbench() {
         <GlobalCalcBar />
         <FloatingCalculator />
         <RunResultsHost />
-        <LazySettingsPanel />
+        {settingsOpen && <LazySettingsPanel />}
         <OnboardingOverlay />
       </>
     );
@@ -820,7 +828,7 @@ export function Workbench() {
       <GlobalCalcBar />
       <RunResultsHost />
       <FloatingCalculator />
-      <LazySettingsPanel />
+      {settingsOpen && <LazySettingsPanel />}
       <OnboardingOverlay />
       <PracticeGuide />
     </motion.div>

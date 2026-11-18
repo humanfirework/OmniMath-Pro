@@ -13,6 +13,9 @@ interface SettingsState {
   /** 符号面板是否展开（编辑器下方可点击符号条） */
   symbolPaletteOpen: boolean;
 
+  /** 启动时检查 GitHub Gist 云端是否有较新备份（仅提示合并，不自动覆盖） */
+  cloudAutoCheck: boolean;
+
   /* 全局默认设置 */
   /** 默认导出 DPI 倍数（1/2/4），默认 2 */
   defaultExportDpi: 1 | 2 | 4;
@@ -69,6 +72,7 @@ interface SettingsState {
   setOpen: (v: boolean) => void;
   toggleOpen: () => void;
   setSymbolPaletteOpen: (v: boolean) => void;
+  setCloudAutoCheck: (v: boolean) => void;
   setDefaultExportDpi: (dpi: 1 | 2 | 4) => void;
   setDefaultFormulaFontSize: (size: number) => void;
   setUseMathFont: (v: boolean) => void;
@@ -140,6 +144,7 @@ interface PersistedSettings {
   advancedExportPrefix?: string;
   slidersCollapsed?: boolean;
   symbolPaletteOpen?: boolean;
+  cloudAutoCheck?: boolean;
   symbolCategoryOrder?: string[];
   whiteboardColor?: string;
   whiteboardBrush?: InkBrush;
@@ -169,6 +174,7 @@ let saveTimer: ReturnType<typeof setTimeout> | null = null;
 export const useSettingsStore = create<SettingsState>((set, get) => ({
   open: false,
   symbolPaletteOpen: false,
+  cloudAutoCheck: false,
   defaultExportDpi: 2,
   defaultFormulaFontSize: 28,
   useMathFont: true,
@@ -190,6 +196,10 @@ export const useSettingsStore = create<SettingsState>((set, get) => ({
   toggleOpen: () => set((s) => ({ open: !s.open })),
   setSymbolPaletteOpen: (v) => {
     set({ symbolPaletteOpen: v });
+    get().saveToStorage();
+  },
+  setCloudAutoCheck: (v) => {
+    set({ cloudAutoCheck: v });
     get().saveToStorage();
   },
   setDefaultExportDpi: (dpi) => {
@@ -318,6 +328,7 @@ export const useSettingsStore = create<SettingsState>((set, get) => ({
           advancedExportPrefix: s.advancedExportPrefix,
           slidersCollapsed: s.slidersCollapsed,
           symbolPaletteOpen: s.symbolPaletteOpen,
+          cloudAutoCheck: s.cloudAutoCheck,
           symbolCategoryOrder: s.symbolCategoryOrder,
           whiteboardColor: s.whiteboardColor,
           whiteboardBrush: s.whiteboardBrush,
@@ -400,6 +411,9 @@ export const useSettingsStore = create<SettingsState>((set, get) => ({
       if (typeof data.symbolPaletteOpen === 'boolean') {
         set({ symbolPaletteOpen: data.symbolPaletteOpen });
       }
+      if (typeof data.cloudAutoCheck === 'boolean') {
+        set({ cloudAutoCheck: data.cloudAutoCheck });
+      }
       if (Array.isArray(data.symbolCategoryOrder)) {
         const valid = data.symbolCategoryOrder.filter(
           (id): id is string =>
@@ -442,6 +456,7 @@ export const useSettingsStore = create<SettingsState>((set, get) => ({
       ...ADVANCED_DEFAULTS,
       slidersCollapsed: false,
       symbolPaletteOpen: false,
+      cloudAutoCheck: false,
       symbolCategoryOrder: [...DEFAULT_SYMBOL_CATEGORY_ORDER],
       whiteboardColor: '#0ea5e9',
       whiteboardBrush: 'pen',

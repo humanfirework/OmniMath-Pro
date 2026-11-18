@@ -628,7 +628,14 @@ export const useWorkbenchStore = create<WorkbenchState>((set, get) => ({
       // the console and blueprint nodes can use them immediately after a
       // page reload (previously the panel showed them but mathjs could
       // not evaluate them until re-assigned).
-      if (initial.variables || initial.plotParams) {
+      //
+      // 只有「确实有东西要恢复」时才动态加载 mathjs：空对象也是 truthy，
+      // 之前首屏会因此白白下载整个引擎。
+      const hasStoredVariables =
+        !!initial.variables && Object.keys(initial.variables).length > 0;
+      const hasStoredPlotParams =
+        !!initial.plotParams && Object.keys(initial.plotParams).length > 0;
+      if (hasStoredVariables || hasStoredPlotParams) {
         const storedVariables = initial.variables;
         const storedPlotParams = initial.plotParams;
         void loadEngine()
