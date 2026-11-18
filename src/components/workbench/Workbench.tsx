@@ -48,6 +48,7 @@ import { StatusBar } from '@/components/workbench/layout/StatusBar';
 import { CommandPalette } from '@/components/workbench/panels/CommandPalette';
 import { GlobalCalcBar } from '@/components/workbench/panels/GlobalCalcBar';
 import { FloatingCalculator } from '@/components/workbench/panels/FloatingCalculator';
+import { RunResultsHost } from '@/components/workbench/runresults/RunResultsHost';
 import { MobileWorkbench } from '@/components/workbench/MobileWorkbench';
 import { OnboardingOverlay } from '@/components/workbench/OnboardingOverlay';
 import { PracticeGuide } from '@/components/workbench/PracticeGuide';
@@ -499,6 +500,7 @@ export function Workbench() {
           <CommandPalette />
           <GlobalCalcBar />
           <FloatingCalculator />
+          <RunResultsHost />
           <SettingsPanel />
           <OnboardingOverlay />
         </>
@@ -510,6 +512,7 @@ export function Workbench() {
         <CommandPalette />
         <GlobalCalcBar />
         <FloatingCalculator />
+        <RunResultsHost />
         <SettingsPanel />
         <OnboardingOverlay />
       </>
@@ -803,6 +806,7 @@ export function Workbench() {
       {/* Overlays */}
       <CommandPalette />
       <GlobalCalcBar />
+      <RunResultsHost />
       <FloatingCalculator />
       <SettingsPanel />
       <OnboardingOverlay />

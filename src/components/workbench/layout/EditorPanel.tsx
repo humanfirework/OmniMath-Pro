@@ -485,6 +485,13 @@ export function EditorPanel() {
     return () => window.removeEventListener('omnimath:run-all', handler);
   }, [runScript]);
 
+  // 菜单 / 命令面板：运行到独立浮窗（MATLAB figure 风格，可拖拽 / 缩放 / 多开）。
+  useEffect(() => {
+    const handler = () => runScript('independent');
+    window.addEventListener('omnimath:run-independent', handler);
+    return () => window.removeEventListener('omnimath:run-independent', handler);
+  }, [runScript]);
+
   /* ─── Global run shortcut (Ctrl/Cmd+Enter from settings) ──────── */
   // 编辑器自身由 CodeMirror keymap 处理 Ctrl+Enter；这里补上焦点在
   // 画布/蓝图等其它区域时的全局运行，使设置页里的「运行」快捷键真正生效。

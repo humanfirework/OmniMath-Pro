@@ -152,7 +152,6 @@ import { useWorkbenchStore, type PreviewTab } from '@/lib/store/workbench';
 import { useRunResultsStore, type RunCurve } from '@/lib/store/runResultsStore';
 import { useAIContextStore } from '@/lib/store/aiContextStore';
 import { AiPromptInput } from '@/components/workbench/ai/AiPromptInput';
-import { RunResultsHost } from '../runresults/RunResultsHost';
 import type { BezierPathData, BezierSegmentData } from '../plots/Plot2DCanvas';
 import {
   NODE_TYPES,
@@ -2421,9 +2420,6 @@ function NodePipelineInner() {
         onDoubleClick={onCanvasDoubleClick}
         onContextMenu={onCanvasContextMenu}
       >
-        {/* 独立运行结果面板（MATLAB figure 风格浮窗，多开/拖拽/缩放） */}
-        <RunResultsHost />
-
         {/* P2-5: 流水线运行中浮层 + 逐节点进度 */}
         <AnimatePresence>
           {pipelineRunning && (

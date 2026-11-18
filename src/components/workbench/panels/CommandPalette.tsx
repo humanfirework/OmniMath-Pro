@@ -52,6 +52,7 @@ import {
   GraduationCap,
   House,
   Settings,
+  Maximize,
 } from 'lucide-react';
 import { useWorkbenchStore } from '@/lib/store/workbench';
 import { useSettingsStore } from '@/lib/store/settingsStore';
@@ -169,6 +170,15 @@ export function CommandPalette() {
             <Play className="size-4" />
             <span>{t('cpRunAll')}</span>
             <CommandShortcut>Ctrl+Enter</CommandShortcut>
+          </CommandItem>
+          <CommandItem
+            onSelect={() => {
+              window.dispatchEvent(new CustomEvent('omnimath:run-independent'));
+              close();
+            }}
+          >
+            <Maximize className="size-4" />
+            <span>{t('cpRunIndependent')}</span>
           </CommandItem>
           <CommandItem
             onSelect={() => {

@@ -401,6 +401,13 @@ export function TitleBar() {
             </DropdownMenuItem>
             <DropdownMenuItem
               className="gap-2 text-[12px]"
+              onClick={() => window.dispatchEvent(new CustomEvent('omnimath:run-independent'))}
+            >
+              <Maximize className="size-3.5 text-muted-foreground" />
+              {t('cpRunIndependent')}
+            </DropdownMenuItem>
+            <DropdownMenuItem
+              className="gap-2 text-[12px]"
               onClick={() => setEditorContent('')}
             >
               <Eraser className="size-3.5 text-muted-foreground" />

@@ -1062,6 +1062,7 @@ export interface TranslationDict {
   cpGroupLayout: string;
   cpGroupTemplates: string;
   cpRunAll: string;
+  cpRunIndependent: string;
   cpClearEditor: string;
   cpClearAllHistVars: string;
   cpSwitchLight: string;
@@ -2383,6 +2384,7 @@ const zhCN: TranslationDict = {
   cpGroupLayout: "布局",
   cpGroupTemplates: "模板",
   cpRunAll: "运行全部",
+  cpRunIndependent: "运行到独立浮窗",
   cpClearEditor: "清空编辑器",
   cpClearAllHistVars: "清除全部历史与变量",
   cpSwitchLight: "切换到浅色主题",
@@ -3699,6 +3701,7 @@ const en: TranslationDict = {
   cpGroupLayout: "Layout",
   cpGroupTemplates: "Templates",
   cpRunAll: "Run All",
+  cpRunIndependent: "Run to floating figure",
   cpClearEditor: "Clear Editor",
   cpClearAllHistVars: "Clear All History & Variables",
   cpSwitchLight: "Switch to Light Theme",
