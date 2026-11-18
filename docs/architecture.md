@@ -165,7 +165,7 @@ Workspace
 src/lib/ink/          Canvas 墨迹引擎（与 React 无关，可 Worker 化）
 src/lib/mathnotes/    表达式引擎 + 本地符号识别
 src/lib/engine/       共享 mathjs 实例、求值、符号运算
-src/lib/plots/        2D/3D 采样与渲染
+src/lib/plots/        2D/3D 采样与渲染；curveTypes.ts 只放曲线/贝塞尔类型，供 store、vision 与组件共用
 src/components/workbench/
   layout/             标题栏、活动栏、侧栏、编辑器、预览、状态栏
   whiteboard/         白板与数学卡片

@@ -8,7 +8,7 @@
  * 避免「数据层翻一次、渲染层又翻一次」导致的点颠倒（double flip）。
  */
 
-import type { BezierSegmentData } from '@/components/workbench/plots/Plot2DCanvas';
+import type { BezierSegmentData } from '@/lib/plots/curveTypes';
 
 /** 像素 y → 数学 y。flipY 为 false 时原样返回。 */
 export function mapPixelY(py: number, H: number, flipY?: boolean): number {

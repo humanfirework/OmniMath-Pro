@@ -8,7 +8,7 @@
  *  - 逐帧动画（curve-animate）
  */
 
-import type { BezierSegmentData } from '@/components/workbench/plots/Plot2DCanvas';
+import type { BezierSegmentData } from '@/lib/plots/curveTypes';
 import type { RunCurve, RunResultImage, RunResultPanel } from '@/lib/store/runResultsStore';
 import { flattenPixels as flattenPixelsToPts, mapPixelPoint } from '@/lib/vision/coords';
 

@@ -2,7 +2,7 @@ import { create } from 'zustand';
 import type { InputMode } from '@/lib/engine/types';
 import type { Locale } from '@/lib/i18n';
 import { setLocale as setI18nLocale } from '@/lib/i18n';
-import type { CurveSetData } from '@/components/workbench/plots/Plot2DCanvas';
+import type { CurveSetData } from '@/lib/plots/curveTypes';
 import { useSettingsStore } from './settingsStore';
 
 export interface CalculationResult {

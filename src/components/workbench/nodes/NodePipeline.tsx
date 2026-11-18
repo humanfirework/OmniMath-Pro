@@ -152,7 +152,7 @@ import { useWorkbenchStore, type PreviewTab } from '@/lib/store/workbench';
 import { useRunResultsStore, type RunCurve } from '@/lib/store/runResultsStore';
 import { useAIContextStore } from '@/lib/store/aiContextStore';
 import { AiPromptInput } from '@/components/workbench/ai/AiPromptInput';
-import type { BezierPathData, BezierSegmentData } from '../plots/Plot2DCanvas';
+import type { BezierPathData, BezierSegmentData } from '@/lib/plots/curveTypes';
 import {
   NODE_TYPES,
   NODE_WIDTH,

@@ -18,7 +18,7 @@
 import { useMemo, useState } from 'react';
 import { useWorkbenchStore } from '@/lib/store/workbench';
 import { refitCurveCandidate, type Polyline, type Point } from '@/lib/vision';
-import type { CurveSetData, CurveCorrectionCandidate, Pt2, BezierPathData } from './Plot2DCanvas';
+import type { CurveSetData, CurveCorrectionCandidate, Pt2, BezierPathData } from '@/lib/plots/curveTypes';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Slider } from '@/components/ui/slider';

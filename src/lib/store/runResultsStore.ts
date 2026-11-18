@@ -7,7 +7,7 @@
  */
 
 import { create } from 'zustand';
-import type { BezierSegmentData } from '@/components/workbench/plots/Plot2DCanvas';
+import type { BezierSegmentData } from '@/lib/plots/curveTypes';
 import { mapPixelPoint } from '@/lib/vision/coords';
 
 export type RunResultKind = 'plot' | 'curves' | 'animation';
