@@ -277,17 +277,20 @@ function BillboardLabel({
   color,
   outlineColor,
   pixelSize = 14,
-  outlineWidth = 0.04,
+  outlineWidth = 0.07,
 }: BillboardLabelProps) {
-  const { camera } = useThree();
+  const { camera, size } = useThree();
   const textRef = useRef<any>(null);
   const posVec = useMemo(() => new THREE.Vector3(...position), [position]);
   const lastDistanceRef = useRef(0);
+  // outlineWidth is a ratio of the glyph size (not a fixed world length).
+  const outlineRatio = Math.max(0.02, Math.min(0.15, outlineWidth));
 
-  // Update fontSize based on camera distance — but only when distance
-  // changes by >5%, to avoid updating 24 labels × 60fps unnecessarily.
-  // Guarded: a throw inside a useFrame callback propagates through the
-  // fiber render loop and can unmount the whole Canvas (blank panel).
+  // Update fontSize so the label keeps a constant on-screen pixel size.
+  // World units per pixel depend on the camera FOV + viewport height:
+  //   worldPerPixel = 2 * tan(fov/2) * distance / viewportHeight
+  // The old approximation (distance / 280) made ticks ~3x too large when
+  // the camera sat far from the origin.
   useFrame(() => {
     try {
       if (!textRef.current) return;
@@ -297,8 +300,23 @@ function BillboardLabel({
         if (ratio > 0.95 && ratio < 1.05) return; // skip — barely changed
       }
       lastDistanceRef.current = distance;
-      const worldSize = (pixelSize * distance) / 280;
-      textRef.current.fontSize = worldSize;
+      const viewportH = Math.max(1, size.height);
+      const perspective = camera as THREE.PerspectiveCamera;
+      const isOrtho = (camera as THREE.OrthographicCamera).isOrthographicCamera;
+      const worldPerPixel = isOrtho
+        ? ((camera as THREE.OrthographicCamera).top - (camera as THREE.OrthographicCamera).bottom) /
+          viewportH /
+          Math.max(0.0001, (camera as THREE.OrthographicCamera).zoom)
+        : (2 * Math.tan((perspective.fov * Math.PI) / 360) * distance) / viewportH;
+      const fontSize = worldPerPixel * pixelSize;
+      textRef.current.fontSize = fontSize;
+      // Outline must scale with the glyphs; a fixed world-space outline makes
+      // the small tick labels look 2–3× larger and blurry.
+      textRef.current.outlineWidth = Math.max(0.001, fontSize * outlineRatio);
+      // troika-three-text only regenerates its SDF when sync() is called;
+      // setting fontSize imperatively without syncing leaves the glyphs at
+      // their initial size.
+      textRef.current.sync?.();
     } catch (err) {
       // Never let a label-sizing failure kill the render loop.
       console.error('[Plot3DScene] BillboardLabel frame error', err);
@@ -309,11 +327,11 @@ function BillboardLabel({
     <Billboard position={position}>
       <Text
         ref={textRef}
-        fontSize={0.3}
+        fontSize={0.12}
         color={color}
         anchorX="center"
         anchorY="middle"
-        outlineWidth={outlineWidth}
+        outlineWidth={0.01}
         outlineColor={outlineColor}
       >
         {text}
