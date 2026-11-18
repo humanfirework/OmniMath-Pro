@@ -38,7 +38,6 @@ import {
   Trash2,
   FileCode2,
   Loader2,
-  Settings2,
   Sigma,
   X,
   PanelTop,
@@ -137,7 +136,6 @@ export function EditorPanel() {
   const setActiveSidePanel = useWorkbenchStore((s) => s.setActiveSidePanel);
   const variables = useWorkbenchStore((s) => s.variables);
 
-  const [cursor, setCursor] = useState({ line: 1, col: 1 });
   const [isRunning, setIsRunning] = useState(false);
   const [previewLine, setPreviewLine] = useState(1);
   // 输入界面：'code'（代码编辑器） | 'demos'（Desmos 式直接输入）。
@@ -612,25 +610,6 @@ export function EditorPanel() {
             </TooltipTrigger>
             <TooltipContent side="bottom">{t('editorClear')}</TooltipContent>
           </Tooltip>
-          {/* P2-1: 显式「运行到独立面板」按钮 —— 把绘图送入可拖拽浮窗 */}
-          <Tooltip>
-            <TooltipTrigger asChild>
-              <button
-                type="button"
-                onClick={() => runScript('independent')}
-                disabled={isRunning}
-                aria-label={t('editorRunToPanel')}
-                className={cn(
-                  'flex items-center gap-1.5 h-7 px-2.5 ml-1 rounded-md text-[11.5px] font-medium transition-all',
-                  'text-primary border border-primary/30 hover:bg-primary/10',
-                )}
-              >
-                <PanelTop className="size-3.5" />
-                <span className="hidden sm:inline">{t('editorRunToPanel')}</span>
-              </button>
-            </TooltipTrigger>
-            <TooltipContent side="bottom">{t('editorRunToPanelHint')}</TooltipContent>
-          </Tooltip>
           <motion.button
             type="button"
             onClick={() => runScript()}
@@ -764,23 +743,17 @@ export function EditorPanel() {
         </div>
       ) : (
         <>
-          {/* Live preview bar (simple mode only) */}
-          {inputMode === 'simple' && (
+          {/* Live preview bar (simple mode only, hidden when the line is empty) */}
+          {inputMode === 'simple' && previewLatex && (
             <div className="shrink-0 min-h-10 max-h-48 flex items-start gap-2 px-2.5 py-2 border-b border-border/60 bg-muted/30 border-l-2 border-l-primary/60 overflow-x-auto overflow-y-auto">
               <span className="text-[12px] font-medium text-muted-foreground shrink-0 mt-0.5">
                 {t('editorLivePreview')}:
               </span>
-              {previewLatex ? (
-                <FormulaRenderer
-                  latex={previewLatex}
-                  displayMode
-                  className="min-w-0 flex-1 text-[13px]"
-                />
-              ) : (
-                <span className="text-[12px] text-muted-foreground/70 mt-0.5">
-                  {t('editorLivePreviewHint')}
-                </span>
-              )}
+              <FormulaRenderer
+                latex={previewLatex}
+                displayMode
+                className="min-w-0 flex-1 text-[13px]"
+              />
             </div>
           )}
 
@@ -790,8 +763,7 @@ export function EditorPanel() {
               value={editorContent}
               onChange={setEditorContent}
               onRun={runScript}
-              onCursorChange={(line, col) => {
-                setCursor({ line, col });
+              onCursorChange={(line) => {
                 // Debounced preview update.
                 if (previewTimerRef.current) clearTimeout(previewTimerRef.current);
                 previewTimerRef.current = setTimeout(() => setPreviewLine(line), 200);
@@ -806,19 +778,6 @@ export function EditorPanel() {
 
       {/* Symbol palette (collapsible) */}
       <SymbolPalette />
-
-      {/* Bottom info bar */}
-      <div className="shrink-0 h-6 flex items-center justify-between px-2.5 text-[10.5px] text-muted-foreground border-t border-border/60 bg-background/40">
-        <div className="flex items-center gap-3 font-mono">
-          <span>↵ {t('editorEnterToEval')}</span>
-          <span className="hidden sm:inline">⇧↵ {t('editorShiftEnterNewLine')}</span>
-          <span className="hidden md:inline">⌘/ {t('editorCtrlSlashComment')}</span>
-        </div>
-        <div className="flex items-center gap-2 font-mono">
-          <Settings2 className="size-3" />
-          <span>{t('editorLn')} {cursor.line}, {t('editorCol')} {cursor.col}</span>
-        </div>
-      </div>
         </>
       )}
     </div>

@@ -371,22 +371,23 @@ export function WhiteboardCanvas() {
   }, []);
 
   /**
-   * Recognize the ink written since the last recognition pass.
-   * Runs ~1s after the pen stops — accuracy first, then latency.
+   * Recognize the ink on the line the user just finished writing.
+   *
+   * We deliberately re-read a short trailing window instead of only the ink
+   * added since the last pass: a slow writer frequently pauses for >1s
+   * between symbols, and "recognize only new strokes" would then evaluate
+   * "3" instead of "2+3".
    */
   const recognizeMathFromInk = useCallback(() => {
     if (!mathModeRef.current) return;
-    const all = strokesRef.current;
-    const start = Math.min(lastMathIndexRef.current, all.length);
-    let slice = all.slice(start).filter((s) => !s.shape && !s.pixel);
-    if (slice.length === 0) return;
-    if (slice.length > 40) slice = slice.slice(-40);
+    const all = strokesRef.current.filter((s) => !s.shape && !s.pixel);
+    if (all.length === 0) return;
 
-    let x0 = Infinity;
-    let y0 = Infinity;
-    let x1 = -Infinity;
-    let y1 = -Infinity;
-    for (const s of slice) {
+    const bboxOf = (s: Stroke) => {
+      let x0 = Infinity;
+      let y0 = Infinity;
+      let x1 = -Infinity;
+      let y1 = -Infinity;
       for (const p of s.points) {
         if (!Number.isFinite(p.x) || !Number.isFinite(p.y)) continue;
         if (p.x < x0) x0 = p.x;
@@ -394,12 +395,66 @@ export function WhiteboardCanvas() {
         if (p.x > x1) x1 = p.x;
         if (p.y > y1) y1 = p.y;
       }
+      return Number.isFinite(x0) ? { x0, y0, x1, y1 } : null;
+    };
+
+    // Work out the writing line from the recent strokes themselves. Using
+    // the very last stroke fails when it is a raised superscript: the band
+    // would move up and cut off the baseline glyphs.
+    const recent = all.slice(-16);
+    const boxes = recent
+      .map((s) => bboxOf(s))
+      .filter((b): b is { x0: number; y0: number; x1: number; y1: number } => b !== null);
+    if (boxes.length === 0) return;
+    const centers = boxes.map((b) => (b.y0 + b.y1) / 2).sort((a, b) => a - b);
+    const heights = boxes.map((b) => b.y1 - b.y0).sort((a, b) => a - b);
+    const midCenter = centers[Math.floor(centers.length / 2)];
+    const midHeight = Math.max(8, heights[Math.floor(heights.length / 2)]);
+    const bandTop = midCenter - midHeight * 1.5;
+    const bandBottom = midCenter + midHeight * 1.5;
+
+    const slice: Stroke[] = [];
+    for (let i = 0; i < recent.length; i++) {
+      const b = bboxOf(recent[i]);
+      if (!b) continue;
+      const cy = (b.y0 + b.y1) / 2;
+      if (cy >= bandTop && cy <= bandBottom) slice.push(recent[i]);
+    }
+    if (slice.length === 0) slice.push(all[all.length - 1]);
+
+    let x0 = Infinity;
+    let y0 = Infinity;
+    let x1 = -Infinity;
+    let y1 = -Infinity;
+    for (const s of slice) {
+      const b = bboxOf(s);
+      if (!b) continue;
+      if (b.x0 < x0) x0 = b.x0;
+      if (b.y0 < y0) y0 = b.y0;
+      if (b.x1 > x1) x1 = b.x1;
+      if (b.y1 > y1) y1 = b.y1;
     }
     if (!Number.isFinite(x0)) return;
     mathAnchorRef.current = { x: x1 + 18, y: y0 };
 
     const rec = recognizeMathInk(slice.map((s) => ({ points: s.points })));
     lastMathIndexRef.current = all.length;
+    if (typeof window !== 'undefined') {
+      // Lightweight diagnostic hook for bug reports / automated tests.
+      (window as unknown as Record<string, unknown>).__omnimathRecognition = {
+        text: rec.text,
+        display: rec.display,
+        confidence: rec.confidence,
+        glyphs: rec.glyphs.map((g) => ({
+          char: g.char,
+          confidence: Number(g.confidence.toFixed(3)),
+          alternatives: g.alternatives,
+          reason: g.reason,
+          superscript: g.superscript,
+          bbox: g.bbox,
+        })),
+      };
+    }
     const evaluation = rec.text ? evaluateMathNote(rec.text) : null;
     setMathDraft({
       text: rec.text,

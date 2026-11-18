@@ -45,6 +45,10 @@ export interface RecognizedGlyph {
   char: string;
   displayChar: string;
   confidence: number;
+  /** Runner-up characters, for diagnostics / user correction UI. */
+  alternatives?: string[];
+  /** Which rule produced this glyph (diagnostics). */
+  reason?: string;
   bbox: BBox;
   superscript: boolean;
   strokes: RecognitionStroke[];
@@ -134,6 +138,38 @@ export function groupStrokesIntoGlyphs(strokes: RecognitionStroke[]): GlyphGroup
     }
   }
 
+  // Second pass: merge strokes that belong to one symbol but do not overlap
+  // enough in the first pass (the two bars of "+", crossing strokes of "x").
+  let merged = true;
+  while (merged) {
+    merged = false;
+    outer: for (let i = 0; i < groups.length; i++) {
+      for (let j = i + 1; j < groups.length; j++) {
+        const a = groups[i];
+        const b = groups[j];
+        const combined = unionBBox(a.bbox, b.bbox);
+        const combinedW = combined.x1 - combined.x0;
+        const combinedH = combined.y1 - combined.y0;
+        if (combinedW > medianHeight * 2.1 || combinedH > medianHeight * 2.4) continue;
+
+        const xo = xOverlapRatio(a.bbox, b.bbox);
+        const yo = yOverlapRatio(a.bbox, b.bbox);
+        const centerDy = Math.abs(
+          (a.bbox.y0 + a.bbox.y1) / 2 - (b.bbox.y0 + b.bbox.y1) / 2,
+        );
+        const crossing = xo >= 0.35 && yo >= 0.1;
+        const stacked = xo >= 0.7 && centerDy <= medianHeight * 0.5;
+        if (crossing || stacked) {
+          a.strokes.push(...b.strokes);
+          a.bbox = combined;
+          groups.splice(j, 1);
+          merged = true;
+          break outer;
+        }
+      }
+    }
+  }
+
   return groups
     .map((g) => ({
       strokes: g.strokes,
@@ -148,14 +184,16 @@ export function groupStrokesIntoGlyphs(strokes: RecognitionStroke[]): GlyphGroup
 
 function xOverlapRatio(a: BBox, b: BBox): number {
   const overlap = Math.min(a.x1, b.x1) - Math.max(a.x0, b.x0);
-  if (overlap <= 0) return 0;
-  return overlap / Math.max(1, Math.min(a.x1 - a.x0, b.x1 - b.x0));
+  if (overlap < 0) return 0;
+  // +0.5 so a perfectly vertical stroke (zero-width bbox) still counts as
+  // intersecting the horizontal bar it crosses.
+  return (overlap + 0.5) / Math.max(1, Math.min(a.x1 - a.x0, b.x1 - b.x0));
 }
 
 function yOverlapRatio(a: BBox, b: BBox): number {
   const overlap = Math.min(a.y1, b.y1) - Math.max(a.y0, b.y0);
-  if (overlap <= 0) return 0;
-  return overlap / Math.max(1, Math.min(a.y1 - a.y0, b.y1 - b.y0));
+  if (overlap < 0) return 0;
+  return (overlap + 0.5) / Math.max(1, Math.min(a.y1 - a.y0, b.y1 - b.y0));
 }
 
 function horizontalGap(a: BBox, b: BBox): number {
@@ -173,7 +211,7 @@ const TEMPLATE_CHARS = [
   '0', '1', '2', '3', '4', '5', '6', '7', '8', '9',
   '+', '-', '*', '/', '=', '(', ')', '.', 'x', 'y',
 ];
-const TEMPLATE_FONTS = ['sans-serif', 'serif', 'monospace'];
+const TEMPLATE_FONTS = ['DejaVu Sans', 'DejaVu Serif', 'DejaVu Sans Mono', 'sans-serif', 'serif'];
 
 interface GlyphTemplate {
   char: string;
@@ -367,7 +405,317 @@ export function classifyGlyphBitmap(ink: Uint8Array, templates: GlyphTemplate[])
 }
 
 /* ================================================================== *
- * 3. Layout reconstruction
+ * 3. Geometry shortcuts
+ *
+ * Digits need templates, but + − = / × . ( ) are structurally trivial and
+ * much more reliable with a few geometric rules. Running these first stops
+ * "2 + 3" from being classified as a single odd glyph.
+ * ================================================================== */
+
+export interface GeometryHint {
+  char: string;
+  confidence: number;
+  alternatives: string[];
+  reason?: string;
+}
+
+export function classifyGlyphGeometry(group: GlyphGroup): GeometryHint | null {
+  const strokes = group.strokes.filter((s) => s.points.length >= 2);
+  if (strokes.length === 0) return null;
+  const groupW = Math.max(1, group.width);
+  const groupH = Math.max(1, group.height);
+
+  if (groupW <= 6 && groupH <= 6) {
+    return { char: '.', confidence: 0.9, alternatives: [] };
+  }
+
+  if (strokes.length === 1) {
+    const stroke = strokes[0];
+    const bbox = strokeBBox(stroke);
+    if (!bbox) return null;
+    const w = Math.max(1, bbox.x1 - bbox.x0);
+    const h = Math.max(1, bbox.y1 - bbox.y0);
+    const aspect = w / h;
+    const line = pathLinearity(stroke);
+    const reversals = directionReversals(stroke);
+
+    if (aspect >= 2.2 && h <= Math.max(6, w * 0.22) && line.straightness > 0.78) {
+      return { char: '-', confidence: 0.88, alternatives: [] };
+    }
+    if (h / w >= 2.6 && w <= Math.max(6, h * 0.3) && line.straightness > 0.8) {
+      return { char: '1', confidence: 0.62, alternatives: [], reason: 'vertical-line' };
+    }
+    if (aspect >= 0.45 && aspect <= 2.2 && closureRatio(stroke) < 0.22) {
+      return { char: '0', confidence: 0.55, alternatives: [], reason: 'closed-loop' };
+    }
+
+    // Loop digits: 6 / 8 / 9 all cross themselves. Vertical ink density
+    // separates a top loop (9) from a bottom loop (6).
+    const selfCrossings = countSelfIntersections(stroke);
+    if (selfCrossings >= 1 && h / w >= 1.05) {
+      const density = verticalDensity(stroke);
+      if (selfCrossings >= 2 && density.top > 0.3 && density.bottom > 0.3) {
+        return { char: '8', confidence: 0.58, alternatives: [], reason: `loops(${selfCrossings})` };
+      }
+      if (density.top > density.bottom * 1.2) {
+        return { char: '9', confidence: 0.66, alternatives: [], reason: `loop-top(${selfCrossings})` };
+      }
+      if (density.bottom > density.top * 1.2) {
+        return { char: '6', confidence: 0.66, alternatives: [], reason: `loop-bottom(${selfCrossings})` };
+      }
+    }
+
+    // "2": a flat horizontal bar at the bottom, ending on the right edge.
+    if (hasFlatBar(stroke, 'bottom') && stroke.points[stroke.points.length - 1].x > bbox.x0 + w * 0.72) {
+      return { char: '2', confidence: 0.72, alternatives: [], reason: 'bottom-bar' };
+    }
+    // "3": two right-facing bumps, both endpoints on the left.
+    if (
+      reversals >= 2 &&
+      stroke.points[0].x < bbox.x0 + w * 0.55 &&
+      stroke.points[stroke.points.length - 1].x < bbox.x0 + w * 0.55
+    ) {
+      return { char: '3', confidence: 0.68, alternatives: [], reason: 'double-bump' };
+    }
+    // "7": a flat top bar followed by a descending diagonal.
+    if (hasFlatBar(stroke, 'top')) {
+      return { char: '7', confidence: 0.56, alternatives: [], reason: 'top-bar' };
+    }
+    if (h / w >= 1.6 && line.straightness < 0.72 && reversals <= 1) {
+      const cx = meanX(stroke);
+      const endpoints = (stroke.points[0].x + stroke.points[stroke.points.length - 1].x) / 2;
+      if (cx < endpoints - w * 0.08) return { char: '(', confidence: 0.68, alternatives: [] };
+      if (cx > endpoints + w * 0.08) return { char: ')', confidence: 0.68, alternatives: [] };
+    }
+    if (line.pathRatio < 1.3 && w > 12 && h > 12) {
+      const p0 = stroke.points[0];
+      const p1 = stroke.points[stroke.points.length - 1];
+      const dx = Math.abs(p1.x - p0.x);
+      const dy = Math.abs(p1.y - p0.y);
+      if (dx > w * 0.55 && dy > h * 0.55) {
+        return { char: '/', confidence: 0.66, alternatives: [] };
+      }
+    }
+    return null;
+  }
+
+  if (strokes.length === 2) {
+    const a = strokeBBox(strokes[0]);
+    const b = strokeBBox(strokes[1]);
+    if (!a || !b) return null;
+    const aw = Math.max(1, a.x1 - a.x0);
+    const ah = Math.max(1, a.y1 - a.y0);
+    const bw = Math.max(1, b.x1 - b.x0);
+    const bh = Math.max(1, b.y1 - b.y0);
+    const aHoriz = aw / ah >= 2.2;
+    const bHoriz = bw / bh >= 2.2;
+    const aVert = ah / aw >= 2.2;
+    const bVert = bh / bw >= 2.2;
+
+    if (aHoriz && bHoriz) {
+      const gap = Math.abs((a.y0 + a.y1) / 2 - (b.y0 + b.y1) / 2);
+      if (gap >= 2 && gap <= Math.max(ah, bh) * 1.8 + 10) {
+        return { char: '=', confidence: 0.88, alternatives: [] };
+      }
+    }
+    if ((aHoriz && bVert) || (aVert && bHoriz)) {
+      return { char: '+', confidence: 0.86, alternatives: [] };
+    }
+
+    // "y": a V-shaped body with a narrower descender below it. This is the
+    // common two-stroke way of writing y, and it keeps y from being read as 7.
+    const a0 = a.y0 <= b.y0 ? a : b;
+    const tail = a.y0 <= b.y0 ? b : a;
+    const mainW = Math.max(1, a0.x1 - a0.x0);
+    const mainH = Math.max(1, a0.y1 - a0.y0);
+    const tailW = Math.max(1, tail.x1 - tail.x0);
+    const tailH = Math.max(1, tail.y1 - tail.y0);
+    const mainStroke = a.y0 <= b.y0 ? strokes[0] : strokes[1];
+    if (
+      tail.y1 > a0.y1 + mainH * 0.2 &&
+      tailW < mainW * 0.9 &&
+      tailH > mainH * 0.5 &&
+      tailW / tailH < 2.2 &&
+      directionReversalsY(mainStroke) >= 1
+    ) {
+      return { char: 'y', confidence: 0.68, alternatives: [] };
+    }
+
+    if (
+      lineOf(strokes[0]).straightness > 0.72 &&
+      lineOf(strokes[1]).straightness > 0.72 &&
+      segmentsIntersect(
+        strokes[0].points[0],
+        strokes[0].points[strokes[0].points.length - 1],
+        strokes[1].points[0],
+        strokes[1].points[strokes[1].points.length - 1],
+      )
+    ) {
+      return { char: '*', confidence: 0.68, alternatives: ['x'] };
+    }
+  }
+
+  return null;
+}
+
+function lineOf(stroke: RecognitionStroke) {
+  return pathLinearity(stroke);
+}
+
+/** 1 = perfectly straight chord; lower = more curved. */
+function pathLinearity(stroke: RecognitionStroke) {
+  const pts = stroke.points;
+  let path = 0;
+  for (let i = 1; i < pts.length; i++) {
+    path += Math.hypot(pts[i].x - pts[i - 1].x, pts[i].y - pts[i - 1].y);
+  }
+  const chord = Math.hypot(pts[pts.length - 1].x - pts[0].x, pts[pts.length - 1].y - pts[0].y);
+  return {
+    straightness: chord / Math.max(1e-6, path),
+    pathRatio: path / Math.max(1e-6, chord),
+  };
+}
+
+function closureRatio(stroke: RecognitionStroke): number {
+  const bbox = strokeBBox(stroke);
+  if (!bbox) return 1;
+  const diag = Math.hypot(bbox.x1 - bbox.x0, bbox.y1 - bbox.y0) || 1;
+  const pts = stroke.points;
+  return Math.hypot(pts[pts.length - 1].x - pts[0].x, pts[pts.length - 1].y - pts[0].y) / diag;
+}
+
+function meanX(stroke: RecognitionStroke): number {
+  let sum = 0;
+  for (const p of stroke.points) sum += p.x;
+  return sum / Math.max(1, stroke.points.length);
+}
+
+/** Count horizontal direction reversals (a "3" has two bumps, ")" only one). */
+function directionReversals(stroke: RecognitionStroke): number {
+  const pts = stroke.points;
+  let lastSign = 0;
+  let reversals = 0;
+  for (let i = 1; i < pts.length; i++) {
+    const dx = pts[i].x - pts[i - 1].x;
+    if (Math.abs(dx) < 1.2) continue;
+    const sign = Math.sign(dx);
+    if (lastSign !== 0 && sign !== lastSign) reversals++;
+    lastSign = sign;
+  }
+  return reversals;
+}
+
+/** Vertical direction reversals (a V-shaped "y" goes down then up). */
+function directionReversalsY(stroke: RecognitionStroke): number {
+  const pts = stroke.points;
+  let lastSign = 0;
+  let reversals = 0;
+  for (let i = 1; i < pts.length; i++) {
+    const dy = pts[i].y - pts[i - 1].y;
+    if (Math.abs(dy) < 1.2) continue;
+    const sign = Math.sign(dy);
+    if (lastSign !== 0 && sign !== lastSign) reversals++;
+    lastSign = sign;
+  }
+  return reversals;
+}
+
+/** Is there a long, almost horizontal segment at the top/bottom of the stroke? */
+function hasFlatBar(stroke: RecognitionStroke, where: 'top' | 'bottom'): boolean {
+  const bbox = strokeBBox(stroke);
+  if (!bbox) return false;
+  const w = Math.max(1, bbox.x1 - bbox.x0);
+  const h = Math.max(1, bbox.y1 - bbox.y0);
+  const pts = stroke.points;
+  if (pts.length < 4) return false;
+
+  // Walk from the relevant end while the pen stays on the same horizontal
+  // line. Using a fixed % of points fails because pointer sampling is not
+  // uniform along the path.
+  const tolerance = Math.max(3, h * 0.13);
+  const run: RecognitionPoint[] = [];
+  if (where === 'bottom') {
+    const ref = pts[pts.length - 1].y;
+    for (let i = pts.length - 1; i >= 0; i--) {
+      if (Math.abs(pts[i].y - ref) > tolerance) break;
+      run.push(pts[i]);
+    }
+  } else {
+    const ref = pts[0].y;
+    for (let i = 0; i < pts.length; i++) {
+      if (Math.abs(pts[i].y - ref) > tolerance) break;
+      run.push(pts[i]);
+    }
+  }
+  if (run.length < 3) return false;
+
+  let minX = Infinity;
+  let maxX = -Infinity;
+  let sumY = 0;
+  for (const p of run) {
+    minX = Math.min(minX, p.x);
+    maxX = Math.max(maxX, p.x);
+    sumY += p.y;
+  }
+  const meanY = sumY / run.length;
+  const wide = maxX - minX >= w * 0.65;
+  const located =
+    where === 'bottom' ? meanY >= bbox.y0 + h * 0.68 : meanY <= bbox.y0 + h * 0.32;
+  return wide && located;
+}
+
+/** Fraction of ink points above / below the vertical midline. */
+function verticalDensity(stroke: RecognitionStroke): { top: number; bottom: number } {
+  const bbox = strokeBBox(stroke);
+  if (!bbox) return { top: 0, bottom: 0 };
+  const mid = (bbox.y0 + bbox.y1) / 2;
+  let top = 0;
+  let bottom = 0;
+  for (const p of stroke.points) {
+    if (p.y < mid) top++;
+    else bottom++;
+  }
+  const total = Math.max(1, top + bottom);
+  return { top: top / total, bottom: bottom / total };
+}
+
+/** Number of times the stroke crosses itself (loops in 6/8/9). */
+function countSelfIntersections(stroke: RecognitionStroke): number {
+  const pts = stroke.points;
+  const step = Math.max(1, Math.floor(pts.length / 40));
+  const sampled: RecognitionPoint[] = [];
+  for (let i = 0; i < pts.length; i += step) sampled.push(pts[i]);
+  let count = 0;
+  for (let i = 0; i < sampled.length - 1; i++) {
+    for (let j = i + 3; j < sampled.length - 1; j++) {
+      if (
+        segmentsIntersect(sampled[i], sampled[i + 1], sampled[j], sampled[j + 1])
+      ) {
+        count++;
+        if (count > 4) return count;
+      }
+    }
+  }
+  return count;
+}
+
+function segmentsIntersect(
+  a: RecognitionPoint,
+  b: RecognitionPoint,
+  c: RecognitionPoint,
+  d: RecognitionPoint,
+): boolean {
+  const cross = (p: RecognitionPoint, q: RecognitionPoint, r: RecognitionPoint) =>
+    (q.x - p.x) * (r.y - p.y) - (q.y - p.y) * (r.x - p.x);
+  const d1 = cross(a, b, c);
+  const d2 = cross(a, b, d);
+  const d3 = cross(c, d, a);
+  const d4 = cross(c, d, b);
+  return d1 * d2 < 0 && d3 * d4 < 0;
+}
+
+/* ================================================================== *
+ * 4. Layout reconstruction
  * ================================================================== */
 
 const DIGITS = new Set(['0', '1', '2', '3', '4', '5', '6', '7', '8', '9']);
@@ -439,7 +787,11 @@ export function recognizeMathInk(strokes: RecognitionStroke[]): MathRecognitionR
   for (const group of groups) {
     const raster = rasterizeGlyph(group.strokes);
     if (!raster) continue;
-    const cls = classifyGlyphBitmap(raster.ink, templates);
+    const hint = classifyGlyphGeometry(group);
+    const cls =
+      hint && hint.confidence >= 0.6
+        ? hint
+        : classifyGlyphBitmap(raster.ink, templates);
 
     let char = cls.char;
     // Preferred display for multiplication.
@@ -465,13 +817,20 @@ export function recognizeMathInk(strokes: RecognitionStroke[]): MathRecognitionR
       char,
       displayChar: char === '*' ? '×' : displayChar,
       confidence: superscript ? cls.confidence * 0.9 : cls.confidence,
+      alternatives: cls.alternatives,
+      reason: hint && hint.confidence >= 0.6 ? (hint.reason ?? 'geometry') : 'template',
       bbox: group.bbox,
       superscript,
       strokes: group.strokes,
     });
   }
 
-  const text = buildRecognizedText(glyphs);
+  const rawText = buildRecognizedText(glyphs);
+  // "x" and "×" share the same two crossing strokes. A lone × after "=", at
+  // the start, or before a superscript is the variable x — not multiplication.
+  const text = rawText
+    .replace(/^\*(?=[+\-/^()]|$)/, 'x')
+    .replace(/=\*(?=[+\-/^()]|$)/g, '=x');
   const display = glyphs.map((g) => (g.superscript ? `^${g.displayChar}` : g.displayChar)).join('');
   const confidence =
     glyphs.length > 0

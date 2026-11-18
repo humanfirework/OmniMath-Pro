@@ -194,7 +194,7 @@ function FullScreenViews({ activeViewMode }: { activeViewMode: ViewMode }) {
   };
 
   return (
-    <div className="flex-1 min-w-0 min-h-0 relative overflow-hidden">
+    <div className="h-full w-full min-w-0 relative overflow-hidden">
       {FULLSCREEN_VIEWS.map((vm) => (
         <div
           key={vm}

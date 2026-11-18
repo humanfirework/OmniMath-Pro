@@ -20,7 +20,7 @@
  */
 
 import dynamic from 'next/dynamic';
-import { Fragment, memo, useCallback, useRef } from 'react';
+import { Fragment, memo, useCallback, useEffect, useRef } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
   FileText,
@@ -138,6 +138,14 @@ export function PreviewPanel() {
 
   const [copied, setCopied] = useState(false);
   const copyTimerRef = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
+
+  // Three.js is expensive: do not create a WebGL context until the user
+  // actually opens the 3D tab. Once visited it stays mounted (hidden) so
+  // switching back is instant and we never churn WebGL contexts.
+  const [visited3d, setVisited3d] = useState(activeTab === 'plot3d');
+  useEffect(() => {
+    if (activeTab === 'plot3d') setVisited3d(true);
+  }, [activeTab]);
 
   const handleCopy = useCallback(async () => {
     if (!currentResult) return;
@@ -287,7 +295,7 @@ export function PreviewPanel() {
 
       {/* Body */}
       <div className="flex-1 min-h-0 relative overflow-hidden">
-        {/* T3: Plot3D 常驻挂载 — 用 display:none 隐藏而非卸载，避免切 tab
+        {/* 首次进入 3D 才挂载；之后用 display:none 隐藏而非卸载，避免切 tab
             导致 WebGLRenderer 被销毁、再切回时重新创建上下文（切 16 次后
             浏览器会因 WebGL 上下文数量上限而黑屏）。frameloop="demand" 让
             隐藏期间 GPU 不消耗资源，切回时由 ResizeObserver 自动恢复尺寸。 */}
@@ -297,7 +305,7 @@ export function PreviewPanel() {
           aria-hidden={activeTab !== 'plot3d'}
         >
           <ErrorBoundary>
-            <Plot3DPanel />
+            {visited3d && <Plot3DPanel />}
           </ErrorBoundary>
         </div>
 
