@@ -178,6 +178,11 @@ export interface TranslationDict {
   abPixelMode: string;
   abEducation: string;
   abLayoutMenu: string;
+  abAllTools: string;
+  abViewGroup: string;
+  abPanelGroup: string;
+  abLayoutGroup: string;
+  abShowFullBar: string;
   abAI: string;
   abLinalg: string;
   abMatrix: string;
@@ -1477,6 +1482,11 @@ const zhCN: TranslationDict = {
   abPixelMode: "像素画模式：笔迹吸附到网格，绘制像素点",
   abEducation: "学习陪伴",
   abLayoutMenu: "布局选项",
+  abAllTools: "全部工具",
+  abViewGroup: "视图",
+  abPanelGroup: "侧边面板",
+  abLayoutGroup: "布局",
+  abShowFullBar: "显示完整活动栏",
   abAI: "AI 助手",
   abLinalg: "线性代数",
   abMatrix: "矩阵",
@@ -2764,6 +2774,11 @@ const en: TranslationDict = {
   abPixelMode: "Pixel mode: snap strokes to a grid and draw pixels",
   abEducation: "Learning Companion",
   abLayoutMenu: "Layout Options",
+  abAllTools: "All Tools",
+  abViewGroup: "Views",
+  abPanelGroup: "Side Panels",
+  abLayoutGroup: "Layout",
+  abShowFullBar: "Show Full Activity Bar",
   abAI: "AI Assistant",
   abLinalg: "Linear Algebra",
   abMatrix: "Matrix",

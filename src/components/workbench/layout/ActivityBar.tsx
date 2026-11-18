@@ -126,6 +126,14 @@ const GROUP_2_SET = new Set(GROUP_2_IDS);
 const GROUP_3_SET = new Set(GROUP_3_IDS);
 const BOTTOM_UTIL_SET = new Set(BOTTOM_UTIL_IDS);
 
+/** 精简活动栏中常驻的高频入口（其余全部收进「全部工具」菜单）。 */
+const COMPACT_PRIMARY_IDS: ActivityItemId[] = ['home', 'whiteboard', 'linalg', 'pipeline'];
+const COMPACT_PRIMARY_SET = new Set(COMPACT_PRIMARY_IDS);
+const SIDE_TAB_SET = new Set<ActivityItemId>(['history', 'variables', 'files', 'formulas']);
+const VIEW_MODE_SET = new Set<ActivityItemId>([
+  'home', 'solver', 'control', 'pipeline', 'whiteboard', 'linalg', 'stats', 'education',
+]);
+
 function SortableWrapper({ id, children }: { id: string; children: React.ReactNode }) {
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id });
   const style: CSSProperties = {
@@ -165,6 +173,8 @@ export function ActivityBar() {
 
   const activityBarOrder = useSettingsStore((s) => s.activityBarOrder);
   const setActivityBarOrder = useSettingsStore((s) => s.setActivityBarOrder);
+  const activityBarCompact = useSettingsStore((s) => s.activityBarCompact);
+  const setActivityBarCompact = useSettingsStore((s) => s.setActivityBarCompact);
 
   const isRight = activityBarPosition === 'right';
   const tooltipSide = isRight ? 'left' : 'right';
@@ -531,6 +541,60 @@ export function ActivityBar() {
     return null;
   };
 
+  /**
+   * 精简模式：「全部工具」菜单的分发入口。
+   * 侧边面板需要先回到工作台视图，再切到对应面板；全屏视图直接切换。
+   */
+  const openFromOverflow = (id: ActivityItemId) => {
+    if (id === 'toggleEditor') {
+      setEditorVisible(!editorVisible);
+      return;
+    }
+    if (id === 'togglePreview') {
+      setPreviewVisible(!previewVisible);
+      return;
+    }
+    if (id === 'toggleSidebar') {
+      toggleSidePanel();
+      return;
+    }
+    if (id === 'settings') {
+      setSettingsOpen(true);
+      return;
+    }
+    if (SIDE_TAB_SET.has(id)) {
+      if (viewMode !== 'workbench') setViewMode('workbench');
+      setActiveSidePanel(id as SidePanelTab);
+      if (sidePanelCollapsed) toggleSidePanel();
+      return;
+    }
+    if (VIEW_MODE_SET.has(id)) {
+      setViewMode(id as ViewMode);
+    }
+  };
+
+  const renderMenuEntry = (id: ActivityItemId) => {
+    const reg = ACTIVITY_REGISTRY[id];
+    if (!reg) return null;
+    const Icon = reg.icon;
+    return (
+      <DropdownMenuItem
+        key={id}
+        onClick={() => openFromOverflow(id)}
+        className="gap-2 text-[11.5px]"
+      >
+        <Icon className="size-3.5" />
+        <span>{t(reg.labelKey)}</span>
+      </DropdownMenuItem>
+    );
+  };
+
+  const overflowRestIds = orderedIds.filter(
+    (id) => !COMPACT_PRIMARY_SET.has(id) && !BOTTOM_UTIL_SET.has(id),
+  );
+  const overflowViewIds = overflowRestIds.filter((id) => VIEW_MODE_SET.has(id));
+  const overflowSideIds = overflowRestIds.filter((id) => SIDE_TAB_SET.has(id));
+
   const renderGroup1 = (ids: ActivityItemId[]) => {
     if (!mounted) {
       return (
@@ -662,6 +726,109 @@ export function ActivityBar() {
           <span className="w-[2px] h-8 rounded-full bg-primary/40" />
         </div>
       </motion.aside>
+    );
+  }
+
+  // Compact rail: only the four most-used destinations stay visible; every
+  // other view/panel moves into a single "All tools" menu. This directly
+  // addresses the "left side is a wall of icons" complaint while keeping the
+  // full drag-sortable rail one click away.
+  if (activityBarCompact) {
+    return (
+      <aside
+        className={cn(
+          'relative w-11 shrink-0 flex flex-col items-center justify-between py-2 gap-1',
+          'glass border-r border-border',
+          'select-none',
+          isRight && 'border-r-0 border-l border-border',
+        )}
+        aria-label="Activity Bar"
+        onMouseLeave={() => {
+          if (activityBarAutoHide && !activityBarLocked) {
+            if (hideTimerRef.current) clearTimeout(hideTimerRef.current);
+            hideTimerRef.current = setTimeout(() => {
+              toggleActivityBarHidden();
+              hideTimerRef.current = null;
+            }, 200);
+          }
+        }}
+      >
+        <div className="flex flex-col items-center gap-1 w-full">
+          {COMPACT_PRIMARY_IDS.map((id) => renderItem(id, false))}
+          <div className="w-6 h-px bg-border/50 my-1 mx-auto rounded-full" />
+          <DropdownMenu>
+            <Tooltip delayDuration={200}>
+              <TooltipTrigger asChild>
+                <DropdownMenuTrigger asChild>
+                  <button
+                    type="button"
+                    aria-label={t('abAllTools')}
+                    className="grid place-items-center size-9 rounded-lg text-muted-foreground hover:text-foreground hover:bg-accent/60 transition-colors"
+                  >
+                    <MoreHorizontal className="size-[18px]" />
+                  </button>
+                </DropdownMenuTrigger>
+              </TooltipTrigger>
+              <TooltipContent side={tooltipSide}>{t('abAllTools')}</TooltipContent>
+            </Tooltip>
+            <DropdownMenuContent side={tooltipSide} align="start" className="w-56">
+              {overflowViewIds.length > 0 && (
+                <>
+                  <DropdownMenuLabel className="text-[10px] uppercase tracking-wide text-muted-foreground">
+                    {t('abViewGroup')}
+                  </DropdownMenuLabel>
+                  {overflowViewIds.map(renderMenuEntry)}
+                </>
+              )}
+              {overflowSideIds.length > 0 && (
+                <>
+                  <DropdownMenuSeparator />
+                  <DropdownMenuLabel className="text-[10px] uppercase tracking-wide text-muted-foreground">
+                    {t('abPanelGroup')}
+                  </DropdownMenuLabel>
+                  {overflowSideIds.map(renderMenuEntry)}
+                </>
+              )}
+              <DropdownMenuSeparator />
+              <DropdownMenuLabel className="text-[10px] uppercase tracking-wide text-muted-foreground">
+                {t('abLayoutGroup')}
+              </DropdownMenuLabel>
+              <DropdownMenuItem
+                onClick={() => setEditorVisible(!editorVisible)}
+                className="gap-2 text-[11.5px]"
+              >
+                <LayoutTemplate className="size-3.5" />
+                <span>{t('abToggleEditor')}</span>
+              </DropdownMenuItem>
+              <DropdownMenuItem
+                onClick={() => setPreviewVisible(!previewVisible)}
+                className="gap-2 text-[11.5px]"
+              >
+                <PanelRight className="size-3.5" />
+                <span>{t('abTogglePreview')}</span>
+              </DropdownMenuItem>
+              <DropdownMenuItem
+                onClick={toggleSidePanel}
+                className="gap-2 text-[11.5px]"
+              >
+                {sidePanelCollapsed ? <PanelLeftOpen className="size-3.5" /> : <PanelLeftClose className="size-3.5" />}
+                <span>{sidePanelCollapsed ? t('abShowSidebar') : t('abHideSidebar')}</span>
+              </DropdownMenuItem>
+              <DropdownMenuItem
+                onClick={() => setActivityBarCompact(false)}
+                className="gap-2 text-[11.5px]"
+              >
+                <PanelLeft className="size-3.5" />
+                <span>{t('abShowFullBar')}</span>
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
+        </div>
+        <div className="flex flex-col items-center gap-1 w-full">
+          {renderItem('toggleSidebar', false)}
+          {renderItem('settings', false)}
+        </div>
+      </aside>
     );
   }
 

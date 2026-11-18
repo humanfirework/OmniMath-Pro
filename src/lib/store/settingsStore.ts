@@ -23,6 +23,8 @@ interface SettingsState {
   fontPreset: 'modern' | 'scholarly' | 'system';
   /** 活动栏图标顺序（自由拖拽排序后持久化），默认与内置布局顺序一致 */
   activityBarOrder: string[];
+  /** 精简活动栏：只显示高频入口，其余收进「全部工具」菜单（默认开启） */
+  activityBarCompact: boolean;
   /** 编辑器字号（px，8–32），默认 14 */
   editorFontSize: number;
   /** 坐标轴字号（px，8–24），默认 12 */
@@ -59,6 +61,7 @@ interface SettingsState {
   setUseMathFont: (v: boolean) => void;
   setFontPreset: (v: 'modern' | 'scholarly' | 'system') => void;
   setActivityBarOrder: (order: string[]) => void;
+  setActivityBarCompact: (v: boolean) => void;
   setEditorFontSize: (size: number) => void;
   setPlotAxisFontSize: (size: number) => void;
 
@@ -105,6 +108,7 @@ interface PersistedSettings {
   useMathFont: boolean;
   fontPreset?: 'modern' | 'scholarly' | 'system';
   activityBarOrder?: string[];
+  activityBarCompact?: boolean;
   editorFontSize?: number;
   plotAxisFontSize?: number;
   /* 高级设置项均为可选，兼容旧版本持久化数据 */
@@ -147,6 +151,7 @@ export const useSettingsStore = create<SettingsState>((set, get) => ({
   useMathFont: true,
   fontPreset: 'modern',
   activityBarOrder: [...DEFAULT_ACTIVITY_BAR_ORDER],
+  activityBarCompact: true,
   editorFontSize: 14,
   plotAxisFontSize: 12,
   ...ADVANCED_DEFAULTS,
@@ -177,6 +182,10 @@ export const useSettingsStore = create<SettingsState>((set, get) => ({
   },
   setActivityBarOrder: (order) => {
     set({ activityBarOrder: order });
+    get().saveToStorage();
+  },
+  setActivityBarCompact: (v) => {
+    set({ activityBarCompact: v });
     get().saveToStorage();
   },
   setEditorFontSize: (size) => {
@@ -246,6 +255,7 @@ export const useSettingsStore = create<SettingsState>((set, get) => ({
           useMathFont: s.useMathFont,
           fontPreset: s.fontPreset,
           activityBarOrder: s.activityBarOrder,
+          activityBarCompact: s.activityBarCompact,
           editorFontSize: s.editorFontSize,
           plotAxisFontSize: s.plotAxisFontSize,
           advancedPlotSamples: s.advancedPlotSamples,
@@ -294,6 +304,9 @@ export const useSettingsStore = create<SettingsState>((set, get) => ({
           if (!valid.includes(id)) valid.push(id);
         }
         set({ activityBarOrder: valid });
+      }
+      if (typeof data.activityBarCompact === 'boolean') {
+        set({ activityBarCompact: data.activityBarCompact });
       }
       if (typeof data.editorFontSize === 'number' && data.editorFontSize >= 8 && data.editorFontSize <= 32) {
         set({ editorFontSize: Math.round(data.editorFontSize) });
@@ -353,6 +366,7 @@ export const useSettingsStore = create<SettingsState>((set, get) => ({
       useMathFont: true,
       fontPreset: 'modern',
       activityBarOrder: [...DEFAULT_ACTIVITY_BAR_ORDER],
+      activityBarCompact: true,
       editorFontSize: 14,
       plotAxisFontSize: 12,
       ...ADVANCED_DEFAULTS,
