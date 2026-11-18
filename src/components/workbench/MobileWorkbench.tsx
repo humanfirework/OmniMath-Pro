@@ -14,19 +14,20 @@ import { motion, AnimatePresence } from 'framer-motion';
 import {
   Code2,
   Eye,
+  House,
   PanelLeft,
   PencilRuler,
 } from 'lucide-react';
-import { useWorkbenchStore } from '@/lib/store/workbench';
 import { TitleBar } from '@/components/workbench/layout/TitleBar';
 import { EditorPanel } from '@/components/workbench/layout/EditorPanel';
 import { PreviewPanel } from '@/components/workbench/layout/PreviewPanel';
 import { SidePanel } from '@/components/workbench/layout/SidePanel';
 import { cn } from '@/lib/utils';
 
-type MobileTab = 'editor' | 'preview' | 'side' | 'canvas';
+type MobileTab = 'home' | 'editor' | 'preview' | 'side' | 'canvas';
 
 const TABS: Array<{ id: MobileTab; icon: typeof Code2; label: string }> = [
+  { id: 'home', icon: House, label: '首页' },
   { id: 'side', icon: PanelLeft, label: '侧栏' },
   { id: 'editor', icon: Code2, label: '编辑器' },
   { id: 'canvas', icon: PencilRuler, label: '画布' },
@@ -36,6 +37,12 @@ const TABS: Array<{ id: MobileTab; icon: typeof Code2; label: string }> = [
 const WhiteboardCanvas = lazy(() =>
   import('@/components/workbench/whiteboard/WhiteboardCanvas').then((m) => ({
     default: m.WhiteboardCanvas,
+  })),
+);
+
+const StudioHome = lazy(() =>
+  import('@/components/workbench/studio/StudioHome').then((m) => ({
+    default: m.StudioHome,
   })),
 );
 
@@ -57,6 +64,17 @@ export function MobileWorkbench() {
             transition={{ duration: 0.18 }}
             className="absolute inset-0"
           >
+            {tab === 'home' && (
+              <Suspense
+                fallback={
+                  <div className="grid h-full place-items-center text-xs text-muted-foreground">
+                    加载工具…
+                  </div>
+                }
+              >
+                <StudioHome />
+              </Suspense>
+            )}
             {tab === 'editor' && <EditorPanel />}
             {tab === 'preview' && <PreviewPanel />}
             {tab === 'side' && <SidePanel />}

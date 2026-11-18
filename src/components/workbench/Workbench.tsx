@@ -454,6 +454,37 @@ export function Workbench() {
   const showFsSide = !sidePanelCollapsed && viewMode !== 'focus' && !focusWhiteboard;
 
   if (isMobile) {
+    // 手机上点开首页卡片（蓝图/矩阵/求解/统计等）时，直接渲染全宽视图，
+    // 而不是回到四标签工作台：小屏更适合一次专注一个工具。
+    if (isFullScreenView(viewMode)) {
+      return (
+        <>
+          <div className="h-[100dvh] w-screen flex flex-col overflow-hidden bg-background text-foreground">
+            <TitleBar />
+            <div className="shrink-0 h-9 flex items-center gap-2 border-b border-border/60 bg-card/40 px-2">
+              <button
+                type="button"
+                onClick={() => setViewMode('workbench')}
+                className="inline-flex h-7 items-center gap-1 rounded-md px-2 text-[11px] text-muted-foreground hover:bg-accent/60 hover:text-foreground"
+              >
+                ← 返回
+              </button>
+              <span className="text-[11.5px] font-medium text-foreground/80">
+                {fullScreenLabel(viewMode)}
+              </span>
+            </div>
+            <div className="flex-1 min-h-0 relative">
+              <FullScreenViews activeViewMode={viewMode} />
+            </div>
+          </div>
+          <CommandPalette />
+          <GlobalCalcBar />
+          <FloatingCalculator />
+          <SettingsPanel />
+          <OnboardingOverlay />
+        </>
+      );
+    }
     return (
       <>
         <MobileWorkbench />
