@@ -15,6 +15,7 @@ import { cn } from '@/lib/utils';
 import { useT } from '@/lib/i18n';
 import { saveTextToFile } from '@/lib/nativeExport';
 import { useWorkbenchStore } from '@/lib/store/workbench';
+import { useSettingsStore } from '@/lib/store/settingsStore';
 import { useIsMobile } from '@/hooks/use-mobile';
 
 type CalcMode = 'basic' | 'scientific' | 'programmer' | 'linalg' | 'converter';
@@ -228,10 +229,15 @@ export function FloatingCalculator() {
   const [copied, setCopied] = useState(false);
 
   // 手机端 AI 面板底部就是输入框与发送键：悬浮计算器会压在上面，
-  // 因此在 AI 标签激活时收起入口（面板已打开则保持，避免把用户困住）。
+  // 因此在 AI 标签激活时收起入口；设置 / 命令面板打开时也让位，
+  // 避免悬浮按钮压住弹层（面板已打开则保持，避免把用户困住）。
   const isMobile = useIsMobile();
   const activePreviewTab = useWorkbenchStore((s) => s.activePreviewTab);
-  const hideFab = isMobile && activePreviewTab === 'ai' && !open;
+  const commandPaletteOpen = useWorkbenchStore((s) => s.commandPaletteOpen);
+  const settingsOpen = useSettingsStore((s) => s.open);
+  const hideFab = !open && (
+    (isMobile && activePreviewTab === 'ai') || commandPaletteOpen || settingsOpen
+  );
 
   // 科学模式函数分区折叠状态（按分类收缩/展开，功能多时更清爽）。
   // 默认所有分区都是「收起」的 —— 打开即折叠，避免一开始就排满一长屏；

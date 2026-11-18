@@ -51,8 +51,10 @@ import {
   CircleGauge,
   GraduationCap,
   House,
+  Settings,
 } from 'lucide-react';
 import { useWorkbenchStore } from '@/lib/store/workbench';
+import { useSettingsStore } from '@/lib/store/settingsStore';
 import {
   t,
   setLocale as setI18nLocale,
@@ -107,6 +109,7 @@ export function CommandPalette() {
   const setViewMode = useWorkbenchStore((s) => s.setViewMode);
   const setLocaleStore = useWorkbenchStore((s) => s.setLocale);
   const editorContent = useWorkbenchStore((s) => s.editorContent);
+  const setSettingsOpen = useSettingsStore((s) => s.setOpen);
 
   const editorVisible = useWorkbenchStore((s) => s.editorVisible);
   const previewVisible = useWorkbenchStore((s) => s.previewVisible);
@@ -186,6 +189,16 @@ export function CommandPalette() {
           >
             <Trash2 className="size-4" />
             <span>{t('cpClearAllHistVars')}</span>
+          </CommandItem>
+          {/* 手机端标题栏没有菜单栏：命令面板 / 语言菜单是进入设置的主要入口 */}
+          <CommandItem
+            onSelect={() => {
+              setSettingsOpen(true);
+              close();
+            }}
+          >
+            <Settings className="size-4" />
+            <span>{t('settingsTitle')}</span>
           </CommandItem>
         </CommandGroup>
 

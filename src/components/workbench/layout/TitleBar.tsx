@@ -519,6 +519,10 @@ export function TitleBar() {
               <span className="mr-2">🇺🇸</span> English
             </DropdownMenuItem>
             <DropdownMenuSeparator />
+            <DropdownMenuItem className="gap-2" onClick={() => setSettingsOpen(true)}>
+              <Settings className="size-3.5" />
+              {t('settingsTitle')}
+            </DropdownMenuItem>
             <DropdownMenuItem onClick={() => setCommandPaletteOpen(true)}>
               {t('menuCommandPalette')}…
             </DropdownMenuItem>
