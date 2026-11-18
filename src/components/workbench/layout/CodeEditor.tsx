@@ -16,7 +16,7 @@
  */
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { LineChart, MessageSquare, Wand2 } from 'lucide-react';
+import { LineChart, MessageSquare, Play, Wand2 } from 'lucide-react';
 import { toast } from 'sonner';
 import { EditorState, EditorSelection, Compartment, StateField } from '@codemirror/state';
 import { EditorView, keymap, lineNumbers, highlightActiveLine, highlightActiveLineGutter, hoverTooltip, showTooltip, placeholder as cmPlaceholder } from '@codemirror/view';
@@ -47,6 +47,8 @@ export interface CodeEditorProps {
   value: string;
   onChange: (value: string) => void;
   onRun: () => void;
+  /** 只运行选中的代码（编辑器选区动作条的「运行」）。 */
+  onRunSelection?: (code: string) => void;
   onCursorChange?: (line: number, col: number) => void;
   language?: 'simple' | 'python' | 'matlab';
   placeholder?: string;
@@ -57,6 +59,7 @@ export function CodeEditor({
   value,
   onChange,
   onRun,
+  onRunSelection,
   onCursorChange,
   language = 'simple',
   placeholder,
@@ -301,8 +304,8 @@ export function CodeEditor({
         const left = Math.min(start.left, end?.left ?? start.left);
         const right = Math.max(start.right, end?.right ?? start.right);
         const center = (left + right) / 2;
-        // 动作条约 165px 宽 / 30px 高：先夹在编辑器容器内，再兜底夹在视口内。
-        const BUBBLE_W = 165;
+        // 动作条约 220px 宽 / 30px 高：先夹在编辑器容器内，再兜底夹在视口内。
+        const BUBBLE_W = 220;
         const BUBBLE_H = 30;
         const rect = containerRef.current?.getBoundingClientRect();
         const minLeft = Math.max(8, (rect?.left ?? 0) + 4);
@@ -580,6 +583,25 @@ export function CodeEditor({
             selectionBubble.placement === 'above' ? '-translate-y-full' : '',
           )}
         >
+          {onRunSelection && (
+            <>
+              <button
+                type="button"
+                title="运行选中的代码"
+                aria-label="运行选中的代码"
+                onClick={() => {
+                  onRunSelection(selectionBubble.text);
+                  setSelectionBubble(null);
+                  viewRef.current?.focus();
+                }}
+                className="flex h-6 items-center gap-1 rounded-md px-1.5 text-[10.5px] font-medium text-muted-foreground transition-colors hover:bg-primary/10 hover:text-primary"
+              >
+                <Play className="size-3" fill="currentColor" />
+                运行
+              </button>
+              <span className="mx-0.5 h-3 w-px bg-border/60" />
+            </>
+          )}
           {SELECTION_ACTIONS.map((action) => {
             const Icon = ACTION_ICONS[action.id];
             return (

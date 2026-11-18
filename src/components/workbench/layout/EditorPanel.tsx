@@ -316,14 +316,14 @@ export function EditorPanel() {
   const runScriptTimerRef = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
   // P2-1: target='independent' 时，把绘图结果额外送入「独立运行结果面板」
   //（可拖拽/缩放/多开的 MATLAB figure 风格浮窗），而非仅预览面板。
-  const runScript = useCallback((target: 'preview' | 'independent' = 'preview') => {
+  const runScript = useCallback((target: 'preview' | 'independent' = 'preview', source?: string) => {
     if (isRunning) return;
     setIsRunning(true);
     // Defer to allow UI to show running state.
     clearTimeout(runScriptTimerRef.current);
     runScriptTimerRef.current = setTimeout(async () => {
       try {
-        const lines = editorContent.split('\n');
+        const lines = (source ?? editorContent).split('\n');
         let lastResult: CalculationResult | null = null;
         let plotAdded = false;
         let surface3dAdded = false;
@@ -452,6 +452,10 @@ export function EditorPanel() {
         }
 
         toast.success(`运行完成 · ${resultCount} 个结果`, { duration: 1200 });
+        // 手机端：运行选中后切到预览，结果 / 曲线才看得见。
+        if (source) {
+          window.dispatchEvent(new CustomEvent('omnimath:mobile-tab', { detail: 'preview' }));
+        }
       } catch (err) {
         toast.error('运行出错', { description: (err as Error).message });
       } finally {
@@ -763,6 +767,7 @@ export function EditorPanel() {
           value={editorContent}
           onChange={setEditorContent}
           onRun={runScript}
+          onRunSelection={(code) => runScript('preview', code)}
           onCursorChange={(line) => {
             // Debounced preview update.
             if (previewTimerRef.current) clearTimeout(previewTimerRef.current);

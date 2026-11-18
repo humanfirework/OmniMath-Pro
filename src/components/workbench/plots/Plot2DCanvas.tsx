@@ -468,6 +468,7 @@ export function Plot2DCanvas({
     if (redrawScheduledRef.current) return;
     redrawScheduledRef.current = true;
     rafRef.current = requestAnimationFrame(() => {
+      rafRef.current = null;
       redrawScheduledRef.current = false;
       drawNowRef.current();
     });
@@ -1844,6 +1845,12 @@ export function Plot2DCanvas({
   useEffect(() => {
     return () => {
       if (rafRef.current) cancelAnimationFrame(rafRef.current);
+      rafRef.current = null;
+      // 关键：卸载时（含 React StrictMode 的「假卸载」）把调度标记复位。
+      // 若只取消 rAF 而不清标记，重新挂载后 scheduleRedraw 会一直以为已有
+      // 一次重绘在排队，画布就再也不会绘制（表现为绘图区全黑、canvas 停在
+      // 默认 300×150）。
+      redrawScheduledRef.current = false;
     };
   }, []);
 

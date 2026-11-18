@@ -368,6 +368,7 @@ function FacetPlot({ plot, color, xRange, yRange, theme, spec }: FacetPlotProps)
     if (redrawScheduledRef.current) return;
     redrawScheduledRef.current = true;
     rafRef.current = requestAnimationFrame(() => {
+      rafRef.current = null;
       redrawScheduledRef.current = false;
       drawNowRef.current();
     });
@@ -429,7 +430,13 @@ function FacetPlot({ plot, color, xRange, yRange, theme, spec }: FacetPlotProps)
 
   // Cleanup.
   useEffect(() => {
-    return () => { if (rafRef.current) cancelAnimationFrame(rafRef.current); };
+    return () => {
+      if (rafRef.current) cancelAnimationFrame(rafRef.current);
+      rafRef.current = null;
+      // 与 Plot2DCanvas 一致：StrictMode 假卸载取消 rAF 后必须复位调度标记，
+      // 否则重新挂载后不会再调度任何重绘（分面图会停在空白画布）。
+      redrawScheduledRef.current = false;
+    };
   }, []);
 
   return (
