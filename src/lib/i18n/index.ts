@@ -1057,6 +1057,7 @@ export interface TranslationDict {
   cpQuickEval: string;
   cpGroupActions: string;
   cpGroupView: string;
+  cpGroupViews: string;
   cpGroupPanels: string;
   cpGroupLayout: string;
   cpGroupTemplates: string;
@@ -2377,6 +2378,7 @@ const zhCN: TranslationDict = {
   cpQuickEval: "快速求值",
   cpGroupActions: "操作",
   cpGroupView: "视图",
+  cpGroupViews: "工具视图",
   cpGroupPanels: "面板",
   cpGroupLayout: "布局",
   cpGroupTemplates: "模板",
@@ -3692,6 +3694,7 @@ const en: TranslationDict = {
   cpQuickEval: "Quick evaluate",
   cpGroupActions: "Actions",
   cpGroupView: "View",
+  cpGroupViews: "Workspace Views",
   cpGroupPanels: "Panels",
   cpGroupLayout: "Layout",
   cpGroupTemplates: "Templates",

@@ -47,6 +47,10 @@ import {
   PanelLeftClose,
   PanelRightClose,
   PanelRightOpen,
+  PencilRuler,
+  CircleGauge,
+  GraduationCap,
+  House,
 } from 'lucide-react';
 import { useWorkbenchStore } from '@/lib/store/workbench';
 import {
@@ -55,9 +59,27 @@ import {
   getLocale,
   useLocale,
   type Locale,
+  type TranslationDict,
 } from '@/lib/i18n';
 import type { InputMode } from '@/lib/engine/types';
-import type { SidePanelTab, PreviewTab } from '@/lib/store/workbench';
+import type { SidePanelTab, PreviewTab, ViewMode } from '@/lib/store/workbench';
+
+/** 工具视图入口：命令面板里按当前语言显示，中文/英文都能搜到。 */
+const VIEW_COMMANDS: Array<{
+  mode: ViewMode;
+  icon: typeof Code2;
+  labelKey: keyof TranslationDict;
+}> = [
+  { mode: 'home', icon: House, labelKey: 'abHome' },
+  { mode: 'workbench', icon: Code2, labelKey: 'viewWorkbench' },
+  { mode: 'whiteboard', icon: PencilRuler, labelKey: 'abWhiteboard' },
+  { mode: 'pipeline', icon: Workflow, labelKey: 'abPipeline' },
+  { mode: 'linalg', icon: Grid3x3, labelKey: 'abLinalg' },
+  { mode: 'solver', icon: FunctionSquare, labelKey: 'abSolver' },
+  { mode: 'stats', icon: BarChart3, labelKey: 'abStats' },
+  { mode: 'control', icon: CircleGauge, labelKey: 'abControl' },
+  { mode: 'education', icon: GraduationCap, labelKey: 'abEducation' },
+];
 
 const EXAMPLE_SCRIPTS: Array<{ label: string; content: string }> = [
   { label: '基础算式', content: '2 + 3 * 4\nsin(pi/4)\nlog(100)' },
@@ -199,24 +221,24 @@ export function CommandPalette() {
             <PanelLeft className="size-4" />
             <span>{t('cpToggleSidebar')}</span>
           </CommandItem>
-          <CommandItem
-            onSelect={() => {
-              setViewMode('workbench');
-              close();
-            }}
-          >
-            <Code2 className="size-4" />
-            <span>Workbench</span>
-          </CommandItem>
-          <CommandItem
-            onSelect={() => {
-              setViewMode('pipeline');
-              close();
-            }}
-          >
-            <Workflow className="size-4" />
-            <span>Pipeline</span>
-          </CommandItem>
+        </CommandGroup>
+
+        <CommandSeparator />
+
+        {/* Workspace views — 与活动栏 / 首页卡片使用同一套本地化名称 */}
+        <CommandGroup heading={t('cpGroupViews')}>
+          {VIEW_COMMANDS.map(({ mode, icon: Icon, labelKey }) => (
+            <CommandItem
+              key={mode}
+              onSelect={() => {
+                setViewMode(mode);
+                close();
+              }}
+            >
+              <Icon className="size-4" />
+              <span>{t(labelKey)}</span>
+            </CommandItem>
+          ))}
         </CommandGroup>
 
         <CommandSeparator />
