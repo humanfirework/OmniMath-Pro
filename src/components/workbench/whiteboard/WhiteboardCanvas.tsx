@@ -730,7 +730,9 @@ export function WhiteboardCanvas() {
       <div
         className={cn(
           'shrink-0 flex items-center gap-1 px-3 py-2 border-b border-border/60 bg-card/40 backdrop-blur-sm',
-          coarse ? 'flex-nowrap overflow-x-auto [&>*]:shrink-0' : 'flex-wrap',
+          // Always a single scrollable row: in the side-by-side layout the
+          // panel is narrow, and wrapping produced a messy two-row toolbar.
+          'flex-nowrap overflow-x-auto [&>*]:shrink-0',
         )}
       >
         <div className="flex items-center gap-1 mr-2">
