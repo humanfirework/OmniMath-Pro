@@ -59,6 +59,7 @@ import { applyEraser, type EraserMode } from '@/lib/ink/eraser';
 import type { InkBrush, InkStroke, InkView } from '@/lib/ink/types';
 import { getGlyphTemplates, recognizeMathInk, addUserGlyphSamples } from '@/lib/mathnotes/recognize';
 import { evaluateMathNote } from '@/lib/mathnotes/expression';
+import { classifyWithFourier } from '@/lib/vision/shapeFourier';
 import { MathCardView, type MathCard } from './math/MathCardView';
 import { MathNotePanel, type MathNoteDraft } from './math/MathNotePanel';
 
@@ -256,6 +257,14 @@ function recognizeShape(points: Point[]): Stroke['recognized'] {
   if (circErr < rectErr && circErr < triErr && circErr < 0.22 && ecc < 0.55) return 'circle';
   if (rectErr < circErr && rectErr < triErr && rectErr < 12) return 'rectangle';
   if (triErr < circErr && triErr < rectErr && triErr < 14) return 'triangle';
+
+  // Fallback: Fourier descriptors (rotation/scale invariant) handle the
+  // ambiguous cases the distance heuristics above cannot separate.
+  const fourier = classifyWithFourier(points);
+  if (fourier.confidence >= 0.55) {
+    if (fourier.shape === 'ellipse') return 'circle';
+    return fourier.shape;
+  }
   return null;
 }
 
