@@ -908,37 +908,29 @@ export function buildRecognizedText(glyphs: RecognizedGlyph[]): string {
       i++;
       continue;
     }
-    if (g.superscript) {
-      // Consecutive superscript glyphs belong to one exponent (x²³ → x^(23),
-      // not x^2^3).
-      const parts: string[] = [];
+    if (g.superscript || g.subscript) {
+      // 一段连续的上下标合并成一个脚本簇：同一基座写出的 x₁² / x²₁
+      // 常因笔顺不同而上下标交错，统一输出「先下标、后上标」的
+      // `x_1^2`（mathjs 里 x_1 是合法标识符，再做幂运算）。
+      const sup: string[] = [];
+      const sub: string[] = [];
       let j = i;
-      while (j < glyphs.length && glyphs[j].superscript) {
-        if (!(glyphs[j].char === '?' && !glyphs[j].text)) parts.push(tokenText(glyphs[j]));
+      while (j < glyphs.length && (glyphs[j].superscript || glyphs[j].subscript)) {
+        const s = glyphs[j];
+        if (!(s.char === '?' && !s.text)) {
+          (s.superscript ? sup : sub).push(tokenText(s));
+        }
         j++;
       }
-      const joined = parts.join('');
-      if (joined) {
-        out += `^${/^[0-9a-zA-Z]$/.test(joined) ? joined : `(${joined})`}`;
-        prev = glyphs[j - 1];
+      const subJoined = sub.join('');
+      if (subJoined) {
+        out += /^[0-9A-Za-z]+$/.test(subJoined) ? `_${subJoined}` : `_(${subJoined})`;
       }
-      i = j;
-      continue;
-    }
-    if (g.subscript) {
-      // 连续下标合成一个符号名：x₂₃ → x_23。
-      // mathjs 允许下划线出现在标识符里，因此单个字母/数字组合可直接求值。
-      const parts: string[] = [];
-      let j = i;
-      while (j < glyphs.length && glyphs[j].subscript) {
-        if (!(glyphs[j].char === '?' && !glyphs[j].text)) parts.push(tokenText(glyphs[j]));
-        j++;
+      const supJoined = sup.join('');
+      if (supJoined) {
+        out += `^${/^[0-9a-zA-Z]$/.test(supJoined) ? supJoined : `(${supJoined})`}`;
       }
-      const joined = parts.join('');
-      if (joined) {
-        out += /^[0-9A-Za-z]+$/.test(joined) ? `_${joined}` : `_(${joined})`;
-        prev = glyphs[j - 1];
-      }
+      if (subJoined || supJoined) prev = glyphs[j - 1];
       i = j;
       continue;
     }
@@ -1009,27 +1001,19 @@ export function buildRecognizedDisplay(glyphs: RecognizedGlyph[]): string {
   let i = 0;
   while (i < glyphs.length) {
     const g = glyphs[i];
-    if (g.superscript) {
-      const parts: string[] = [];
+    if (g.superscript || g.subscript) {
+      // 与 buildRecognizedText 一致：上下标交错时先显示下标，再显示上标。
+      const sup: string[] = [];
+      const sub: string[] = [];
       let j = i;
-      while (j < glyphs.length && glyphs[j].superscript) {
-        parts.push(glyphs[j].displayChar);
+      while (j < glyphs.length && (glyphs[j].superscript || glyphs[j].subscript)) {
+        (glyphs[j].superscript ? sup : sub).push(glyphs[j].displayChar);
         j++;
       }
-      const joined = parts.join('');
-      out += joined.length <= 1 ? `^${joined}` : `^(${joined})`;
-      i = j;
-      continue;
-    }
-    if (g.subscript) {
-      const parts: string[] = [];
-      let j = i;
-      while (j < glyphs.length && glyphs[j].subscript) {
-        parts.push(glyphs[j].displayChar);
-        j++;
-      }
-      const joined = parts.join('');
-      out += toSubscriptDisplay(joined) ?? `_(${joined})`;
+      const subJoined = sub.join('');
+      if (subJoined) out += toSubscriptDisplay(subJoined) ?? `_(${subJoined})`;
+      const supJoined = sup.join('');
+      if (supJoined) out += supJoined.length <= 1 ? `^${supJoined}` : `^(${supJoined})`;
       i = j;
       continue;
     }

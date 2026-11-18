@@ -392,6 +392,24 @@ describe('buildRecognizedText', () => {
       buildRecognizedDisplay([glyph('x'), glyph('2', false, true), glyph('3', false, true)]),
     ).toBe('x₂₃');
   });
+
+  it('combines subscript and superscript on the same base', () => {
+    // 笔顺不同（上标先写 / 下标先写）都归一化为 x_1^2。
+    expect(
+      buildRecognizedText([glyph('x'), glyph('2', true), glyph('1', false, true)]),
+    ).toBe('x_1^2');
+    expect(
+      buildRecognizedText([glyph('x'), glyph('1', false, true), glyph('2', true)]),
+    ).toBe('x_1^2');
+    // 上下标之后仍补乘号。
+    expect(
+      buildRecognizedText([glyph('x'), glyph('2', true), glyph('1', false, true), glyph('y')]),
+    ).toBe('x_1^2*y');
+    // 显示串：先下标后上标。
+    expect(
+      buildRecognizedDisplay([glyph('x'), glyph('2', true), glyph('1', false, true)]),
+    ).toBe('x₁^2');
+  });
 });
 
 describe('detectScriptPosition', () => {
