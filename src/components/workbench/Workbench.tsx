@@ -474,6 +474,13 @@ export function Workbench() {
     }
   }, [viewMode, setEditorVisible]);
 
+  // 进入全屏工具视图时，effect 会在提交后把 editorVisible 置 false。若这一帧
+  // 就渲染编辑器，会白下载编辑器 + mathjs 的 chunk（白板/蓝图根本用不到）。
+  // 因此在「首次自动隐藏尚未生效」的这帧先渲染空占位；用户之后手动再打开
+  // 编辑器时 autoHiddenEditorRef 已为 true，会正常渲染。
+  const editorPendingAutoHide =
+    isFullScreenView(viewMode) && editorVisible && !autoHiddenEditorRef.current;
+
   if (isMobile) {
     // 手机上点开首页卡片（蓝图/矩阵/求解/统计等）时，直接渲染全宽视图，
     // 而不是回到四标签工作台：小屏更适合一次专注一个工具。
@@ -603,7 +610,11 @@ export function Workbench() {
                   order={2}
                 >
                   <ErrorBoundary>
-                    <LazyEditorPanel />
+                    {editorPendingAutoHide ? (
+                      <div className="h-full w-full bg-background/30" aria-hidden />
+                    ) : (
+                      <LazyEditorPanel />
+                    )}
                   </ErrorBoundary>
                 </ResizablePanel>
                 <ResizableHandle withHandle className="data-[resize-handle-active]:bg-primary/60" />
