@@ -22,7 +22,7 @@
 
 import { lazy, Suspense, useCallback, useEffect, useState } from 'react';
 import { motion } from 'framer-motion';
-import { PanelLeftClose, PanelRight, PanelRightOpen, LayoutTemplate } from 'lucide-react';
+import { PanelLeftClose, PanelLeftOpen, PanelRight, PanelRightOpen, LayoutTemplate } from 'lucide-react';
 import { getCurrentWindow } from '@tauri-apps/api/window';
 import {
   ResizablePanelGroup,
@@ -131,10 +131,15 @@ function FullScreenPanel({
   viewMode,
   onClose,
   onFocus,
+  editorVisible,
+  onToggleEditor,
 }: {
   viewMode: ViewMode;
   onClose: () => void;
   onFocus?: () => void;
+  /** 编辑器是否显示；提供 onToggleEditor 时才显示对应按钮。 */
+  editorVisible?: boolean;
+  onToggleEditor?: () => void;
 }) {
   return (
     <div className="h-full w-full flex flex-col min-h-0 bg-background">
@@ -143,6 +148,16 @@ function FullScreenPanel({
         <span className="text-xs font-medium text-foreground/80">{fullScreenLabel(viewMode)}</span>
         <span className="text-[10px] text-muted-foreground">并排视图</span>
         <div className="flex-1" />
+        {onToggleEditor && (
+          <button
+            type="button"
+            onClick={onToggleEditor}
+            className="h-6 rounded px-2 text-[10px] text-muted-foreground hover:bg-accent/60 hover:text-foreground transition-colors"
+            title={editorVisible ? '隐藏编辑器，让当前视图占满宽度' : '显示编辑器'}
+          >
+            {editorVisible ? <PanelLeftClose className="size-3.5" /> : <PanelLeftOpen className="size-3.5" />}
+          </button>
+        )}
         {onFocus && (
           <button
             type="button"
@@ -560,6 +575,8 @@ export function Workbench() {
                 viewMode={viewMode}
                 onClose={() => setViewMode('workbench')}
                 onFocus={() => enterFocus(viewMode)}
+                editorVisible={editorVisible}
+                onToggleEditor={focusWhiteboard ? undefined : () => setEditorVisible(!editorVisible)}
               />
             </ResizablePanel>
           </ResizablePanelGroup>
