@@ -143,7 +143,7 @@ export function CommandPalette() {
           >
             <Play className="size-4" />
             <span>{t('cpRunAll')}</span>
-            <CommandShortcut>Enter</CommandShortcut>
+            <CommandShortcut>Ctrl+Enter</CommandShortcut>
           </CommandItem>
           <CommandItem
             onSelect={() => {

@@ -210,10 +210,12 @@ export function StudioHome() {
               <Command className="size-3.5" />
               {copy.command}
             </button>
+            {/* 手机端由底部标签负责切到编辑器/画布，「返回工作台」在移动端
+                布局里点了没有可见效果，直接隐藏；平板/桌面保留。 */}
             <button
               type="button"
               onClick={() => setViewMode('workbench')}
-              className="inline-flex h-8 items-center gap-1.5 rounded-lg bg-primary px-3 text-xs font-medium text-white transition-colors hover:bg-primary/90"
+              className="hidden md:inline-flex h-8 items-center gap-1.5 rounded-lg bg-primary px-3 text-xs font-medium text-white transition-colors hover:bg-primary/90"
             >
               {copy.back}
             </button>
