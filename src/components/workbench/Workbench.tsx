@@ -427,9 +427,28 @@ export function Workbench() {
       <TitleBar />
 
       <div className="flex-1 flex min-h-0">
-        {activityBarPosition === 'left' && <ActivityBar />}
+        {activityBarPosition === 'left' && viewMode !== 'focus' && <ActivityBar />}
 
-        {viewMode === 'home' ? (
+        {viewMode === 'focus' ? (
+          /* 专注模式：收起活动栏 / 侧栏 / 编辑器，只留主工作区。 */
+          <div className="flex-1 min-w-0 min-h-0 relative bg-background">
+            <ErrorBoundary>
+              <PreviewPanel />
+            </ErrorBoundary>
+            <div className="pointer-events-none absolute left-3 top-3 z-20 flex items-center gap-2">
+              <span className="rounded-full border border-border/60 bg-background/80 px-2 py-0.5 text-[10px] text-muted-foreground backdrop-blur">
+                专注模式
+              </span>
+            </div>
+            <button
+              type="button"
+              onClick={() => setViewMode('workbench')}
+              className="absolute right-3 top-3 z-20 h-7 rounded-lg border border-border/60 bg-background/90 px-2.5 text-[10px] text-muted-foreground shadow-sm backdrop-blur transition-colors hover:bg-accent/60 hover:text-foreground"
+            >
+              退出专注 · F11
+            </button>
+          </div>
+        ) : viewMode === 'home' ? (
           <div className="flex-1 min-w-0 min-h-0">
             <ErrorBoundary>
               <Suspense fallback={<ViewLoading />}>
@@ -653,7 +672,7 @@ export function Workbench() {
           </ResizablePanelGroup>
         )}
 
-        {activityBarPosition === 'right' && <ActivityBar />}
+        {activityBarPosition === 'right' && viewMode !== 'focus' && <ActivityBar />}
       </div>
 
       <StatusBar />

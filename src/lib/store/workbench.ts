@@ -292,7 +292,7 @@ function loadInitial(): Partial<WorkbenchState> {
     const VALID_INPUT_MODES = ['simple', 'python', 'matlab'] as const;
     const VALID_THEMES = ['dark', 'light'] as const;
     const VALID_LOCALES = ['zh-CN', 'en'] as const;
-    const VALID_VIEW_MODES = ['workbench', 'pipeline', 'whiteboard', 'focus', 'linalg', 'solver', 'stats', 'control', 'education'] as const;
+    const VALID_VIEW_MODES = ['workbench', 'home', 'pipeline', 'whiteboard', 'focus', 'linalg', 'solver', 'stats', 'control', 'education'] as const;
     const VALID_AB_POSITIONS = ['left', 'right'] as const;
     const VALID_PREVIEW_TABS = ['formula', 'plot2d', 'plot3d', 'log', 'pipeline', 'ai'] as const;
 
