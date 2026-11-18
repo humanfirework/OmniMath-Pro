@@ -53,6 +53,8 @@ export interface RecognizedGlyph {
   text?: string;
   bbox: BBox;
   superscript: boolean;
+  /** 下标：字号更小、整体位于基线下方（x₂）。 */
+  subscript?: boolean;
   strokes: RecognitionStroke[];
 }
 
@@ -923,11 +925,77 @@ export function buildRecognizedText(glyphs: RecognizedGlyph[]): string {
       i = j;
       continue;
     }
+    if (g.subscript) {
+      // 连续下标合成一个符号名：x₂₃ → x_23。
+      // mathjs 允许下划线出现在标识符里，因此单个字母/数字组合可直接求值。
+      const parts: string[] = [];
+      let j = i;
+      while (j < glyphs.length && glyphs[j].subscript) {
+        if (!(glyphs[j].char === '?' && !glyphs[j].text)) parts.push(tokenText(glyphs[j]));
+        j++;
+      }
+      const joined = parts.join('');
+      if (joined) {
+        out += /^[0-9A-Za-z]+$/.test(joined) ? `_${joined}` : `_(${joined})`;
+        prev = glyphs[j - 1];
+      }
+      i = j;
+      continue;
+    }
     const token = tokenText(g);
     if (prev && needsMultiplication(prev, g)) out += '*';
     out += token;
     prev = g;
     i++;
+  }
+  return out;
+}
+
+/**
+ * Decide whether a glyph group is a superscript or subscript of `base`.
+ *
+ * 上标：更小且中心明显高于基线；下标：更小且中心明显低于基线。
+ * 下标还要求基线是「值」（字母/数字/右括号），避免把运算符后的
+ * 低矮数字误判成下标。阈值刻意偏严，宁可漏判也不要把正常书写拆坏。
+ */
+export function detectScriptPosition(
+  group: Pick<GlyphGroup, 'height' | 'centerY' | 'bbox'>,
+  base: RecognizedGlyph | null,
+): { superscript: boolean; subscript: boolean } {
+  if (!base || group.height <= 0) return { superscript: false, subscript: false };
+  const baseHeight = base.bbox.y1 - base.bbox.y0;
+  if (baseHeight <= 0) return { superscript: false, subscript: false };
+  const baseCenterY = (base.bbox.y0 + base.bbox.y1) / 2;
+
+  const above = group.centerY < baseCenterY - baseHeight * 0.28;
+  const smaller = group.height < baseHeight * 0.85;
+  if (above && smaller) return { superscript: true, subscript: false };
+
+  const baseIsValue = /^[0-9A-Za-z)\]]$/.test(base.char);
+  const below = group.centerY > baseCenterY + baseHeight * 0.22;
+  const smallEnough = group.height < baseHeight * 0.78;
+  return { superscript: false, subscript: baseIsValue && below && smallEnough };
+}
+
+/**
+ * 下标显示映射：优先用 Unicode 下标字符（x₂、log₂），
+ * 没有对应字形的字符返回 null，调用方回退到 _(...) 形式。
+ */
+const SUBSCRIPT_MAP: Record<string, string> = {
+  '0': '₀', '1': '₁', '2': '₂', '3': '₃', '4': '₄',
+  '5': '₅', '6': '₆', '7': '₇', '8': '₈', '9': '₉',
+  '+': '₊', '-': '₋', '=': '₌', '(': '₍', ')': '₎',
+  a: 'ₐ', e: 'ₑ', h: 'ₕ', i: 'ᵢ', j: 'ⱼ', k: 'ₖ', l: 'ₗ',
+  m: 'ₘ', n: 'ₙ', o: 'ₒ', p: 'ₚ', r: 'ᵣ', s: 'ₛ', t: 'ₜ',
+  u: 'ᵤ', v: 'ᵥ', x: 'ₓ',
+};
+
+export function toSubscriptDisplay(text: string): string | null {
+  let out = '';
+  for (const ch of text) {
+    const mapped = SUBSCRIPT_MAP[ch];
+    if (!mapped) return null;
+    out += mapped;
   }
   return out;
 }
@@ -950,6 +1018,18 @@ export function buildRecognizedDisplay(glyphs: RecognizedGlyph[]): string {
       }
       const joined = parts.join('');
       out += joined.length <= 1 ? `^${joined}` : `^(${joined})`;
+      i = j;
+      continue;
+    }
+    if (g.subscript) {
+      const parts: string[] = [];
+      let j = i;
+      while (j < glyphs.length && glyphs[j].subscript) {
+        parts.push(glyphs[j].displayChar);
+        j++;
+      }
+      const joined = parts.join('');
+      out += toSubscriptDisplay(joined) ?? `_(${joined})`;
       i = j;
       continue;
     }
@@ -1285,36 +1365,37 @@ export function recognizeMathInk(strokes: RecognitionStroke[]): MathRecognitionR
     // Preferred display for multiplication.
     const displayChar = char === '*' ? '×' : char;
 
-    // Superscript: clearly above the baseline glyph and smaller. Using the
-    // baseline (not just the previous glyph) lets multi-digit exponents like
-    // x²³ keep both digits in the exponent.
+    // Superscript / subscript: compare against the last baseline glyph, not
+    // just the previous one, so multi-digit scripts (x²³, x₂₃) stay together.
     let superscript = false;
+    let subscript = false;
     const prev = glyphs[glyphs.length - 1];
     const base = superscriptBase ?? prev;
-    if (base && group.height > 0 && base.bbox.y1 - base.bbox.y0 > 0) {
-      const baseHeight = base.bbox.y1 - base.bbox.y0;
-      const baseCenterY = (base.bbox.y0 + base.bbox.y1) / 2;
-      const above = group.centerY < baseCenterY - baseHeight * 0.28;
-      const smaller = group.height < baseHeight * 0.85;
-      superscript = above && smaller;
+    if (base) {
+      const script = detectScriptPosition(group, base);
+      superscript = script.superscript;
+      subscript = script.subscript;
     }
 
     // Decimal point writes tiny; keep it even when classifier is unsure.
-    if (!superscript && group.width < (group.height || 1) * 0.35 && group.height < 6) {
+    if (!superscript && !subscript && group.width < (group.height || 1) * 0.35 && group.height < 6) {
       char = '.';
     }
+    // 小数点/极小笔画永远不是下标。
+    if (char === '.') subscript = false;
 
     const glyph: RecognizedGlyph = {
       char,
       displayChar: char === '*' ? '×' : displayChar,
-      confidence: superscript ? cls.confidence * 0.9 : cls.confidence,
+      confidence: superscript || subscript ? cls.confidence * 0.9 : cls.confidence,
       alternatives: cls.alternatives,
       reason: hint && hint.confidence >= 0.6 ? (hint.reason ?? 'geometry') : 'template',
       bbox: group.bbox,
       superscript,
+      subscript,
       strokes: group.strokes,
     };
-    if (!glyph.superscript) superscriptBase = glyph;
+    if (!glyph.superscript && !glyph.subscript) superscriptBase = glyph;
     glyphs.push(glyph);
   }
 

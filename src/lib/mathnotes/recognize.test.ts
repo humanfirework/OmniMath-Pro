@@ -8,6 +8,7 @@ import {
   classifyGlyphGeometry,
   clearUserGlyphBank,
   detectRadicalStrokes,
+  detectScriptPosition,
   loadUserGlyphSamples,
   distanceTransform,
   groupStrokesIntoGlyphs,
@@ -27,13 +28,14 @@ function line(x0: number, y0: number, x1: number, y1: number, y?: number): Recog
   };
 }
 
-function glyph(char: string, superscript = false): RecognizedGlyph {
+function glyph(char: string, superscript = false, subscript = false): RecognizedGlyph {
   return {
     char,
     displayChar: char === '*' ? '×' : char,
     confidence: 1,
     bbox: { x0: 0, y0: 0, x1: 10, y1: 10 },
     superscript,
+    subscript,
     strokes: [],
   };
 }
@@ -369,5 +371,54 @@ describe('buildRecognizedText', () => {
     expect(
       buildRecognizedText([glyph('x'), glyph('2', true), glyph('y')]),
     ).toBe('x^2*y');
+  });
+
+  it('rebuilds subscripts', () => {
+    expect(buildRecognizedText([glyph('x'), glyph('2', false, true)])).toBe('x_2');
+    expect(
+      buildRecognizedText([glyph('x'), glyph('2', false, true), glyph('3', false, true)]),
+    ).toBe('x_23');
+    // 下标之后仍能正确补乘号
+    expect(
+      buildRecognizedText([glyph('x'), glyph('2', false, true), glyph('y')]),
+    ).toBe('x_2*y');
+  });
+
+  it('renders subscripts with Unicode subscript glyphs', () => {
+    expect(
+      buildRecognizedDisplay([glyph('x'), glyph('2', false, true)]),
+    ).toBe('x₂');
+    expect(
+      buildRecognizedDisplay([glyph('x'), glyph('2', false, true), glyph('3', false, true)]),
+    ).toBe('x₂₃');
+  });
+});
+
+describe('detectScriptPosition', () => {
+  const base = glyph('x'); // bbox 0..10 → height 10, center 5
+  const group = (centerY: number, height = 5) => ({
+    height,
+    centerY,
+    bbox: { x0: 20, y0: centerY - height / 2, x1: 26, y1: centerY + height / 2 },
+  });
+
+  it('detects a small glyph above the baseline as superscript', () => {
+    expect(detectScriptPosition(group(1.5), base)).toEqual({ superscript: true, subscript: false });
+  });
+
+  it('detects a small glyph below the baseline as subscript', () => {
+    expect(detectScriptPosition(group(9), base)).toEqual({ superscript: false, subscript: true });
+  });
+
+  it('keeps baseline-sized digits as normal text', () => {
+    expect(detectScriptPosition(group(5, 9), base)).toEqual({ superscript: false, subscript: false });
+  });
+
+  it('does not treat a low digit after an operator as a subscript', () => {
+    expect(detectScriptPosition(group(9), glyph('+')).subscript).toBe(false);
+  });
+
+  it('rejects oversized glyphs below the baseline', () => {
+    expect(detectScriptPosition(group(9, 9), base)).toEqual({ superscript: false, subscript: false });
   });
 });
