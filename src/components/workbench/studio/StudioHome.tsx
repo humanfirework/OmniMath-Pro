@@ -11,6 +11,7 @@ import {
   BarChart3,
   Code2,
   Command,
+  FileCode2,
   FunctionSquare,
   Grid3x3,
   House,
@@ -20,7 +21,9 @@ import {
   Workflow,
   CircleGauge,
 } from 'lucide-react';
+import { useEffect, useMemo } from 'react';
 import { useWorkbenchStore } from '@/lib/store/workbench';
+import { useFileSystemStore } from '@/lib/store/fileSystemStore';
 import { useLocale } from '@/lib/i18n';
 import { cn } from '@/lib/utils';
 
@@ -49,6 +52,7 @@ interface Copy {
   back: string;
   command: string;
   hint: string;
+  recent: string;
   cards: Record<StudioAction, CardCopy>;
 }
 
@@ -62,6 +66,7 @@ const COPY: Record<'zh-CN' | 'en', Copy> = {
     back: '返回工作台',
     command: '命令面板',
     hint: '写一笔、跑一行、画一张图——不用先想清楚它在哪个菜单里。',
+    recent: '最近使用',
     cards: {
       codePlot: { title: '代码画图', desc: '写一行 plot(sin(x))，立刻看到曲线。', tag: '脚本' },
       functionPlot: { title: '函数画图', desc: 'Desmos 式表达式列表，参数和曲线实时联动。', tag: '2D / 3D' },
@@ -83,6 +88,7 @@ const COPY: Record<'zh-CN' | 'en', Copy> = {
     back: 'Back to Workbench',
     command: 'Command Palette',
     hint: 'Write a stroke, run a line, draw a curve — without hunting through menus first.',
+    recent: 'Recent',
     cards: {
       codePlot: { title: 'Code to Plot', desc: 'Write plot(sin(x)) and see the curve immediately.', tag: 'Script' },
       functionPlot: { title: 'Function Plot', desc: 'A Desmos-style expression list with live parameters.', tag: '2D / 3D' },
@@ -121,6 +127,39 @@ const TONES: Record<StudioAction, string> = {
   control: 'bg-teal-500/10 text-teal-500',
 };
 
+/** 短相对时间，例如「刚刚」「12 分钟前」「3 天前」。 */
+function relativeTime(ts: number, locale: string, now = Date.now()): string {
+  const minutes = Math.max(0, Math.floor((now - ts) / 60000));
+  if (minutes < 1) return locale === 'en' ? 'just now' : '刚刚';
+  if (minutes < 60) return locale === 'en' ? `${minutes}m ago` : `${minutes} 分钟前`;
+  const hours = Math.floor(minutes / 60);
+  if (hours < 24) return locale === 'en' ? `${hours}h ago` : `${hours} 小时前`;
+  const days = Math.floor(hours / 24);
+  if (days < 30) return locale === 'en' ? `${days}d ago` : `${days} 天前`;
+  return new Date(ts).toLocaleDateString(locale === 'en' ? 'en-US' : 'zh-CN');
+}
+
+/** 取文件正文的第一条有效行，作为「最近文件」的一行摘要。 */
+function fileSummary(content: string | undefined): string {
+  if (!content) return '';
+  for (const line of content.split('\n')) {
+    const trimmed = line.trim();
+    if (!trimmed || trimmed.startsWith('#') || trimmed.startsWith('//') || trimmed === '---') continue;
+    return trimmed;
+  }
+  return '';
+}
+
+interface RecentItem {
+  id: string;
+  kind: 'file' | 'result';
+  title: string;
+  meta: string;
+  ts: number;
+  /** 结果条目：点击后载入编辑器的表达式。 */
+  input?: string;
+}
+
 export function StudioHome() {
   const locale = useLocale();
   const copy = COPY[locale] ?? COPY['zh-CN'];
@@ -129,7 +168,57 @@ export function StudioHome() {
   const setInputView = useWorkbenchStore((s) => s.setInputView);
   const setPreviewVisible = useWorkbenchStore((s) => s.setPreviewVisible);
   const setEditorVisible = useWorkbenchStore((s) => s.setEditorVisible);
+  const setEditorContent = useWorkbenchStore((s) => s.setEditorContent);
   const setCommandPaletteOpen = useWorkbenchStore((s) => s.setCommandPaletteOpen);
+  const results = useWorkbenchStore((s) => s.results);
+
+  // 最近文件来自 IndexedDB；首页先加载一次，文件列表才有内容可选。
+  const fsLoaded = useFileSystemStore((s) => s.loaded);
+  const loadFsFromStorage = useFileSystemStore((s) => s.loadFromStorage);
+  const nodes = useFileSystemStore((s) => s.nodes);
+  const openFile = useFileSystemStore((s) => s.openFile);
+  useEffect(() => {
+    if (!fsLoaded) void loadFsFromStorage();
+  }, [fsLoaded, loadFsFromStorage]);
+
+  const recentItems = useMemo<RecentItem[]>(() => {
+    const files: RecentItem[] = Object.values(nodes)
+      .filter((n) => n.type === 'file')
+      .sort((a, b) => b.updatedAt - a.updatedAt)
+      .slice(0, 2)
+      .map((n) => ({
+        id: n.id,
+        kind: 'file',
+        title: n.name,
+        meta: fileSummary(n.content) || (locale === 'en' ? 'Empty file' : '空文件'),
+        ts: n.updatedAt,
+      }));
+
+    const history: RecentItem[] = [...results]
+      .sort((a, b) => b.timestamp - a.timestamp)
+      .slice(0, 2)
+      .map((r) => ({
+        id: r.id,
+        kind: 'result',
+        title: r.input,
+        meta: r.error ? r.error : `= ${r.output}`,
+        ts: r.timestamp,
+        input: r.input,
+      }));
+
+    return [...files, ...history].sort((a, b) => b.ts - a.ts).slice(0, 4);
+  }, [nodes, results, locale]);
+
+  const openRecent = (item: RecentItem) => {
+    if (item.kind === 'file') {
+      openFile(item.id);
+    } else if (item.input) {
+      setEditorContent(item.input);
+    }
+    setEditorVisible(true);
+    setViewMode('workbench');
+    window.dispatchEvent(new CustomEvent('omnimath:mobile-tab', { detail: 'editor' }));
+  };
 
   const open = (action: StudioAction) => {
     switch (action) {
@@ -245,6 +334,47 @@ export function StudioHome() {
           </h2>
           <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">{BASICS.map(renderCard)}</div>
         </section>
+
+        {recentItems.length > 0 && (
+          <section className="space-y-3">
+            <h2 className="text-xs font-semibold uppercase tracking-[0.16em] text-muted-foreground">
+              {copy.recent}
+            </h2>
+            <div className="grid gap-2 sm:grid-cols-2 xl:grid-cols-4">
+              {recentItems.map((item) => {
+                const Icon = item.kind === 'file' ? FileCode2 : LineChart;
+                return (
+                  <button
+                    key={`${item.kind}-${item.id}`}
+                    type="button"
+                    onClick={() => openRecent(item)}
+                    className="group flex min-w-0 items-center gap-2.5 rounded-xl border border-border/60 bg-card/30 px-3 py-2.5 text-left transition-colors hover:border-primary/40 hover:bg-card/60"
+                  >
+                    <span
+                      className={cn(
+                        'grid size-8 shrink-0 place-items-center rounded-lg',
+                        item.kind === 'file'
+                          ? 'bg-sky-500/10 text-sky-500'
+                          : 'bg-emerald-500/10 text-emerald-500',
+                      )}
+                    >
+                      <Icon className="size-4" />
+                    </span>
+                    <span className="min-w-0 flex-1">
+                      <span className="block truncate text-xs font-medium text-foreground">{item.title}</span>
+                      <span className="block truncate font-mono text-[10.5px] text-muted-foreground">
+                        {item.meta}
+                      </span>
+                    </span>
+                    <span className="shrink-0 text-[10px] text-muted-foreground/70">
+                      {relativeTime(item.ts, locale)}
+                    </span>
+                  </button>
+                );
+              })}
+            </div>
+          </section>
+        )}
       </div>
     </div>
   );
