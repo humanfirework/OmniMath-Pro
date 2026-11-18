@@ -1040,11 +1040,169 @@ export function buildFractionLayout(glyphs: RecognizedGlyph[]): RecognizedGlyph[
 }
 
 /**
+ * A single-stroke square-root symbol: short descending tick, long rising
+ * diagonal, then a nearly flat overbar.
+ */
+export interface RadicalRegion {
+  /** Full stroke bbox (pixel/ink coordinates). */
+  bbox: BBox;
+  /** x where the radicand starts (right of the tick). */
+  startX: number;
+  /** y of the overbar; radicand glyphs must sit below it. */
+  barY: number;
+  stroke: RecognitionStroke;
+  confidence: number;
+}
+
+/**
+ * Detect one-stroke radical symbols before glyph grouping.
+ *
+ * The shape we accept is deliberately narrow: the lowest point (the V vertex)
+ * must be in the left 60% of the stroke, the stroke must dip well below its
+ * top, and the tail must be a flat overbar near the top. A checkmark, "7" or
+ * "z" fails at least one of those tests.
+ */
+export function detectRadicalStrokes(strokes: RecognitionStroke[]): RadicalRegion[] {
+  const heights = strokes
+    .map((s) => strokeBBox(s))
+    .filter((b): b is BBox => b !== null)
+    .map((b) => Math.max(1, b.y1 - b.y0))
+    .sort((a, b) => a - b);
+  const medianHeight = heights.length > 0 ? heights[Math.floor(heights.length / 2)] : 20;
+
+  const out: RadicalRegion[] = [];
+  for (const stroke of strokes) {
+    const pts = stroke.points;
+    if (pts.length < 6) continue;
+    const bbox = strokeBBox(stroke);
+    if (!bbox) continue;
+    const w = bbox.x1 - bbox.x0;
+    const h = bbox.y1 - bbox.y0;
+    if (w < 18 || h < 8) continue;
+    if (w < medianHeight * 1.1) continue;
+    if (w < h * 0.9 || w > h * 12) continue;
+
+    // Lowest point = the sharp vertex of the radical.
+    let lowIdx = 0;
+    let lowY = -Infinity;
+    for (let i = 0; i < pts.length; i++) {
+      if (pts[i].y > lowY) {
+        lowY = pts[i].y;
+        lowIdx = i;
+      }
+    }
+    if (lowIdx < 1 || lowIdx > pts.length * 0.6) continue;
+    const vertex = pts[lowIdx];
+    if (vertex.y - bbox.y0 < h * 0.55) continue;
+    // Start near the upper-left, not already at the bottom.
+    if (pts[0].y - bbox.y0 > h * 0.55) continue;
+
+    // The tail after the vertex must be an overbar near the top.
+    const tailStart = Math.max(lowIdx + 1, Math.floor(pts.length * 0.62));
+    const tail = pts.slice(tailStart);
+    if (tail.length < 2) continue;
+    let tailY = 0;
+    let tailMinY = Infinity;
+    let tailMaxY = -Infinity;
+    for (const p of tail) {
+      tailY += p.y;
+      if (p.y < tailMinY) tailMinY = p.y;
+      if (p.y > tailMaxY) tailMaxY = p.y;
+    }
+    tailY /= tail.length;
+    if (tailMaxY - tailMinY > h * 0.18) continue;
+    if (tailY - bbox.y0 > h * 0.35) continue;
+    if (tail[tail.length - 1].x - tail[0].x < w * 0.25) continue;
+    // The overbar must extend to the right of the vertex.
+    if (bbox.x1 - vertex.x < w * 0.4) continue;
+
+    out.push({
+      bbox,
+      startX: vertex.x + w * 0.04,
+      barY: tailY,
+      stroke,
+      confidence: 0.75,
+    });
+  }
+  return out;
+}
+
+/**
+ * Wrap glyphs that sit under a detected radical into `sqrt(...)` tokens.
+ * Applied after fraction layout so `√(1/2)` keeps the fraction token inside.
+ */
+export function applyRadicalLayout(
+  glyphs: RecognizedGlyph[],
+  regions: RadicalRegion[],
+): RecognizedGlyph[] {
+  if (regions.length === 0 || glyphs.length === 0) return glyphs;
+
+  const consumed = new Set<number>();
+  const tokens = new Map<number, RecognizedGlyph>();
+
+  for (const region of regions) {
+    const indices: number[] = [];
+    for (let i = 0; i < glyphs.length; i++) {
+      if (consumed.has(i)) continue;
+      const g = glyphs[i];
+      const cx = (g.bbox.x0 + g.bbox.x1) / 2;
+      if (cx < region.startX || cx > region.bbox.x1 + 8) continue;
+      // 上标 / 数字只要底部在横杠下方，就属于被开方内容。
+      if (g.bbox.y1 < region.barY - 2) continue;
+      indices.push(i);
+    }
+    if (indices.length === 0) continue;
+    indices.sort((a, b) => glyphs[a].bbox.x0 - glyphs[b].bbox.x0);
+
+    const inner = indices.map((i) => glyphs[i]);
+    const innerText = buildRecognizedText(inner);
+    if (!innerText) continue;
+    const innerDisplay = inner
+      .map((g) => (g.superscript ? `^${g.displayChar}` : g.displayChar))
+      .join('');
+    const confidence =
+      inner.reduce((sum, g) => sum + g.confidence, 0) / inner.length;
+
+    const x0 = Math.min(region.bbox.x0, ...inner.map((g) => g.bbox.x0));
+    const y0 = Math.min(region.bbox.y0, ...inner.map((g) => g.bbox.y0));
+    const x1 = Math.max(region.bbox.x1, ...inner.map((g) => g.bbox.x1));
+    const y1 = Math.max(region.bbox.y1, ...inner.map((g) => g.bbox.y1));
+
+    tokens.set(indices[0], {
+      char: `sqrt(${innerText})`,
+      displayChar: `√(${innerDisplay})`,
+      text: `sqrt(${innerText})`,
+      confidence: Math.min(0.95, (confidence + region.confidence) / 2),
+      bbox: { x0, y0, x1, y1 },
+      superscript: false,
+      reason: 'radical',
+      strokes: [region.stroke],
+    });
+    for (const i of indices) consumed.add(i);
+  }
+
+  if (tokens.size === 0) return glyphs;
+  const out: RecognizedGlyph[] = [];
+  for (let i = 0; i < glyphs.length; i++) {
+    const token = tokens.get(i);
+    if (token) out.push(token);
+    else if (!consumed.has(i)) out.push(glyphs[i]);
+  }
+  return out;
+}
+
+/**
  * Recognize a set of ink strokes as a math expression.
  * `strokes` should already be in reading order or arbitrary; grouping sorts.
  */
 export function recognizeMathInk(strokes: RecognitionStroke[]): MathRecognitionResult {
-  const groups = groupStrokesIntoGlyphs(strokes);
+  // 根号通常是一笔跨在数字上方的长笔画，会与下方字形的大包围盒重叠而干扰分组，
+  // 因此先单独识别并抽走，再对剩余笔画做字形分组。
+  const radicals = detectRadicalStrokes(strokes);
+  const radicalStrokes = new Set(radicals.map((r) => r.stroke));
+  const inkStrokes =
+    radicalStrokes.size > 0 ? strokes.filter((s) => !radicalStrokes.has(s)) : strokes;
+  const groups = groupStrokesIntoGlyphs(inkStrokes);
   if (groups.length === 0) {
     return {
       ok: false,
@@ -1110,7 +1268,7 @@ export function recognizeMathInk(strokes: RecognitionStroke[]): MathRecognitionR
     });
   }
 
-  const layoutGlyphs = buildFractionLayout(glyphs);
+  const layoutGlyphs = applyRadicalLayout(buildFractionLayout(glyphs), radicals);
   const rawText = buildRecognizedText(layoutGlyphs);
   // "x" and "×" share the same two crossing strokes. A lone × after "=", at
   // the start, or before a superscript is the variable x — not multiplication.

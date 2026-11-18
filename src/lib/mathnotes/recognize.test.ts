@@ -1,10 +1,12 @@
 import { describe, expect, it } from 'vitest';
 import {
   addUserGlyphSamples,
+  applyRadicalLayout,
   buildFractionLayout,
   buildRecognizedText,
   classifyGlyphGeometry,
   clearUserGlyphBank,
+  detectRadicalStrokes,
   loadUserGlyphSamples,
   distanceTransform,
   groupStrokesIntoGlyphs,
@@ -241,6 +243,92 @@ describe('fraction layout', () => {
     expect(layout).toHaveLength(1);
     expect(layout[0].text).toBe('((1)/(2))/(3)');
     expect(layout[0].displayChar).toBe('1/2/3');
+  });
+});
+
+describe('radical layout', () => {
+  const radical: RecognitionStroke = {
+    points: [
+      { x: 0, y: 30 },
+      { x: 8, y: 38 },
+      { x: 16, y: 60 },
+      { x: 24, y: 30 },
+      { x: 32, y: 10 },
+      { x: 48, y: 9 },
+      { x: 64, y: 10 },
+      { x: 80, y: 10 },
+    ],
+  };
+
+  const glyphAt = (
+    char: string,
+    x0: number,
+    y0: number,
+    x1: number,
+    y1: number,
+    extra: Partial<RecognizedGlyph> = {},
+  ): RecognizedGlyph => ({
+    char,
+    displayChar: char,
+    confidence: 0.9,
+    bbox: { x0, y0, x1, y1 },
+    superscript: false,
+    strokes: [],
+    ...extra,
+  });
+
+  it('detects a one-stroke radical (tick + diagonal + overbar)', () => {
+    const regions = detectRadicalStrokes([radical]);
+    expect(regions).toHaveLength(1);
+    expect(regions[0].barY).toBeLessThan(20);
+    expect(regions[0].startX).toBeGreaterThan(14);
+  });
+
+  it('rejects a horizontal dash and a check mark', () => {
+    const dash: RecognitionStroke = {
+      points: [0, 20, 40, 60, 80, 100].map((x) => ({ x, y: 10 })),
+    };
+    const check: RecognitionStroke = {
+      points: [
+        { x: 0, y: 20 },
+        { x: 10, y: 30 },
+        { x: 20, y: 40 },
+        { x: 30, y: 20 },
+        { x: 40, y: 0 },
+        { x: 50, y: -10 },
+        { x: 60, y: -20 },
+      ],
+    };
+    expect(detectRadicalStrokes([dash])).toHaveLength(0);
+    expect(detectRadicalStrokes([check])).toHaveLength(0);
+  });
+
+  it('wraps glyphs under the overbar into sqrt()', () => {
+    const regions = detectRadicalStrokes([radical]);
+    const out = applyRadicalLayout([glyphAt('2', 26, 20, 42, 55)], regions);
+    expect(out).toHaveLength(1);
+    expect(out[0].text).toBe('sqrt(2)');
+    expect(out[0].displayChar).toBe('√(2)');
+  });
+
+  it('keeps a fraction token inside the radical', () => {
+    const regions = detectRadicalStrokes([radical]);
+    const fraction = glyphAt('(1)/(2)', 24, 16, 64, 56, {
+      text: '(1)/(2)',
+      displayChar: '1/2',
+      reason: 'fraction',
+    });
+    const out = applyRadicalLayout([fraction], regions);
+    expect(out).toHaveLength(1);
+    expect(out[0].text).toBe('sqrt((1)/(2))');
+  });
+
+  it('leaves glyphs outside the radical untouched', () => {
+    const regions = detectRadicalStrokes([radical]);
+    const outside = glyphAt('x', 120, 20, 136, 55);
+    const out = applyRadicalLayout([outside], regions);
+    expect(out).toHaveLength(1);
+    expect(out[0]).toBe(outside);
   });
 });
 
