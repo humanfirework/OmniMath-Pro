@@ -831,10 +831,10 @@ export function WhiteboardCanvas() {
       {/* Toolbar */}
       <div
         className={cn(
-          'shrink-0 flex items-center gap-1 px-3 py-2 border-b border-border/60 bg-card/40 backdrop-blur-sm',
-          // Always a single scrollable row: in the side-by-side layout the
-          // panel is narrow, and wrapping produced a messy two-row toolbar.
-          'flex-nowrap overflow-x-auto [&>*]:shrink-0',
+          'shrink-0 flex items-center gap-1 px-2 sm:px-3 py-2 border-b border-border/60 bg-card/40 backdrop-blur-sm',
+          // 手机/窄屏：允许换行，所有工具与颜色都看得见，不用横向滚动猜。
+          // 平板/桌面：保持单行，避免侧边并排时工具栏变成多行。
+          'flex-wrap md:flex-nowrap md:overflow-x-auto [&>*]:shrink-0',
         )}
       >
         <div className="flex items-center gap-1 mr-2">
@@ -1144,6 +1144,14 @@ export function WhiteboardCanvas() {
 
             <DropdownMenuSeparator />
             <DropdownMenuItem
+              onClick={handleExport}
+              disabled={empty}
+              className="gap-2 text-[11.5px]"
+            >
+              <Download className="size-3.5" />
+              <span>导出 PNG</span>
+            </DropdownMenuItem>
+            <DropdownMenuItem
               onClick={handleClear}
               disabled={empty}
               className="gap-2 text-[11.5px] text-rose-500 focus:text-rose-500"
@@ -1154,8 +1162,10 @@ export function WhiteboardCanvas() {
           </DropdownMenuContent>
         </DropdownMenu>
 
-        {/* Zoom controls */}
-        <div className="flex items-center gap-0.5 p-0.5 rounded-md bg-muted/40 border border-border/40">
+        {/* Zoom + actions — 手机上交给底部笔栏 / 手势，工具栏保持两行以内 */}
+        <div className="hidden md:flex items-center gap-0.5">
+          {/* Zoom controls */}
+          <div className="flex items-center gap-0.5 p-0.5 rounded-md bg-muted/40 border border-border/40">
           <button
             type="button"
             onClick={() => zoomAt(1 / 1.2)}
@@ -1214,6 +1224,7 @@ export function WhiteboardCanvas() {
           <Download className="size-3.5" />
           PNG
         </button>
+        </div>
       </div>
 
       {/* Canvas */}
