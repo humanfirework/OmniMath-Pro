@@ -20,15 +20,17 @@ const snapshot = (keys: Record<string, string>): WorkspaceSnapshot => ({
 describe('workspace snapshot', () => {
   beforeEach(() => localStorage.clear());
 
-  it('collects app keys but never AI secrets', () => {
+  it('collects app keys but never AI or sync secrets', () => {
     localStorage.setItem('omnimath-pro-v2', '{"a":1}');
     localStorage.setItem('omnimath-whiteboard-v1', '{"strokes":[]}');
     localStorage.setItem('omnimath:ai:apiKey', 'secret');
+    localStorage.setItem('omnimath:sync:gistToken', 'ghp_secret');
     localStorage.setItem('other-app', 'x');
 
     const snap = collectSnapshot();
     expect(Object.keys(snap.keys).sort()).toEqual(['omnimath-pro-v2', 'omnimath-whiteboard-v1']);
     expect(JSON.stringify(snap)).not.toContain('secret');
+    expect(JSON.stringify(snap)).not.toContain('ghp_');
   });
 
   it('replace mode removes old records and writes the snapshot', () => {

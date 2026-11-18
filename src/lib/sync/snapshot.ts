@@ -12,7 +12,7 @@ export const SNAPSHOT_VERSION = 1 as const;
 export const SNAPSHOT_EXTENSION = 'json';
 
 const KEY_PREFIX = 'omnimath';
-const SECRET_PREFIXES = ['omnimath:ai:'];
+const SECRET_PREFIXES = ['omnimath:ai:', 'omnimath:sync:'];
 
 export interface WorkspaceSnapshot {
   app: typeof SNAPSHOT_APP;

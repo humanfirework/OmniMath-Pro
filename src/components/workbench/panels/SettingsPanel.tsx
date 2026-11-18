@@ -94,6 +94,14 @@ import {
   pullFromSyncFolder,
   pushToSyncFolder,
 } from '@/lib/sync/folder';
+import {
+  getGistToken,
+  getStoredGistId,
+  pullFromGist,
+  pushToGist,
+  setGistToken,
+  testGistToken,
+} from '@/lib/sync/gist';
 import { toast } from 'sonner';
 
 type Category = 'appearance' | 'editor' | 'layout' | 'data' | 'backup' | 'export' | 'language' | 'shortcuts' | 'advanced' | 'about';
@@ -180,6 +188,11 @@ export function SettingsPanel() {
   const backupFileRef = useRef<HTMLInputElement>(null);
   const [syncFolder, setSyncFolderState] = useState<string | null>(() => getSyncFolder());
   const [folderBusy, setFolderBusy] = useState(false);
+  // GitHub Gist cloud sync (optional, token never leaves the device except to GitHub)
+  const [gistTokenInput, setGistTokenInput] = useState(() => getGistToken());
+  const [gistAccount, setGistAccount] = useState<string | null>(null);
+  const [gistBusy, setGistBusy] = useState(false);
+  const [gistId, setGistId] = useState(() => getStoredGistId());
 
   useEffect(() => {
     loadSettings();
@@ -290,6 +303,69 @@ export function SettingsPanel() {
       toast.error('读取同步文件夹失败', { description: (err as Error).message });
     } finally {
       setFolderBusy(false);
+    }
+  };
+
+  /* ── GitHub Gist cloud sync ──────────────────────────────────── */
+
+  const handleSaveGistToken = () => {
+    setGistToken(gistTokenInput);
+    setGistAccount(null);
+    toast.success(gistTokenInput.trim() ? 'Token 已保存在本机' : '已清除 Token');
+  };
+
+  const handleVerifyGist = async () => {
+    setGistBusy(true);
+    try {
+      setGistToken(gistTokenInput);
+      const login = await testGistToken(gistTokenInput);
+      setGistAccount(login);
+      toast.success(`已连接 GitHub：${login}`);
+    } catch (err) {
+      setGistAccount(null);
+      toast.error('Token 验证失败', { description: (err as Error).message });
+    } finally {
+      setGistBusy(false);
+    }
+  };
+
+  const handlePushGist = async () => {
+    setGistBusy(true);
+    try {
+      setGistToken(gistTokenInput);
+      const result = await pushToGist(gistTokenInput);
+      setGistId(result.gistId);
+      toast.success('已上传到 GitHub Gist', {
+        description: `Gist ${result.gistId.slice(0, 8)} · 另一台设备用同一 Token 读取`,
+        duration: 3200,
+      });
+    } catch (err) {
+      toast.error('上传失败', { description: (err as Error).message });
+    } finally {
+      setGistBusy(false);
+    }
+  };
+
+  const handlePullGist = async () => {
+    setGistBusy(true);
+    try {
+      setGistToken(gistTokenInput);
+      const { snapshot, gistId: id } = await pullFromGist(gistTokenInput);
+      const result = applySnapshot(snapshot, importMode);
+      setGistId(id);
+      toast.success(
+        importMode === 'replace'
+          ? `已从 Gist 恢复 ${result.written} 项数据`
+          : `已合并 ${result.merged} 项记录、补全 ${result.written} 项，保留 ${result.skipped} 项本机数据`,
+        { description: '即将重新载入界面…', duration: 2200 },
+      );
+      setTimeout(() => {
+        if (typeof window !== 'undefined') window.location.reload();
+      }, 900);
+    } catch (err) {
+      toast.error('读取失败', { description: (err as Error).message });
+    } finally {
+      setGistBusy(false);
     }
   };
 
@@ -826,6 +902,70 @@ export function SettingsPanel() {
                       桌面版支持同步文件夹；网页版请使用上方的导出 / 导入。
                     </p>
                   )}
+                </div>
+
+                <div className="rounded-lg border border-dashed border-border/70 p-3.5">
+                  <div className="flex items-center gap-2 text-xs font-semibold">
+                    <Cloud className="size-3.5 text-primary" />
+                    GitHub Gist 云同步（可选）
+                  </div>
+                  <p className="mt-1.5 text-[11px] leading-relaxed text-muted-foreground">
+                    用 GitHub Token 把工作区上传为私有 Gist，另一台设备填同一 Token 读取即可。
+                    Token 只保存在本机，不会写进备份。
+                  </p>
+                  <div className="mt-2 flex flex-col gap-2 sm:flex-row">
+                    <Input
+                      type="password"
+                      value={gistTokenInput}
+                      onChange={(e) => setGistTokenInput(e.target.value)}
+                      placeholder="ghp_...（只需 gist 权限）"
+                      className="h-8 flex-1 font-mono text-[11px]"
+                      autoComplete="off"
+                    />
+                    <div className="flex gap-2">
+                      <Button size="sm" variant="outline" onClick={handleSaveGistToken} className="gap-1.5">
+                        保存
+                      </Button>
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        disabled={!gistTokenInput.trim() || gistBusy}
+                        onClick={() => void handleVerifyGist()}
+                      >
+                        验证
+                      </Button>
+                    </div>
+                  </div>
+                  <div className="mt-2 flex flex-wrap items-center gap-2">
+                    <Button
+                      size="sm"
+                      disabled={!gistTokenInput.trim() || gistBusy}
+                      onClick={() => void handlePushGist()}
+                      className="gap-1.5"
+                    >
+                      <Upload className={cn('size-3.5', gistBusy && 'animate-pulse')} />
+                      上传到 Gist
+                    </Button>
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      disabled={!gistTokenInput.trim() || gistBusy}
+                      onClick={() => void handlePullGist()}
+                    >
+                      读取并{importMode === 'replace' ? '恢复' : '合并'}
+                    </Button>
+                  </div>
+                  <p className="mt-2 text-[10px] text-muted-foreground">
+                    {gistAccount
+                      ? `已连接：${gistAccount}`
+                      : gistId
+                        ? `上次 Gist：${gistId.slice(0, 8)}`
+                        : '尚未上传备份'}
+                    {' · '}读取时使用上方「合并 / 覆盖恢复」方式。
+                  </p>
+                  <p className="mt-1 text-[10px] text-muted-foreground">
+                    在 github.com/settings/tokens 创建 Token，只需勾选 gist 权限。
+                  </p>
                 </div>
               </motion.div>
             )}
