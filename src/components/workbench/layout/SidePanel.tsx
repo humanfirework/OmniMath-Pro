@@ -74,7 +74,7 @@ const SIDE_PANEL_TABS: SidePanelTab[] = [
   'history', 'variables', 'files', 'formulas', 'linalg', 'solver', 'stats',
 ];
 
-export function SidePanel() {
+export function SidePanel({ onClose }: { onClose?: () => void } = {}) {
   useLocale();
   const activeSidePanel = useWorkbenchStore((s) => s.activeSidePanel);
   const toggleSidePanel = useWorkbenchStore((s) => s.toggleSidePanel);
@@ -134,7 +134,7 @@ export function SidePanel() {
           <TooltipTrigger asChild>
             <button
               type="button"
-              onClick={toggleSidePanel}
+              onClick={onClose ?? toggleSidePanel}
               aria-label={t('abHideSidebar')}
               className={cn(
                 'grid place-items-center size-6 rounded-md text-muted-foreground',

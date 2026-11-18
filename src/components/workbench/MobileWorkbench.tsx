@@ -77,7 +77,7 @@ export function MobileWorkbench() {
             )}
             {tab === 'editor' && <EditorPanel />}
             {tab === 'preview' && <PreviewPanel />}
-            {tab === 'side' && <SidePanel />}
+            {tab === 'side' && <SidePanel onClose={() => setTab('home')} />}
             {tab === 'canvas' && (
               <Suspense
                 fallback={
