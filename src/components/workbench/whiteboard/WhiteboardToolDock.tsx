@@ -13,6 +13,7 @@ import {
   Eraser,
   Grid2x2,
   Lasso,
+  MoreHorizontal,
   MousePointer2,
   Pencil,
   Shapes,
@@ -176,7 +177,7 @@ export function WhiteboardToolDock(props: WhiteboardToolDockProps) {
           <Sigma className="size-4" />
         </DockButton>
         <DockButton label="更多" active={panel === 'more'} onClick={() => toggle('more')}>
-          <span className="text-[15px] leading-none">⋯</span>
+          <MoreHorizontal className="size-4" />
         </DockButton>
       </div>
 

@@ -989,6 +989,24 @@ export function WhiteboardCanvas() {
           </>
         )}
 
+        {coarse && (
+          <button
+            type="button"
+            onClick={toggleMathMode}
+            aria-pressed={mathMode}
+            aria-label="数学模式"
+            title="数学模式：停笔 0.7 秒识别手写公式"
+            className={cn(
+              'absolute bottom-24 right-3 z-30 grid size-10 place-items-center rounded-full border shadow-lg backdrop-blur transition-colors',
+              mathMode
+                ? 'border-primary bg-primary text-primary-foreground'
+                : 'border-border/70 bg-background/95 text-muted-foreground hover:text-foreground',
+            )}
+          >
+            <Sigma className="size-4" />
+          </button>
+        )}
+
         {/* 识别范围框：让用户看到这次识别到底用了哪一段笔迹 */}
         {mathScopeBox && mathDraft && (
           <div
