@@ -132,7 +132,9 @@ export function Plot3DPanel() {
   const [showGrid, setShowGrid] = useState(true);
   const [autoRotate, setAutoRotate] = useState(false);
   const [colorMode, setColorMode] = useState<'height' | 'solid'>('height');
-  const [upAxis, setUpAxis] = useState<'y' | 'z'>('y');
+  // 数学惯例 z 朝上（three.js 默认是 y 朝上）。z=f(x,y) 的曲面应当从
+  // z 轴方向看过去是碗形，而不是把定义域的 y 当成竖直方向。
+  const [upAxis, setUpAxis] = useState<'y' | 'z'>('z');
   const [showControls, setShowControls] = useState(false);
   const [resetSignal, setResetSignal] = useState(0);
   const [expandOpen, setExpandOpen] = useState(false);

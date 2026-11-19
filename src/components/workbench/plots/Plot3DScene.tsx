@@ -563,14 +563,17 @@ function CameraReset({
   upAxis,
   fitDistance,
   fitKey,
+  target,
 }: {
   resetSignal: number;
   controlsRef: MutableRefObject<OrbitControlsHandle | null>;
   upAxis: 'y' | 'z';
-  /** 能装下整个场景的相机距离（由包围盒半径与 FOV 计算）。 */
+  /** 能装下整个场景的相机距离（由包围球半径与 FOV 计算）。 */
   fitDistance: number;
   /** 仅在场景范围/轴向变化时变化，避免参数滑块拖动时相机乱跳。 */
   fitKey: string;
+  /** 观察目标：z 范围很大时取 z 的中点，否则曲面会偏出视口。 */
+  target: [number, number, number];
 }) {
   const { camera } = useThree();
 
@@ -578,15 +581,18 @@ function CameraReset({
   // 但只有「新增/删除曲面、修改定义域、切换 up 轴」才应重新取景。
   const fitDistanceRef = useRef(fitDistance);
   fitDistanceRef.current = fitDistance;
+  const targetRef = useRef(target);
+  targetRef.current = target;
 
   const applyDefault = useCallback(() => {
     const dir = upAxis === 'z'
       ? new THREE.Vector3(1, 1, 0.85)
       : new THREE.Vector3(1, 0.85, 1);
     dir.normalize().multiplyScalar(fitDistanceRef.current);
+    const [tx, ty, tz] = targetRef.current;
     camera.up.set(0, upAxis === 'z' ? 0 : 1, upAxis === 'z' ? 1 : 0);
-    camera.position.copy(dir);
-    camera.lookAt(0, 0, 0);
+    camera.position.set(tx + dir.x, ty + dir.y, tz + dir.z);
+    camera.lookAt(tx, ty, tz);
     controlsRef.current?.update?.();
   }, [camera, upAxis, controlsRef]);
 
@@ -688,14 +694,26 @@ function SceneContents({
     return { sizeX: snap(mx), sizeY: snap(my), sizeZ: snap(mz) };
   }, [surfaces]);
 
-  // 自动取景：用最大半轴长度换算相机距离。
-  // 竖直方向的可视半高 = tan(fov/2) * distance；留 1.25 倍余量，
-  // 兼顾透视近大远小与较窄的面板（右边缘不贴边）。
-  // 用包围球对角线会过于保守（曲面只占视口一半），这里按最长半轴取景。
-  const maxHalfAxis = Math.max(sizeX, sizeY, sizeZ);
+  // 自动取景：用包围球半径换算相机距离。
+  // 之前只看「最长半轴」且把相机上限写死 39 / OrbitControls maxDistance=40，
+  // 当 z 范围远大于 x/y（如 x²+y² 的 z 到 50）时，曲面与 z 轴都会被裁出视口。
+  // 这里改为：以 z 范围的真正中点作为观察目标，按包围球半径算距离，
+  // 距离上限只做防溢出（400），OrbitControls 的 maxDistance 也随场景放大。
+  const { zCenter, zHalf } = useMemo(() => {
+    let min = Infinity, max = -Infinity;
+    for (const s of surfaces) {
+      if (s.validTriangleCount <= 0) continue;
+      min = Math.min(min, s.zRange[0]);
+      max = Math.max(max, s.zRange[1]);
+    }
+    if (!Number.isFinite(min) || !Number.isFinite(max)) return { zCenter: 0, zHalf: 5 };
+    return { zCenter: (min + max) / 2, zHalf: Math.max(1, (max - min) / 2) };
+  }, [surfaces]);
+
+  const boundsRadius = Math.hypot(sizeX, sizeY, zHalf);
   const fitDistance = Math.min(
-    39,
-    Math.max(7, (maxHalfAxis / Math.tan((50 * Math.PI) / 180 / 2)) * 1.25),
+    400,
+    Math.max(7, (boundsRadius / Math.sin((50 * Math.PI) / 180 / 2)) * 1.15),
   );
   // 只在「曲面集合 / 定义域 / 轴向」变化时重新取景；zRange 随参数滑动实时变化，
   // 不进入 key，避免拖参数滑块时相机来回跳。
@@ -770,8 +788,8 @@ function SceneContents({
         autoRotate={autoRotate}
         autoRotateSpeed={1.2}
         minDistance={2}
-        maxDistance={40}
-        target={[0, 0, 0]}
+        maxDistance={Math.max(40, fitDistance * 2.2)}
+        target={[0, 0, zCenter]}
         makeDefault
       />
 
@@ -781,6 +799,7 @@ function SceneContents({
         upAxis={upAxis}
         fitDistance={fitDistance}
         fitKey={fitKey}
+        target={[0, 0, zCenter]}
       />
 
       {/* T6: 命令式截图桥接 — 把 gl.render + toDataURL 注册到外部 ref */}
@@ -804,7 +823,7 @@ export function Plot3DScene({
   wireframe,
   autoRotate = false,
   colorMode = 'height',
-  upAxis = 'y',
+  upAxis = 'z',
   resetSignal = 0,
   captureRef,
 }: Plot3DSceneProps) {
