@@ -475,7 +475,6 @@ export function WhiteboardCanvas() {
 
   const recognizeMathFromInk = useCallback(() => {
     if (!mathModeRef.current || recognizingRef.current) return;
-    if (strokesRef.current.length === lastMathIndexRef.current) return;
     const all = strokesRef.current.filter((s) => !s.shape && !s.pixel);
     if (all.length === 0) return;
 
