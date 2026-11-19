@@ -289,12 +289,10 @@ export function TitleBar() {
               className="h-5 w-auto object-contain pointer-events-none select-none"
               style={{ filter: 'brightness(1.25) contrast(1.4) saturate(1.2)' }}
             />
-          <motion.span
+          <span
             aria-hidden
             className="absolute inset-0 rounded-lg"
             style={{ boxShadow: '0 0 0 1px oklch(0.7 0.15 165 / 60%)' }}
-            animate={{ opacity: [0.4, 1, 0.4] }}
-            transition={{ duration: 2.6, repeat: Infinity, ease: 'easeInOut' }}
           />
           </motion.div>
         </motion.div>

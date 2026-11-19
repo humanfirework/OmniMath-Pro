@@ -1842,7 +1842,7 @@ export function Plot2DCanvas({
         <div className="relative z-10 flex h-full w-full flex-col items-center justify-center gap-4 px-6 text-center">
           <svg
             viewBox="0 0 240 80"
-            className="animate-float h-16 w-48 text-primary"
+            className="h-16 w-48 text-primary"
             fill="none"
             stroke="currentColor"
             strokeWidth="2"
@@ -1850,7 +1850,6 @@ export function Plot2DCanvas({
           >
             <path
               d="M0 40 Q 30 0 60 40 T 120 40 T 180 40 T 240 40"
-              className="animate-pulse-subtle"
             />
           </svg>
           <div className="space-y-1.5">

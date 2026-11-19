@@ -139,13 +139,9 @@ export function VariablesPanel() {
                 exit={{ opacity: 0 }}
                 className="flex flex-col items-center justify-center py-16 text-center px-6"
               >
-                <motion.div
-                  animate={{ y: [0, -6, 0] }}
-                  transition={{ duration: 3.2, repeat: Infinity, ease: 'easeInOut' }}
-                  className="grid place-items-center size-14 rounded-2xl bg-primary/8 border border-primary/20 mb-3"
-                >
+                <div className="grid place-items-center size-14 rounded-2xl bg-primary/8 border border-primary/20 mb-3">
                   <VariableIcon className="size-6 text-primary/70" />
-                </motion.div>
+                </div>
                 <p className="text-[12.5px] font-medium text-foreground/80 mb-1">
                   {t('varsNoVars')}
                 </p>

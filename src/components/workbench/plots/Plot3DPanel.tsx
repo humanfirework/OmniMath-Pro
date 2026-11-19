@@ -948,9 +948,10 @@ function EmptyState3D() {
   const t = useT();
   return (
     <div className="grid-bg absolute inset-0 flex flex-col items-center justify-center gap-4 p-6 text-center">
-      {/* Animated wireframe cube (pure CSS / SVG) */}
+      {/* Static wireframe cube (pure CSS / SVG). 之前是无限浮动 + 旋转，
+          在空状态里持续占用合成器；改成静态后视觉更安静，也不再空转。 */}
       <div
-        className="animate-float relative h-32 w-32"
+        className="relative h-32 w-32"
         style={{ perspective: '600px' }}
         aria-hidden
       >
@@ -959,7 +960,6 @@ function EmptyState3D() {
           style={{
             transformStyle: 'preserve-3d',
             transform: 'rotateX(-20deg) rotateY(30deg)',
-            animation: 'spin3d 12s linear infinite',
           }}
         >
           {/* Cube faces as borders */}
