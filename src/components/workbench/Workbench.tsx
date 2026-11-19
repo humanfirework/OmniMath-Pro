@@ -141,6 +141,8 @@ function FullScreenPanel({
   onFocus,
   editorVisible,
   onToggleEditor,
+  sideOpen,
+  onToggleSide,
 }: {
   viewMode: ViewMode;
   onClose: () => void;
@@ -148,6 +150,9 @@ function FullScreenPanel({
   /** 编辑器是否显示；提供 onToggleEditor 时才显示对应按钮。 */
   editorVisible?: boolean;
   onToggleEditor?: () => void;
+  /** 工具视图的左侧栏默认收起；提供 onToggleSide 时才显示开关。 */
+  sideOpen?: boolean;
+  onToggleSide?: () => void;
 }) {
   return (
     <div className="h-full w-full flex flex-col min-h-0 bg-background">
@@ -158,6 +163,17 @@ function FullScreenPanel({
         <span className="size-1.5 rounded-full bg-primary" />
         <span className="text-[11px] font-medium text-foreground/75">{fullScreenLabel(viewMode)}</span>
         <div className="flex-1" />
+        {onToggleSide && (
+          <button
+            type="button"
+            onClick={onToggleSide}
+            className="grid size-6 place-items-center rounded text-muted-foreground transition-colors hover:bg-accent/60 hover:text-foreground"
+            title={sideOpen ? '收起左侧栏' : '展开左侧栏（变量 / 历史）'}
+            aria-label={sideOpen ? '收起左侧栏' : '展开左侧栏'}
+          >
+            {sideOpen ? <PanelLeftClose className="size-3.5" /> : <PanelLeftOpen className="size-3.5" />}
+          </button>
+        )}
         {onToggleEditor && (
           <button
             type="button"
@@ -493,7 +509,10 @@ export function Workbench() {
   const effectivePreviewPosition = portraitTablet ? 'bottom' : previewPosition;
   // 平板打开白板时收起编辑器/侧栏，让画布吃满屏幕。
   const focusWhiteboard = coarsePointer && viewMode === 'whiteboard';
-  const showFsSide = !sidePanelCollapsed && viewMode !== 'focus' && !focusWhiteboard;
+  // 工具视图（蓝图/白板/线代/求解…）默认不显示左侧栏：这些视图自带完整操作区，
+  // 左栏常驻只会把画布挤到右边。需要变量/历史时用标题栏的侧栏按钮临时展开。
+  const [toolSideOpen, setToolSideOpen] = useState(false);
+  const showFsSide = !focusWhiteboard && (isFullScreenView(viewMode) ? toolSideOpen : !sidePanelCollapsed);
 
   // 全屏工具视图（白板 / 蓝图 / 矩阵 / 求解 / 统计 / 控制 / 学习）都是自包含的：
   // 进入时自动收起代码编辑器，让工具占满宽度，返回工作台时再恢复。
@@ -689,6 +708,8 @@ export function Workbench() {
                 onFocus={() => enterFocus(viewMode)}
                 editorVisible={editorVisible}
                 onToggleEditor={focusWhiteboard ? undefined : () => setEditorVisible(!editorVisible)}
+                sideOpen={showFsSide}
+                onToggleSide={focusWhiteboard ? undefined : () => setToolSideOpen((v) => !v)}
               />
             </ResizablePanel>
           </ResizablePanelGroup>

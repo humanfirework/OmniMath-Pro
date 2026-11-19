@@ -68,6 +68,25 @@ describe('groupStrokesIntoGlyphs', () => {
     expect(groups[0].centerX).toBeLessThan(groups[1].centerX);
   });
 
+  it('keeps an adjacent bracket separate from the letter before it', () => {
+    // 之前只按 18% 行高的水平间隙合并，log 的 g 和紧随其后的 "(" 会粘成
+    // 一个字形，括号被吞掉。只有「细碎笔画」（点的宽度级别）才允许近距合并。
+    const loopsAround = (x: number) => ({
+      points: [
+        { x, y: 0 },
+        { x: x + 24, y: 0 },
+        { x: x + 24, y: 40 },
+        { x, y: 40 },
+        { x, y: 0 },
+      ],
+    });
+    const groups = groupStrokesIntoGlyphs([
+      loopsAround(0),
+      { points: [{ x: 26, y: 0 }, { x: 40, y: 10 }, { x: 40, y: 30 }, { x: 26, y: 40 }] },
+    ]);
+    expect(groups).toHaveLength(2);
+  });
+
   it('ignores empty strokes', () => {
     expect(groupStrokesIntoGlyphs([{ points: [] }])).toHaveLength(0);
     expect(strokeBBox({ points: [] })).toBeNull();
@@ -422,7 +441,23 @@ describe('applyMathWordCorrection', () => {
     expect(corrected(['5', 'i', 'n'])).toBe('sin');
     expect(corrected(['c', '0', '5'])).toBe('cos');
     expect(corrected(['1', 'o', 'g'])).toBe('log');
-    expect(corrected(['1', 'n'])).toBe('ln');
+    // 只有 1 个真字母时，必须靠后面的 "(" 才认定是函数名。
+    expect(corrected(['1', 'n'])).toBe('1n');
+    expect(corrected(['1', 'n', '('])).toBe('ln(');
+  });
+
+  it('does not over-correct a digit + letter that is not a call', () => {
+    // y 的两笔被误识成 1n 时，不能强改成 ln（这是之前 y=x² 识别成 ln=x*2 的原因）。
+    const glyphs = [glyph('1'), glyph('n'), glyph('='), glyph('x')];
+    applyMathWordCorrection(glyphs);
+    expect(glyphs.map((g) => g.char).join('')).toBe('1n=x');
+  });
+
+  it('does not rewrite a letter into a digit just to match a word', () => {
+    // logx 里的 x 不是 log2 里的 2：只有分类器真的给出过该候选时才允许替换。
+    const glyphs = [glyph('l'), glyph('o'), glyph('g'), { ...glyph('x'), alternatives: ['x'] }];
+    applyMathWordCorrection(glyphs);
+    expect(glyphs.map((g) => g.char).join('')).toBe('logx');
   });
 
   it('uses the alternatives of a rejected "?" glyph', () => {

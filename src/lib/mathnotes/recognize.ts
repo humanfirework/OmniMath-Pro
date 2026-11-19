@@ -127,7 +127,10 @@ export function groupStrokesIntoGlyphs(strokes: RecognitionStroke[]): GlyphGroup
       const gap = horizontalGap(g.bbox, item.bbox);
       const verticalOverlap = yOverlapRatio(g.bbox, item.bbox);
       const vGap = verticalGap(g.bbox, item.bbox);
-      const near = gap <= medianHeight * 0.18 && verticalOverlap > 0.35;
+      const near =
+        Math.min(item.bbox.x1 - item.bbox.x0, g.bbox.x1 - g.bbox.x0) <= medianHeight * 0.25 &&
+        gap <= medianHeight * 0.18 &&
+        verticalOverlap > 0.35;
       // Strong horizontal overlap alone must not merge a fraction bar with
       // the digits above/below it — require vertical proximity as well.
       const wideFlat =
@@ -630,12 +633,16 @@ export function classifyGlyphGeometry(group: GlyphGroup): GeometryHint | null {
     if (aspect >= 2.2 && h <= Math.max(6, w * 0.22) && line.straightness > 0.78) {
       return { char: '-', confidence: 0.88, alternatives: [] };
     }
-    // 括号：细高、整体向一侧鼓出。放在「竖线 = 1」之前判断，否则一条
-    // 画得比较直的 "(" 会被误判成 1，导致 sin(x) 变成 sin1…。
+    // 括号：细高、向一侧鼓出，而且最鼓的位置在笔画中点附近。
+    // 前者把它和竖线 1 分开，后者避免把 y / g 这种「下半段带钩」的字母
+    // 误判成括号（它们的最大偏移在顶部或底部，不在中点）。
     if (h / w >= 1.4 && line.straightness < 0.98) {
-      const chordMidX = (stroke.points[0].x + stroke.points[stroke.points.length - 1].x) / 2;
-      const bulge = meanX(stroke) - chordMidX;
-      if (Math.abs(bulge) > Math.max(4, h * 0.12)) {
+      const pts0 = stroke.points;
+      const chordDx = Math.abs(pts0[0].x - pts0[pts0.length - 1].x);
+      // 括号从上方写到下方，首尾基本在同一个 x 上；s / n / y 的收笔会明显偏开。
+      const verticalChord = chordDx <= Math.max(4, h * 0.15);
+      const { bulge, peakDy } = bracketBulge(stroke);
+      if (verticalChord && Math.abs(bulge) > Math.max(3, h * 0.1) && peakDy <= h * 0.24) {
         return {
           char: bulge < 0 ? '(' : ')',
           confidence: 0.7,
@@ -781,10 +788,29 @@ function closureRatio(stroke: RecognitionStroke): number {
   return Math.hypot(pts[pts.length - 1].x - pts[0].x, pts[pts.length - 1].y - pts[0].y) / diag;
 }
 
-function meanX(stroke: RecognitionStroke): number {
-  let sum = 0;
-  for (const p of stroke.points) sum += p.x;
-  return sum / Math.max(1, stroke.points.length);
+/**
+ * 括号的单侧鼓包：返回相对首尾连线的最大水平偏移，以及该偏移点
+ * 距离连线中点的高度差。真正的括号在中点最鼓；y / g 的钩在顶部或底部。
+ */
+function bracketBulge(stroke: RecognitionStroke): { bulge: number; peakDy: number } {
+  const pts = stroke.points;
+  if (pts.length === 0) return { bulge: 0, peakDy: 0 };
+  const first = pts[0];
+  const last = pts[pts.length - 1];
+  const midX = (first.x + last.x) / 2;
+  const midY = (first.y + last.y) / 2;
+  let bulge = 0;
+  let peakDy = 0;
+  // 首尾点必然落在连线上，只看中间点：否则 'n' 的右端点会被当成鼓包。
+  for (let i = 1; i < pts.length - 1; i++) {
+    const p = pts[i];
+    const dx = p.x - midX;
+    if (Math.abs(dx) > Math.abs(bulge)) {
+      bulge = dx;
+      peakDy = Math.abs(p.y - midY);
+    }
+  }
+  return { bulge, peakDy };
 }
 
 /** Count horizontal direction reversals (a "3" has two bumps, ")" only one). */
@@ -1034,7 +1060,9 @@ function letterCandidates(g: RecognizedGlyph): string[] {
   if (g.text) return [];
   const ch = g.char.toLowerCase();
   const out: string[] = [];
-  if (/^[a-z]$/.test(ch)) out.push(ch);
+  // 字母本身、以及数字被误读成字母的情况；数字自身也保留，
+  // 这样 log2 / log10 这类带数字的函数名不会被排斥。
+  if (/^[a-z0-9]$/.test(ch)) out.push(ch);
   const mapped = CONFUSABLE_LETTERS[ch];
   if (mapped) out.push(...mapped);
   if (ch === '?') {
@@ -1061,9 +1089,21 @@ function matchMathWord(run: RecognizedGlyph[]): string | null {
     let cost = 0;
     for (let k = 0; k < word.length; k++) {
       if (candidates[k].includes(word[k])) continue;
-      // "?" has no usable guess: allow it as a wildcard, but cost more than
-      // a confident substitution so a real letter match still wins.
-      cost += run[k].char === '?' ? 0.5 : 1;
+      if (run[k].char === '?') {
+        // "?" has no usable guess: allow it as a wildcard, but cost more than
+        // a confident letter match so a real letter match still wins.
+        cost += 0.5;
+        if (cost > 1) break;
+        continue;
+      }
+      // A replacement is only credible when the classifier actually listed
+      // that character as an alternative. "logx" must not become "log2".
+      const alts = (run[k].alternatives ?? []).map((a) => a.toLowerCase());
+      if (!alts.includes(word[k])) {
+        cost = 2;
+        break;
+      }
+      cost += 1;
       if (cost > 1) break;
     }
     if (cost > 1) continue;
@@ -1088,7 +1128,12 @@ export function applyMathWordCorrection(glyphs: RecognizedGlyph[]): RecognizedGl
     const run = glyphs.slice(i, j);
     if (run.length >= 2 && run.length <= 12) {
       const word = matchMathWord(run);
-      if (word) {
+      // 纠正也要保守：2 个字母的短词（ln / pi）只在后面紧跟 "(" 时才认，
+      // 否则 y 的两笔被误识成 "1n" 就会被强改成 "ln"（y=x² → ln=x*2）。
+      // 3 个字母以上（sin / cos / log）辨识度足够，直接纠正。
+      const followedByCall = glyphs[j]?.char === '(';
+      const safe = followedByCall || (word?.length ?? 0) >= 3 || word === 'pi';
+      if (word && safe) {
         for (let k = 0; k < run.length; k++) {
           const g = run[k];
           g.char = word[k];
