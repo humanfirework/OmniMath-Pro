@@ -125,20 +125,28 @@ export function MobileWorkbench({ initialView }: { initialView?: ViewMode | null
         </AnimatePresence>
       </div>
 
-      {/* Mobile tab bar */}
-      <div className="shrink-0 h-12 flex items-stretch border-t border-border bg-background/80 backdrop-blur-md">
+      {/* Mobile tab bar：底部安全区留白，避免 iPhone 手势条压住标签；
+          选中项加一条顶端指示线，比只变颜色更容易在户外看清。 */}
+      <div className="shrink-0 flex items-stretch border-t border-border bg-background/80 backdrop-blur-md pb-[env(safe-area-inset-bottom)]">
         {TABS.map(({ id, icon: Icon, label }) => (
           <button
             key={id}
             type="button"
             onClick={() => setTab(id)}
+            aria-current={tab === id ? 'page' : undefined}
             className={cn(
-              'flex-1 flex flex-col items-center justify-center gap-0.5 text-[10px] transition-colors',
+              'relative flex-1 flex flex-col items-center justify-center gap-0.5 h-12 text-[10px] transition-colors active:scale-[0.97]',
               tab === id
                 ? 'text-primary'
                 : 'text-muted-foreground hover:text-foreground',
             )}
           >
+            <span
+              className={cn(
+                'absolute top-0 left-1/2 -translate-x-1/2 h-0.5 w-7 rounded-full transition-opacity',
+                tab === id ? 'bg-primary opacity-100' : 'opacity-0',
+              )}
+            />
             <Icon className="size-4" />
             {label}
           </button>

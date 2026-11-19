@@ -51,6 +51,7 @@ export interface TranslationDict {
   editorRunToPanelHint: string;
   editorReset: string;
   editorClear: string;
+  editorMore: string;
   editorModeSimple: string;
   editorModePython: string;
   editorModeMatlab: string;
@@ -1379,6 +1380,7 @@ const zhCN: TranslationDict = {
   editorRunToPanelHint: "运行脚本并把结果送入可拖拽的独立结果浮窗（右上角「关闭全部」可清空）",
   editorReset: "重置",
   editorClear: "清空",
+  editorMore: "更多",
   editorModeSimple: "简单",
   editorModePython: "Python",
   editorModeMatlab: "MATLAB",
@@ -2695,6 +2697,7 @@ const en: TranslationDict = {
   editorRunToPanelHint: "Run the script and send results to a draggable floating result window (clear all via the top-right button)",
   editorReset: "Reset",
   editorClear: "Clear",
+  editorMore: "More",
   editorModeSimple: "Simple",
   editorModePython: "Python",
   editorModeMatlab: "MATLAB",

@@ -41,6 +41,7 @@ import {
   FileCode2,
   Loader2,
   Sigma,
+  MoreHorizontal,
   X,
 } from 'lucide-react';
 import {
@@ -48,6 +49,12 @@ import {
   TooltipContent,
   TooltipTrigger,
 } from '@/components/ui/tooltip';
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu';
 import {
   Select,
   SelectContent,
@@ -628,32 +635,33 @@ export function EditorPanel() {
             </TooltipTrigger>
             <TooltipContent side="bottom">{t('symbolPaletteToggle')}</TooltipContent>
           </Tooltip>
-          <Tooltip>
-            <TooltipTrigger asChild>
+          {/* 重置 / 清空收进「更多」：两个低频且不可撤销的操作不再占用
+              主工具栏，也避免「橡皮」图标在编辑器里被误读为擦除笔迹。 */}
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
               <button
                 type="button"
-                onClick={handleReset}
-                aria-label={t('editorReset')}
-                className="hidden @[420px]:grid place-items-center size-7 rounded-md text-muted-foreground hover:bg-accent hover:text-foreground transition-colors"
+                aria-label={t('editorMore')}
+                title={t('editorMore')}
+                className="grid place-items-center size-7 rounded-md text-muted-foreground hover:bg-accent hover:text-foreground transition-colors"
               >
-                <Eraser className="size-3.5" />
+                <MoreHorizontal className="size-3.5" />
               </button>
-            </TooltipTrigger>
-            <TooltipContent side="bottom">{t('editorReset')}</TooltipContent>
-          </Tooltip>
-          <Tooltip>
-            <TooltipTrigger asChild>
-              <button
-                type="button"
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end" className="w-40">
+              <DropdownMenuItem onClick={handleReset} className="gap-2 text-[11.5px]">
+                <Eraser className="size-3.5" />
+                <span>{t('editorReset')}</span>
+              </DropdownMenuItem>
+              <DropdownMenuItem
                 onClick={handleClear}
-                aria-label={t('editorClear')}
-                className="hidden @[420px]:grid place-items-center size-7 rounded-md text-muted-foreground hover:bg-accent hover:text-foreground transition-colors"
+                className="gap-2 text-[11.5px] text-rose-500 focus:text-rose-500"
               >
                 <Trash2 className="size-3.5" />
-              </button>
-            </TooltipTrigger>
-            <TooltipContent side="bottom">{t('editorClear')}</TooltipContent>
-          </Tooltip>
+                <span>{t('editorClear')}</span>
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
           <Tooltip>
             <TooltipTrigger asChild>
               <motion.button
