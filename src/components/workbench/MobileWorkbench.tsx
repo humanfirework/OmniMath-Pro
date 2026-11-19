@@ -25,6 +25,7 @@ import {
   LazySidePanel,
 } from '@/components/workbench/layout/LazyPanels';
 import { useAIContextStore } from '@/lib/store/aiContextStore';
+import type { ViewMode } from '@/lib/store/workbench';
 import { cn } from '@/lib/utils';
 
 type MobileTab = 'home' | 'editor' | 'preview' | 'side' | 'canvas';
@@ -49,9 +50,17 @@ const StudioHome = lazy(() =>
   })),
 );
 
-export function MobileWorkbench() {
+export function MobileWorkbench({ initialView }: { initialView?: ViewMode | null }) {
   // Phone opens on the canvas: this is a handwriting-first app, not an IDE.
   const [tab, setTab] = useState<MobileTab>('canvas');
+
+  // PWA / 桌面快捷方式：?view=home / ?view=workbench 要落到对应标签，
+  // 而不是无论请求什么都显示画布。参数在挂载后到达，所以用 effect 同步。
+  useEffect(() => {
+    if (!initialView) return;
+    if (initialView === 'home') setTab('home');
+    else if (initialView === 'workbench') setTab('editor');
+  }, [initialView]);
 
   // AI 请求从编辑器 / 结果发起时，答案在「预览」里的 AI 标签：
   // 手机上自动切过去，避免用户以为没有反应。

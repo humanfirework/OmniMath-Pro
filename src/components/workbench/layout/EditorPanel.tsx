@@ -57,6 +57,7 @@ import {
 } from '@/components/ui/select';
 import { useWorkbenchStore } from '@/lib/store/workbench';
 import { DEFAULT_SCRIPT } from '@/lib/editor/defaultScript';
+import { toLiteLatex } from '@/lib/editor/liteLatex';
 import { useFileSystemStore } from '@/lib/store/fileSystemStore';
 import { useSettingsStore } from '@/lib/store/settingsStore';
 import type { InputMode } from '@/lib/engine/types';
@@ -299,39 +300,13 @@ export function EditorPanel() {
   const lineCount = useMemo(() => editorContent.split('\n').length, [editorContent]);
   const varCount = Object.keys(variables).length;
 
-  /* ─── Live preview LaTeX (simple mode only) ───────────────────── */
-  // LaTeX 预览依赖 mathjs，但打开编辑器本身不应该等它。这里延迟 250ms 再
-  // 动态加载：停在注释行 / 空行时完全不触发；真在输入表达式时引擎已在路上，
-  // 用户点运行几乎无额外等待。
-  const [previewLatex, setPreviewLatex] = useState('');
-  useEffect(() => {
-    if (inputMode !== 'simple') {
-      setPreviewLatex('');
-      return;
-    }
-    const lines = editorContent.split('\n');
-    const line = lines[previewLine - 1];
-    if (!line) {
-      setPreviewLatex('');
-      return;
-    }
-    const trimmed = line.trim();
-    if (!trimmed || trimmed.startsWith('#') || trimmed.startsWith('//')) {
-      setPreviewLatex('');
-      return;
-    }
-    let cancelled = false;
-    const timer = setTimeout(() => {
-      void import('@/lib/engine')
-        .then(({ inputToLatex }) => {
-          if (!cancelled) setPreviewLatex(inputToLatex(line, 'simple'));
-        })
-        .catch(() => {});
-    }, 250);
-    return () => {
-      cancelled = true;
-      clearTimeout(timer);
-    };
+  /* ─── Live preview LaTeX (simple mode only) ─────────────────────
+   * 只做本地轻量排版（`liteLatex`），不触碰 mathjs —— 光标移进表达式行
+   * 不应该在后台下载求解引擎。真正的解析与计算仍只在运行时发生。 */
+  const previewLatex = useMemo(() => {
+    if (inputMode !== 'simple') return '';
+    const line = editorContent.split('\n')[previewLine - 1];
+    return line ? toLiteLatex(line) : '';
   }, [previewLine, editorContent, inputMode]);
 
   // 任何编辑 / 切换文件都会改变行号与内容的对应关系，行尾结果立即清空。
@@ -793,24 +768,10 @@ export function EditorPanel() {
         </div>
       )}
 
-      {/* Live preview bar (simple mode only, hidden when the line is empty) */}
-      {inputMode === 'simple' && previewLatex && (
-        <div className="shrink-0 min-h-10 max-h-48 flex items-start gap-2 px-2.5 py-2 border-b border-border/60 bg-muted/30 border-l-2 border-l-primary/60 overflow-x-auto overflow-y-auto">
-          <span className="text-[12px] font-medium text-muted-foreground shrink-0 mt-0.5">
-            {t('editorLivePreview')}:
-          </span>
-          <FormulaRenderer
-            latex={previewLatex}
-            displayMode
-            className="min-w-0 flex-1 text-[13px]"
-          />
-        </div>
-      )}
-
       {/* Editor area — 永远保持可输入。
           之前当「未打开文件且内容为空」时会用空状态替换整个编辑器，
           用户按 Ctrl+A + Delete 清空后编辑器直接消失、无法继续输入。 */}
-      <div ref={editorContainerRef} className="flex-1 min-h-0 flex overflow-hidden">
+      <div ref={editorContainerRef} className="relative flex-1 min-h-0 flex overflow-hidden">
         <CodeEditor
           value={editorContent}
           onChange={setEditorContent}
@@ -826,6 +787,25 @@ export function EditorPanel() {
           fontSize={editorFontSize}
           inlineResults={inlineResults}
         />
+        {/* 当前行公式镜头：浮在编辑器右下角，不占布局高度，光标移动时不再
+            让整段代码上下跳动。纯展示，不拦截点击。 */}
+        {inputMode === 'simple' && previewLatex && (
+          <div
+            aria-hidden
+            className="pointer-events-none absolute bottom-2 right-3 z-10 max-w-[62%] overflow-hidden rounded-md border border-border/60 bg-background/85 px-2.5 py-1 shadow-sm backdrop-blur-sm"
+          >
+            <div className="flex items-center gap-2">
+              <span className="shrink-0 text-[10px] font-medium uppercase tracking-wide text-muted-foreground/70">
+                {t('editorLivePreview')}
+              </span>
+              <FormulaRenderer
+                latex={previewLatex}
+                displayMode={false}
+                className="min-w-0 truncate text-[13px]"
+              />
+            </div>
+          </div>
+        )}
       </div>
 
       {/* Symbol palette (collapsible) */}

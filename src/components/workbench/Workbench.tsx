@@ -284,6 +284,8 @@ export function Workbench() {
   const toggleSidePanel = useWorkbenchStore((s) => s.toggleSidePanel);
   const setEditorContent = useWorkbenchStore((s) => s.setEditorContent);
   const setCommandPaletteOpen = useWorkbenchStore((s) => s.setCommandPaletteOpen);
+  /** PWA / 桌面快捷方式显式请求的视图（?view=）；手机端据此选择首个标签。 */
+  const [requestedView, setRequestedView] = useState<ViewMode | null>(null);
 
   // 布局状态（预览位置 / 尺寸）
   const previewPosition = useLayoutStore((s) => s.previewPosition);
@@ -338,6 +340,7 @@ export function Workbench() {
       const requested = new URLSearchParams(window.location.search).get('view');
       if (requested && PWA_VIEW_MODES.includes(requested as ViewMode)) {
         useWorkbenchStore.getState().setViewMode(requested as ViewMode);
+        setRequestedView(requested as ViewMode);
         window.history.replaceState(null, '', window.location.pathname + window.location.hash);
       }
     } catch {
@@ -549,7 +552,7 @@ export function Workbench() {
     }
     return (
       <>
-        <MobileWorkbench />
+        <MobileWorkbench initialView={requestedView} />
         <CommandPalette />
         <GlobalCalcBar />
         <FloatingCalculator />
