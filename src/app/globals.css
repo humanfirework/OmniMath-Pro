@@ -592,6 +592,17 @@ svg *::after {
   src: url("/fonts/stix-two-math-latin-400-normal.woff2") format("woff2");
 }
 
+/* OmniHand — 手写风格的回退字形（Caveat，SIL OFL）。
+   白板数学卡片会把用户自己的笔迹回放出来；用户没写过的字符（计算结果、
+   运算符）用这个字体渲染，视觉上更接近「同一只手写出来的」。 */
+@font-face {
+  font-family: "OmniHand";
+  font-style: normal;
+  font-display: swap;
+  font-weight: 500;
+  src: url("/fonts/caveat-latin-500-normal.woff2") format("woff2");
+}
+
 /* Space Grotesk — Scholarly 预设 UI 字体（几何无衬线，calculus-visual-field-guide 同款） */
 @font-face {
   font-family: "Space Grotesk";
