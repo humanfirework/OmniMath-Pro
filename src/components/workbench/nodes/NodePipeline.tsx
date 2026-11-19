@@ -817,7 +817,7 @@ function NodePipelineInner() {
   useEffect(() => { runProgressRef.current = runProgress; }, [runProgress]);
   // 用户手动终止：ref 跨渲染保持，供 executePipeline 的 shouldCancel 轮询读取。
   const cancelRunRef = useRef(false);
-  // 终止当前流水线：置位取消标记，长任务节点与逐节点循环都会尽快退出。
+  // 终止当前运行：置位取消标记，长任务节点与逐节点循环都会尽快退出。
   const stopPipeline = useCallback(() => { cancelRunRef.current = true; }, []);
   // 节点内长任务进度（如视频→曲线逐帧处理）。pipeline 运行期间由 ctx.onProgress 写入。
   const [nodeProgress, setNodeProgress] = useState<{ fraction: number; label?: string } | null>(null);
@@ -1095,7 +1095,7 @@ function NodePipelineInner() {
       // 运行结果提示：告知已生成多少个独立浮窗，避免用户「转完不知道结果在哪」。
       const _count = useRunResultsStore.getState().panels.length;
       if (_count > 0) {
-        toast.success('流水线执行完成', {
+        toast.success('蓝图运行完成', {
           description: `已在右侧浮窗生成 ${_count} 个结果面板（可拖拽/缩放，右上角可关闭全部）`,
           duration: 3200,
         });
@@ -1134,10 +1134,10 @@ function NodePipelineInner() {
     } catch (err) {
       if (err instanceof PipelineCancelledError) {
         // 用户手动终止：不算失败，仅提示。
-        toast.info('流水线已终止', { duration: 2000 });
+        toast.info('蓝图已停止', { duration: 2000 });
       } else {
         console.error('[NodePipeline] runPipeline error:', err);
-        toast.error('流水线执行失败', {
+        toast.error('蓝图运行失败', {
           description: (err as Error).message,
           duration: 4000,
         });
@@ -2433,7 +2433,7 @@ function NodePipelineInner() {
                 <Loader2 className="size-6 animate-spin text-primary" />
                 <div className="flex flex-col items-center gap-1">
                   <span className="text-[12.5px] font-medium text-foreground">
-                    流水线运行中…
+                    蓝图运行中…
                   </span>
                   {nodeProgress ? (
                     <span className="font-mono text-[11px] tabular-nums text-muted-foreground">
@@ -2652,7 +2652,7 @@ function NodePipelineInner() {
             <div className="flex-1 min-h-0 overflow-auto p-2.5 space-y-2">
               {errorNodes.length === 0 ? (
                 <div className="text-[11px] text-muted-foreground/70 py-6 text-center">
-                  没有错误。当前流水线运行正常 ✓
+                  没有错误。当前蓝图运行正常 ✓
                 </div>
               ) : (
                 <>
@@ -2855,7 +2855,7 @@ function PipelineToolbar({
             size="sm"
             className="h-8 px-3 gap-1.5 text-[12px]"
             onClick={onStop}
-            title="终止当前流水线"
+            title="终止当前运行"
           >
             <Square className="size-3.5" />
             停止

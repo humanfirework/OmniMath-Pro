@@ -28,6 +28,8 @@ export interface MathNoteDraft {
   /** Text produced by the recognizer before any correction. */
   sourceText?: string;
   glyphs: RecognizedGlyph[];
+  /** Post-layout glyphs (fractions / sqrt already folded); used for 1-click fixes. */
+  layoutGlyphs?: RecognizedGlyph[];
   confidence: number;
   error?: string;
   /** 原始笔迹，用于在识别窗口里回显「我写的是什么」。 */
@@ -40,13 +42,30 @@ export interface MathNotePanelProps {
   onRetry: () => void;
   onInsert: (text: string) => void;
   onClose: () => void;
+  /** 点击低置信度字符的备选：直接改写该字形并重新生成表达式。 */
+  onCorrectGlyph?: (glyphIndex: number, char: string) => void;
   /** 触屏设备底部有 PenDock，识别窗口需要抬高避免遮住笔刷/橡皮。 */
   raised?: boolean;
 }
 
-export function MathNotePanel({ draft, onChange, onRetry, onInsert, onClose, raised }: MathNotePanelProps) {
+export function MathNotePanel({ draft, onChange, onRetry, onInsert, onClose, onCorrectGlyph, raised }: MathNotePanelProps) {
   const evaluation = useMemo(() => evaluateMathNote(draft.text), [draft.text]);
   const confidence = Math.round(draft.confidence * 100);
+  // 低置信度字符 + 分类器给出的备选：点一下就能改，不用整行重打。
+  const unsure = useMemo(() => {
+    const glyphs = draft.layoutGlyphs ?? draft.glyphs;
+    const out: Array<{ index: number; char: string; alternatives: string[] }> = [];
+    for (let i = 0; i < glyphs.length; i++) {
+      const g = glyphs[i];
+      if (g.text || g.superscript || g.subscript) continue;
+      const alts = (g.alternatives ?? []).filter((a) => a && a !== g.char).slice(0, 3);
+      if ((g.confidence < 0.72 || g.char === '?') && alts.length > 0) {
+        out.push({ index: i, char: g.char === '?' ? '□' : g.char, alternatives: alts });
+      }
+      if (out.length >= 3) break;
+    }
+    return out;
+  }, [draft.glyphs, draft.layoutGlyphs]);
   const [explain, setExplain] = useState<string | null>(null);
   const [explaining, setExplaining] = useState(false);
 
@@ -137,6 +156,33 @@ export function MathNotePanel({ draft, onChange, onRetry, onInsert, onClose, rai
             placeholder="识别结果，可手动修正…"
           />
         </div>
+
+        {unsure.length > 0 && onCorrectGlyph && (
+          <div className="flex flex-wrap items-center gap-1.5 rounded-md border border-amber-500/25 bg-amber-500/5 px-2 py-1">
+            <span className="text-[9.5px] font-medium text-amber-600 dark:text-amber-400">
+              不太确定
+            </span>
+            {unsure.map((u) => (
+              <span key={u.index} className="inline-flex items-center gap-0.5 text-[10.5px]">
+                <span className="rounded bg-background/70 px-1 font-mono text-foreground/80">
+                  {u.char}
+                </span>
+                <span className="text-muted-foreground">→</span>
+                {u.alternatives.map((alt) => (
+                  <button
+                    key={alt}
+                    type="button"
+                    onClick={() => onCorrectGlyph(u.index, alt)}
+                    title={`改为 ${alt}（并记住这次写法）`}
+                    className="rounded px-1 font-mono text-primary transition-colors hover:bg-primary/10"
+                  >
+                    {alt}
+                  </button>
+                ))}
+              </span>
+            ))}
+          </div>
+        )}
 
         <div className="min-h-[52px] rounded-lg border border-border/50 bg-muted/20 px-2 py-1.5">
           {evaluation.ok && evaluation.kind === 'number' ? (

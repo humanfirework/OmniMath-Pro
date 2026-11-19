@@ -65,6 +65,12 @@ export interface MathRecognitionResult {
   /** Pretty version for humans, e.g. "2.5×365×24×60". */
   display: string;
   glyphs: RecognizedGlyph[];
+  /**
+   * Glyphs after fraction / radical layout. Use these for one-click glyph
+   * correction in the panel: rebuilding text from them preserves the
+   * two-dimensional structure (fractions, sqrt).
+   */
+  layoutGlyphs: RecognizedGlyph[];
   confidence: number;
   error?: string;
 }
@@ -254,6 +260,12 @@ const TEMPLATE_CHARS = [
   'π',
 ];
 const TEMPLATE_FONTS = ['DejaVu Sans', 'DejaVu Serif', 'DejaVu Sans Mono', 'sans-serif', 'serif'];
+/**
+ * 手写风格字体：设备上有就补充模板，没有则自动回退，不影响运行。
+ * 打印字体和真实手写差异大，多一套“手写骨架”能明显减少连笔/圆角带来的误判。
+ */
+const HANDWRITING_FONTS = ['Segoe Print', 'Comic Sans MS', 'Bradley Hand', 'Kaiti SC', 'KaiTi'];
+const HANDWRITING_CHARS = /^[0-9a-zA-Z]$/;
 /** 这些字形太小/太扁，归一化会放大成别的东西（点→圆、横→方框），保持原样。 */
 const NO_NORMALIZE_CHARS = new Set(['.', '-']);
 
@@ -272,8 +284,21 @@ interface GlyphTemplate {
  * hand instead of only matching system fonts. Nothing leaves the device.
  */
 export const USER_GLYPHS_KEY = 'omnimath-glyph-bank-v1';
-const MAX_PER_CHAR = 6;
-const MAX_TOTAL = 160;
+const MAX_PER_CHAR = 8;
+const MAX_TOTAL = 240;
+
+/** 每个样本最多保留的笔画点数（均匀抽样，保留首尾）。 */
+const MAX_POINTS_PER_STROKE = 32;
+
+function thinStroke(points: Array<{ x: number; y: number }>): Array<{ x: number; y: number }> {
+  if (points.length <= MAX_POINTS_PER_STROKE) return points;
+  const step = Math.ceil(points.length / MAX_POINTS_PER_STROKE);
+  const out: Array<{ x: number; y: number }> = [];
+  for (let i = 0; i < points.length; i += step) out.push(points[i]);
+  const last = points[points.length - 1];
+  if (out[out.length - 1] !== last) out.push(last);
+  return out;
+}
 
 export interface UserGlyphSample {
   char: string;
@@ -326,7 +351,8 @@ export function addUserGlyphSamples(glyphs: RecognizedGlyph[]): void {
       !g.superscript &&
       g.confidence >= 0.66 &&
       g.strokes.length > 0 &&
-      g.bbox.x1 > g.bbox.x0,
+      // 允许竖直/水平的一笔（l、1、-），只排除真正的单点。
+      (g.bbox.x1 > g.bbox.x0 || g.bbox.y1 > g.bbox.y0),
   );
   if (fresh.length === 0) return;
 
@@ -335,7 +361,7 @@ export function addUserGlyphSamples(glyphs: RecognizedGlyph[]): void {
   for (const g of fresh) {
     samples.push({
       char: g.char,
-      strokes: g.strokes.map((s) => s.points.map((p) => ({ x: p.x, y: p.y }))),
+      strokes: g.strokes.map((s) => thinStroke(s.points.map((p) => ({ x: p.x, y: p.y })))),
       bbox: g.bbox,
       addedAt: now,
     });
@@ -439,6 +465,12 @@ export function getGlyphTemplates(): GlyphTemplate[] {
     for (const font of TEMPLATE_FONTS) {
       const t = renderTemplate(char, font);
       if (t) out.push(t);
+    }
+    if (HANDWRITING_CHARS.test(char)) {
+      for (const font of HANDWRITING_FONTS) {
+        const t = renderTemplate(char, font);
+        if (t) out.push(t);
+      }
     }
   }
 
@@ -1556,6 +1588,7 @@ export function recognizeMathInk(strokes: RecognitionStroke[]): MathRecognitionR
       text: '',
       display: '',
       glyphs: [],
+      layoutGlyphs: [],
       confidence: 0,
       error: '没有可识别的笔迹',
     };
@@ -1568,6 +1601,7 @@ export function recognizeMathInk(strokes: RecognitionStroke[]): MathRecognitionR
       text: '',
       display: '',
       glyphs: [],
+      layoutGlyphs: [],
       confidence: 0,
       error: '当前环境不支持本地识别',
     };
@@ -1647,12 +1681,13 @@ export function recognizeMathInk(strokes: RecognitionStroke[]): MathRecognitionR
       text,
       display,
       glyphs,
+      layoutGlyphs,
       confidence,
       error: '识别置信度过低，请重写或手动修正',
     };
   }
 
-  return { ok: true, text, display, glyphs, confidence };
+  return { ok: true, text, display, glyphs, layoutGlyphs, confidence };
 }
 
 /* ================================================================== *

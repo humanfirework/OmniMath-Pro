@@ -74,7 +74,14 @@ import { applyEraser, type EraserMode } from '@/lib/ink/eraser';
 import { rotateSelection, scaleSelection } from '@/lib/ink/transform';
 import { summarizeLatency, type LatencyStats } from '@/lib/ink/latency';
 import type { InkBrush, InkPoint, InkStroke, InkView } from '@/lib/ink/types';
-import { getGlyphTemplates, recognizeMathInk, addUserGlyphSamples } from '@/lib/mathnotes/recognize';
+import {
+  getGlyphTemplates,
+  recognizeMathInk,
+  addUserGlyphSamples,
+  buildRecognizedText,
+  buildRecognizedDisplay,
+  type RecognizedGlyph,
+} from '@/lib/mathnotes/recognize';
 import { recognizeShape } from '@/lib/ink/shapeRecognize';
 import { selectRecentLine } from '@/lib/ink/recognizeScope';
 import type { MathCard } from './math/MathCardView';
@@ -380,6 +387,7 @@ export function WhiteboardCanvas() {
         display: rec.display,
         sourceText: rec.text,
         glyphs: rec.glyphs,
+        layoutGlyphs: rec.layoutGlyphs,
         confidence: rec.confidence,
         error: rec.text ? undefined : rec.error ?? '没有识别到公式，可重试或直接输入',
         sourcePoints: source?.map((s) => s.points),
@@ -404,6 +412,33 @@ export function WhiteboardCanvas() {
     },
     [],
   );
+
+  /**
+   * One-click fix for a low-confidence glyph from the recognition panel.
+   * Also stores the user's actual strokes under the corrected character,
+   * so the on-device template bank learns this handwriting immediately.
+   */
+  const handleCorrectGlyph = useCallback((index: number, char: string) => {
+    setMathDraft((prev) => {
+      if (!prev) return prev;
+      const base = prev.layoutGlyphs ?? prev.glyphs;
+      const target = base[index];
+      if (!target) return prev;
+      addUserGlyphSamples([{ ...target, char, displayChar: char, confidence: 1 }]);
+      const nextGlyphs: RecognizedGlyph[] = base.map((g, i) =>
+        i === index
+          ? { ...g, char, displayChar: char, confidence: 1, alternatives: [] }
+          : g,
+      );
+      return {
+        ...prev,
+        layoutGlyphs: nextGlyphs,
+        text: buildRecognizedText(nextGlyphs),
+        display: buildRecognizedDisplay(nextGlyphs),
+        confidence: Math.max(prev.confidence, 0.85),
+      };
+    });
+  }, []);
 
   const recognizeMathFromInk = useCallback(() => {
     if (!mathModeRef.current) return;
@@ -1266,6 +1301,7 @@ export function WhiteboardCanvas() {
             <MathNotePanel
               draft={mathDraft}
               raised={coarse}
+              onCorrectGlyph={handleCorrectGlyph}
               onChange={(text) => setMathDraft((prev) => (prev ? { ...prev, text } : prev))}
               onRetry={handleMathRetry}
               onInsert={handleInsertMath}

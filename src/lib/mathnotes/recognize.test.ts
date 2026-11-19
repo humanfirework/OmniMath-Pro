@@ -190,8 +190,31 @@ describe('personal glyph bank', () => {
 
   it('caps the number of samples per character', () => {
     localStorage.clear();
-    for (let i = 0; i < 9; i++) addUserGlyphSamples([sample('5', 0.9)]);
-    expect(loadUserGlyphSamples().filter((s) => s.char === '5').length).toBeLessThanOrEqual(6);
+    for (let i = 0; i < 12; i++) addUserGlyphSamples([sample('5', 0.9)]);
+    expect(loadUserGlyphSamples().filter((s) => s.char === '5').length).toBeLessThanOrEqual(8);
+  });
+
+  it('thins long strokes before persisting (keeps first/last point)', () => {
+    localStorage.clear();
+    const longStroke: RecognitionStroke = {
+      points: Array.from({ length: 120 }, (_, i) => ({ x: i, y: i % 10 })),
+    };
+    addUserGlyphSamples([{ ...sample('8', 0.95), strokes: [longStroke] }]);
+    const stored = loadUserGlyphSamples();
+    expect(stored).toHaveLength(1);
+    const pts = stored[0].strokes[0];
+    expect(pts.length).toBeLessThanOrEqual(33);
+    expect(pts[0]).toEqual({ x: 0, y: 0 });
+    expect(pts[pts.length - 1]).toEqual({ x: 119, y: 9 });
+  });
+
+  it('learns a single vertical stroke (l / 1) but not a single point', () => {
+    localStorage.clear();
+    addUserGlyphSamples([
+      { ...sample('l', 0.9), bbox: { x0: 5, y0: 0, x1: 5, y1: 20 } },
+      { ...sample('?', 0.9), bbox: { x0: 3, y0: 3, x1: 3, y1: 3 } },
+    ]);
+    expect(loadUserGlyphSamples().map((s) => s.char)).toEqual(['l']);
   });
 
   it('can be cleared', () => {

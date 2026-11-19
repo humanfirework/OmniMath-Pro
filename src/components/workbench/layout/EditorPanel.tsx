@@ -462,7 +462,7 @@ export function EditorPanel() {
             });
           }
           // 提示用户结果在哪查看：浮窗右上角可拖拽/缩放，「关闭全部」可清空。
-          toast.success('结果已送入独立浮窗', { description: '可拖拽/缩放，右上角关闭全部；如需结构化查看，请前往「流水线 / 蓝图」', duration: 3200 });
+          toast.success('结果已送入独立浮窗', { description: '可拖拽/缩放，右上角关闭全部；如需结构化查看，请前往「蓝图」', duration: 3200 });
         }
 
         toast.success(`运行完成 · ${resultCount} 个结果`, { duration: 1200 });

@@ -35,7 +35,7 @@ const TABS: Array<{ id: MobileTab; icon: typeof Code2; label: string }> = [
   // “侧栏”是桌面术语；手机上是历史 / 变量 / 文件 / 公式库的集合，叫“资料”更直白。
   { id: 'side', icon: PanelLeft, label: '资料' },
   { id: 'editor', icon: Code2, label: '编辑器' },
-  { id: 'canvas', icon: PencilRuler, label: '画布' },
+  { id: 'canvas', icon: PencilRuler, label: '白板' },
   { id: 'preview', icon: Eye, label: '预览' },
 ];
 
@@ -114,7 +114,7 @@ export function MobileWorkbench({ initialView }: { initialView?: ViewMode | null
               <Suspense
                 fallback={
                   <div className="grid h-full place-items-center text-xs text-muted-foreground">
-                    加载画布…
+                    加载白板…
                   </div>
                 }
               >

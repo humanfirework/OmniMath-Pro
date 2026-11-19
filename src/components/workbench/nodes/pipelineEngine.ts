@@ -470,7 +470,7 @@ function matrixRank(m: any): number {
 /** 用户手动终止流水线时抛出的错误。调用方据此区分「终止」与「失败」。 */
 export class PipelineCancelledError extends Error {
   constructor() {
-    super('流水线已终止');
+    super('蓝图已停止');
     this.name = 'PipelineCancelledError';
   }
 }
