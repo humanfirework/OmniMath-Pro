@@ -83,7 +83,7 @@ export const PLOT_PADDING = { left: 48, right: 16, top: 16, bottom: 32 } as cons
  * 导出供 Plot2DCanvas / FacetGrid 等共享，避免切换模式时刻度字体跳变。
  */
 export const PLOT_FONT_FAMILY =
-  'Inter, "Noto Sans SC", "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", ui-sans-serif, system-ui, sans-serif';
+  'Inter, "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", "Noto Sans CJK SC", "Noto Sans SC", ui-sans-serif, system-ui, sans-serif';
 
 /**
  * 数据读出（tooltip）用的等宽字体栈，与 globals.css 的 --font-mono 一致，

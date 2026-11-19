@@ -3674,11 +3674,11 @@ svg *::after {
   --color-node-border: var(--node-border);
   --color-connector: var(--connector);
 
-  /* 栈首 "Inter" / "Noto Sans SC" 命中文件顶部自托管的 @font-face
-     （public/fonts，含中文 unicode-range 分片），保证无 CJK 系统字体
-     的环境（如精简 Linux、Tauri webview）中文不再显示为方框；
-     其后仍按平台回退 PingFang SC（macOS/iOS）→ 冬青黑体 → 微软雅黑 */
-  --font-sans: "Inter", "Noto Sans SC", "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", "SF Pro Display", "SF Pro Text", -apple-system, BlinkMacSystemFont, "Segoe UI", ui-sans-serif, system-ui, sans-serif;
+  /* 中文优先用系统字体（PingFang / 冬青黑体 / 微软雅黑 / Noto CJK），
+     避免首屏为了中文额外下载近 1 MB 的 Noto Sans SC 分片；系统没有
+     CJK 字体时（精简 Linux / Tauri webview）再回退到自托管的
+     "Noto Sans SC" @font-face，保证不出现方框。 */
+  --font-sans: "Inter", "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", "Noto Sans CJK SC", "Noto Sans SC", "SF Pro Display", "SF Pro Text", -apple-system, BlinkMacSystemFont, "Segoe UI", ui-sans-serif, system-ui, sans-serif;
   --font-mono: "JetBrains Mono", "SF Mono", "Fira Code", "Cascadia Code", "Roboto Mono", ui-monospace, SFMono-Regular, Menlo, Consolas, "Courier New", monospace;
   --font-math: "STIX Two Math", "KaTeX_Math", "Cambria Math", serif;
 
@@ -4958,7 +4958,7 @@ input[type="number"] {
 /* 预设: scholarly — 数学教科书风格（calculus-visual-field-guide 同款）
    Space Grotesk UI + Newsreader 正文 + JetBrains Mono 等宽 + STIX 数学 */
 html[data-font-preset="scholarly"] {
-  --font-sans: "Space Grotesk", "Noto Sans SC", "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", -apple-system, BlinkMacSystemFont, "Segoe UI", ui-sans-serif, system-ui, sans-serif;
+  --font-sans: "Space Grotesk", "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", "Noto Sans CJK SC", "Noto Sans SC", -apple-system, BlinkMacSystemFont, "Segoe UI", ui-sans-serif, system-ui, sans-serif;
   --font-mono: "JetBrains Mono", "SF Mono", "Fira Code", "Cascadia Code", ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
   --font-math: "STIX Two Math", "Newsreader", "KaTeX_Math", "Cambria Math", serif;
 }
