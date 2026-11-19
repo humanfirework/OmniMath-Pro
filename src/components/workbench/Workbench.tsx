@@ -22,7 +22,7 @@
 
 import { lazy, Suspense, useCallback, useEffect, useRef, useState } from 'react';
 import { motion } from 'framer-motion';
-import { PanelLeftClose, PanelLeftOpen, PanelRight, PanelRightOpen, LayoutTemplate } from 'lucide-react';
+import { PanelLeftClose, PanelLeftOpen, PanelRight, PanelRightOpen, LayoutTemplate, X, Maximize2 } from 'lucide-react';
 import { getCurrentWindow } from '@tauri-apps/api/window';
 import {
   ResizablePanelGroup,
@@ -150,17 +150,20 @@ function FullScreenPanel({
 }) {
   return (
     <div className="h-full w-full flex flex-col min-h-0 bg-background">
-      <div className="shrink-0 h-9 flex items-center gap-2 border-b border-border/60 bg-card/40 px-3">
+      {/* 轻量标题条：只保留视图名 + 三个图标操作。
+          之前这里还有「并排视图」和两个文字按钮，和视图自己的标题重复，
+          白板 / 蓝图等工具顶部因此叠了两行 chrome。 */}
+      <div className="shrink-0 h-8 flex items-center gap-2 border-b border-border/60 bg-card/40 px-2">
         <span className="size-1.5 rounded-full bg-primary" />
-        <span className="text-xs font-medium text-foreground/80">{fullScreenLabel(viewMode)}</span>
-        <span className="text-[10px] text-muted-foreground">并排视图</span>
+        <span className="text-[11px] font-medium text-foreground/75">{fullScreenLabel(viewMode)}</span>
         <div className="flex-1" />
         {onToggleEditor && (
           <button
             type="button"
             onClick={onToggleEditor}
-            className="h-6 rounded px-2 text-[10px] text-muted-foreground hover:bg-accent/60 hover:text-foreground transition-colors"
+            className="grid size-6 place-items-center rounded text-muted-foreground transition-colors hover:bg-accent/60 hover:text-foreground"
             title={editorVisible ? '隐藏编辑器，让当前视图占满宽度' : '显示编辑器'}
+            aria-label={editorVisible ? '隐藏编辑器' : '显示编辑器'}
           >
             {editorVisible ? <PanelLeftClose className="size-3.5" /> : <PanelLeftOpen className="size-3.5" />}
           </button>
@@ -169,18 +172,21 @@ function FullScreenPanel({
           <button
             type="button"
             onClick={onFocus}
-            className="h-6 rounded px-2 text-[10px] text-muted-foreground hover:bg-accent/60 hover:text-foreground transition-colors"
+            className="grid size-6 place-items-center rounded text-muted-foreground transition-colors hover:bg-accent/60 hover:text-foreground"
             title="收起其他面板，全宽显示当前视图"
+            aria-label="专注模式"
           >
-            专注
+            <Maximize2 className="size-3.5" />
           </button>
         )}
         <button
           type="button"
           onClick={onClose}
-          className="h-6 rounded px-2 text-[10px] text-muted-foreground hover:bg-accent/60 hover:text-foreground transition-colors"
+          className="grid size-6 place-items-center rounded text-muted-foreground transition-colors hover:bg-accent/60 hover:text-foreground"
+          title="关闭并返回工作台"
+          aria-label="关闭"
         >
-          关闭
+          <X className="size-3.5" />
         </button>
       </div>
       <div className="flex-1 min-h-0 relative">
@@ -766,7 +772,7 @@ export function Workbench() {
                 className="h-full w-full"
               >
                 <ResizablePanel
-                  defaultSize={previewSize === 'large' ? 40 : 50}
+                  defaultSize={previewSize === 'large' ? 36 : 58}
                   minSize={20}
                   maxSize={80}
                   id="editor-panel"
@@ -778,7 +784,7 @@ export function Workbench() {
                 </ResizablePanel>
                 <ResizableHandle withHandle className="data-[resize-handle-active]:bg-primary/60" />
                 <ResizablePanel
-                  defaultSize={previewSize === 'large' ? 60 : 50}
+                  defaultSize={previewSize === 'large' ? 64 : 42}
                   minSize={previewSize === 'large' ? 30 : 20}
                   maxSize={80}
                   id="preview-panel"

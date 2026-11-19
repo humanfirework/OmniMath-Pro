@@ -149,6 +149,25 @@ function fmtValue(v: unknown): string {
   return String(v);
 }
 
+/**
+ * mathjs 的矩阵运算返回类型取决于入参：传入普通数组时，transpose / inv
+ * 直接返回 number[][]；传入 Matrix 时才返回带 toArray() 的 Matrix。
+ * 之前这里无条件调用 `.toArray()`，导致「转置 / 逆矩阵」必然报
+ * `e.toArray is not a function`。
+ */
+function toMatrixArray(v: unknown): number[][] {
+  if (Array.isArray(v)) return v as number[][];
+  if (
+    v &&
+    typeof v === 'object' &&
+    'toArray' in v &&
+    typeof (v as { toArray?: unknown }).toArray === 'function'
+  ) {
+    return (v as { toArray: () => number[][] }).toArray();
+  }
+  return [];
+}
+
 function MatrixGrid({ matrix }: { matrix: number[][] }) {
   const cols = Math.max(1, matrix[0]?.length ?? 1);
   return (
@@ -195,13 +214,13 @@ export function LinalgStudio() {
           addResult({ title: 'det(A)', value: fmt(math.det(m)) });
           break;
         case 'transpose': {
-          const t = math.transpose(m) as unknown as { toArray: () => number[][] };
-          addResult({ title: 'Aᵀ', value: '', matrix: t.toArray() });
+          const t = math.transpose(m);
+          addResult({ title: 'Aᵀ', value: '', matrix: toMatrixArray(t) });
           break;
         }
         case 'inv': {
-          const inv = math.inv(m) as unknown as { toArray: () => number[][] };
-          addResult({ title: 'A⁻¹', value: '', matrix: inv.toArray() });
+          const inv = math.inv(m);
+          addResult({ title: 'A⁻¹', value: '', matrix: toMatrixArray(inv) });
           break;
         }
         case 'rank':
