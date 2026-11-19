@@ -17,36 +17,77 @@
 
 import { Diagnostic } from '@codemirror/lint';
 import { EditorView } from '@codemirror/view';
-import { parse } from 'mathjs';
 
 export type SupportedLanguage = 'simple' | 'python' | 'matlab';
 
 const MAX_LINES_CHECKED = 500;
 
 /**
+ * Obvious line-level mistakes. Deliberately conservative — the goal is to
+ * catch typos without rejecting the lenient syntax the engine accepts
+ * (`2x`, `ax + b`, `plot sin(x)` …).
+ */
+export interface LineIssue {
+  message: string;
+  /** 0-based column inside the checked expression. */
+  col: number;
+  /** Highlights this many characters (defaults to 1). */
+  length?: number;
+}
+
+export function findLineIssue(expr: string): LineIssue | null {
+  const s = expr.trimEnd();
+  if (!s) return null;
+
+  // 结尾是二元运算符：`x^`、`2 *`、`y =`。
+  if (/[+\-*/^=,]$/.test(s)) {
+    return { message: '表达式以运算符结尾', col: Math.max(0, s.length - 1) };
+  }
+
+  // 连续两个「不可能连用」的运算符（`* /`、`= *` …）。允许 `*-3`、`^-2`
+  // 这类合法的「运算符 + 负号」。
+  if (/[+\-*/^=]\s*[+*/^=]/.test(s)) {
+    const match = s.match(/[+\-*/^=]\s*[+*/^=]/);
+    return {
+      message: '这里缺少一个操作数',
+      col: match?.index ?? 0,
+      length: match?.[0].length ?? 1,
+    };
+  }
+
+  // 字符串未闭合
+  const quotes = (s.match(/"/g) ?? []).length;
+  if (quotes % 2 === 1) {
+    return { message: '字符串引号没有闭合', col: Math.max(0, s.lastIndexOf('"')) };
+  }
+
+  return null;
+}
+
+/**
  * Build a list of syntax diagnostics for the given editor view.
+ *
+ * This used to call `mathjs.parse` per line, which meant opening the editor
+ * pulled the whole mathjs runtime (~1.5 MB) just to underline typos. The
+ * checks below are local and instant; the real parser still runs when the
+ * user executes the script.
  */
 export function checkSyntax(
   view: EditorView,
   language: SupportedLanguage,
 ): Diagnostic[] {
+  // 括号 / 引号配对在所有模式下都有意义。
+  const diagnostics = checkBracketBalance(view);
+  if (language === 'python') return diagnostics;
+
   const doc = view.state.doc;
-  const lineCount = doc.lines;
-
-  if (language === 'python') {
-    // Python mode: only do basic bracket matching, mathjs cannot parse Python.
-    return checkBracketBalance(view);
-  }
-
-  const diagnostics: Diagnostic[] = [];
-  const limit = Math.min(lineCount, MAX_LINES_CHECKED);
+  const limit = Math.min(doc.lines, MAX_LINES_CHECKED);
 
   for (let lineNum = 1; lineNum <= limit; lineNum++) {
     const line = doc.line(lineNum);
     const raw = line.text;
     const trimmed = raw.trim();
 
-    // Skip empty and comment lines
     if (!trimmed) continue;
     if (
       trimmed.startsWith('#') ||
@@ -55,24 +96,24 @@ export function checkSyntax(
     ) {
       continue;
     }
-
-    // Skip calculation-block separators (--- or %%%)
     if (trimmed === '---' || trimmed === '%%%') continue;
+    if (isControlFlow(trimmed)) continue;
 
-    // Extract RHS of assignment if present.
-    // Supports: `a = ...`, `A = [...]`, `f(x) = ...`, `a := ...`
     const rhs = extractRhs(trimmed);
     if (!rhs) continue;
 
-    // Skip control-flow keywords that mathjs can't parse.
-    if (isControlFlow(trimmed)) continue;
+    const issue = findLineIssue(rhs);
+    if (!issue) continue;
 
-    try {
-      parse(rhs);
-    } catch (err) {
-      const diag = buildDiagnostic(err, line.from, raw, rhs);
-      if (diag) diagnostics.push(diag);
-    }
+    const rhsOffset = raw.indexOf(rhs);
+    const from = line.from + Math.max(0, (rhsOffset >= 0 ? rhsOffset : 0) + issue.col);
+    diagnostics.push({
+      from,
+      to: Math.min(line.to, from + (issue.length ?? 1)),
+      severity: 'error',
+      message: issue.message,
+      source: 'omnimath',
+    });
   }
 
   return diagnostics;
@@ -101,66 +142,6 @@ function extractRhs(line: string): string | null {
 function isControlFlow(line: string): boolean {
   const kw = line.split(/[ (]/)[0].toLowerCase();
   return ['if', 'else', 'elif', 'for', 'while', 'function', 'return', 'break', 'continue', 'end', 'switch', 'case', 'otherwise'].includes(kw);
-}
-
-/**
- * Convert a mathjs error into a Diagnostic with proper positioning.
- */
-function buildDiagnostic(
-  err: unknown,
-  lineStart: number,
-  rawLine: string,
-  rhs: string,
-): Diagnostic | null {
-  const e = err as { message?: string; char?: number; index?: number; data?: unknown };
-  const message = e.message || 'Syntax error';
-
-  // mathjs errors usually include `char` (column in the parsed string, 1-based)
-  // or `index` (0-based offset). We need to map back to the original line.
-  let col = -1;
-  if (typeof e.char === 'number' && e.char > 0) {
-    col = e.char - 1;
-  } else if (typeof e.index === 'number' && e.index >= 0) {
-    col = e.index;
-  }
-
-  // Map RHS column back to raw line column.
-  // If rhs is a substring of rawLine, offset by the position of rhs in rawLine.
-  const rhsOffset = rawLine.indexOf(rhs);
-  let absCol = col;
-  if (rhsOffset >= 0 && col >= 0) {
-    absCol = rhsOffset + col;
-  } else if (col < 0) {
-    // Fallback: highlight the whole line
-    absCol = 0;
-  }
-
-  // Clamp to line length
-  absCol = Math.max(0, Math.min(absCol, rawLine.length));
-
-  // Determine the span of the error marker.
-  // If we have a precise column, highlight a small token; otherwise the whole line.
-  let from = lineStart + absCol;
-  let to: number;
-  if (col >= 0 && absCol < rawLine.length) {
-    // Highlight a single character or a small token at the error position.
-    const remaining = rawLine.slice(absCol);
-    const tokenMatch = remaining.match(/^([A-Za-z_][A-Za-z0-9_]*|[0-9]+\.?[0-9]*|[(){}\[\];,:.+\-*/^%=<>!&|~])/);
-    to = from + (tokenMatch ? tokenMatch[0].length : 1);
-  } else {
-    to = lineStart + rawLine.length;
-  }
-
-  // Clean up the message — strip leading "Error:" or similar.
-  const cleanMessage = message.replace(/^(Error:\s*)/i, '');
-
-  return {
-    from,
-    to,
-    severity: 'error',
-    message: cleanMessage,
-    source: 'mathjs',
-  };
 }
 
 /**

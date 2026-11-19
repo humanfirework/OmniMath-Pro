@@ -59,7 +59,6 @@ import { ScrollArea } from '@/components/ui/scroll-area';
 import { Button } from '@/components/ui/button';
 import { ErrorBoundary } from '@/components/ErrorBoundary';
 import { FormulaRenderer } from '@/components/workbench/FormulaRenderer';
-import { Plot2DPanel } from '@/components/workbench/plots/Plot2DPanel';
 import { AIPanel } from '@/components/workbench/panels/AIPanel';
 import { useWorkbenchStore } from '@/lib/store/workbench';
 import { useLayoutStore } from '@/lib/store/layoutStore';
@@ -70,6 +69,19 @@ import { saveTextToFile } from '@/lib/nativeExport';
 import { resultToMarkdown, resultToLatex } from '@/lib/exportMarkdown';
 import { useState } from 'react';
 import type { PreviewTab, CalculationResult } from '@/lib/store/workbench';
+
+// Plot2DPanel 依赖 mathjs；只有切到「绘图」标签或真的运行绘图时才需要它。
+const Plot2DPanel = dynamic(
+  () => import('@/components/workbench/plots/Plot2DPanel').then((m) => m.Plot2DPanel),
+  {
+    ssr: false,
+    loading: () => (
+      <div className="h-full w-full grid place-items-center">
+        <div className="size-4 animate-spin rounded-full border-2 border-primary/20 border-t-primary" />
+      </div>
+    ),
+  },
+);
 
 // Plot3DPanel uses three.js — must NOT load on the server.
 const Plot3DPanel = dynamic(

@@ -25,6 +25,8 @@
  */
 
 import {
+  lazy,
+  Suspense,
   useCallback,
   useEffect,
   useMemo,
@@ -57,26 +59,33 @@ import { useWorkbenchStore } from '@/lib/store/workbench';
 import { DEFAULT_SCRIPT } from '@/lib/editor/defaultScript';
 import { useFileSystemStore } from '@/lib/store/fileSystemStore';
 import { useSettingsStore } from '@/lib/store/settingsStore';
-import {
-  evaluateExpressionAsync,
-  getScope,
-  resetScope,
-  inputToLatex,
-  type InputMode,
-} from '@/lib/engine';
+import type { InputMode } from '@/lib/engine/types';
 import { DEFAULT_CARTESIAN_RANGE } from '@/lib/engine/types';
 import { t, useLocale } from '@/lib/i18n';
 import { cn } from '@/lib/utils';
 import { toast } from 'sonner';
 import type { CalculationResult } from '@/lib/store/workbench';
 import { useRunResultsStore } from '@/lib/store/runResultsStore';
-import { sampleFunction, type Plot2DType } from '@/lib/plots/plot2d';
+import type { Plot2DType } from '@/lib/plots/plot2d';
 import { buildPlotConfig } from '@/lib/plots/fromResult';
 import { CodeEditor, type InlineResult } from '@/components/workbench/layout/CodeEditor';
 import { registerShortcutHandler } from '@/lib/hooks/useGlobalShortcuts';
 import { SymbolPalette } from '@/components/workbench/SymbolPalette';
 import { FormulaRenderer } from '@/components/workbench/FormulaRenderer';
-import { DemosPanel } from '@/components/workbench/plots/DemosPanel';
+
+// Demos 面板依赖 mathjs；代码模式首屏不需要它，按需加载。
+const DemosPanel = lazy(() =>
+  import('@/components/workbench/plots/DemosPanel').then((m) => ({ default: m.DemosPanel })),
+);
+
+/** 延迟加载 Demos 面板时的占位。 */
+function DemosLoading() {
+  return (
+    <div className="h-full w-full grid place-items-center">
+      <div className="size-4 animate-spin rounded-full border-2 border-primary/20 border-t-primary" />
+    </div>
+  );
+}
 
 const MODES: Array<{ id: InputMode; labelKey: 'editorModeSimple' | 'editorModePython' | 'editorModeMatlab' }> = [
   { id: 'simple', labelKey: 'editorModeSimple' },
@@ -291,14 +300,38 @@ export function EditorPanel() {
   const varCount = Object.keys(variables).length;
 
   /* ─── Live preview LaTeX (simple mode only) ───────────────────── */
-  const previewLatex = useMemo(() => {
-    if (inputMode !== 'simple') return '';
+  // LaTeX 预览依赖 mathjs，但打开编辑器本身不应该等它。这里延迟 250ms 再
+  // 动态加载：停在注释行 / 空行时完全不触发；真在输入表达式时引擎已在路上，
+  // 用户点运行几乎无额外等待。
+  const [previewLatex, setPreviewLatex] = useState('');
+  useEffect(() => {
+    if (inputMode !== 'simple') {
+      setPreviewLatex('');
+      return;
+    }
     const lines = editorContent.split('\n');
     const line = lines[previewLine - 1];
-    if (!line) return '';
+    if (!line) {
+      setPreviewLatex('');
+      return;
+    }
     const trimmed = line.trim();
-    if (!trimmed || trimmed.startsWith('#') || trimmed.startsWith('//')) return '';
-    return inputToLatex(line, 'simple');
+    if (!trimmed || trimmed.startsWith('#') || trimmed.startsWith('//')) {
+      setPreviewLatex('');
+      return;
+    }
+    let cancelled = false;
+    const timer = setTimeout(() => {
+      void import('@/lib/engine')
+        .then(({ inputToLatex }) => {
+          if (!cancelled) setPreviewLatex(inputToLatex(line, 'simple'));
+        })
+        .catch(() => {});
+    }, 250);
+    return () => {
+      cancelled = true;
+      clearTimeout(timer);
+    };
   }, [previewLine, editorContent, inputMode]);
 
   // 任何编辑 / 切换文件都会改变行号与内容的对应关系，行尾结果立即清空。
@@ -317,6 +350,8 @@ export function EditorPanel() {
     clearTimeout(runScriptTimerRef.current);
     runScriptTimerRef.current = setTimeout(async () => {
       try {
+        // 真正运行时才加载求解引擎（mathjs）：打开编辑器 / 浏览代码不需要它。
+        const { evaluateExpressionAsync, resetScope } = await import('@/lib/engine');
         const lines = (source ?? editorContent).split('\n');
         let lastResult: CalculationResult | null = null;
         let plotAdded = false;
@@ -432,6 +467,7 @@ export function EditorPanel() {
         // ── P2-1: 运行到独立面板 ─────────────────────────────────────
         // 把本次 2D 绘图采样成点集，归一化为 RunCurve 送入独立结果面板。
         if (target === 'independent' && runPlots.length > 0) {
+          const { sampleFunction } = await import('@/lib/plots/plot2d');
           const add = useRunResultsStore.getState().addRunResult;
           for (const p of runPlots) {
             const samples = sampleFunction(p.expression, p.xRange, p.plotType)
@@ -507,7 +543,7 @@ export function EditorPanel() {
   /* ─── Reset scope ──────────────────────────────────────────────── */
   const handleReset = useCallback(() => {
     try {
-      resetScope();
+      // clearVariables 会同时清空 store 与引擎作用域（引擎按需加载）。
       clearHistory();
       clearVariables();
       clearPlots();
@@ -698,7 +734,9 @@ export function EditorPanel() {
       {/* Demos 模式：直接输入数学表达式，隐藏代码编辑器专属 UI */}
       {inputView === 'demos' ? (
         <div className="flex-1 min-h-0 flex overflow-hidden">
-          <DemosPanel />
+          <Suspense fallback={<DemosLoading />}>
+            <DemosPanel />
+          </Suspense>
         </div>
       ) : (
         <>
