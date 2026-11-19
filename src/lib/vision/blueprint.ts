@@ -145,7 +145,10 @@ export function parseBlueprint(
   linkIndices: number[];
 } {
   const minNodeSize = Math.max(6, options.minNodeSize ?? 30);
-  const snap = Math.max(8, options.snapDistance ?? Math.max(14, minNodeSize));
+  // 连线端点通常不会精确贴住节点边框（中间留 20–40px 空隙很常见）。
+  // 之前的默认值只等于 minNodeSize（30px），轮廓内缩 3px 后就刚好漏判。
+  // 这里放宽到 1.5× 节点尺寸，同时保留调用方显式覆盖的能力。
+  const snap = Math.max(18, options.snapDistance ?? Math.max(18, Math.round(minNodeSize * 1.5)));
   const allowShapes = options.allowShapes ?? DEFAULT_NODE_SHAPES;
   const maxNodes = Math.max(1, Math.floor(options.maxNodes ?? 24));
   const maxLinks = Math.max(0, Math.floor(options.maxLinks ?? 40));

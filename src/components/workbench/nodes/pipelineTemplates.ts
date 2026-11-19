@@ -208,7 +208,7 @@ const templateBlueprintParse: PipelineTemplate = {
     { id: 'bp_in', type: 'image-input', position: { x: 80, y: 220 }, config: {} },
     { id: 'bp_gt', type: 'grayscale-threshold', position: { x: 340, y: 220 }, config: { method: 'simple', threshold: 128 } },
     { id: 'bp_ct', type: 'contour-trace', position: { x: 600, y: 220 }, config: { turdsize: 3, skeletonize: false } },
-    { id: 'bp_bp', type: 'blueprint-parse', position: { x: 860, y: 220 }, config: { minNodeSize: 30, snapDistance: 30, maxNodes: 24, maxLinks: 40 } },
+    { id: 'bp_bp', type: 'blueprint-parse', position: { x: 860, y: 220 }, config: { minNodeSize: 30, snapDistance: 45, maxNodes: 24, maxLinks: 40 } },
     { id: 'bp_cf', type: 'curve-fit', position: { x: 1120, y: 220 }, config: { fitMode: 'bezier', quality: 'smooth', errorThreshold: 2.0, flipY: true, flipX: false, scale: 1 } },
     { id: 'bp_pc', type: 'plot-curves', position: { x: 1380, y: 220 }, config: { color: '#0ea5e9', width: 2, flipX: false, flipY: true } },
   ],

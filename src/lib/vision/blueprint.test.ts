@@ -88,6 +88,15 @@ describe('parseBlueprint', () => {
     expect(graph.linkIndices).toEqual([2]);
   });
 
+  it('snaps a connector with a typical hand-drawn gap using the default tolerance', () => {
+    // 两端各留 33px 空隙：默认 snap（minNodeSize 24 → 36）应当能连上。
+    // 之前默认 snap 只有 minNodeSize，轮廓内缩后刚好漏判成孤立节点。
+    const graph = parseBlueprint([left, right, ribbon(133, 207, 50)], { minNodeSize: 24 });
+    expect(graph.nodes).toHaveLength(2);
+    expect(graph.links).toHaveLength(1);
+    expect(graph.links[0]).toMatchObject({ from: 'N1', to: 'N2' });
+  });
+
   it('treats the inner hole as the node and skips the outer border ring', () => {
     const graph = parseBlueprint([rect(20, 20, 120, 120), rect(40, 40, 100, 100)], {
       minNodeSize: 20,
