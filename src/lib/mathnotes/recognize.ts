@@ -136,6 +136,8 @@ export function groupStrokesIntoGlyphs(strokes: RecognitionStroke[]): GlyphGroup
       const verticalOverlap = yOverlapRatio(g.bbox, item.bbox);
       const vGap = verticalGap(g.bbox, item.bbox);
       const near =
+        !isTinyBox(item.bbox, medianHeight) &&
+        !isTinyBox(g.bbox, medianHeight) &&
         Math.min(item.bbox.x1 - item.bbox.x0, g.bbox.x1 - g.bbox.x0) <= medianHeight * 0.25 &&
         gap <= medianHeight * 0.18 &&
         verticalOverlap > 0.35;
@@ -188,7 +190,12 @@ export function groupStrokesIntoGlyphs(strokes: RecognitionStroke[]): GlyphGroup
         const wideFlat =
           isWideFlat(a.bbox, medianHeight) || isWideFlat(b.bbox, medianHeight);
         const stacked = !wideFlat && xo >= 0.7 && centerDy <= medianHeight * 0.5;
-        if (crossing || stacked) {
+        // i / j 的点：一个很小的笔画悬在主干正上方。点如果被拆成独立字形，
+        // 会被当成上标或小数点，sin / lim 这类词就整段崩掉。
+        const dotAbove =
+          isDotAbove(a.bbox, b.bbox, medianHeight) ||
+          isDotAbove(b.bbox, a.bbox, medianHeight);
+        if (crossing || stacked || dotAbove) {
           a.strokes.push(...b.strokes);
           a.bbox = combined;
           groups.splice(j, 1);
@@ -244,6 +251,28 @@ function isWideFlat(bbox: BBox, medianHeight: number): boolean {
   return w > medianHeight * 1.2 && h < medianHeight * 0.3;
 }
 
+/** 极小的孤立笔画：i / j 的点、小数点、噪点。 */
+function isTinyBox(bbox: BBox, refHeight: number): boolean {
+  return (
+    bbox.x1 - bbox.x0 <= refHeight * 0.32 &&
+    bbox.y1 - bbox.y0 <= refHeight * 0.32
+  );
+}
+
+/**
+ * 悬在另一组正上方的点 → 属于下方主干（i / j 的点）。
+ * 要求点足够小、水平居中、垂直间隙小于半个字高；小数点在下基线附近，
+ * 不会被这条规则误合并。
+ */
+function isDotAbove(dot: BBox, stem: BBox, refHeight: number): boolean {
+  if (!isTinyBox(dot, refHeight) || isTinyBox(stem, refHeight)) return false;
+  const cx = (dot.x0 + dot.x1) / 2;
+  const tolerance = Math.max((stem.x1 - stem.x0) * 0.25, refHeight * 0.35);
+  const above = dot.y1 <= stem.y0 + refHeight * 0.15;
+  const close = stem.y0 - dot.y1 <= refHeight * 0.55;
+  return cx >= stem.x0 - tolerance && cx <= stem.x1 + tolerance && above && close;
+}
+
 /* ================================================================== *
  * 2. Glyph classification (skeleton templates + Chamfer distance)
  * ================================================================== */
@@ -277,7 +306,19 @@ interface GlyphTemplate {
   skeleton: Uint8Array;
   /** Chamfer distance field of the skeleton. */
   distance: Float32Array;
+  /** 骨架墨点下标（预计算，分类时只遍历墨点而不是整张 48×48 位图）。 */
+  inkIndices: Uint16Array;
   bbox: BBox;
+}
+
+/** 收集位图中所有墨点下标，供 Chamfer 距离快速求和。 */
+function inkIndicesOf(bitmap: Uint8Array): Uint16Array {
+  let count = 0;
+  for (let i = 0; i < bitmap.length; i++) if (bitmap[i]) count++;
+  const out = new Uint16Array(count);
+  let k = 0;
+  for (let i = 0; i < bitmap.length; i++) if (bitmap[i]) out[k++] = i;
+  return out;
 }
 
 /* ── Personal glyph bank ───────────────────────────────────────────
@@ -350,6 +391,8 @@ export function addUserGlyphSamples(glyphs: RecognizedGlyph[]): void {
   const fresh = glyphs.filter(
     (g) =>
       g.char !== '?' &&
+      g.char.length === 1 &&
+      !g.text &&
       !g.superscript &&
       g.confidence >= 0.66 &&
       g.strokes.length > 0 &&
@@ -453,6 +496,7 @@ function renderTemplate(char: string, font: string): GlyphTemplate | null {
       char,
       skeleton,
       distance: distanceTransform(skeleton, TEMPLATE_SIZE, TEMPLATE_SIZE),
+      inkIndices: inkIndicesOf(skeleton),
       bbox: bitmapBBox(skeleton, TEMPLATE_SIZE, TEMPLATE_SIZE),
     };
   } catch {
@@ -488,6 +532,7 @@ export function getGlyphTemplates(): GlyphTemplate[] {
       char: sample.char,
       skeleton,
       distance: distanceTransform(skeleton, TEMPLATE_SIZE, TEMPLATE_SIZE),
+      inkIndices: inkIndicesOf(skeleton),
       bbox: bitmapBBox(skeleton, TEMPLATE_SIZE, TEMPLATE_SIZE),
     });
   }
@@ -589,24 +634,17 @@ export function classifyGlyphBitmap(ink: Uint8Array, templates: GlyphTemplate[])
   if (templates.length === 0) {
     return { char: '?', confidence: 0, alternatives: [] };
   }
+  const userIndices = inkIndicesOf(ink);
   const userDistance = distanceTransform(ink, TEMPLATE_SIZE, TEMPLATE_SIZE);
   const scores = new Map<string, number>();
 
   for (const t of templates) {
     let sumUser = 0;
-    let userCount = 0;
-    for (let i = 0; i < ink.length; i++) {
-      if (!ink[i]) continue;
-      sumUser += t.distance[i];
-      userCount++;
-    }
+    for (let k = 0; k < userIndices.length; k++) sumUser += t.distance[userIndices[k]];
     let sumTemplate = 0;
-    let templateCount = 0;
-    for (let i = 0; i < t.skeleton.length; i++) {
-      if (!t.skeleton[i]) continue;
-      sumTemplate += userDistance[i];
-      templateCount++;
-    }
+    for (let k = 0; k < t.inkIndices.length; k++) sumTemplate += userDistance[t.inkIndices[k]];
+    const userCount = userIndices.length;
+    const templateCount = t.inkIndices.length;
     if (userCount === 0 || templateCount === 0) continue;
     const score = (sumUser / userCount + sumTemplate / templateCount) / 2;
     const prev = scores.get(t.char);
@@ -1660,8 +1698,11 @@ export function recognizeMathInk(strokes: RecognitionStroke[]): MathRecognitionR
     if (!superscript && !subscript && group.width < (group.height || 1) * 0.35 && group.height < 6) {
       char = '.';
     }
-    // 小数点/极小笔画永远不是下标。
-    if (char === '.') subscript = false;
+    // 小数点/极小笔画永远不是下标，也不该被当成上标（i 的点已在上游合并）。
+    if (char === '.') {
+      superscript = false;
+      subscript = false;
+    }
 
     const glyph: RecognizedGlyph = {
       char,

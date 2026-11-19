@@ -502,6 +502,16 @@ export class InkEngine {
 
     const n = stroke.points.length;
     if (n === 0 || this.liveDrawn >= n) return;
+    // 马克笔 / 荧光笔是半透明笔刷。增量绘制会在每一段的接缝处叠加两次
+    // alpha，写长笔时出现一节一节的深色斑。整笔重画虽然多算一点，但只
+    // 有一条活动笔画，60fps 下完全撑得住，视觉上也干净。
+    if (stroke.brush === 'marker' || stroke.brush === 'highlighter') {
+      this.clearLive();
+      this.applyWorld(this.liveCtx);
+      buildCachedStroke(stroke, this.backgroundColor).draw(this.liveCtx);
+      this.liveDrawn = n;
+      return;
+    }
     const from = Math.max(0, this.liveDrawn - 1);
     const segment = stroke.points.slice(from);
     buildCachedStroke({ ...stroke, points: segment }, this.backgroundColor).draw(this.liveCtx);

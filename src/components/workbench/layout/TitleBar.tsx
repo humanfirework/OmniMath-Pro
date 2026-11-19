@@ -322,6 +322,12 @@ export function TitleBar() {
             <span className="text-[10px] text-muted-foreground/80 hidden sm:inline">
               v{pkg.version}
             </span>
+            <span
+              className="hidden sm:inline-flex items-center rounded-full border border-amber-500/40 bg-amber-500/10 px-1.5 py-[1px] text-[9px] font-semibold tracking-wide text-amber-600 dark:text-amber-400"
+              title="Beta 版本：功能仍在迭代，欢迎反馈问题"
+            >
+              Beta
+            </span>
           </div>
         </div>
       </div>

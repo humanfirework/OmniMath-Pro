@@ -87,6 +87,30 @@ describe('groupStrokesIntoGlyphs', () => {
     expect(groups).toHaveLength(2);
   });
 
+  it('merges the dot of an i into its stem', () => {
+    // sin / lim 里的 i 常写成「一竖 + 上方一点」。点如果单独成组，会被
+    // 误当成上标或小数点，整个函数名就废了。
+    const stem: RecognitionStroke = {
+      points: [{ x: 10, y: 10 }, { x: 10, y: 40 }],
+    };
+    const dot: RecognitionStroke = {
+      points: [{ x: 10, y: 1 }, { x: 10.5, y: 2 }],
+    };
+    const groups = groupStrokesIntoGlyphs([stem, dot]);
+    expect(groups).toHaveLength(1);
+    expect(groups[0].height).toBeCloseTo(39);
+  });
+
+  it('keeps a decimal point in its own group', () => {
+    const digit: RecognitionStroke = {
+      points: [{ x: 0, y: 0 }, { x: 0, y: 30 }, { x: 12, y: 30 }],
+    };
+    const dot: RecognitionStroke = {
+      points: [{ x: 16, y: 30 }, { x: 17, y: 31 }],
+    };
+    expect(groupStrokesIntoGlyphs([digit, dot])).toHaveLength(2);
+  });
+
   it('ignores empty strokes', () => {
     expect(groupStrokesIntoGlyphs([{ points: [] }])).toHaveLength(0);
     expect(strokeBBox({ points: [] })).toBeNull();

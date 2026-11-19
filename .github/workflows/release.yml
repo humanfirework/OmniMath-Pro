@@ -90,9 +90,11 @@ jobs:
         with:
           projectPath: "./src-tauri"
           tagName: ${{ github.ref_name }}
-          releaseName: "OmniMath Pro ${{ github.ref_name }}"
+          releaseName: "OmniMath Pro ${{ github.ref_name }} (Beta)"
           releaseBody: |
-            OmniMath Pro ${{ github.ref_name }} 桌面端安装包
+            OmniMath Pro ${{ github.ref_name }} Beta 桌面端安装包
+
+            Beta 版本：功能仍在快速迭代，欢迎在 Issues 反馈问题。
 
             | 平台 | 推荐下载 |
             |---|---|
@@ -103,7 +105,7 @@ jobs:
 
             文件名中包含版本号 `${{ github.ref_name }}` 和目标平台，请根据你的系统选择对应安装包。
           releaseDraft: false
-          prerelease: false
+          prerelease: true
           args: ${{ matrix.args }}
 
       - name: Generate SHA256 checksums for release artifacts

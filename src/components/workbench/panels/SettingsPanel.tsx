@@ -108,8 +108,8 @@ import { toast } from 'sonner';
 type Category = 'appearance' | 'editor' | 'layout' | 'data' | 'backup' | 'export' | 'language' | 'shortcuts' | 'advanced' | 'about';
 
 // 版本号优先取构建期注入的 NEXT_PUBLIC_APP_VERSION（与 package.json 对齐），
-// 缺失时回退到 package.json 中的版本（0.1.4）。
-const APP_VERSION = process.env.NEXT_PUBLIC_APP_VERSION ?? '0.1.4';
+// 缺失时回退到 package.json 中的版本（0.15.0）。
+const APP_VERSION = process.env.NEXT_PUBLIC_APP_VERSION ?? '0.15.0';
 
 // 关于页相关链接（仓库地址取自 package.json: humanfirework/OmniMath-Pro）。
 const ABOUT_LINKS: { emoji: string; label: string; url: string }[] = [
@@ -1106,7 +1106,12 @@ export function SettingsPanel() {
                     </div>
                   </div>
                   <h3 className="text-base font-semibold">OmniMath Pro</h3>
-                  <p className="text-xs text-muted-foreground mt-1">Version {APP_VERSION}</p>
+                  <p className="text-xs text-muted-foreground mt-1 flex items-center justify-center gap-1.5">
+                    Version {APP_VERSION}
+                    <span className="inline-flex items-center rounded-full border border-amber-500/40 bg-amber-500/10 px-1.5 py-[1px] text-[9px] font-semibold tracking-wide text-amber-600 dark:text-amber-400">
+                      Beta
+                    </span>
+                  </p>
                   <p className="text-[11px] text-muted-foreground mt-2">专业的数学计算与可视化工具</p>
                 </div>
 
