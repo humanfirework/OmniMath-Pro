@@ -20,7 +20,7 @@
  *   - Export uses try/finally to guarantee URL.revokeObjectURL even on drawImage failure.
  */
 
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { motion } from 'framer-motion';
 import {
   Pencil,
@@ -74,10 +74,18 @@ import { rotateSelection, scaleSelection } from '@/lib/ink/transform';
 import { summarizeLatency, type LatencyStats } from '@/lib/ink/latency';
 import type { InkBrush, InkStroke, InkView } from '@/lib/ink/types';
 import { getGlyphTemplates, recognizeMathInk, addUserGlyphSamples } from '@/lib/mathnotes/recognize';
-import { evaluateMathNote } from '@/lib/mathnotes/expression';
 import { recognizeShape } from '@/lib/ink/shapeRecognize';
-import { MathCardView, type MathCard } from './math/MathCardView';
-import { MathNotePanel, type MathNoteDraft } from './math/MathNotePanel';
+import type { MathCard } from './math/MathCardView';
+import type { MathNoteDraft } from './math/MathNotePanel';
+
+// 数学卡片 / 识别面板静态依赖 mathjs（约 1.5 MB）。白板首屏只需要墨迹引擎，
+// 这里改为按需加载：只有真的出现数学卡片或识别草稿时才拉取解题引擎。
+const MathCardView = lazy(() =>
+  import('./math/MathCardView').then((m) => ({ default: m.MathCardView })),
+);
+const MathNotePanel = lazy(() =>
+  import('./math/MathNotePanel').then((m) => ({ default: m.MathNotePanel })),
+);
 
 type Tool = 'pen' | 'eraser' | 'select' | 'lasso';
 type Background = 'dot' | 'grid' | 'ruled' | 'blank';
@@ -417,7 +425,7 @@ export function WhiteboardCanvas() {
         })),
       };
     }
-    const evaluation = rec.text ? evaluateMathNote(rec.text) : null;
+    // 先立即展示识别文本（不等 mathjs），错误信息等引擎加载后再补。
     setMathDraft({
       text: rec.text,
       display: rec.display,
@@ -425,11 +433,26 @@ export function WhiteboardCanvas() {
       glyphs: rec.glyphs,
       confidence: rec.confidence,
       error: rec.text
-        ? evaluation && !evaluation.ok
-          ? evaluation.error
-          : undefined
+        ? undefined
         : rec.error ?? '没有识别到公式，可重试或直接输入',
     });
+    if (rec.text) {
+      const recognizedText = rec.text;
+      void import('@/lib/mathnotes/expression')
+        .then(({ evaluateMathNote }) => {
+          const evaluation = evaluateMathNote(recognizedText);
+          if (!evaluation.ok) {
+            setMathDraft((prev) =>
+              prev && prev.sourceText === recognizedText
+                ? { ...prev, error: evaluation.error }
+                : prev,
+            );
+          }
+        })
+        .catch(() => {
+          // 引擎加载失败：保留识别文本，用户仍可手动修正 / 插入。
+        });
+    }
   }, []);
 
   const scheduleMathRecognition = useCallback(
@@ -467,7 +490,8 @@ export function WhiteboardCanvas() {
   }, []);
 
   const handleInsertMath = useCallback(
-    (text: string) => {
+    async (text: string) => {
+      const { evaluateMathNote } = await import('@/lib/mathnotes/expression');
       const evaluation = evaluateMathNote(text);
       if (!evaluation.ok) return;
       // Only learn from notes the user accepted without editing: a corrected
@@ -1191,26 +1215,28 @@ export function WhiteboardCanvas() {
           onLatency={handleLatencySample}
         />
 
-        {/* Vector math cards (calculations / live graphs) */}
-        {mathCards.map((card) => (
-          <MathCardView
-            key={card.id}
-            card={card}
-            view={view}
-            onChange={updateMathCard}
-            onDelete={deleteMathCard}
-          />
-        ))}
+        {/* Vector math cards (calculations / live graphs) — 引擎按需加载 */}
+        <Suspense fallback={null}>
+          {mathCards.map((card) => (
+            <MathCardView
+              key={card.id}
+              card={card}
+              view={view}
+              onChange={updateMathCard}
+              onDelete={deleteMathCard}
+            />
+          ))}
 
-        {mathDraft && (
-          <MathNotePanel
-            draft={mathDraft}
-            onChange={(text) => setMathDraft((prev) => (prev ? { ...prev, text } : prev))}
-            onRetry={handleMathRetry}
-            onInsert={handleInsertMath}
-            onClose={() => setMathDraft(null)}
-          />
-        )}
+          {mathDraft && (
+            <MathNotePanel
+              draft={mathDraft}
+              onChange={(text) => setMathDraft((prev) => (prev ? { ...prev, text } : prev))}
+              onRetry={handleMathRetry}
+              onInsert={handleInsertMath}
+              onClose={() => setMathDraft(null)}
+            />
+          )}
+        </Suspense>
 
         {mathMode && !mathDraft && (
           <div className="pointer-events-none absolute left-3 top-3 z-20 flex items-center gap-1.5 rounded-full border border-border/60 bg-background/85 px-2.5 py-1 text-[10px] text-muted-foreground shadow-sm backdrop-blur">

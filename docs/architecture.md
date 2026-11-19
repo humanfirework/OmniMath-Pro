@@ -216,6 +216,8 @@ src/components/workbench/
   - 设置面板改为「打开时才挂载」，持久化设置改在 Workbench 启动时主动 `loadFromStorage()`（之前依赖设置面板常驻来触发，改成按需加载后字号 / 白板偏好会延迟生效）；store 恢复变量时先判断 `variables` / `plotParams` 是否非空，空对象不再触发 mathjs 预加载；
   - 编辑器行尾结果胶囊：运行后每行末尾直接显示结果摘要（图像 / 数值 / 错误），编辑或切换文件即清空；长结果截断并用悬停显示全文，选区运行按选区起始行回填到正确行；手机上胶囊自动换行到代码下方，不再需要每次切到预览确认结果；
   - 首次启动的示例脚本改由 store 在 `loadFromStorage` 阶段写入（`lib/editor/defaultScript.ts`）：编辑器改为按需加载后，原初始化逻辑会晚于 store 的自动保存，导致首次启动误判「已有存储」而显示空白；
+  - PWA / 离线：生产 Web 端注册 app shell Service Worker（`public/sw.js`），导航 network-first、静态资源 stale-while-revalidate；首次访问用 Resource Timing 把实际加载的哈希 chunk 交给 SW 缓存（只靠 `script[src]` 会漏掉 Next 的 async 入口）。Tauri 与开发模式自动跳过；manifest 里的 `?view=whiteboard` / `?view=linalg` 快捷方式现在会在启动时直达对应工具并清理 query（实测离线重载后 JS 仍可交互）；
+  - 白板数学卡片 / 识别面板改为按需加载：未写数学时白板不再下载 mathjs；识别文本先立即显示，解析错误等引擎加载后再补；手机默认画布首屏 JS 约 367 KB（此前会连带加载 mathjs 等约 1.5 MB+）；
   - 可选 GitHub Gist 云同步（BYO Token，私密 Gist）。
 - **P1（进行中）**
   - 嵌套分数已落地（递归分母/分子，外包分数条去重）；单笔画根号已落地（V 形折线 + 顶部横杠 → `sqrt(...)`，被开方内容含分数 token）；多位指数已落地（x²³ → `x^(23)`，按基准字形判定）；下标已落地（x₂ → `x_2`，显示为 Unicode 下标 x₂，阈值严格避免把高低抖动误判）；同一基座的上下标组合已落地（x₁² / x²₁ 与笔顺无关，统一归一化为 `x_1^2`，上下标之后仍正确补乘号）；

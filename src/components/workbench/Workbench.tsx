@@ -58,6 +58,7 @@ import { ErrorBoundary } from '@/components/ErrorBoundary';
 import { useShortcutsStore, SHORTCUTS_KEY } from '@/lib/store/shortcutsStore';
 import { useGlobalShortcuts, registerShortcutHandler } from '@/lib/hooks/useGlobalShortcuts';
 import { useCloudAutoCheck } from '@/lib/hooks/useCloudAutoCheck';
+import { registerServiceWorker } from '@/lib/pwa/registerServiceWorker';
 import { cn } from '@/lib/utils';
 import type { ViewMode } from '@/lib/store/workbench';
 
@@ -103,6 +104,9 @@ function ViewLoading() {
 
 /** 全屏视图列表（按 ActivityBar 中「全屏视图」的生命周期保持一致）。 */
 const FULLSCREEN_VIEWS: ViewMode[] = ['pipeline', 'whiteboard', 'linalg', 'solver', 'stats', 'control', 'education'];
+
+/** PWA 快捷方式允许直达的视图（查询参数 ?view=）。 */
+const PWA_VIEW_MODES: ViewMode[] = ['home', 'workbench', ...FULLSCREEN_VIEWS];
 
 function isFullScreenView(vm: ViewMode): boolean {
   return FULLSCREEN_VIEWS.includes(vm);
@@ -325,6 +329,20 @@ export function Workbench() {
     // 设置面板现在是按需挂载（不再常驻），持久化设置必须在应用启动时主动载入，
     // 否则字号 / 白板偏好等要等用户打开设置面板才生效。
     loadSettingsFromStorage();
+    // Web / PWA：生产线注册 app shell 缓存（开发模式与 Tauri 内部自动跳过）。
+    registerServiceWorker();
+
+    // PWA / 桌面快捷方式：/?view=whiteboard 直接进入对应工具。
+    // 读取后清掉 query，避免之后刷新反复强制跳转、也避免污染历史记录。
+    try {
+      const requested = new URLSearchParams(window.location.search).get('view');
+      if (requested && PWA_VIEW_MODES.includes(requested as ViewMode)) {
+        useWorkbenchStore.getState().setViewMode(requested as ViewMode);
+        window.history.replaceState(null, '', window.location.pathname + window.location.hash);
+      }
+    } catch {
+      // 忽略异常的 URL / 历史 API（隐私模式等）。
+    }
 
     const onUnhandledRejection = (e: PromiseRejectionEvent) => {
       if (typeof console !== 'undefined') {
