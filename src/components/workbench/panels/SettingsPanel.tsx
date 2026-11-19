@@ -79,6 +79,7 @@ import {
 import { t, useLocale } from '@/lib/i18n';
 import type { TranslationDict } from '@/lib/i18n';
 import { cn } from '@/lib/utils';
+import { isVersionNewer } from '@/lib/version';
 import { inTauri, setMinimizeToTray as syncMinimizeToTray } from '@/lib/tauri';
 import { saveTextToFile } from '@/lib/nativeExport';
 import {
@@ -110,7 +111,6 @@ type Category = 'appearance' | 'editor' | 'layout' | 'data' | 'backup' | 'export
 // 版本号优先取构建期注入的 NEXT_PUBLIC_APP_VERSION（与 package.json 对齐），
 // 缺失时回退到 package.json 中的版本（0.1.6）。
 const APP_VERSION = process.env.NEXT_PUBLIC_APP_VERSION ?? '0.1.6';
-
 // 关于页相关链接（仓库地址取自 package.json: humanfirework/OmniMath-Pro）。
 const ABOUT_LINKS: { emoji: string; label: string; url: string }[] = [
   { emoji: '📖', label: '官方文档', url: 'https://github.com/humanfirework/OmniMath-Pro#readme' },
@@ -441,7 +441,7 @@ export function SettingsPanel() {
       const data = await response.json();
       const latestVersion = (data?.tag_name ?? '').replace(/^v/, '');
       const currentVersion = APP_VERSION;
-      if (latestVersion && latestVersion !== currentVersion) {
+      if (latestVersion && isVersionNewer(latestVersion, currentVersion)) {
         setUpdateInfo({
           available: true,
           latest: latestVersion,
