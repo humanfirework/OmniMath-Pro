@@ -553,3 +553,10 @@ export function loadTemplate(
     edges: tpl.edges.map((e) => ({ ...e })),
   };
 }
+
+/** 模板分组顺序与标签（category 缺省视为 math）。 */
+export const TEMPLATE_GROUPS: { key: string; label: string }[] = [
+  { key: 'math', label: '数学 / 计算' },
+  { key: 'vision', label: '视觉 / 曲线' },
+  { key: 'simulation', label: '仿真 / 控制' },
+];

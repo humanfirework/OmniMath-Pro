@@ -136,8 +136,6 @@ import {
   DropdownMenuTrigger,
   DropdownMenuContent,
   DropdownMenuItem,
-  DropdownMenuLabel,
-  DropdownMenuSeparator,
 } from '@/components/ui/dropdown-menu';
 import {
   Tooltip,
@@ -178,6 +176,7 @@ import {
 } from './pipelineEngine';
 import { runSimulation, isSimulationNode, type SimSeries } from './simulationEngine';
 import { PIPELINE_TEMPLATES, loadTemplate } from './pipelineTemplates';
+import { TemplateGallery } from './TemplateGallery';
 import { PALETTE_GROUPS, DEFAULT_EXPANDED_CATEGORIES } from './paletteGroups';
 import { normalizeRect, selectNodesInBox } from './nodeSelection';
 import { Minimap } from './Minimap';
@@ -557,13 +556,6 @@ function createNode(type: NodeType, x: number, y: number): PipelineNode {
  */
 const APPROX_NODE_H = 130;
 
-/** 模板分组顺序与标签（category 缺省视为 math）。 */
-const TEMPLATE_GROUPS: { key: string; label: string }[] = [
-  { key: 'math', label: '数学 / 计算' },
-  { key: 'vision', label: '视觉 / 曲线' },
-  { key: 'simulation', label: '仿真 / 控制' },
-];
-
 /**
  * Compute a viewport transform that fits all given nodes inside the
  * canvas (with padding). Returns null if there are no nodes.
@@ -909,7 +901,14 @@ function NodePipelineInner() {
   );
 
   /* ── 独立运行结果面板：把 plot/curve/animation 输出归一化后送入 runResults store ── */
-  const pushRunResults = useCallback((nodes: PipelineNode[], graphEdges: PipelineEdge[] = []) => {
+  const pushRunResults = useCallback((
+    nodes: PipelineNode[],
+    graphEdges: PipelineEdge[] = [],
+    // plot-output 节点本身会在卡片里画缩略曲线；运行时默认不弹浮窗，
+    // 否则浮窗会盖住画布上的其他节点。用户点缩略图时再显式打开。
+    opts: { plotOutput?: boolean } = {},
+  ) => {
+    const autoPlotOutput = opts.plotOutput ?? true;
     const add = useRunResultsStore.getState().addRunResult;
     // P0-4 图像+轮廓窗：收集 image-input 节点的原图，供 plot-curves 结果叠加背景。
     const imageInputs = new Map<string, { src: string; width: number; height: number }>();
@@ -939,6 +938,7 @@ function NodePipelineInner() {
     };
     for (const n of nodes) {
       if (n.type === 'plot-output' && n.outputs?.plot) {
+        if (!autoPlotOutput) continue;
         const plot = n.outputs.plot as {
           expr: string;
           xMin: number;
@@ -1091,7 +1091,7 @@ function NodePipelineInner() {
 
       // Side-effects: plot / curve / animation 输出统统进入独立运行结果面板，
       // 不再 push 到 2D 绘图工作台 store（彻底解耦）、不再自动切回 plot2d tab。
-      pushRunResults(executed, edges);
+      pushRunResults(executed, edges, { plotOutput: false });
       // 运行结果提示：告知已生成多少个独立浮窗，避免用户「转完不知道结果在哪」。
       const _count = useRunResultsStore.getState().panels.length;
       if (_count > 0) {
@@ -1189,7 +1189,7 @@ function NodePipelineInner() {
       setNodes(executed);
       setComputeTick((n) => n + 1);
       // 独立运行结果面板（与 2D 绘图彻底解耦）。
-      pushRunResults(executed, edges);
+      pushRunResults(executed, edges, { plotOutput: false });
       toast.success('已执行到选中节点', {
         description: '下游节点已暂停，可继续排查',
         duration: 2500,
@@ -2764,6 +2764,7 @@ function PipelineToolbar({
   onAddNode, onDeleteSelected, onGroup, onUngroup,
   nodeCount, edgeCount, selectedCount, errorCount, diagnosticsOpen, running,
 }: ToolbarProps) {
+  const [galleryOpen, setGalleryOpen] = useState(false);
   return (
     <div className="shrink-0 h-11 flex items-center justify-between px-3 gap-3 glass border-b border-border">
       <div className="flex items-center gap-2 min-w-0">
@@ -2903,47 +2904,20 @@ function PipelineToolbar({
           <Plus className="size-3.5" />
           <span className="hidden sm:inline">{t('npAddNodeTitle')}</span>
         </Button>
-        <DropdownMenu>
-          <DropdownMenuTrigger asChild>
-            <Button variant="outline" size="sm" className="h-8 px-2 gap-1.5 text-[12px]">
-              <LayoutTemplate className="size-3.5" />
-              <span className="hidden sm:inline">模板</span>
-            </Button>
-          </DropdownMenuTrigger>
-          <DropdownMenuContent align="start" className="w-72">
-            <DropdownMenuLabel>示例工作流</DropdownMenuLabel>
-            <DropdownMenuSeparator />
-            {/* 模板分组：按 category 归类 + 可滚动，避免模板变多后难以浏览。 */}
-            <div className="max-h-[60vh] overflow-y-auto pr-1">
-              {TEMPLATE_GROUPS.map((group) => {
-                const items = PIPELINE_TEMPLATES.filter((t) => (t.category ?? 'math') === group.key);
-                if (items.length === 0) return null;
-                return (
-                  <div key={group.key} className="mb-1">
-                    <div className="px-2 py-1 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground/80">
-                      {group.label}
-                    </div>
-                    {items.map((tpl) => (
-                      <DropdownMenuItem
-                        key={tpl.id}
-                        onSelect={() => onLoadTemplate(tpl.id)}
-                        className="flex flex-col items-start gap-0.5 py-2"
-                      >
-                        <span className="flex w-full items-center gap-1.5 text-[12px] font-medium">
-                          <span className="truncate">{tpl.name}</span>
-                          <span className="ml-auto shrink-0 rounded bg-muted px-1 py-0.5 text-[9px] font-normal text-muted-foreground">
-                            {tpl.nodes.length} 节点
-                          </span>
-                        </span>
-                        <span className="text-[10px] text-muted-foreground leading-snug">{tpl.description}</span>
-                      </DropdownMenuItem>
-                    ))}
-                  </div>
-                );
-              })}
-            </div>
-          </DropdownMenuContent>
-        </DropdownMenu>
+        <Button
+          variant="outline"
+          size="sm"
+          className="h-8 px-2 gap-1.5 text-[12px]"
+          onClick={() => setGalleryOpen(true)}
+        >
+          <LayoutTemplate className="size-3.5" />
+          <span className="hidden sm:inline">模板</span>
+        </Button>
+        <TemplateGallery
+          open={galleryOpen}
+          onOpenChange={setGalleryOpen}
+          onLoad={onLoadTemplate}
+        />
         <Tooltip>
           <TooltipTrigger asChild>
             <Button variant="outline" size="sm" className="h-8 w-8 p-0" onClick={onOpenSimConfig}>
