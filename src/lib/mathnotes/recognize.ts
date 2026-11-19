@@ -16,6 +16,8 @@
  * speed second — recognition is triggered after the pen has been idle.
  */
 
+import { attachFunctionArguments } from './functionArgs';
+
 export interface RecognitionPoint {
   x: number;
   y: number;
@@ -1056,7 +1058,9 @@ export function buildRecognizedText(glyphs: RecognizedGlyph[]): string {
     prev = g;
     i++;
   }
-  return out;
+  // sin x 手写常被拆成 s i n x，拼出来是 "sin*x"。补成 sin(x)，否则
+  // mathjs 会把 sin 当成变量相乘，识别结果显示「没有用」。
+  return attachFunctionArguments(out);
 }
 
 /* ================================================================== *
@@ -1159,14 +1163,31 @@ export function applyMathWordCorrection(glyphs: RecognizedGlyph[]): RecognizedGl
     while (j < glyphs.length && isWordGlyph(glyphs[j])) j++;
     const run = glyphs.slice(i, j);
     if (run.length >= 2 && run.length <= 12) {
-      const word = matchMathWord(run);
-      // 纠正也要保守：2 个字母的短词（ln / pi）只在后面紧跟 "(" 时才认，
+      // 先试整段（sin / cos / log）；手写时参数变量通常紧贴函数名，
+      // 会被并进同一个字母段（s i n x 是一段 4 个字形），整段匹配不到，
+      // 这时再按前缀匹配，把 sin 从 sinx 里拆出来。
+      let word = matchMathWord(run);
+      let used = run.length;
+      if (!word) {
+        for (let len = Math.min(12, run.length - 1); len >= 2; len--) {
+          const prefix = matchMathWord(run.slice(0, len));
+          if (prefix) {
+            word = prefix;
+            used = len;
+            break;
+          }
+        }
+      }
+      // 纠正也要保守：2 个字母的短词只在后面紧跟 "(" 或一个操作数时才认，
       // 否则 y 的两笔被误识成 "1n" 就会被强改成 "ln"（y=x² → ln=x*2）。
       // 3 个字母以上（sin / cos / log）辨识度足够，直接纠正。
-      const followedByCall = glyphs[j]?.char === '(';
-      const safe = followedByCall || (word?.length ?? 0) >= 3 || word === 'pi';
+      const nextChar = used < run.length ? run[used].char : glyphs[j]?.char;
+      const followedByCall = nextChar === '(';
+      const followedByValue = !!nextChar && /^[0-9a-zA-Z]$/.test(nextChar);
+      const shortCall = (word === 'ln' || word === 'lg') && followedByValue;
+      const safe = followedByCall || (word?.length ?? 0) >= 3 || word === 'pi' || shortCall;
       if (word && safe) {
-        for (let k = 0; k < run.length; k++) {
+        for (let k = 0; k < used; k++) {
           const g = run[k];
           g.char = word[k];
           g.displayChar = word[k];

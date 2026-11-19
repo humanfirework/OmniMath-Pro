@@ -31,6 +31,19 @@ describe('normalizeMathExpression', () => {
   it('drops a trailing equals sign', () => {
     expect(normalizeMathExpression('2+2=')).toBe('2+2');
   });
+
+  it('wraps handwritten function calls that have no parentheses', () => {
+    expect(normalizeMathExpression('sin x')).toBe('sin(x)');
+    expect(normalizeMathExpression('sinx')).toBe('sin(x)');
+    expect(normalizeMathExpression('sin*x')).toBe('sin(x)');
+    expect(normalizeMathExpression('ln x')).toBe('ln(x)');
+    expect(normalizeMathExpression('sin 2x')).toBe('sin(2*x)');
+    expect(normalizeMathExpression('sin x^2')).toBe('sin(x^2)');
+    expect(normalizeMathExpression('2sin x')).toBe('2*sin(x)');
+    // 已经带括号、或只是变量名的一部分时不要乱动。
+    expect(normalizeMathExpression('sin(x)')).toBe('sin(x)');
+    expect(normalizeMathExpression('xsin')).toBe('xsin');
+  });
 });
 
 describe('parseMathNote', () => {
@@ -53,6 +66,13 @@ describe('parseMathNote', () => {
 });
 
 describe('evaluateMathNote', () => {
+  it('plots sin x written without parentheses (common handwriting)', () => {
+    const result = evaluateMathNote('sin x');
+    expect(result.ok).toBe(true);
+    expect(result.kind).toBe('plot');
+    expect(result.expression).toBe('sin(x)');
+  });
+
   it('computes the reference video expression', () => {
     const result = evaluateMathNote('2.5 × 365 × 24 × 60');
     expect(result.ok).toBe(true);

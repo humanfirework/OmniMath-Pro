@@ -34,6 +34,32 @@ describe('applyEraser', () => {
     expect(next[0].id).not.toBe('s1');
   });
 
+  it('轻点一下在 partial 模式也整条删除（不再只切掉几个采样点）', () => {
+    const tap: InkStroke = {
+      id: 'e-tap',
+      points: [{ x: 50, y: 0 }],
+      color: '#000',
+      width: 20,
+      style: 'eraser',
+    };
+    const { next, changed } = applyEraser([horizontal()], tap, 'partial');
+    expect(changed).toBe(true);
+    expect(next).toEqual([]);
+  });
+
+  it('拖动的橡皮仍然只切断碰到的一段', () => {
+    const drag: InkStroke = {
+      id: 'e-drag',
+      points: [{ x: 50, y: -10 }, { x: 50, y: 10 }],
+      color: '#000',
+      width: 20,
+      style: 'eraser',
+    };
+    const { next, changed } = applyEraser([horizontal()], drag, 'partial');
+    expect(changed).toBe(true);
+    expect(next.length).toBe(2);
+  });
+
   it('stroke 模式整条删除', () => {
     const { next, changed } = applyEraser([horizontal()], eraserAt(50), 'stroke');
     expect(changed).toBe(true);

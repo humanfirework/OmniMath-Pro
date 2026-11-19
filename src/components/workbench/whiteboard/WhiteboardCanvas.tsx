@@ -30,7 +30,6 @@ import {
   Trash2,
   Download,
   PencilRuler,
-  Shapes,
   Grid3x3,
   Minus,
   CircleDot,
@@ -82,7 +81,6 @@ import {
   buildRecognizedDisplay,
   type RecognizedGlyph,
 } from '@/lib/mathnotes/recognize';
-import { recognizeShape } from '@/lib/ink/shapeRecognize';
 import { selectRecentLine } from '@/lib/ink/recognizeScope';
 import type { MathCard } from './math/MathCardView';
 import type { MathNoteDraft } from './math/MathNotePanel';
@@ -229,8 +227,10 @@ export function WhiteboardCanvas() {
       const raw = localStorage.getItem(STORAGE_KEY);
       if (!raw) return [];
       const parsed = JSON.parse(raw);
-      if (Array.isArray(parsed?.strokes)) return parsed.strokes;
-      return [];
+      if (!Array.isArray(parsed?.strokes)) return [];
+      // 旧版本会自动把近似方/圆的自由笔迹渲染成规则图形。那个开关已经
+      // 移除，这里顺手清掉落盘的 recognized 标记，让历史笔迹恢复原样。
+      return parsed.strokes.map((s: Stroke) => (s ? { ...s, recognized: null } : s));
     } catch {
       return [];
     }
@@ -252,11 +252,6 @@ export function WhiteboardCanvas() {
   const setColor = useSettingsStore((s) => s.setWhiteboardColor);
   const width = useSettingsStore((s) => s.whiteboardWidth);
   const setWidth = useSettingsStore((s) => s.setWhiteboardWidth);
-  // 形状识别默认开启：画布空状态明确写着「圆、矩形、三角形和直线会被
-  // 自动识别」，默认关闭会让用户以为功能失效。识别只是给笔迹打标签并在
-  // 渲染时美化，不会改变笔迹的几何语义，可随时在「更多」里关闭。
-  const recognize = useSettingsStore((s) => s.whiteboardRecognize);
-  const setRecognize = useSettingsStore((s) => s.setWhiteboardRecognize);
   const [pixelMode, setPixelMode] = useState<boolean>(false);
   const [eraserSize, setEraserSize] = useState<number>(PEN_ERASER_SIZES[1]);
   const [shapeTool, setShapeTool] = useState<ShapeId | null>(null);
@@ -643,16 +638,20 @@ export function WhiteboardCanvas() {
         const b = stroke.points[stroke.points.length - 1];
         if (stroke.points.length < 2 || Math.hypot(b.x - a.x, b.y - a.y) <= 2) return false;
         commitStrokes([...strokesRef.current, { ...stroke, points: [...stroke.points] }]);
+        // 形状工具只生效一次：画完一个图形立刻回到钢笔。否则用户下次随手
+        // 写字母时，笔迹会继续被套成矩形 / 三角形，看起来像「被自动纠正」。
+        setShapeTool(null);
+        setTool('pen');
+        inkRef.current?.setStyle({ tool: 'pen', shapeTool: null });
         return true;
       }
-      if (recognize && stroke.points.length >= 2 && !stroke.pixel) {
-        stroke.recognized = recognizeShape(stroke.points);
-      }
+      // 自由笔迹永远保持原样。以前这里会把「像方形 / 三角形」的笔画自动
+      // 拉直，写 x、写 n 时经常突然变成几何图形；想要规则图形请用形状工具。
       commitStrokes([...strokesRef.current, { ...stroke, points: [...stroke.points] }]);
       if (!stroke.pixel) scheduleMathRecognition();
       return true;
     },
-    [recognize, commitStrokes, scheduleMathRecognition],
+    [commitStrokes, scheduleMathRecognition],
   );
 
   const handleEraseEnd = useCallback(
@@ -1141,14 +1140,6 @@ export function WhiteboardCanvas() {
               {pixelMode && <Check className="ml-auto size-3 text-primary" />}
             </DropdownMenuItem>
             <DropdownMenuItem
-              onClick={() => setRecognize(!recognize)}
-              className="gap-2 text-[11.5px]"
-            >
-              <Shapes className="size-3.5" />
-              <span>形状识别</span>
-              {recognize && <Check className="ml-auto size-3 text-primary" />}
-            </DropdownMenuItem>
-            <DropdownMenuItem
               onClick={toggleLatencyProbe}
               className="gap-2 text-[11.5px]"
             >
@@ -1478,10 +1469,10 @@ export function WhiteboardCanvas() {
                 {t('abWhiteboard')}
               </p>
               <p className="text-[11.5px] text-muted-foreground max-w-xs">
-                写公式，停 1 秒自动计算或画图
+                先点顶部 Σ 开启数学模式，写公式后停 1 秒出结果
               </p>
               <p className="mt-1 text-[10.5px] text-muted-foreground/70 max-w-xs">
-                圆 / 矩形 / 三角形 / 直线会自动拉直识别
+                sin x、y=x² 都能识别 · 笔迹不会被自动改成几何图形
               </p>
             </div>
           </motion.div>
@@ -1504,8 +1495,8 @@ export function WhiteboardCanvas() {
               : tool === 'lasso'
                 ? '套圈'
                 : '选择'}
-          {selectedIds.length > 0 ? ` · 已选 ${selectedIds.length}` : ''} · 识别{' '}
-          {recognize ? '开' : '关'} · 背景 {BACKGROUNDS.find((b) => b.id === background)?.label}
+          {selectedIds.length > 0 ? ` · 已选 ${selectedIds.length}` : ''} · 背景{' '}
+          {BACKGROUNDS.find((b) => b.id === background)?.label}
           {mathMode ? ' · 数学模式（停笔 1 秒识别）' : ''}
           {mathCards.length > 0 ? ` · ${mathCards.length} 个结果卡` : ''}
         </span>

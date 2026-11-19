@@ -41,8 +41,6 @@ interface SettingsState {
   whiteboardBrush: InkBrush;
   /** 线宽（px） */
   whiteboardWidth: number;
-  /** 形状识别开关 */
-  whiteboardRecognize: boolean;
   /** 数学识别模式 */
   whiteboardMathMode: boolean;
 
@@ -84,7 +82,6 @@ interface SettingsState {
   setWhiteboardColor: (color: string) => void;
   setWhiteboardBrush: (brush: InkBrush) => void;
   setWhiteboardWidth: (width: number) => void;
-  setWhiteboardRecognize: (v: boolean) => void;
   setWhiteboardMathMode: (v: boolean) => void;
 
   setAdvancedPlotSamples: (n: number) => void;
@@ -149,7 +146,6 @@ interface PersistedSettings {
   whiteboardColor?: string;
   whiteboardBrush?: InkBrush;
   whiteboardWidth?: number;
-  whiteboardRecognize?: boolean;
   whiteboardMathMode?: boolean;
 }
 
@@ -189,7 +185,6 @@ export const useSettingsStore = create<SettingsState>((set, get) => ({
   whiteboardColor: '#0ea5e9',
   whiteboardBrush: 'pen',
   whiteboardWidth: 4,
-  whiteboardRecognize: true,
   whiteboardMathMode: false,
 
   setOpen: (v) => set({ open: v }),
@@ -246,10 +241,6 @@ export const useSettingsStore = create<SettingsState>((set, get) => ({
   },
   setWhiteboardWidth: (width) => {
     set({ whiteboardWidth: clampInt(width, 1, 32) });
-    get().saveToStorage();
-  },
-  setWhiteboardRecognize: (v) => {
-    set({ whiteboardRecognize: v });
     get().saveToStorage();
   },
   setWhiteboardMathMode: (v) => {
@@ -333,7 +324,6 @@ export const useSettingsStore = create<SettingsState>((set, get) => ({
           whiteboardColor: s.whiteboardColor,
           whiteboardBrush: s.whiteboardBrush,
           whiteboardWidth: s.whiteboardWidth,
-          whiteboardRecognize: s.whiteboardRecognize,
           whiteboardMathMode: s.whiteboardMathMode,
         };
         localStorage.setItem(SETTINGS_KEY, JSON.stringify(payload));
@@ -433,9 +423,6 @@ export const useSettingsStore = create<SettingsState>((set, get) => ({
       if (typeof data.whiteboardWidth === 'number' && data.whiteboardWidth >= 1 && data.whiteboardWidth <= 32) {
         set({ whiteboardWidth: Math.round(data.whiteboardWidth) });
       }
-      if (typeof data.whiteboardRecognize === 'boolean') {
-        set({ whiteboardRecognize: data.whiteboardRecognize });
-      }
       if (typeof data.whiteboardMathMode === 'boolean') {
         set({ whiteboardMathMode: data.whiteboardMathMode });
       }
@@ -461,7 +448,6 @@ export const useSettingsStore = create<SettingsState>((set, get) => ({
       whiteboardColor: '#0ea5e9',
       whiteboardBrush: 'pen',
       whiteboardWidth: 4,
-      whiteboardRecognize: true,
       whiteboardMathMode: false,
     });
     get().saveToStorage();

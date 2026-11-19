@@ -386,6 +386,11 @@ describe('buildRecognizedText', () => {
     expect(text).toBe('2.5*365');
   });
 
+  it('wraps handwritten function names with their argument', () => {
+    expect(buildRecognizedText([glyph('s'), glyph('i'), glyph('n'), glyph('x')])).toBe('sin(x)');
+    expect(buildRecognizedText([glyph('l'), glyph('n'), glyph('x')])).toBe('ln(x)');
+  });
+
   it('inserts implicit multiplication between adjacent operands', () => {
     expect(buildRecognizedText([glyph('2'), glyph('x')])).toBe('2*x');
     expect(buildRecognizedText([glyph('('), glyph('x'), glyph(')')])).toBe('(x)');
@@ -464,9 +469,11 @@ describe('applyMathWordCorrection', () => {
     expect(corrected(['5', 'i', 'n'])).toBe('sin');
     expect(corrected(['c', '0', '5'])).toBe('cos');
     expect(corrected(['1', 'o', 'g'])).toBe('log');
-    // 只有 1 个真字母时，必须靠后面的 "(" 才认定是函数名。
+    // 只有 1 个真字母时，必须靠后面的 "(" 或操作数才认定是函数名。
     expect(corrected(['1', 'n'])).toBe('1n');
     expect(corrected(['1', 'n', '('])).toBe('ln(');
+    // 手写 ln x 不写括号：后面是操作数时也按 ln 处理。
+    expect(corrected(['1', 'n', 'x'])).toBe('lnx');
   });
 
   it('does not over-correct a digit + letter that is not a call', () => {

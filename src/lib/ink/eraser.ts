@@ -36,10 +36,26 @@ function hitStroke(stroke: InkStroke, eraser: InkStroke, r: number): boolean {
   return stroke.points.some((p) => pointHit(p, eraser, r));
 }
 
+/** 橡皮触点之间的最大跨度：小于该值视为「轻点」而不是拖动。 */
+const TAP_SPAN = 4;
+
+function eraserSpan(eraser: InkStroke): number {
+  if (eraser.points.length <= 1) return 0;
+  const first = eraser.points[0];
+  let span = 0;
+  for (const p of eraser.points) {
+    span = Math.max(span, Math.hypot(p.x - first.x, p.y - first.y));
+  }
+  return span;
+}
+
 /**
  * 应用橡皮效果：
  *  - partial：沿橡皮路径切断自由笔迹；像素格逐格删除；图形整体删除。
  *  - stroke：碰到任意对象就整条删除。
+ *
+ * 轻点（笔尖几乎没移动）在 partial 模式下也按整笔删除处理：以前点一下
+ * 只切掉半径内的几个采样点，看起来像「橡皮点不动」。
  */
 export function applyEraser(
   strokes: InkStroke[],
@@ -49,11 +65,12 @@ export function applyEraser(
   const r = eraser.width / 2;
   const result: InkStroke[] = [];
   let changed = false;
+  const tap = eraserSpan(eraser) < TAP_SPAN;
 
   for (const s of strokes) {
     if (s.style === 'eraser' || s.points.length === 0) continue;
 
-    if (mode === 'stroke') {
+    if (mode === 'stroke' || (tap && !s.pixel)) {
       if (hitStroke(s, eraser, r)) changed = true;
       else result.push(s);
       continue;

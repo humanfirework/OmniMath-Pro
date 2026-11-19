@@ -11,6 +11,7 @@
  */
 
 import { math } from '@/lib/engine/mathInstance';
+import { CALLABLE_FUNCTIONS, attachFunctionArguments } from './functionArgs';
 
 export interface PlotSample {
   x: number;
@@ -42,15 +43,7 @@ export interface MathNoteEvaluation {
   error?: string;
 }
 
-const FUNCTIONS = new Set([
-  'sin', 'cos', 'tan', 'cot', 'sec', 'csc',
-  'asin', 'acos', 'atan', 'atan2', 'acot',
-  'sinh', 'cosh', 'tanh', 'asinh', 'acosh', 'atanh',
-  'sqrt', 'cbrt', 'nthRoot', 'abs', 'exp', 'log', 'ln', 'lg', 'log10', 'log2',
-  'floor', 'ceil', 'round', 'fix', 'sign', 'min', 'max', 'mod', 'pow',
-  'gamma', 'factorial', 'ncr', 'npr',
-  're', 'im', 'arg', 'conj',
-]);
+const FUNCTIONS = new Set(CALLABLE_FUNCTIONS);
 
 const CONSTANTS = new Set(['pi', 'e', 'tau', 'phi']);
 
@@ -90,6 +83,9 @@ export function normalizeMathExpression(raw: string): string {
 
   // A trailing "=" is what people write before expecting a result.
   s = s.replace(/=+\s*$/g, '');
+  // `sin x` / `sinx` / `sin*x` → `sin(x)`（必须在去掉空格之前，
+  // 空格是区分参数和下一个函数的重要边界）。
+  s = attachFunctionArguments(s);
   s = s.replace(/\s+/g, '');
   return insertImplicitMultiplication(s);
 }
