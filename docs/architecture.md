@@ -18,6 +18,8 @@
 
 只有当产品明确变成**桌面-only 的专业手写工具**，且实测 Canvas 在 240Hz 笔输入下无法达标时，才值得评估。当前没有证据支持这一点。
 
+实测数据、Canvas 与 GPUI 的逐项对比、以及「何时才换渲染层」的阈值见 [handwriting-render-benchmark.md](./handwriting-render-benchmark.md)：当前引擎在 Chromium 60Hz 下单笔迹平均 9.8ms、P95 17.9ms，已接近事件→帧下限。
+
 ## 2. 性能真正的瓶颈与对策
 
 历史卡顿的根因不是 Canvas，而是：

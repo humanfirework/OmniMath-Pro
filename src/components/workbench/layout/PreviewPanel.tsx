@@ -160,6 +160,21 @@ export function PreviewPanel() {
     if (activeTab === 'plot3d') setVisited3d(true);
   }, [activeTab]);
 
+  // 预览面板较窄时（平板竖屏 / 小窗口左右分栏）只显示图标，
+  // 避免「流水线 / AI」被挤出可视区；宽度恢复后自动带回文字。
+  const tabBarRef = useRef<HTMLDivElement>(null);
+  const [compactTabs, setCompactTabs] = useState(false);
+  useEffect(() => {
+    const el = tabBarRef.current;
+    if (!el || typeof ResizeObserver === 'undefined') return;
+    const ro = new ResizeObserver((entries) => {
+      const width = entries[0]?.contentRect.width ?? el.clientWidth;
+      setCompactTabs(width < 430);
+    });
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, []);
+
   const handleCopy = useCallback(async () => {
     if (!currentResult) return;
     try {
@@ -175,7 +190,7 @@ export function PreviewPanel() {
   return (
     <div className="flex flex-col h-full bg-card/30">
       {/* Tab bar */}
-      <div className="shrink-0 h-9 flex items-center justify-between px-1.5 border-b border-border/60 bg-background/40">
+      <div ref={tabBarRef} className="shrink-0 h-9 flex items-center justify-between px-1.5 border-b border-border/60 bg-background/40">
         <div className="flex items-center h-full overflow-x-auto scrollbar-none">
           {TABS.map((tab, idx) => {
             const Icon = tab.icon;
@@ -194,15 +209,18 @@ export function PreviewPanel() {
                 <button
                   type="button"
                   onClick={() => setActiveTab(tab.id)}
+                  title={compactTabs ? t(tab.labelKey) : undefined}
+                  aria-label={compactTabs ? t(tab.labelKey) : undefined}
                   className={cn(
-                    'relative h-full flex items-center gap-1.5 px-2.5 text-[11.5px] font-medium transition-colors shrink-0',
+                    'relative h-full flex items-center gap-1.5 text-[11.5px] font-medium transition-colors shrink-0',
+                    compactTabs ? 'px-2' : 'px-2.5',
                     isActive
                       ? 'text-primary'
                       : 'text-muted-foreground hover:text-foreground',
                   )}
                 >
                   <Icon className="size-3.5" />
-                  <span className="whitespace-nowrap">{t(tab.labelKey)}</span>
+                  {!compactTabs && <span className="whitespace-nowrap">{t(tab.labelKey)}</span>}
                   {isActive && (
                     <motion.span
                       layoutId="preview-tab-indicator"

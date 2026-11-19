@@ -38,6 +38,7 @@ import { inTauri } from '@/lib/tauri';
 import { setLocale as setI18nLocale, getLocale, t, useLocale } from '@/lib/i18n';
 import { useIsMobile } from '@/hooks/use-mobile';
 import { useCoarsePointer } from '@/hooks/use-coarse-pointer';
+import { usePortraitTablet } from '@/hooks/use-portrait-tablet';
 import { TitleBar } from '@/components/workbench/layout/TitleBar';
 import { ActivityBar } from '@/components/workbench/layout/ActivityBar';
 import {
@@ -486,6 +487,10 @@ export function Workbench() {
 
   const isMobile = useIsMobile();
   const coarsePointer = useCoarsePointer();
+  // 竖屏平板默认上下分栏：左右分栏会把编辑器和预览都压到三百多像素，
+  // 预览的「流水线 / AI」标签还会被截断。
+  const portraitTablet = usePortraitTablet();
+  const effectivePreviewPosition = portraitTablet ? 'bottom' : previewPosition;
   // 平板打开白板时收起编辑器/侧栏，让画布吃满屏幕。
   const focusWhiteboard = coarsePointer && viewMode === 'whiteboard';
   const showFsSide = !sidePanelCollapsed && viewMode !== 'focus' && !focusWhiteboard;
@@ -767,8 +772,8 @@ export function Workbench() {
               order={2}
             >
               <ResizablePanelGroup
-                direction={previewPosition === 'right' ? 'horizontal' : 'vertical'}
-                autoSaveId={`omnimath-main-${previewPosition}-${previewSize}`}
+                direction={effectivePreviewPosition === 'right' ? 'horizontal' : 'vertical'}
+                autoSaveId={`omnimath-main-${effectivePreviewPosition}-${previewSize}`}
                 className="h-full w-full"
               >
                 <ResizablePanel

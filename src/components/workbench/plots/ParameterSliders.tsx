@@ -348,21 +348,17 @@ export function ParameterSliders({
     bumpScopeVersion();
   }, [params, configs, setPlotParam]);
 
-  // 无自由参数时给出明确引导（而非一片空白）：让用户知道用
-  // a*sin(x)+b 这类含参数表达式即可出现实时调节滑块。
+  // 无自由参数时不再占一整块说明区：只留一行轻提示，避免在图上方堆文字。
+  // 没有可见曲线时干脆不渲染，空状态本身已有引导。
   if (params.length === 0) {
     const hasVisiblePlot = plots.some((p) => p.visible && p.plotType !== 'surface3d');
+    if (!hasVisiblePlot) return null;
     return (
-      <div className="border-t border-border/60 bg-background/40 px-3 py-2 text-[11px] text-muted-foreground">
-        <div className="flex items-center gap-1.5 font-medium">
-          <SlidersHorizontal className="size-3" />
-          <span>参数滑块</span>
-        </div>
-        <p className="mt-1 leading-relaxed">
-          {hasVisiblePlot
-            ? '当前表达式没有可调参数（如 a·x²+b 中的 a、b）。在表达式里加入字母参数即可出现可拖动滑块，实时改变曲线。'
-            : '还没有可见的 2D 曲线。输入如 a*sin(x)+b 的表达式并运行，即可出现可拖动滑块，实时改变曲线。'}
-        </p>
+      <div className="flex h-6 items-center gap-1.5 border-t border-border/60 bg-background/40 px-3 text-[10.5px] text-muted-foreground">
+        <SlidersHorizontal className="size-3" />
+        <span>参数滑块</span>
+        <span className="text-border">·</span>
+        <span className="truncate">表达式里加 a、b 等字母即可实时调节</span>
       </div>
     );
   }
