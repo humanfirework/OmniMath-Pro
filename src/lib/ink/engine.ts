@@ -1,10 +1,11 @@
 /**
  * OmniMath — 框架无关的 Canvas 墨迹引擎。
  *
- * 四层画布：
+ * 四层画布 + 预测层：
  *   L0 背景（网格/横线/点阵）
  *   L1 已提交笔画（Path2D 缓存）
  *   L2 活动笔画（增量绘制）
+ *   L2.5 触控笔预测尾巴（每帧重画，下一帧真实点到达即清除）
  *   L3 交互层（选中框、套圈、橡皮圈）
  *
  * 指针热路径直接写 ref / Path2D，不经过 React state。
@@ -28,8 +29,13 @@ import {
   pointInPolygon,
   type CachedInkStroke,
 } from './render';
+import { predictPenTail } from './predict';
 
 const MIN_POINT_DIST = 1.2;
+
+/** 预测尾巴：按上一段速度外推 10ms，最多 7 个屏幕像素。 */
+const PREDICT_AHEAD_MS = 10;
+const PREDICT_MAX_PX = 7;
 
 function clamp(v: number, min: number, max: number): number {
   return Math.max(min, Math.min(max, v));
@@ -80,10 +86,12 @@ export class InkEngine {
   private bgCanvas: HTMLCanvasElement;
   private mainCanvas: HTMLCanvasElement;
   private liveCanvas: HTMLCanvasElement;
+  private predCanvas: HTMLCanvasElement;
   private overlayCanvas: HTMLCanvasElement;
   private bgCtx: CanvasRenderingContext2D;
   private mainCtx: CanvasRenderingContext2D;
   private liveCtx: CanvasRenderingContext2D;
+  private predCtx: CanvasRenderingContext2D;
   private overlayCtx: CanvasRenderingContext2D;
 
   private width = 1;
@@ -128,6 +136,8 @@ export class InkEngine {
   private overlayRaf = 0;
   private liveRaf = 0;
   private viewRaf = 0;
+  private predTimer: ReturnType<typeof setTimeout> | null = null;
+  private predGen = 0;
   private viewTimer: ReturnType<typeof setTimeout> | null = null;
   private resizeObserver: ResizeObserver | null = null;
   private themeObserver: MutationObserver | null = null;
@@ -140,9 +150,10 @@ export class InkEngine {
     this.bgCanvas = document.createElement('canvas');
     this.mainCanvas = document.createElement('canvas');
     this.liveCanvas = document.createElement('canvas');
+    this.predCanvas = document.createElement('canvas');
     this.overlayCanvas = document.createElement('canvas');
 
-    for (const canvas of [this.bgCanvas, this.mainCanvas, this.liveCanvas, this.overlayCanvas]) {
+    for (const canvas of [this.bgCanvas, this.mainCanvas, this.liveCanvas, this.predCanvas, this.overlayCanvas]) {
       canvas.style.position = 'absolute';
       canvas.style.inset = '0';
       canvas.style.width = '100%';
@@ -154,13 +165,15 @@ export class InkEngine {
     const bgCtx = this.bgCanvas.getContext('2d');
     const mainCtx = this.mainCanvas.getContext('2d');
     const liveCtx = this.liveCanvas.getContext('2d');
+    const predCtx = this.predCanvas.getContext('2d');
     const overlayCtx = this.overlayCanvas.getContext('2d');
-    if (!bgCtx || !mainCtx || !liveCtx || !overlayCtx) {
+    if (!bgCtx || !mainCtx || !liveCtx || !predCtx || !overlayCtx) {
       throw new Error('Canvas 2D context unavailable');
     }
     this.bgCtx = bgCtx;
     this.mainCtx = mainCtx;
     this.liveCtx = liveCtx;
+    this.predCtx = predCtx;
     this.overlayCtx = overlayCtx;
 
     container.style.touchAction = 'none';
@@ -316,10 +329,12 @@ export class InkEngine {
     if (this.overlayRaf) cancelAnimationFrame(this.overlayRaf);
     if (this.liveRaf) cancelAnimationFrame(this.liveRaf);
     if (this.viewRaf) cancelAnimationFrame(this.viewRaf);
+    if (this.predTimer) clearTimeout(this.predTimer);
     if (this.viewTimer) clearTimeout(this.viewTimer);
     this.bgCanvas.remove();
     this.mainCanvas.remove();
     this.liveCanvas.remove();
+    this.predCanvas.remove();
     this.overlayCanvas.remove();
   }
 
@@ -352,7 +367,7 @@ export class InkEngine {
     this.width = w;
     this.height = h;
     this.dpr = dpr;
-    for (const canvas of [this.bgCanvas, this.mainCanvas, this.liveCanvas, this.overlayCanvas]) {
+    for (const canvas of [this.bgCanvas, this.mainCanvas, this.liveCanvas, this.predCanvas, this.overlayCanvas]) {
       canvas.width = Math.round(w * dpr);
       canvas.height = Math.round(h * dpr);
     }
@@ -396,6 +411,56 @@ export class InkEngine {
   private clearLive(): void {
     this.clear(this.liveCtx, this.liveCanvas);
     this.liveDrawn = 0;
+    this.clearPrediction();
+  }
+
+  private clearPrediction(): void {
+    if (this.predTimer) {
+      clearTimeout(this.predTimer);
+      this.predTimer = null;
+    }
+    this.predGen += 1;
+    this.clear(this.predCtx, this.predCanvas);
+  }
+
+  /**
+   * 触控笔预测尾巴：只画一小段（≤7px），下一帧真实点到达后整层清除。
+   * 只对 pen 生效，鼠标/手指不画，避免出现「鼠标拖影」。
+   */
+  private drawPrediction(): void {
+    this.clearPrediction();
+    const stroke = this.live;
+    if (!stroke || this.activePointerType !== 'pen') return;
+    if (stroke.shape || stroke.pixel || stroke.style === 'eraser') return;
+    if (stroke.brush === 'highlighter') return;
+    const last = stroke.points[stroke.points.length - 1];
+    // 笔停住时不再保留尾巴：最后一点超过 40ms 就视为停顿。
+    if (!last?.t || performance.now() - last.t > 40) return;
+
+    const maxWorld = PREDICT_MAX_PX / Math.max(0.05, this.view.k);
+    const tail = predictPenTail(stroke.points, PREDICT_AHEAD_MS, maxWorld);
+    if (!tail) return;
+
+    const ctx = this.predCtx;
+    ctx.save();
+    this.applyWorld(ctx);
+    ctx.strokeStyle = stroke.color;
+    ctx.lineWidth = Math.max(0.5, last.w ?? stroke.width);
+    ctx.lineCap = 'round';
+    ctx.lineJoin = 'round';
+    ctx.globalAlpha = stroke.brush === 'marker' ? 0.88 : 1;
+    ctx.beginPath();
+    ctx.moveTo(last.x, last.y);
+    ctx.lineTo(tail.x, tail.y);
+    ctx.stroke();
+    ctx.restore();
+
+    // 没有新点时自动消失；有更新的预测会以新的 generation 覆盖这个定时器。
+    const gen = this.predGen;
+    this.predTimer = setTimeout(() => {
+      this.predTimer = null;
+      if (this.predGen === gen) this.clear(this.predCtx, this.predCanvas);
+    }, 40);
   }
 
   private drawLiveFull(): void {
@@ -448,6 +513,7 @@ export class InkEngine {
     this.liveRaf = requestAnimationFrame(() => {
       this.liveRaf = 0;
       this.drawLiveIncrement();
+      this.drawPrediction();
     });
   }
 
