@@ -238,11 +238,21 @@ function isWideFlat(bbox: BBox, medianHeight: number): boolean {
  * ================================================================== */
 
 export const TEMPLATE_SIZE = 48;
+/**
+ * Glyph alphabet. Digits + operators + the variable letters, plus the
+ * lowercase Latin letters needed for function names (sin / cos / log / ln …).
+ * Handwriting users constantly write function names on the board; without
+ * these templates every letter was silently dropped from the result.
+ */
 const TEMPLATE_CHARS = [
   '0', '1', '2', '3', '4', '5', '6', '7', '8', '9',
-  '+', '-', '*', '/', '=', '(', ')', '.', 'x', 'y',
+  '+', '-', '*', '/', '=', '(', ')', '.',
+  ...'abcdefghijklmnopqrstuvwxyz'.split(''),
+  'π',
 ];
 const TEMPLATE_FONTS = ['DejaVu Sans', 'DejaVu Serif', 'DejaVu Sans Mono', 'sans-serif', 'serif'];
+/** 这些字形太小/太扁，归一化会放大成别的东西（点→圆、横→方框），保持原样。 */
+const NO_NORMALIZE_CHARS = new Set(['.', '-']);
 
 interface GlyphTemplate {
   char: string;
@@ -346,6 +356,38 @@ export function addUserGlyphSamples(glyphs: RecognizedGlyph[]): void {
 
 let templateCache: GlyphTemplate[] | null = null;
 
+/**
+ * 把字体骨架按包围盒等比缩放铺满模板位图，与 `rasterizeGlyph` 对用户笔迹
+ * 的归一化方式保持一致。否则字号 42px 的小写字母只占画布中间一小块，
+ * 与写满整格的用户笔迹做 Chamfer 距离时会天然偏大，字母几乎无法被识别。
+ */
+function normalizeSkeleton(skeleton: Uint8Array, bbox: BBox): Uint8Array {
+  const w = Math.max(1, bbox.x1 - bbox.x0);
+  const h = Math.max(1, bbox.y1 - bbox.y0);
+  const pad = 3;
+  const scale = (TEMPLATE_SIZE - pad * 2) / Math.max(w, h);
+  const offX = (TEMPLATE_SIZE - w * scale) / 2;
+  const offY = (TEMPLATE_SIZE - h * scale) / 2;
+  const out = new Uint8Array(TEMPLATE_SIZE * TEMPLATE_SIZE);
+  for (let y = 0; y < TEMPLATE_SIZE; y++) {
+    for (let x = 0; x < TEMPLATE_SIZE; x++) {
+      if (!skeleton[y * TEMPLATE_SIZE + x]) continue;
+      const nx = Math.round(offX + (x - bbox.x0) * scale);
+      const ny = Math.round(offY + (y - bbox.y0) * scale);
+      // 缩放后的 1px 骨架容易断开，落点周围补一圈保证连通。
+      for (let oy = -1; oy <= 1; oy++) {
+        for (let ox = -1; ox <= 1; ox++) {
+          const px = nx + ox;
+          const py = ny + oy;
+          if (px < 0 || py < 0 || px >= TEMPLATE_SIZE || py >= TEMPLATE_SIZE) continue;
+          out[py * TEMPLATE_SIZE + px] = 1;
+        }
+      }
+    }
+  }
+  return out;
+}
+
 /** Render + thin a character with a local font. Browser only. */
 function renderTemplate(char: string, font: string): GlyphTemplate | null {
   if (typeof document === 'undefined') return null;
@@ -370,7 +412,12 @@ function renderTemplate(char: string, font: string): GlyphTemplate | null {
       const luma = 0.299 * data[i * 4] + 0.587 * data[i * 4 + 1] + 0.114 * data[i * 4 + 2];
       ink[i] = luma < 128 ? 1 : 0;
     }
-    const skeleton = skeletonize(ink, TEMPLATE_SIZE, TEMPLATE_SIZE);
+    let skeleton = skeletonize(ink, TEMPLATE_SIZE, TEMPLATE_SIZE);
+    const bbox = bitmapBBox(skeleton, TEMPLATE_SIZE, TEMPLATE_SIZE);
+    if (bbox.x1 <= bbox.x0 && bbox.y1 <= bbox.y0) return null;
+    if (!NO_NORMALIZE_CHARS.has(char)) {
+      skeleton = normalizeSkeleton(skeleton, bbox);
+    }
     return {
       char,
       skeleton,
@@ -533,13 +580,15 @@ export function classifyGlyphBitmap(ink: Uint8Array, templates: GlyphTemplate[])
   if (ranked.length === 0) return { char: '?', confidence: 0, alternatives: [] };
 
   const [bestChar, bestScore] = ranked[0];
-  // 0 px error → 1.0; ~7 px average error → 0. Confidence is advisory.
+  // 0 px error → 1.0; ~7 px average error 0. Confidence is advisory.
   const confidence = Math.max(0, Math.min(1, 1 - bestScore / 7));
   const char = confidence < 0.28 ? '?' : bestChar;
   return {
     char,
     confidence,
-    alternatives: ranked.slice(1, 4).map(([c]) => c),
+    // When the best guess is rejected as "?", keep it in the alternatives so
+    // the word-level correction pass can still use it (e.g. "s?n" → "sin").
+    alternatives: (char === '?' ? ranked.slice(0, 3) : ranked.slice(1, 4)).map(([c]) => c),
   };
 }
 
@@ -581,11 +630,26 @@ export function classifyGlyphGeometry(group: GlyphGroup): GeometryHint | null {
     if (aspect >= 2.2 && h <= Math.max(6, w * 0.22) && line.straightness > 0.78) {
       return { char: '-', confidence: 0.88, alternatives: [] };
     }
+    // 括号：细高、整体向一侧鼓出。放在「竖线 = 1」之前判断，否则一条
+    // 画得比较直的 "(" 会被误判成 1，导致 sin(x) 变成 sin1…。
+    if (h / w >= 1.4 && line.straightness < 0.98) {
+      const chordMidX = (stroke.points[0].x + stroke.points[stroke.points.length - 1].x) / 2;
+      const bulge = meanX(stroke) - chordMidX;
+      if (Math.abs(bulge) > Math.max(4, h * 0.12)) {
+        return {
+          char: bulge < 0 ? '(' : ')',
+          confidence: 0.7,
+          alternatives: [],
+          reason: 'arc-bulge',
+        };
+      }
+    }
     if (h / w >= 2.6 && w <= Math.max(6, h * 0.3) && line.straightness > 0.8) {
-      return { char: '1', confidence: 0.62, alternatives: [], reason: 'vertical-line' };
+      // 竖线既可能是 1 也可能是 l / i；字母上下文由词级纠错决定。
+      return { char: '1', confidence: 0.62, alternatives: ['l', 'i'], reason: 'vertical-line' };
     }
     if (aspect >= 0.45 && aspect <= 2.2 && closureRatio(stroke) < 0.22) {
-      return { char: '0', confidence: 0.55, alternatives: [], reason: 'closed-loop' };
+      return { char: '0', confidence: 0.55, alternatives: ['o'], reason: 'closed-loop' };
     }
 
     // Loop digits: 6 / 8 / 9 all cross themselves. Vertical ink density
@@ -594,19 +658,19 @@ export function classifyGlyphGeometry(group: GlyphGroup): GeometryHint | null {
     if (selfCrossings >= 1 && h / w >= 1.05) {
       const density = verticalDensity(stroke);
       if (selfCrossings >= 2 && density.top > 0.3 && density.bottom > 0.3) {
-        return { char: '8', confidence: 0.58, alternatives: [], reason: `loops(${selfCrossings})` };
+        return { char: '8', confidence: 0.58, alternatives: ['b'], reason: `loops(${selfCrossings})` };
       }
       if (density.top > density.bottom * 1.2) {
-        return { char: '9', confidence: 0.66, alternatives: [], reason: `loop-top(${selfCrossings})` };
+        return { char: '9', confidence: 0.66, alternatives: ['g', 'q'], reason: `loop-top(${selfCrossings})` };
       }
       if (density.bottom > density.top * 1.2) {
-        return { char: '6', confidence: 0.66, alternatives: [], reason: `loop-bottom(${selfCrossings})` };
+        return { char: '6', confidence: 0.66, alternatives: ['b'], reason: `loop-bottom(${selfCrossings})` };
       }
     }
 
     // "2": a flat horizontal bar at the bottom, ending on the right edge.
     if (hasFlatBar(stroke, 'bottom') && stroke.points[stroke.points.length - 1].x > bbox.x0 + w * 0.72) {
-      return { char: '2', confidence: 0.72, alternatives: [], reason: 'bottom-bar' };
+      return { char: '2', confidence: 0.72, alternatives: ['z'], reason: 'bottom-bar' };
     }
     // "3": two right-facing bumps, both endpoints on the left.
     if (
@@ -619,12 +683,6 @@ export function classifyGlyphGeometry(group: GlyphGroup): GeometryHint | null {
     // "7": a flat top bar followed by a descending diagonal.
     if (hasFlatBar(stroke, 'top')) {
       return { char: '7', confidence: 0.56, alternatives: [], reason: 'top-bar' };
-    }
-    if (h / w >= 1.6 && line.straightness < 0.72 && reversals <= 1) {
-      const cx = meanX(stroke);
-      const endpoints = (stroke.points[0].x + stroke.points[stroke.points.length - 1].x) / 2;
-      if (cx < endpoints - w * 0.08) return { char: '(', confidence: 0.68, alternatives: [] };
-      if (cx > endpoints + w * 0.08) return { char: ')', confidence: 0.68, alternatives: [] };
     }
     if (line.pathRatio < 1.3 && w > 12 && h > 12) {
       const p0 = stroke.points[0];
@@ -942,6 +1000,143 @@ export function buildRecognizedText(glyphs: RecognizedGlyph[]): string {
   }
   return out;
 }
+
+/* ================================================================== *
+ * 2b. Word-level correction (function names)
+ *
+ * Per-glyph classification cannot tell "1" from "l" or "5" from "s": both
+ * are the same ink. Math notation gives us a strong prior though — a run of
+ * 2+ letters is almost always a function name (sin / cos / log / ln …).
+ * This pass snaps such runs to the nearest known name, repairing the exact
+ * confusions the template classifier is prone to.
+ * ================================================================== */
+
+const MATH_WORDS = [
+  'sin', 'cos', 'tan', 'cot', 'sec', 'csc', 'asin', 'acos', 'atan',
+  'sinh', 'cosh', 'tanh', 'asinh', 'acosh', 'atanh', 'atan2',
+  'log', 'ln', 'lg', 'log10', 'log2', 'sqrt', 'cbrt', 'nthroot',
+  'abs', 'exp', 'floor', 'ceil', 'round', 'sign', 'min', 'max',
+  'mod', 'pow', 'det', 'lim', 'pi', 'tau', 'phi', 'deg', 'rad',
+];
+
+const CONFUSABLE_LETTERS: Record<string, string[]> = {
+  '0': ['o'],
+  '1': ['l', 'i'],
+  '2': ['z'],
+  '5': ['s'],
+  '6': ['b'],
+  '8': ['b'],
+  '9': ['g', 'q'],
+};
+
+/** Possible letters this glyph could stand for inside a word. */
+function letterCandidates(g: RecognizedGlyph): string[] {
+  if (g.text) return [];
+  const ch = g.char.toLowerCase();
+  const out: string[] = [];
+  if (/^[a-z]$/.test(ch)) out.push(ch);
+  const mapped = CONFUSABLE_LETTERS[ch];
+  if (mapped) out.push(...mapped);
+  if (ch === '?') {
+    for (const alt of g.alternatives ?? []) {
+      if (/^[a-z]$/i.test(alt)) out.push(alt.toLowerCase());
+    }
+  }
+  return [...new Set(out)];
+}
+
+function isWordGlyph(g: RecognizedGlyph): boolean {
+  if (g.text || g.superscript || g.subscript) return false;
+  if (/^[a-z]$/i.test(g.char) || g.char === '?') return true;
+  return g.char in CONFUSABLE_LETTERS;
+}
+
+/** Best known math word for a run of glyphs, or null when none is close. */
+function matchMathWord(run: RecognizedGlyph[]): string | null {
+  const candidates = run.map(letterCandidates);
+  if (candidates.some((c) => c.length === 0)) return null;
+  let best: { word: string; cost: number } | null = null;
+  for (const word of MATH_WORDS) {
+    if (word.length !== run.length) continue;
+    let cost = 0;
+    for (let k = 0; k < word.length; k++) {
+      if (candidates[k].includes(word[k])) continue;
+      // "?" has no usable guess: allow it as a wildcard, but cost more than
+      // a confident substitution so a real letter match still wins.
+      cost += run[k].char === '?' ? 0.5 : 1;
+      if (cost > 1) break;
+    }
+    if (cost > 1) continue;
+    if (!best || cost < best.cost) best = { word, cost };
+  }
+  return best?.word ?? null;
+}
+
+/**
+ * Rewrite consecutive letter-like glyphs into known function names.
+ * Mutates the glyphs in place and returns the same array.
+ */
+export function applyMathWordCorrection(glyphs: RecognizedGlyph[]): RecognizedGlyph[] {
+  let i = 0;
+  while (i < glyphs.length) {
+    if (!isWordGlyph(glyphs[i])) {
+      i++;
+      continue;
+    }
+    let j = i;
+    while (j < glyphs.length && isWordGlyph(glyphs[j])) j++;
+    const run = glyphs.slice(i, j);
+    if (run.length >= 2 && run.length <= 12) {
+      const word = matchMathWord(run);
+      if (word) {
+        for (let k = 0; k < run.length; k++) {
+          const g = run[k];
+          g.char = word[k];
+          g.displayChar = word[k];
+          g.confidence = Math.max(g.confidence, 0.6);
+          g.reason = 'lexicon';
+        }
+      }
+    }
+    i = j;
+  }
+  return glyphs;
+}
+
+/**
+ * A cross glyph ("×") is ambiguous: it is either the multiplication sign or
+ * the letter x. In math notation the two never appear in the same position —
+ * a cross in operand position (after "(" / an operator / at the start, or
+ * before ")" / an operator) must be the variable x.
+ */
+export function disambiguateCrossGlyphs(glyphs: RecognizedGlyph[]): RecognizedGlyph[] {
+  for (let i = 0; i < glyphs.length; i++) {
+    const g = glyphs[i];
+    if (g.char !== '*' || g.text) continue;
+    let prev: RecognizedGlyph | null = null;
+    for (let k = i - 1; k >= 0; k--) {
+      if (!glyphs[k].superscript && !glyphs[k].subscript) { prev = glyphs[k]; break; }
+    }
+    let next: RecognizedGlyph | null = null;
+    for (let k = i + 1; k < glyphs.length; k++) {
+      if (!glyphs[k].superscript && !glyphs[k].subscript) { next = glyphs[k]; break; }
+    }
+    const prevKind = prev ? glyphKind(prev) : null;
+    const nextKind = next ? glyphKind(next) : null;
+    const operandPosition = !prev || prevKind === 'open' || prevKind === 'op';
+    const expressionEnd = !next || nextKind === 'close' || nextKind === 'op';
+    if (operandPosition || expressionEnd) {
+      g.char = 'x';
+      g.displayChar = 'x';
+      g.reason = 'cross-variable';
+    }
+  }
+  return glyphs;
+}
+
+/* ================================================================== *
+ * 3b. Math word correction is applied in `recognizeMathInk` below.
+ * ================================================================== */
 
 /**
  * Decide whether a glyph group is a superscript or subscript of `base`.
@@ -1382,6 +1577,11 @@ export function recognizeMathInk(strokes: RecognitionStroke[]): MathRecognitionR
     if (!glyph.superscript && !glyph.subscript) superscriptBase = glyph;
     glyphs.push(glyph);
   }
+
+  // 字母序列（sin / cos / log …）用数学词汇表纠正 1↔l、5↔s、0↔o 这类
+  // 单字形无法区分的混淆，再进入二维结构重建。
+  disambiguateCrossGlyphs(glyphs);
+  applyMathWordCorrection(glyphs);
 
   const layoutGlyphs = applyRadicalLayout(buildFractionLayout(glyphs), radicals);
   const rawText = buildRecognizedText(layoutGlyphs);

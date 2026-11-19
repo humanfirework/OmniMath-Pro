@@ -11,10 +11,12 @@
 import { useMemo, useState } from 'react';
 import { Check, RefreshCw, Sigma, Sparkles, X } from 'lucide-react';
 import type { RecognizedGlyph } from '@/lib/mathnotes/recognize';
+import type { InkPoint } from '@/lib/ink/types';
 import { evaluateMathNote } from '@/lib/mathnotes/expression';
 import { chatComplete, hasAPIKey, type AIMessage } from '@/lib/ai-client';
 import { FormulaRenderer } from '@/components/workbench/FormulaRenderer';
 import { HandwritingText } from './HandwritingText';
+import { InkPreview } from './InkPreview';
 import { MathPlot } from './MathCardView';
 import { cn } from '@/lib/utils';
 
@@ -28,6 +30,8 @@ export interface MathNoteDraft {
   glyphs: RecognizedGlyph[];
   confidence: number;
   error?: string;
+  /** 原始笔迹，用于在识别窗口里回显「我写的是什么」。 */
+  sourcePoints?: InkPoint[][];
 }
 
 export interface MathNotePanelProps {
@@ -36,9 +40,11 @@ export interface MathNotePanelProps {
   onRetry: () => void;
   onInsert: (text: string) => void;
   onClose: () => void;
+  /** 触屏设备底部有 PenDock，识别窗口需要抬高避免遮住笔刷/橡皮。 */
+  raised?: boolean;
 }
 
-export function MathNotePanel({ draft, onChange, onRetry, onInsert, onClose }: MathNotePanelProps) {
+export function MathNotePanel({ draft, onChange, onRetry, onInsert, onClose, raised }: MathNotePanelProps) {
   const evaluation = useMemo(() => evaluateMathNote(draft.text), [draft.text]);
   const confidence = Math.round(draft.confidence * 100);
   const [explain, setExplain] = useState<string | null>(null);
@@ -77,7 +83,8 @@ export function MathNotePanel({ draft, onChange, onRetry, onInsert, onClose }: M
   return (
     <div
       className={cn(
-        'absolute bottom-3 left-1/2 z-30 w-[min(94vw,540px)] -translate-x-1/2',
+        'absolute left-1/2 z-30 w-[min(94vw,540px)] -translate-x-1/2',
+        raised ? 'bottom-[76px]' : 'bottom-3',
         'rounded-xl border border-border/70 bg-background/95 shadow-xl shadow-black/15 backdrop-blur',
       )}
       onPointerDown={(e) => e.stopPropagation()}
@@ -108,20 +115,28 @@ export function MathNotePanel({ draft, onChange, onRetry, onInsert, onClose }: M
       </div>
 
       <div className="space-y-2 px-2.5 py-2">
-        <input
-          value={draft.text}
-          onChange={(e) => onChange(e.target.value)}
-          onKeyDown={(e) => {
-            if (e.key === 'Enter' && evaluation.ok) {
-              e.preventDefault();
-              onInsert(draft.text);
-            }
-          }}
-          spellCheck={false}
-          aria-label="识别结果（可编辑）"
-          className="h-7 w-full rounded-md border border-border/70 bg-background px-2 font-mono text-[12px] outline-none transition-colors focus:border-primary/70"
-          placeholder="识别结果，可手动修正…"
-        />
+        <div className="flex items-center gap-2">
+          {draft.sourcePoints && draft.sourcePoints.length > 0 && (
+            <InkPreview
+              strokes={draft.sourcePoints}
+              className="h-[46px] w-[84px] shrink-0 rounded-md border border-border/60 bg-background"
+            />
+          )}
+          <input
+            value={draft.text}
+            onChange={(e) => onChange(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter' && evaluation.ok) {
+                e.preventDefault();
+                onInsert(draft.text);
+              }
+            }}
+            spellCheck={false}
+            aria-label="识别结果（可编辑）"
+            className="h-7 min-w-0 flex-1 rounded-md border border-border/70 bg-background px-2 font-mono text-[12px] outline-none transition-colors focus:border-primary/70"
+            placeholder="识别结果，可手动修正…"
+          />
+        </div>
 
         <div className="min-h-[52px] rounded-lg border border-border/50 bg-muted/20 px-2 py-1.5">
           {evaluation.ok && evaluation.kind === 'number' ? (

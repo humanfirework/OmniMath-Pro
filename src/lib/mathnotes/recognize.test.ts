@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
   addUserGlyphSamples,
+  applyMathWordCorrection,
   applyRadicalLayout,
   buildFractionLayout,
   buildRecognizedDisplay,
@@ -409,6 +410,41 @@ describe('buildRecognizedText', () => {
     expect(
       buildRecognizedDisplay([glyph('x'), glyph('2', true), glyph('1', false, true)]),
     ).toBe('x₁^2');
+  });
+});
+
+describe('applyMathWordCorrection', () => {
+  const corrected = (chars: string[]) =>
+    applyMathWordCorrection(chars.map((c) => glyph(c))).map((g) => g.char).join('');
+
+  it('repairs digit/letter confusions inside function names', () => {
+    // 5 vs s, 0 vs o, 1 vs l — 单字形模板无法区分，词汇表按上下文修复。
+    expect(corrected(['5', 'i', 'n'])).toBe('sin');
+    expect(corrected(['c', '0', '5'])).toBe('cos');
+    expect(corrected(['1', 'o', 'g'])).toBe('log');
+    expect(corrected(['1', 'n'])).toBe('ln');
+  });
+
+  it('uses the alternatives of a rejected "?" glyph', () => {
+    const glyphs = [glyph('s'), { ...glyph('?'), alternatives: ['i'] }, glyph('n')];
+    applyMathWordCorrection(glyphs);
+    expect(glyphs.map((g) => g.char).join('')).toBe('sin');
+  });
+
+  it('leaves non-math letter runs and isolated letters untouched', () => {
+    expect(corrected(['q', 'w'])).toBe('qw');
+    expect(corrected(['x'])).toBe('x');
+    // 上标里的字母不是函数名语境。
+    const sup = glyph('s', true);
+    const out = applyMathWordCorrection([glyph('x'), sup]);
+    expect(out[1].char).toBe('s');
+    expect(out[1].superscript).toBe(true);
+  });
+
+  it('normalizes the display string too', () => {
+    const glyphs = [glyph('5'), glyph('i'), glyph('n')];
+    applyMathWordCorrection(glyphs);
+    expect(glyphs.map((g) => g.displayChar).join('')).toBe('sin');
   });
 });
 

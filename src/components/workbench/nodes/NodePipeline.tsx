@@ -2929,7 +2929,12 @@ function PipelineToolbar({
                         onSelect={() => onLoadTemplate(tpl.id)}
                         className="flex flex-col items-start gap-0.5 py-2"
                       >
-                        <span className="text-[12px] font-medium">{tpl.name}</span>
+                        <span className="flex w-full items-center gap-1.5 text-[12px] font-medium">
+                          <span className="truncate">{tpl.name}</span>
+                          <span className="ml-auto shrink-0 rounded bg-muted px-1 py-0.5 text-[9px] font-normal text-muted-foreground">
+                            {tpl.nodes.length} 节点
+                          </span>
+                        </span>
                         <span className="text-[10px] text-muted-foreground leading-snug">{tpl.description}</span>
                       </DropdownMenuItem>
                     ))}

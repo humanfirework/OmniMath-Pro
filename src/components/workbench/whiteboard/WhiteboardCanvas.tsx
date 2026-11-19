@@ -53,6 +53,7 @@ import {
   Check,
   Timer,
 } from 'lucide-react';
+import { toast } from 'sonner';
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -72,9 +73,10 @@ import { hitTestInk, translateInk } from '@/lib/ink/hitTest';
 import { applyEraser, type EraserMode } from '@/lib/ink/eraser';
 import { rotateSelection, scaleSelection } from '@/lib/ink/transform';
 import { summarizeLatency, type LatencyStats } from '@/lib/ink/latency';
-import type { InkBrush, InkStroke, InkView } from '@/lib/ink/types';
+import type { InkBrush, InkPoint, InkStroke, InkView } from '@/lib/ink/types';
 import { getGlyphTemplates, recognizeMathInk, addUserGlyphSamples } from '@/lib/mathnotes/recognize';
 import { recognizeShape } from '@/lib/ink/shapeRecognize';
+import { selectRecentLine } from '@/lib/ink/recognizeScope';
 import type { MathCard } from './math/MathCardView';
 import type { MathNoteDraft } from './math/MathNotePanel';
 
@@ -348,6 +350,61 @@ export function WhiteboardCanvas() {
    * between symbols, and "recognize only new strokes" would then evaluate
    * "3" instead of "2+3".
    */
+  /** 把一次识别结果落到草稿面板：识别文本立即显示，mathjs 结果异步补。 */
+  const applyMathRecognition = useCallback(
+    (
+      rec: ReturnType<typeof recognizeMathInk>,
+      anchor: { x: number; y: number },
+      source?: Array<{ points: InkPoint[] }>,
+    ) => {
+      mathAnchorRef.current = anchor;
+      lastMathIndexRef.current = strokesRef.current.length;
+      if (typeof window !== 'undefined') {
+        // Lightweight diagnostic hook for bug reports / automated tests.
+        (window as unknown as Record<string, unknown>).__omnimathRecognition = {
+          text: rec.text,
+          display: rec.display,
+          confidence: rec.confidence,
+          glyphs: rec.glyphs.map((g) => ({
+            char: g.char,
+            confidence: Number(g.confidence.toFixed(3)),
+            alternatives: g.alternatives,
+            reason: g.reason,
+            superscript: g.superscript,
+            bbox: g.bbox,
+          })),
+        };
+      }
+      setMathDraft({
+        text: rec.text,
+        display: rec.display,
+        sourceText: rec.text,
+        glyphs: rec.glyphs,
+        confidence: rec.confidence,
+        error: rec.text ? undefined : rec.error ?? '没有识别到公式，可重试或直接输入',
+        sourcePoints: source?.map((s) => s.points),
+      });
+      if (rec.text) {
+        const recognizedText = rec.text;
+        void import('@/lib/mathnotes/expression')
+          .then(({ evaluateMathNote }) => {
+            const evaluation = evaluateMathNote(recognizedText);
+            if (!evaluation.ok) {
+              setMathDraft((prev) =>
+                prev && prev.sourceText === recognizedText
+                  ? { ...prev, error: evaluation.error }
+                  : prev,
+              );
+            }
+          })
+          .catch(() => {
+            // 引擎加载失败：保留识别文本，用户仍可手动修正 / 插入。
+          });
+      }
+    },
+    [],
+  );
+
   const recognizeMathFromInk = useCallback(() => {
     if (!mathModeRef.current) return;
     const all = strokesRef.current.filter((s) => !s.shape && !s.pixel);
@@ -368,29 +425,15 @@ export function WhiteboardCanvas() {
       return Number.isFinite(x0) ? { x0, y0, x1, y1 } : null;
     };
 
-    // Work out the writing line from the recent strokes themselves. Using
-    // the very last stroke fails when it is a raised superscript: the band
-    // would move up and cut off the baseline glyphs.
-    const recent = all.slice(-16);
-    const boxes = recent
-      .map((s) => bboxOf(s))
-      .filter((b): b is { x0: number; y0: number; x1: number; y1: number } => b !== null);
-    if (boxes.length === 0) return;
-    const centers = boxes.map((b) => (b.y0 + b.y1) / 2).sort((a, b) => a - b);
-    const heights = boxes.map((b) => b.y1 - b.y0).sort((a, b) => a - b);
-    const midCenter = centers[Math.floor(centers.length / 2)];
-    const midHeight = Math.max(8, heights[Math.floor(heights.length / 2)]);
-    const bandTop = midCenter - midHeight * 1.5;
-    const bandBottom = midCenter + midHeight * 1.5;
-
-    const slice: Stroke[] = [];
-    for (let i = 0; i < recent.length; i++) {
-      const b = bboxOf(recent[i]);
-      if (!b) continue;
-      const cy = (b.y0 + b.y1) / 2;
-      if (cy >= bandTop && cy <= bandBottom) slice.push(recent[i]);
-    }
-    if (slice.length === 0) slice.push(all[all.length - 1]);
+    // 以最后一笔为锚点，只收拢同一行、相邻的笔画。之前用「最近 16 笔的
+    // 中位数水平带」：用户在另一行写第二个公式或随手画标注时，两行会被
+    // 混成一次识别，结果直接错乱。现在换行/大间隙都会截断作用域。
+    const recent = all.slice(-40);
+    const scoped = recent
+      .map((stroke) => ({ stroke, box: bboxOf(stroke) }))
+      .filter((item): item is { stroke: Stroke; box: { x0: number; y0: number; x1: number; y1: number } } => item.box !== null);
+    if (scoped.length === 0) return;
+    const slice: Stroke[] = selectRecentLine(scoped).map((item) => item.stroke);
 
     let x0 = Infinity;
     let y0 = Infinity;
@@ -405,55 +448,43 @@ export function WhiteboardCanvas() {
       if (b.y1 > y1) y1 = b.y1;
     }
     if (!Number.isFinite(x0)) return;
-    mathAnchorRef.current = { x: x1 + 18, y: y0 };
-
     const rec = recognizeMathInk(slice.map((s) => ({ points: s.points })));
-    lastMathIndexRef.current = all.length;
-    if (typeof window !== 'undefined') {
-      // Lightweight diagnostic hook for bug reports / automated tests.
-      (window as unknown as Record<string, unknown>).__omnimathRecognition = {
-        text: rec.text,
-        display: rec.display,
-        confidence: rec.confidence,
-        glyphs: rec.glyphs.map((g) => ({
-          char: g.char,
-          confidence: Number(g.confidence.toFixed(3)),
-          alternatives: g.alternatives,
-          reason: g.reason,
-          superscript: g.superscript,
-          bbox: g.bbox,
-        })),
-      };
+    applyMathRecognition(rec, { x: x1 + 18, y: y0 }, slice);
+  }, [applyMathRecognition]);
+
+  /** 手动识别：只识别当前选中的笔画，适合画布上同时有多个公式/标注时。 */
+  const recognizeSelected = useCallback(() => {
+    const ids = new Set(selectedIds);
+    const selected = strokesRef.current.filter(
+      (s) => ids.has(s.id) && !s.shape && !s.pixel,
+    );
+    if (selected.length === 0) {
+      toast.error('选中的内容里没有可识别的手写', {
+        description: '先用套圈或选择工具圈住一个公式，再点「识别公式」。',
+      });
+      return;
     }
-    // 先立即展示识别文本（不等 mathjs），错误信息等引擎加载后再补。
-    setMathDraft({
-      text: rec.text,
-      display: rec.display,
-      sourceText: rec.text,
-      glyphs: rec.glyphs,
-      confidence: rec.confidence,
-      error: rec.text
-        ? undefined
-        : rec.error ?? '没有识别到公式，可重试或直接输入',
-    });
-    if (rec.text) {
-      const recognizedText = rec.text;
-      void import('@/lib/mathnotes/expression')
-        .then(({ evaluateMathNote }) => {
-          const evaluation = evaluateMathNote(recognizedText);
-          if (!evaluation.ok) {
-            setMathDraft((prev) =>
-              prev && prev.sourceText === recognizedText
-                ? { ...prev, error: evaluation.error }
-                : prev,
-            );
-          }
-        })
-        .catch(() => {
-          // 引擎加载失败：保留识别文本，用户仍可手动修正 / 插入。
-        });
+    let x0 = Infinity;
+    let y0 = Infinity;
+    let x1 = -Infinity;
+    for (const s of selected) {
+      for (const p of s.points) {
+        if (!Number.isFinite(p.x) || !Number.isFinite(p.y)) continue;
+        if (p.x < x0) x0 = p.x;
+        if (p.y < y0) y0 = p.y;
+        if (p.x > x1) x1 = p.x;
+      }
     }
-  }, []);
+    const rec = recognizeMathInk(selected.map((s) => ({ points: s.points })));
+    applyMathRecognition(
+      rec,
+      {
+        x: Number.isFinite(x1) ? x1 + 18 : 40,
+        y: Number.isFinite(y0) ? y0 : 40,
+      },
+      selected,
+    );
+  }, [selectedIds, applyMathRecognition]);
 
   const scheduleMathRecognition = useCallback(
     (delay = 1000) => {
@@ -841,6 +872,7 @@ export function WhiteboardCanvas() {
               : 'text-muted-foreground hover:text-foreground hover:bg-accent/60',
           )}
           aria-label="pen"
+          title="钢笔（手写）"
         >
           <Pencil className="size-3.5" />
         </button>
@@ -882,6 +914,7 @@ export function WhiteboardCanvas() {
               : 'text-muted-foreground hover:text-foreground hover:bg-accent/60',
           )}
           aria-label="eraser"
+          title="橡皮（默认点擦，可在右侧切换划擦与尺寸）"
         >
           <Eraser className="size-3.5" />
         </button>
@@ -929,6 +962,7 @@ export function WhiteboardCanvas() {
               )}
               style={{ backgroundColor: c }}
               aria-label={`color ${c}`}
+              title={`颜色 ${c}`}
             />
           ))}
         </div>
@@ -1005,6 +1039,7 @@ export function WhiteboardCanvas() {
                     : 'text-muted-foreground hover:bg-accent/60',
                 )}
                 aria-label={`width ${w}`}
+                title={`笔宽 ${w}px`}
               >
                 <span
                   className="rounded-full bg-current"
@@ -1230,6 +1265,7 @@ export function WhiteboardCanvas() {
           {mathDraft && (
             <MathNotePanel
               draft={mathDraft}
+              raised={coarse}
               onChange={(text) => setMathDraft((prev) => (prev ? { ...prev, text } : prev))}
               onRetry={handleMathRetry}
               onInsert={handleInsertMath}
@@ -1326,6 +1362,15 @@ export function WhiteboardCanvas() {
               className="grid size-6 place-items-center rounded-full text-muted-foreground hover:bg-accent hover:text-foreground"
             >
               <RotateCw className="size-3.5" />
+            </button>
+            <button
+              type="button"
+              title="识别选中的手写公式"
+              aria-label="识别选中的手写公式"
+              onClick={recognizeSelected}
+              className="mx-0.5 grid size-6 place-items-center rounded-full text-primary hover:bg-primary/10"
+            >
+              <Sigma className="size-3.5" />
             </button>
             <button
               type="button"

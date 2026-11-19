@@ -36,9 +36,11 @@ export function RunResultsHost() {
       const w = Math.min(420, Math.max(MIN_W, size.w * 0.5));
       const h = Math.min(320, Math.max(MIN_H, size.h * 0.4));
       const index = Object.keys(prev).length;
-      const x = 24 + (index % 4) * 28;
+      // 从右上角开始向右下角堆叠：蓝图 / 白板的数据流自左向右展开，
+      // 左上角往往是最重要的输入节点，浮窗放在那里会挡住画布主体。
+      const x = Math.max(12, size.w - w - 16 - (index % 4) * 28);
       // 顶部留出标题栏（40px）空间，浮窗不要压住窗口按钮 / 主题切换。
-      const y = 64 + (index % 4) * 24;
+      const y = 64 + Math.floor(index / 4) * 28 + (index % 4) * 8;
       const isAnim = kind === 'animation';
       return { ...prev, [id]: { x, y, w: isAnim ? 520 : w, h: isAnim ? 380 : h, z: 10 + index } };
     });
@@ -118,7 +120,7 @@ export function RunResultsHost() {
       {panels.length > 0 && (
         <button
           onClick={clearPanels}
-          className="pointer-events-auto absolute top-12 right-3 z-50 text-[11px] px-2 py-1 rounded-md bg-accent/70 text-muted-foreground hover:bg-accent hover:text-foreground"
+          className="pointer-events-auto absolute bottom-3 right-3 z-50 text-[11px] px-2 py-1 rounded-md bg-accent/70 text-muted-foreground hover:bg-accent hover:text-foreground"
           title="关闭全部结果面板"
         >
           关闭全部

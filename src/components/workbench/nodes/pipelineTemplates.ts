@@ -53,39 +53,51 @@ function edge(
 }
 
 /* ------------------------------------------------------------------ *
- * Template 1 — 综合数学展示（基础运算 + 三角函数 + 矩阵求逆 + 导数 + 复合函数）
+ * Template 1 — 快速开始（算一个数 · 画一条曲线）
  *
- *   把几个经典数学能力合并到一张蓝图上，分 5 条独立分支并行演示：
- *     A. 基础运算：a + b × c（运算优先级）
- *     B. 三角函数可视化：sin(x) → 绘图
- *     C. 矩阵求逆：3×3 → 求逆 → 显示
- *     D. 导数求解：x³+2x² → 求导 → 显示
- *     E. 复合函数：数字 → sin → abs → 显示
- *   一次看清 OmniMath 的数学节点能力，直观展示「功能多」。
+ * 蓝图的第一屏不应该是一张 20 个节点的大图。这里只保留两条最小分支：
+ *   A. 3 + 4 → 显示
+ *   B. sin(x) → 绘图
+ * 用户点开模板能立刻看懂「节点 = 一步计算，连线 = 数据流」。
+ * 矩阵 / 求导 / 复合函数等能力拆成独立的小模板，需要时再加载。
  * ------------------------------------------------------------------ */
-const templateMathShowcase: PipelineTemplate = {
-  id: 'math-showcase',
-  name: '综合数学展示（运算 · 三角 · 矩阵 · 导数 · 复合）',
-  description: '一张蓝图并行演示：基础运算、三角函数可视化、矩阵求逆、导数求解、复合函数。直观展示数学节点能力。',
+const templateQuickStart: PipelineTemplate = {
+  id: 'quick-start',
+  name: '快速开始：算一个数、画一条曲线',
+  description: '两条最小分支：3 + 4 直接出结果，sin(x) 直接出图。先看懂节点和连线，再加载更复杂的模板。',
   category: 'math',
   thumbnailColor: '#6366f1',
   nodes: [
-    // ── 分支 A：基础运算 a + b × c（运算优先级）──
-    { id: 'm_a', type: 'number-input', position: { x: 80, y: 120 }, config: { value: 3, min: -10, max: 10, step: 0.1 }, group: { id: 'grp-op', title: '基础运算' } },
-    { id: 'm_b', type: 'number-input', position: { x: 80, y: 280 }, config: { value: 4, min: -10, max: 10, step: 0.1 }, group: { id: 'grp-op', title: '基础运算' } },
-    { id: 'm_c', type: 'number-input', position: { x: 80, y: 440 }, config: { value: 5, min: -10, max: 10, step: 0.1 }, group: { id: 'grp-op', title: '基础运算' } },
-    { id: 'm_mul', type: 'arithmetic', position: { x: 380, y: 280 }, config: { op: '*' }, group: { id: 'grp-op', title: '基础运算' } },
-    { id: 'm_add', type: 'arithmetic', position: { x: 680, y: 190 }, config: { op: '+' }, group: { id: 'grp-op', title: '基础运算' } },
-    { id: 'm_disp1', type: 'display', position: { x: 980, y: 190 }, config: {} , group: { id: 'grp-op', title: '基础运算' } },
-    // ── 分支 B：三角函数可视化 sin(x) ──
-    { id: 'm_exprB', type: 'expression-input', position: { x: 80, y: 760 }, config: { expr: 'sin(x)' }, group: { id: 'grp-trig', title: '三角函数可视化' } },
-    { id: 'm_plotB', type: 'plot-output', position: { x: 380, y: 760 }, config: { xMin: -10, xMax: 10 }, group: { id: 'grp-trig', title: '三角函数可视化' } },
-    // ── 分支 C：矩阵求逆 ──
+    // ── 分支 A：3 + 4 ──
+    { id: 'q_a', type: 'number-input', position: { x: 80, y: 140 }, config: { value: 3, min: -10, max: 10, step: 0.1 }, group: { id: 'grp-calc', title: '算一个数' } },
+    { id: 'q_b', type: 'number-input', position: { x: 80, y: 360 }, config: { value: 4, min: -10, max: 10, step: 0.1 }, group: { id: 'grp-calc', title: '算一个数' } },
+    { id: 'q_add', type: 'arithmetic', position: { x: 400, y: 250 }, config: { op: '+' }, group: { id: 'grp-calc', title: '算一个数' } },
+    { id: 'q_disp', type: 'display', position: { x: 720, y: 250 }, config: {}, group: { id: 'grp-calc', title: '算一个数' } },
+    // ── 分支 B：sin(x) 绘图 ──
+    { id: 'q_expr', type: 'expression-input', position: { x: 80, y: 600 }, config: { expr: 'sin(x)' }, group: { id: 'grp-plot', title: '画一条曲线' } },
+    { id: 'q_plot', type: 'plot-output', position: { x: 400, y: 600 }, config: { xMin: -10, xMax: 10 }, group: { id: 'grp-plot', title: '画一条曲线' } },
+  ],
+  edges: [
+    edge('q_e1', 'q_a', 'value', 'q_add', 'a'),
+    edge('q_e2', 'q_b', 'value', 'q_add', 'b'),
+    edge('q_e3', 'q_add', 'result', 'q_disp', 'value'),
+    edge('q_e4', 'q_expr', 'value', 'q_plot', 'expr'),
+  ],
+  onLoad: { viewMode: 'pipeline', activePreviewTab: 'plot2d' },
+};
+
+/** 矩阵求逆：3×3 矩阵 → 求逆 → 显示。 */
+const templateMatrixInverse: PipelineTemplate = {
+  id: 'matrix-inverse',
+  name: '矩阵求逆',
+  description: '一个 3×3 矩阵 → 求逆 → 显示结果。想换成自己的矩阵，直接改节点里的数字。',
+  category: 'math',
+  thumbnailColor: '#06b6d4',
+  nodes: [
     {
-      id: 'm_matC',
+      id: 'mi_mat',
       type: 'matrix-input',
-      position: { x: 80, y: 1040 },
-      group: { id: 'grp-matrix', title: '矩阵求逆' },
+      position: { x: 80, y: 220 },
       config: {
         cells: [
           [{ value: '1' }, { value: '2' }, { value: '3' }],
@@ -96,38 +108,54 @@ const templateMathShowcase: PipelineTemplate = {
         cols: 3,
       },
     },
-    { id: 'm_invC', type: 'matrix-op', position: { x: 380, y: 1040 }, config: { op: 'inv' }, group: { id: 'grp-matrix', title: '矩阵求逆' } },
-    { id: 'm_dispC', type: 'display', position: { x: 680, y: 1040 }, config: {}, group: { id: 'grp-matrix', title: '矩阵求逆' } },
-    // ── 分支 D：导数求解 ──
-    { id: 'm_exprD', type: 'expression-input', position: { x: 80, y: 1320 }, config: { expr: 'x^3 + 2*x^2' }, group: { id: 'grp-derivative', title: '导数求解' } },
-    { id: 'm_derivD', type: 'derivative', position: { x: 380, y: 1320 }, config: { variable: 'x' }, group: { id: 'grp-derivative', title: '导数求解' } },
-    { id: 'm_dispD', type: 'display', position: { x: 680, y: 1320 }, config: {}, group: { id: 'grp-derivative', title: '导数求解' } },
-    // ── 分支 E：复合函数 sin → abs ──
-    { id: 'm_nE', type: 'number-input', position: { x: 80, y: 1600 }, config: { value: 1.5, min: -10, max: 10, step: 0.1 }, group: { id: 'grp-composite', title: '复合函数' } },
-    { id: 'm_sinE', type: 'function-apply', position: { x: 380, y: 1600 }, config: { fn: 'sin', customExpr: '' }, group: { id: 'grp-composite', title: '复合函数' } },
-    { id: 'm_absE', type: 'function-apply', position: { x: 680, y: 1600 }, config: { fn: 'abs', customExpr: '' }, group: { id: 'grp-composite', title: '复合函数' } },
-    { id: 'm_dispE', type: 'display', position: { x: 980, y: 1600 }, config: {}, group: { id: 'grp-composite', title: '复合函数' } },
+    { id: 'mi_inv', type: 'matrix-op', position: { x: 380, y: 220 }, config: { op: 'inv' } },
+    { id: 'mi_disp', type: 'display', position: { x: 680, y: 220 }, config: {} },
   ],
   edges: [
-    // A
-    edge('m_e1', 'm_a', 'value', 'm_add', 'a'),
-    edge('m_e2', 'm_b', 'value', 'm_mul', 'a'),
-    edge('m_e3', 'm_c', 'value', 'm_mul', 'b'),
-    edge('m_e4', 'm_mul', 'result', 'm_add', 'b'),
-    edge('m_e5', 'm_add', 'result', 'm_disp1', 'value'),
-    // B
-    edge('m_e6', 'm_exprB', 'value', 'm_plotB', 'expr'),
-    // C
-    edge('m_e7', 'm_matC', 'matrix', 'm_invC', 'matrix'),
-    edge('m_e8', 'm_invC', 'result', 'm_dispC', 'value'),
-    // D
-    edge('m_e9', 'm_exprD', 'value', 'm_derivD', 'expr'),
-    edge('m_e10', 'm_derivD', 'result', 'm_dispD', 'value'),
-    // E
-    edge('m_e11', 'm_nE', 'value', 'm_sinE', 'x'),
-    edge('m_e12', 'm_sinE', 'result', 'm_absE', 'x'),
-    edge('m_e13', 'm_absE', 'result', 'm_dispE', 'value'),
+    edge('mi_e1', 'mi_mat', 'matrix', 'mi_inv', 'matrix'),
+    edge('mi_e2', 'mi_inv', 'result', 'mi_disp', 'value'),
   ],
+  onLoad: { viewMode: 'pipeline' },
+};
+
+/** 求导：x³ + 2x² → 求导 → 显示。 */
+const templateDerivative: PipelineTemplate = {
+  id: 'derivative',
+  name: '函数求导',
+  description: 'x³ + 2x² → 求导 → 显示。把表达式节点改成任意函数即可复用。',
+  category: 'math',
+  thumbnailColor: '#8b5cf6',
+  nodes: [
+    { id: 'dv_expr', type: 'expression-input', position: { x: 80, y: 220 }, config: { expr: 'x^3 + 2*x^2' } },
+    { id: 'dv_diff', type: 'derivative', position: { x: 380, y: 220 }, config: { variable: 'x' } },
+    { id: 'dv_disp', type: 'display', position: { x: 680, y: 220 }, config: {} },
+  ],
+  edges: [
+    edge('dv_e1', 'dv_expr', 'value', 'dv_diff', 'expr'),
+    edge('dv_e2', 'dv_diff', 'result', 'dv_disp', 'value'),
+  ],
+  onLoad: { viewMode: 'pipeline' },
+};
+
+/** 复合函数：1.5 → sin → abs → 显示。 */
+const templateComposite: PipelineTemplate = {
+  id: 'composite-function',
+  name: '复合函数',
+  description: '数字 → sin → abs → 显示，演示一条数据流如何连续经过多个函数节点。',
+  category: 'math',
+  thumbnailColor: '#f59e0b',
+  nodes: [
+    { id: 'cf_num', type: 'number-input', position: { x: 80, y: 220 }, config: { value: 1.5, min: -10, max: 10, step: 0.1 } },
+    { id: 'cf_sin', type: 'function-apply', position: { x: 380, y: 220 }, config: { fn: 'sin', customExpr: '' } },
+    { id: 'cf_abs', type: 'function-apply', position: { x: 680, y: 220 }, config: { fn: 'abs', customExpr: '' } },
+    { id: 'cf_disp', type: 'display', position: { x: 980, y: 220 }, config: {} },
+  ],
+  edges: [
+    edge('cf_e1', 'cf_num', 'value', 'cf_sin', 'x'),
+    edge('cf_e2', 'cf_sin', 'result', 'cf_abs', 'x'),
+    edge('cf_e3', 'cf_abs', 'result', 'cf_disp', 'value'),
+  ],
+  onLoad: { viewMode: 'pipeline' },
 };
 
 const templateImageVectorizationQuickstart: PipelineTemplate = {
@@ -487,7 +515,10 @@ const templateSatIntegral: PipelineTemplate = {
 };
 
 export const PIPELINE_TEMPLATES: PipelineTemplate[] = [
-  templateMathShowcase,
+  templateQuickStart,
+  templateMatrixInverse,
+  templateDerivative,
+  templateComposite,
   templateImageVectorizationQuickstart,
   templateLineArt,
   templateBlueprintParse,
