@@ -32,7 +32,8 @@ type MobileTab = 'home' | 'editor' | 'preview' | 'side' | 'canvas';
 
 const TABS: Array<{ id: MobileTab; icon: typeof Code2; label: string }> = [
   { id: 'home', icon: House, label: '首页' },
-  { id: 'side', icon: PanelLeft, label: '侧栏' },
+  // “侧栏”是桌面术语；手机上是历史 / 变量 / 文件 / 公式库的集合，叫“资料”更直白。
+  { id: 'side', icon: PanelLeft, label: '资料' },
   { id: 'editor', icon: Code2, label: '编辑器' },
   { id: 'canvas', icon: PencilRuler, label: '画布' },
   { id: 'preview', icon: Eye, label: '预览' },

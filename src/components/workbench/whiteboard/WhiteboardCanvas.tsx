@@ -1442,7 +1442,10 @@ export function WhiteboardCanvas() {
                 {t('abWhiteboard')}
               </p>
               <p className="text-[11.5px] text-muted-foreground max-w-xs">
-                在画布上自由绘制 — 圆、矩形、三角形和直线会被自动识别
+                写公式，停 1 秒自动计算或画图
+              </p>
+              <p className="mt-1 text-[10.5px] text-muted-foreground/70 max-w-xs">
+                圆 / 矩形 / 三角形 / 直线会自动拉直识别
               </p>
             </div>
           </motion.div>
