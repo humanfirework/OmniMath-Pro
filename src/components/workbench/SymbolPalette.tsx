@@ -44,7 +44,7 @@ import {
 } from '@/components/ui/tooltip';
 import { Input } from '@/components/ui/input';
 import { ScrollArea } from '@/components/ui/scroll-area';
-import { symbolAliases, type SymbolAliasEntry } from '@/lib/engine';
+import { symbolAliases, type SymbolAliasEntry } from '@/lib/engine/symbols';
 import { useSettingsStore } from '@/lib/store/settingsStore';
 import { t, useLocale, type TranslationDict } from '@/lib/i18n';
 import { cn } from '@/lib/utils';

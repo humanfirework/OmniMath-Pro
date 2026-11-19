@@ -45,6 +45,8 @@ export function DemosPanel() {
   const addPlot = useWorkbenchStore((s) => s.addPlot);
   const removePlot = useWorkbenchStore((s) => s.removePlot);
   const togglePlotVisibility = useWorkbenchStore((s) => s.togglePlotVisibility);
+  const setPreviewVisible = useWorkbenchStore((s) => s.setPreviewVisible);
+  const setActivePreviewTab = useWorkbenchStore((s) => s.setActivePreviewTab);
   const variables = useWorkbenchStore((s) => s.variables);
   const scopeVersion = useScopeVersion();
 
@@ -239,13 +241,18 @@ export function DemosPanel() {
       const latest = useWorkbenchStore.getState().plots;
       const id = latest[latest.length - 1].id;
       addDemosPlotId(id);
+      // 曲线已经进入 store，但右侧可能还停在「公式 / 日志」标签上——
+      // 用户按 Enter 后看到「暂无结果」，会以为绘图失败。这里直接切到 2D 绘图。
+      setPreviewVisible(true);
+      setActivePreviewTab('plot2d');
+      window.dispatchEvent(new CustomEvent('omnimath:mobile-tab', { detail: 'preview' }));
       // 清空输入，便于连续添加下一张图。
       setDemosExpr('');
       setAnalysis({ params: [], latex: '' });
     } finally {
       setIsApplying(false);
     }
-  }, [demosExpr, plots, addPlot, addDemosPlotId, setDemosExpr]);
+  }, [demosExpr, plots, addPlot, addDemosPlotId, setDemosExpr, setPreviewVisible, setActivePreviewTab]);
 
   const clear = useCallback(() => {
     for (const id of demosPlotIds) {
@@ -357,6 +364,21 @@ export function DemosPanel() {
             )}
           </div>
           <FormulaRenderer latex={analysis.latex} displayMode className="min-w-0 text-[13px]" />
+        </div>
+      )}
+
+      {/* 尚无图像时的引导：避免大片空白让面板显得「坏了」 */}
+      {demosPlots.length === 0 && !analysis.latex && (
+        <div className="flex min-h-[160px] flex-1 flex-col items-center justify-center gap-2 rounded-lg border border-dashed border-border/50 bg-muted/10 px-4 py-8 text-center">
+          <div className="grid size-11 place-items-center rounded-2xl border border-primary/20 bg-primary/8">
+            <FunctionSquare className="size-5 text-primary/70" />
+          </div>
+          <p className="text-[12.5px] font-medium text-foreground/80">
+            输入表达式，按 Enter 直接绘图
+          </p>
+          <p className="max-w-[260px] text-[11px] leading-relaxed text-muted-foreground">
+            试试 sin(x)、a*x^2 + b，或 r = sin(6θ)。含字母参数会自动生成可拖动滑块。
+          </p>
         </div>
       )}
 

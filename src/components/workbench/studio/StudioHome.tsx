@@ -227,6 +227,8 @@ export function StudioHome() {
         setPreviewVisible(true);
         setActivePreviewTab('plot2d');
         setViewMode('workbench');
+        // 手机端没有桌面布局：直接切到「编辑器」标签，否则点了卡片看起来没反应。
+        window.dispatchEvent(new CustomEvent('omnimath:mobile-tab', { detail: 'editor' }));
         break;
       case 'functionPlot':
         setEditorVisible(true);
@@ -234,6 +236,7 @@ export function StudioHome() {
         setInputView('demos');
         setActivePreviewTab('plot2d');
         setViewMode('workbench');
+        window.dispatchEvent(new CustomEvent('omnimath:mobile-tab', { detail: 'editor' }));
         break;
       default:
         setViewMode(action);

@@ -1404,8 +1404,9 @@ export function WhiteboardCanvas() {
         )}
       </div>
 
-      {/* Status bar */}
-      <div className="shrink-0 flex items-center justify-between gap-2 px-3 py-1 border-t border-border/60 bg-card/30 text-[11px] text-muted-foreground">
+      {/* Status bar — 手机端隐藏：底部已有笔工具栏 + 五标签导航，
+          再叠一行状态会让小屏只剩很少的绘图高度。桌面 / 平板仍显示。 */}
+      <div className="shrink-0 hidden md:flex items-center justify-between gap-2 px-3 py-1 border-t border-border/60 bg-card/30 text-[11px] text-muted-foreground">
         <span className="min-w-0 truncate">
           {strokes.length} 笔 ·{' '}
           {tool === 'pen'

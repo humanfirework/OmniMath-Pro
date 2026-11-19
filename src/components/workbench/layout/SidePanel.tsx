@@ -74,6 +74,10 @@ const SIDE_PANEL_TABS: SidePanelTab[] = [
   'history', 'variables', 'files', 'formulas', 'linalg', 'solver', 'stats',
 ];
 
+/** 桌面侧栏头部常驻的四个高频面板（历史 / 变量 / 文件 / 公式）。
+ *  其余重型面板（矩阵/求解/统计）仍在活动栏或「全部工具」里，避免标题栏拥挤。 */
+const PRIMARY_TABS: SidePanelTab[] = ['history', 'variables', 'files', 'formulas'];
+
 export function SidePanel({ onClose }: { onClose?: () => void } = {}) {
   useLocale();
   const activeSidePanel = useWorkbenchStore((s) => s.activeSidePanel);
@@ -122,31 +126,61 @@ export function SidePanel({ onClose }: { onClose?: () => void } = {}) {
     <div className="flex flex-col h-full bg-card/40">
       {/* Header — 手机端由下面的标签条 + 关闭按钮代替，省掉一整行 */}
       <div className="hidden md:flex shrink-0 h-9 items-center justify-between px-2 border-b border-border/60 bg-background/40">
-        <div className="flex items-center gap-1.5 px-1">
+        <div className="flex items-center gap-1.5 px-1 min-w-0">
           {(() => {
             const Icon = PANEL_ICON[activeSidePanel];
             return <Icon className="size-3.5 text-primary shrink-0" />;
           })()}
-          <span className="text-[11.5px] font-semibold tracking-tight text-foreground/85">
+          <span className="text-[11.5px] font-semibold tracking-tight text-foreground/85 truncate">
             {t(PANEL_TITLE_KEY[activeSidePanel])}
           </span>
         </div>
-        <Tooltip>
-          <TooltipTrigger asChild>
-            <button
-              type="button"
-              onClick={onClose ?? toggleSidePanel}
-              aria-label={t('abHideSidebar')}
-              className={cn(
-                'grid place-items-center size-6 rounded-md text-muted-foreground',
-                'hover:bg-accent hover:text-foreground transition-colors',
-              )}
-            >
-              <PanelLeftClose className="size-3.5" />
-            </button>
-          </TooltipTrigger>
-          <TooltipContent side="bottom">{t('abHideSidebar')}</TooltipContent>
-        </Tooltip>
+        <div className="flex items-center gap-0.5 shrink-0">
+          {/* 桌面端常驻四个高频面板：侧栏打开时一眼就能切换，
+              不必再去「全部工具」菜单里找历史 / 变量 / 公式。 */}
+          {PRIMARY_TABS.map((tab) => {
+            const Icon = PANEL_ICON[tab];
+            const active = tab === activeSidePanel;
+            return (
+              <Tooltip key={tab}>
+                <TooltipTrigger asChild>
+                  <button
+                    type="button"
+                    onClick={() => setActiveSidePanel(tab)}
+                    aria-label={t(PANEL_TITLE_KEY[tab])}
+                    aria-pressed={active}
+                    className={cn(
+                      'grid place-items-center size-6 rounded-md transition-colors',
+                      active
+                        ? 'bg-primary/12 text-primary'
+                        : 'text-muted-foreground hover:bg-accent hover:text-foreground',
+                    )}
+                  >
+                    <Icon className="size-3.5" />
+                  </button>
+                </TooltipTrigger>
+                <TooltipContent side="bottom">{t(PANEL_TITLE_KEY[tab])}</TooltipContent>
+              </Tooltip>
+            );
+          })}
+          <span aria-hidden className="mx-0.5 h-3.5 w-px bg-border/60" />
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <button
+                type="button"
+                onClick={onClose ?? toggleSidePanel}
+                aria-label={t('abHideSidebar')}
+                className={cn(
+                  'grid place-items-center size-6 rounded-md text-muted-foreground',
+                  'hover:bg-accent hover:text-foreground transition-colors',
+                )}
+              >
+                <PanelLeftClose className="size-3.5" />
+              </button>
+            </TooltipTrigger>
+            <TooltipContent side="bottom">{t('abHideSidebar')}</TooltipContent>
+          </Tooltip>
+        </div>
       </div>
 
       {/* 手机端没有左侧活动栏：在面板内补一条可横向滑动的标签条，

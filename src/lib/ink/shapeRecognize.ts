@@ -51,6 +51,25 @@ export function pointToTriangleDist(p: Point2D, a: Point2D, b: Point2D, c: Point
   );
 }
 
+/**
+ * 判断一条不闭合笔迹是否「真的像直线」。
+ *
+ * 允许手抖的 1–3px 抖动与少量弯曲（阈值取弦长的 8%，且至少 3px），
+ * 但正弦、圆弧、字母这类明显弯曲的笔迹必须保留为自由笔迹。
+ */
+function isNearlyStraight(points: Point2D[], a: Point2D, b: Point2D): boolean {
+  const len = Math.hypot(b.x - a.x, b.y - a.y);
+  if (len < 1e-6) return false;
+  const tolerance = Math.max(3, len * 0.08);
+  let maxDev = 0;
+  for (const p of points) {
+    maxDev = Math.max(maxDev, pointToSegmentDist(p, a, b));
+    if (maxDev > tolerance) return false;
+  }
+  // 采样点太少（只有两个端点）说明这是一次点击拖拽，按直线处理。
+  return true;
+}
+
 /** 到矩形边框的距离：框内→最近一条边；框外→到框的欧氏距离。 */
 export function pointToRectBorderDist(
   p: Point2D,
@@ -92,7 +111,12 @@ export function recognizeShape(points: Point2D[]): RecognizedShape {
     closingDist < scale * 0.45 ||
     (perimeter > 0 && closingDist / perimeter < 0.12) ||
     closingDist < diag * 0.3;
-  if (!isClosed) return 'line';
+  // 不闭合 ≠ 直线。之前这里直接返回 'line'，导致任何手写曲线、字母、
+  // 正弦笔迹都被吸附成一条直线（白板上写什么都会变直）。只有确实接近
+  // 直线段时才吸附，其余保持自由笔迹（null = 不做图形化）。
+  if (!isClosed) {
+    return isNearlyStraight(points, start, end) ? 'line' : null;
+  }
 
   const cx = (x0 + x1) / 2;
   const cy = (y0 + y1) / 2;
