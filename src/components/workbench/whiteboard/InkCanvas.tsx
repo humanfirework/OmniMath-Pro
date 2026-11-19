@@ -16,6 +16,7 @@ import type {
   InkTool,
   InkView,
 } from '@/lib/ink/types';
+import type { InkStabilizer } from '@/lib/ink/stabilizer';
 
 export interface InkCanvasHandle {
   zoomAt: (factor: number, clientX?: number, clientY?: number) => void;
@@ -36,6 +37,7 @@ export interface InkCanvasProps {
   eraserSize: number;
   pixelMode: boolean;
   background: InkBackground;
+  stabilizer: InkStabilizer;
   selectedIds: string[];
 
   onStrokeEnd: (stroke: InkStroke) => boolean;
@@ -80,6 +82,7 @@ export const InkCanvas = forwardRef<InkCanvasHandle, InkCanvasProps>(function In
       eraserSize: propsRef.current.eraserSize,
       pixelMode: propsRef.current.pixelMode,
       background: propsRef.current.background,
+      stabilizer: propsRef.current.stabilizer,
     };
     engine.setStyle(style);
     engine.setStrokes(propsRef.current.strokes);
@@ -101,6 +104,7 @@ export const InkCanvas = forwardRef<InkCanvasHandle, InkCanvasProps>(function In
     eraserSize,
     pixelMode,
     background,
+    stabilizer,
     selectedIds,
   } = props;
 
@@ -118,8 +122,9 @@ export const InkCanvas = forwardRef<InkCanvasHandle, InkCanvasProps>(function In
       eraserSize,
       pixelMode,
       background,
+      stabilizer,
     });
-  }, [tool, shapeTool, brush, color, width, eraserSize, pixelMode, background]);
+  }, [tool, shapeTool, brush, color, width, eraserSize, pixelMode, background, stabilizer]);
 
   useLayoutEffect(() => {
     engineRef.current?.setSelected(selectedIds);

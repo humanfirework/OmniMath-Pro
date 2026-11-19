@@ -39,6 +39,7 @@ import {
   Eraser,
   Trash2,
   FileCode2,
+  FunctionSquare,
   Loader2,
   Sigma,
   MoreHorizontal,
@@ -81,13 +82,15 @@ import { registerShortcutHandler } from '@/lib/hooks/useGlobalShortcuts';
 import { SymbolPalette } from '@/components/workbench/SymbolPalette';
 import { FormulaRenderer } from '@/components/workbench/FormulaRenderer';
 
-// Demos 面板依赖 mathjs；代码模式首屏不需要它，按需加载。
-const DemosPanel = lazy(() =>
-  import('@/components/workbench/plots/DemosPanel').then((m) => ({ default: m.DemosPanel })),
+// 函数输入器依赖 mathjs；代码模式首屏不需要它，按需加载。
+const FunctionInputPanel = lazy(() =>
+  import('@/components/workbench/plots/FunctionInputPanel').then((m) => ({
+    default: m.FunctionInputPanel,
+  })),
 );
 
-/** 延迟加载 Demos 面板时的占位。 */
-function DemosLoading() {
+/** 延迟加载函数输入器时的占位。 */
+function FunctionInputLoading() {
   return (
     <div className="h-full w-full grid place-items-center">
       <div className="size-4 animate-spin rounded-full border-2 border-primary/20 border-t-primary" />
@@ -128,6 +131,7 @@ export function EditorPanel() {
   const inputMode = useWorkbenchStore((s) => s.inputMode);
   const setInputMode = useWorkbenchStore((s) => s.setInputMode);
   const inputView = useWorkbenchStore((s) => s.inputView);
+  const setInputView = useWorkbenchStore((s) => s.setInputView);
   const addResult = useWorkbenchStore((s) => s.addResult);
   const setCurrentResult = useWorkbenchStore((s) => s.setCurrentResult);
   const setVariable = useWorkbenchStore((s) => s.setVariable);
@@ -541,6 +545,17 @@ export function EditorPanel() {
   }, [setEditorContent]);
 
   /* ─── Render ───────────────────────────────────────────────────── */
+  // 函数输入器是独立界面，不再套编辑器的工具栏与代码专属 UI。
+  if (inputView === 'demos') {
+    return (
+      <div className="h-full min-h-0 overflow-hidden bg-background/40">
+        <Suspense fallback={<FunctionInputLoading />}>
+          <FunctionInputPanel />
+        </Suspense>
+      </div>
+    );
+  }
+
   return (
     <div className="flex flex-col h-full bg-background/60">
       {/* Toolbar —— @container：面板被拖窄或平板竖屏时按容器宽度收缩，
@@ -548,15 +563,24 @@ export function EditorPanel() {
       <div className="@container shrink-0 h-9 flex items-center justify-between px-2.5 gap-2 border-b border-border/60 bg-background/40">
         {/* Left: label + mode switch */}
         <div className="flex items-center gap-2 min-w-0">
-          {/* 代码 / Demos 输入界面切换已上移到顶栏 TitleBar，此处不再重复，避免工具栏拥挤 */}
+          {/* 代码 / 函数输入器切换已上移到顶栏 TitleBar，此处不再重复，避免工具栏拥挤 */}
           <div className="flex items-center gap-1.5 shrink-0">
             <FileCode2 className="size-3.5 text-primary" />
             <span className="text-[11.5px] font-semibold tracking-tight hidden @[360px]:inline">
               {t('editorTitle')}
             </span>
+            {/* 手机端顶栏没有输入界面切换，这里提供一个入口。 */}
+            <button
+              type="button"
+              onClick={() => setInputView('demos')}
+              className="md:hidden inline-flex h-6 items-center gap-1 rounded-md border border-border/60 px-1.5 text-[10.5px] text-muted-foreground hover:bg-accent/60 hover:text-foreground"
+            >
+              <FunctionSquare className="size-3" />
+              函数
+            </button>
           </div>
           {/* Mode switcher —— 仅在代码编辑器模式下显示；
-              Demos 模式下隐藏 简单/Python/MATLAB，界面更简洁。
+              函数输入器有自己的界面，不需要 简单/Python/MATLAB。
               窄容器用下拉框替代三段按钮，避免挤压。 */}
           {inputView === 'code' && (
             <>
@@ -613,7 +637,7 @@ export function EditorPanel() {
         </div>
 
         {/* Right: actions —— 仅代码编辑器模式显示；
-            Demos 模式使用 DemosPanel 自己的「绘图/清空」按钮，
+            函数输入器使用自己的输入与绘图按钮，
             隐藏符号面板/重置/清空/运行等代码编辑专属按键，避免困惑。 */}
         {inputView === 'code' && (
         <div className="flex items-center gap-0.5">
@@ -714,15 +738,8 @@ export function EditorPanel() {
         )}
       </div>
 
-      {/* Demos 模式：直接输入数学表达式，隐藏代码编辑器专属 UI */}
-      {inputView === 'demos' ? (
-        <div className="flex-1 min-h-0 flex overflow-hidden">
-          <Suspense fallback={<DemosLoading />}>
-            <DemosPanel />
-          </Suspense>
-        </div>
-      ) : (
-        <>
+      {/* 代码模式内容（函数输入器在上方已提前返回） */}
+      <>
       {/* Tab bar */}
       {openTabs.length > 0 && (
         <div
@@ -819,7 +836,6 @@ export function EditorPanel() {
       {/* Symbol palette (collapsible) */}
       <SymbolPalette />
         </>
-      )}
     </div>
   );
 }

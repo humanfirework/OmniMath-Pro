@@ -30,6 +30,7 @@ import {
   type CachedInkStroke,
 } from './render';
 import { predictPenTail } from './predict';
+import { StrokeStabilizer, stabilizerAlpha } from './stabilizer';
 
 const MIN_POINT_DIST = 1.2;
 
@@ -108,11 +109,13 @@ export class InkEngine {
     eraserSize: 24,
     pixelMode: false,
     background: 'dot',
+    stabilizer: 'soft',
   };
 
   private strokes: InkStroke[] = [];
   private cache = new Map<string, CachedInkStroke>();
   private selectedIds: string[] = [];
+  private stabilizer = new StrokeStabilizer();
 
   private backgroundColor = '#ffffff';
   private selectionColor = '#0ea5e9';
@@ -362,7 +365,17 @@ export class InkEngine {
     const rect = this.container.getBoundingClientRect();
     const w = Math.max(1, Math.round(rect.width));
     const h = Math.max(1, Math.round(rect.height));
-    const dpr = Math.min(3, Math.max(1, window.devicePixelRatio || 1));
+    const dpr = Math.max(
+      1,
+      Math.min(
+        typeof window !== 'undefined' &&
+          typeof window.matchMedia === 'function' &&
+          window.matchMedia('(pointer: coarse)').matches
+          ? 2
+          : 2.5,
+        window.devicePixelRatio || 1,
+      ),
+    );
     if (w === this.width && h === this.height && dpr === this.dpr) return;
     this.width = w;
     this.height = h;
@@ -1013,6 +1026,7 @@ export class InkEngine {
       stroke.points = [point, { ...point }];
     }
 
+    if (stroke.style !== 'eraser') this.stabilizer.reset(point);
     this.live = stroke;
     this.drawing = true;
     this.clearLive();
@@ -1069,9 +1083,11 @@ export class InkEngine {
     const minDist = MIN_POINT_DIST / this.view.k;
     const base = stroke.width;
     const isPen = this.activePointerType === 'pen';
+    const alpha = stroke.style === 'eraser' ? 1 : stabilizerAlpha(this.style.stabilizer);
 
     for (const ev of events) {
-      const p = this.toWorld(ev.clientX, ev.clientY);
+      const raw = this.toWorld(ev.clientX, ev.clientY);
+      const p = alpha >= 1 ? raw : this.stabilizer.push(raw, alpha);
       const tail = stroke.points[stroke.points.length - 1];
       const dist = Math.hypot(p.x - tail.x, p.y - tail.y);
       if (dist < minDist) continue;

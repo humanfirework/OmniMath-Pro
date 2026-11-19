@@ -20,9 +20,9 @@ export interface ScopedStroke {
   box: ScopeBox;
 }
 
-const MAX_LOOKBACK = 24;
+const MAX_LOOKBACK = 40;
 const LINE_BAND = 1.35;
-const MAX_GAP = 2.2;
+const MAX_GAP = 3.0;
 
 function centerY(b: ScopeBox): number {
   return (b.y0 + b.y1) / 2;

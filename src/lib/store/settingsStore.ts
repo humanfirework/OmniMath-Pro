@@ -5,6 +5,7 @@
 
 import { create } from 'zustand';
 import type { InkBrush } from '@/lib/ink/types';
+import type { InkStabilizer } from '@/lib/ink/stabilizer';
 
 interface SettingsState {
   /** 设置面板是否打开 */
@@ -41,6 +42,8 @@ interface SettingsState {
   whiteboardBrush: InkBrush;
   /** 线宽（px） */
   whiteboardWidth: number;
+  /** 手写稳定器：关闭 / 轻 / 强 */
+  whiteboardStabilizer: InkStabilizer;
   /** 数学识别模式 */
   whiteboardMathMode: boolean;
 
@@ -82,6 +85,7 @@ interface SettingsState {
   setWhiteboardColor: (color: string) => void;
   setWhiteboardBrush: (brush: InkBrush) => void;
   setWhiteboardWidth: (width: number) => void;
+  setWhiteboardStabilizer: (v: InkStabilizer) => void;
   setWhiteboardMathMode: (v: boolean) => void;
 
   setAdvancedPlotSamples: (n: number) => void;
@@ -146,6 +150,7 @@ interface PersistedSettings {
   whiteboardColor?: string;
   whiteboardBrush?: InkBrush;
   whiteboardWidth?: number;
+  whiteboardStabilizer?: InkStabilizer;
   whiteboardMathMode?: boolean;
 }
 
@@ -185,6 +190,7 @@ export const useSettingsStore = create<SettingsState>((set, get) => ({
   whiteboardColor: '#0ea5e9',
   whiteboardBrush: 'pen',
   whiteboardWidth: 4,
+  whiteboardStabilizer: 'soft',
   whiteboardMathMode: false,
 
   setOpen: (v) => set({ open: v }),
@@ -241,6 +247,11 @@ export const useSettingsStore = create<SettingsState>((set, get) => ({
   },
   setWhiteboardWidth: (width) => {
     set({ whiteboardWidth: clampInt(width, 1, 32) });
+    get().saveToStorage();
+  },
+  setWhiteboardStabilizer: (v) => {
+    if (v !== 'off' && v !== 'soft' && v !== 'strong') return;
+    set({ whiteboardStabilizer: v });
     get().saveToStorage();
   },
   setWhiteboardMathMode: (v) => {
@@ -324,6 +335,7 @@ export const useSettingsStore = create<SettingsState>((set, get) => ({
           whiteboardColor: s.whiteboardColor,
           whiteboardBrush: s.whiteboardBrush,
           whiteboardWidth: s.whiteboardWidth,
+          whiteboardStabilizer: s.whiteboardStabilizer,
           whiteboardMathMode: s.whiteboardMathMode,
         };
         localStorage.setItem(SETTINGS_KEY, JSON.stringify(payload));
@@ -423,6 +435,13 @@ export const useSettingsStore = create<SettingsState>((set, get) => ({
       if (typeof data.whiteboardWidth === 'number' && data.whiteboardWidth >= 1 && data.whiteboardWidth <= 32) {
         set({ whiteboardWidth: Math.round(data.whiteboardWidth) });
       }
+      if (
+        data.whiteboardStabilizer === 'off' ||
+        data.whiteboardStabilizer === 'soft' ||
+        data.whiteboardStabilizer === 'strong'
+      ) {
+        set({ whiteboardStabilizer: data.whiteboardStabilizer });
+      }
       if (typeof data.whiteboardMathMode === 'boolean') {
         set({ whiteboardMathMode: data.whiteboardMathMode });
       }
@@ -448,6 +467,7 @@ export const useSettingsStore = create<SettingsState>((set, get) => ({
       whiteboardColor: '#0ea5e9',
       whiteboardBrush: 'pen',
       whiteboardWidth: 4,
+      whiteboardStabilizer: 'soft',
       whiteboardMathMode: false,
     });
     get().saveToStorage();

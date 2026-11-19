@@ -6,6 +6,8 @@
  * 这一层不依赖 React，指针热路径不会触发组件重渲染。
  */
 
+import type { InkStabilizer } from './stabilizer';
+
 export interface InkPoint {
   x: number;
   y: number;
@@ -66,6 +68,8 @@ export interface InkStyle {
   eraserSize: number;
   pixelMode: boolean;
   background: InkBackground;
+  /** 手写稳定器：off / soft / strong。默认 soft。 */
+  stabilizer: InkStabilizer;
 }
 
 export interface InkEngineCallbacks {

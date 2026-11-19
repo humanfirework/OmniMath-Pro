@@ -38,10 +38,30 @@ describe('selectRecentLine', () => {
     expect(selectRecentLine([base, sup])).toEqual([base, sup]);
   });
 
+  it('includes widely spaced function arguments like sin   x', () => {
+    const strokes = [
+      s(0, 0, 20, 30), // s
+      s(26, 0, 40, 30), // i
+      s(46, 0, 62, 30), // n
+      s(150, 0, 170, 30), // x（间距约 3 倍行高）
+    ];
+    expect(selectRecentLine(strokes)).toEqual(strokes);
+  });
+
+  it('stops before a second formula separated by more than 3 line heights', () => {
+    const strokes = [
+      s(0, 0, 30, 30),
+      s(40, 0, 70, 30),
+      s(260, 0, 290, 30),
+      s(300, 0, 330, 30),
+    ];
+    expect(selectRecentLine(strokes)).toEqual(strokes.slice(2));
+  });
+
   it('limits how far back it looks', () => {
-    const strokes = Array.from({ length: 40 }, (_, i) => s(i * 40, 0, i * 40 + 30, 30));
+    const strokes = Array.from({ length: 60 }, (_, i) => s(i * 40, 0, i * 40 + 30, 30));
     const picked = selectRecentLine(strokes);
-    expect(picked.length).toBeLessThanOrEqual(25);
-    expect(picked[picked.length - 1]).toEqual(strokes[39]);
+    expect(picked.length).toBeLessThanOrEqual(41);
+    expect(picked[picked.length - 1]).toEqual(strokes[59]);
   });
 });

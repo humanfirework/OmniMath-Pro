@@ -137,6 +137,17 @@ const TABS: TabDef[] = [
 export function PreviewPanel() {
   useLocale();
   const activeTab = useWorkbenchStore((s) => s.activePreviewTab);
+  const inputView = useWorkbenchStore((s) => s.inputView);
+  // 函数输入器只关心图：隐藏公式/日志/流水线/AI，并强制渲染 2D 或 3D 绘图。
+  // 这里不改写 store 里的 activeTab，切回代码模式时用户原来的标签会恢复。
+  const functionMode = inputView === 'demos';
+  const effectiveTab: PreviewTab =
+    functionMode && activeTab !== 'plot2d' && activeTab !== 'plot3d'
+      ? 'plot2d'
+      : activeTab;
+  const visibleTabs = functionMode
+    ? TABS.filter((tab) => tab.id === 'plot2d' || tab.id === 'plot3d')
+    : TABS;
   const setActiveTab = useWorkbenchStore((s) => s.setActivePreviewTab);
   const currentResult = useWorkbenchStore((s) => s.currentResult);
   const results = useWorkbenchStore((s) => s.results);
@@ -155,10 +166,10 @@ export function PreviewPanel() {
   // Three.js is expensive: do not create a WebGL context until the user
   // actually opens the 3D tab. Once visited it stays mounted (hidden) so
   // switching back is instant and we never churn WebGL contexts.
-  const [visited3d, setVisited3d] = useState(activeTab === 'plot3d');
+  const [visited3d, setVisited3d] = useState(effectiveTab === 'plot3d');
   useEffect(() => {
-    if (activeTab === 'plot3d') setVisited3d(true);
-  }, [activeTab]);
+    if (effectiveTab === 'plot3d') setVisited3d(true);
+  }, [effectiveTab]);
 
   // 预览面板较窄时（平板竖屏 / 小窗口左右分栏）只显示图标，
   // 避免「流水线 / AI」被挤出可视区；宽度恢复后自动带回文字。
@@ -192,15 +203,15 @@ export function PreviewPanel() {
       {/* Tab bar */}
       <div ref={tabBarRef} className="shrink-0 h-9 flex items-center justify-between px-1.5 border-b border-border/60 bg-background/40">
         <div className="flex items-center h-full overflow-x-auto scrollbar-none">
-          {TABS.map((tab, idx) => {
+          {visibleTabs.map((tab, idx) => {
             const Icon = tab.icon;
-            const isActive = activeTab === tab.id;
+            const isActive = effectiveTab === tab.id;
             return (
               <Fragment key={tab.id}>
                 {/* 组间分隔线：当当前 tab 的 group 与上一个不同时插入。
                     用 1px 竖线把"数据/可视化/工具"三组分开，让 tab bar
                     不再是 6 个无差别的图标横排，而是一眼能看出语义分区。 */}
-                {idx > 0 && tab.group !== TABS[idx - 1].group && (
+                {idx > 0 && tab.group !== visibleTabs[idx - 1].group && (
                   <div
                     aria-hidden
                     className="w-px h-3.5 bg-border/50 mx-0.5 shrink-0"
@@ -332,8 +343,8 @@ export function PreviewPanel() {
             隐藏期间 GPU 不消耗资源，切回时由 ResizeObserver 自动恢复尺寸。 */}
         <div
           className="absolute inset-0"
-          style={{ display: activeTab === 'plot3d' ? 'block' : 'none' }}
-          aria-hidden={activeTab !== 'plot3d'}
+          style={{ display: effectiveTab === 'plot3d' ? 'block' : 'none' }}
+          aria-hidden={effectiveTab !== 'plot3d'}
         >
           <ErrorBoundary>
             {visited3d && <Plot3DPanel />}
@@ -342,28 +353,28 @@ export function PreviewPanel() {
 
         {/* 其余 tab 走 AnimatePresence 过渡（plot3d 不在此渲染，避免重复挂载） */}
         <AnimatePresence mode="wait" initial={false}>
-          {activeTab !== 'plot3d' && (
+          {effectiveTab !== 'plot3d' && (
             <motion.div
-              key={activeTab}
+              key={effectiveTab}
               initial={{ opacity: 0, y: 4 }}
               animate={{ opacity: 1, y: 0 }}
               exit={{ opacity: 0, y: -4 }}
               transition={{ duration: 0.16 }}
               className="absolute inset-0"
             >
-              {activeTab === 'formula' && (
+              {effectiveTab === 'formula' && (
                 <FormulaView results={results} previewSize={previewSize} />
               )}
-              {activeTab === 'plot2d' && (
+              {effectiveTab === 'plot2d' && (
                 <ErrorBoundary>
                   <Plot2DPanel />
                 </ErrorBoundary>
               )}
-              {activeTab === 'log' && (
+              {effectiveTab === 'log' && (
                 <LogView results={results} onPick={setEditorContent} />
               )}
-              {activeTab === 'pipeline' && <PipelinePlaceholder />}
-              {activeTab === 'ai' && <AIPanel />}
+              {effectiveTab === 'pipeline' && <PipelinePlaceholder />}
+              {effectiveTab === 'ai' && <AIPanel />}
             </motion.div>
           )}
         </AnimatePresence>

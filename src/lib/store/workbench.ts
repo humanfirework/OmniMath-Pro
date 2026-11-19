@@ -85,16 +85,17 @@ interface WorkbenchState {
   // Editor
   editorContent: string;
   inputMode: InputMode;
-  /** 输入界面：'code'（代码编辑器） | 'demos'（Desmos 式直接输入）。
-   *  提升到 store，供顶栏 TitleBar 与 EditorPanel 共享开关。 */
+  /** 输入界面：'code'（代码编辑器） | 'demos'（函数输入器）。
+   *  提升到 store，供顶栏 TitleBar 与 EditorPanel 共享开关。
+   *  内部仍保留 'demos' 枚举值，避免迁移旧版本已保存的数据。 */
   inputView: 'code' | 'demos';
 
-  // ── Demos 面板状态（持久化，切换视图 / 刷新后不丢失）──────────────
-  /** Demos 输入框当前草稿表达式。 */
+  // ── 函数输入器状态（持久化，切换视图 / 刷新后不丢失）──────────────
+  /** 函数输入器当前草稿表达式。 */
   demosExpr: string;
-  /** Demos 显式添加的变量名（如 t），用于 θ/t 范围表达式。 */
+  /** 函数输入器显式添加的变量名（如 t），用于 θ/t 范围表达式。 */
   demosExtraVars: string[];
-  /** 通过 Demos 面板添加的曲线 id（用于「清空」与左侧图像列表识别）。 */
+  /** 通过函数输入器添加的曲线 id（用于「清空」与左侧图像列表识别）。 */
   demosPlotIds: string[];
   cursorPosition: number;
 
@@ -379,7 +380,8 @@ function reviveStoredValue(
 export const useWorkbenchStore = create<WorkbenchState>((set, get) => ({
   editorContent: '',
   inputMode: 'simple',
-  inputView: 'code',
+  // 新用户默认进入函数输入器；已保存过 'code' 的老用户仍保留自己的选择。
+  inputView: 'demos',
   demosExpr: '',
   demosExtraVars: [],
   demosPlotIds: [],

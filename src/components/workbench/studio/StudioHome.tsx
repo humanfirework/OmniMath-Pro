@@ -69,7 +69,7 @@ const COPY: Record<'zh-CN' | 'en', Copy> = {
     recent: '最近使用',
     cards: {
       codePlot: { title: '代码画图', desc: '写一行 plot(sin(x))，立刻看到曲线。', tag: '脚本' },
-      functionPlot: { title: '函数画图', desc: 'Desmos 式表达式列表，参数和曲线实时联动。', tag: '2D / 3D' },
+      functionPlot: { title: '函数输入器', desc: '左边输入函数，右边立即出图；参数自动生成滑块。', tag: '2D / 3D' },
       whiteboard: { title: '手写白板', desc: '钢笔、马克笔、荧光笔、橡皮与套圈。', tag: '手写' },
       pipeline: { title: '蓝图', desc: '把计算连成图，节点之间实时传值。', tag: '节点' },
       linalg: { title: '矩阵实验室', desc: '一个矩阵、五个常用运算，不再铺满整页。', tag: '线代' },
@@ -91,7 +91,7 @@ const COPY: Record<'zh-CN' | 'en', Copy> = {
     recent: 'Recent',
     cards: {
       codePlot: { title: 'Code to Plot', desc: 'Write plot(sin(x)) and see the curve immediately.', tag: 'Script' },
-      functionPlot: { title: 'Function Plot', desc: 'A Desmos-style expression list with live parameters.', tag: '2D / 3D' },
+      functionPlot: { title: 'Function Input', desc: 'Type a function on the left; the plot appears instantly with auto sliders.', tag: '2D / 3D' },
       whiteboard: { title: 'Handwriting', desc: 'Pen, marker, highlighter, eraser and lasso.', tag: 'Ink' },
       pipeline: { title: 'Blueprint', desc: 'Wire computations into a graph with live values.', tag: 'Nodes' },
       linalg: { title: 'Matrix Lab', desc: 'One matrix, five core operations — no wall of panels.', tag: 'Linear' },

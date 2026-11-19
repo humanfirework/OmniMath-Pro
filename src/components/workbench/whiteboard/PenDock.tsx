@@ -31,10 +31,11 @@ import {
   PEN_WIDTHS as WIDTHS,
 } from '@/lib/ink/presets';
 import type { InkBrush, InkShapeId, InkTool } from '@/lib/ink/types';
+import type { InkStabilizer } from '@/lib/ink/stabilizer';
 import type { EraserMode } from '@/lib/ink/eraser';
 import { cn } from '@/lib/utils';
 
-const SHAPES: Array<{ id: InkShapeId; icon: typeof Minus; label: string }> = [
+export const SHAPES: Array<{ id: InkShapeId; icon: typeof Minus; label: string }> = [
   { id: 'line', icon: Minus, label: '直线' },
   { id: 'rect', icon: Square, label: '矩形' },
   { id: 'triangle', icon: Triangle, label: '三角' },
@@ -42,7 +43,7 @@ const SHAPES: Array<{ id: InkShapeId; icon: typeof Minus; label: string }> = [
   { id: 'axes', icon: Crosshair, label: '坐标' },
 ];
 
-const BRUSHES: Array<{ id: InkBrush; icon: typeof Pencil; label: string }> = [
+export const BRUSHES: Array<{ id: InkBrush; icon: typeof Pencil; label: string }> = [
   { id: 'pen', icon: Pencil, label: '钢笔' },
   { id: 'marker', icon: PenLine, label: '马克笔' },
   { id: 'highlighter', icon: Highlighter, label: '荧光笔' },
@@ -61,6 +62,8 @@ export interface PenDockProps {
   onWidth: (width: number) => void;
   eraserSize: number;
   onEraserSize: (size: number) => void;
+  stabilizer: InkStabilizer;
+  onStabilizer: (v: InkStabilizer) => void;
   shapeTool: InkShapeId | null;
   onShapeTool: (shape: InkShapeId | null) => void;
   pixelMode: boolean;
@@ -237,6 +240,33 @@ export function PenDock(props: PenDockProps) {
                   </button>
                 );
               })}
+            </div>
+          </div>
+
+          <div className="mt-3 flex items-center justify-between">
+            <span className="text-2xs text-muted-foreground">手感</span>
+            <div className="flex items-center gap-1">
+              {(
+                [
+                  ['off', '关闭'],
+                  ['soft', '轻'],
+                  ['strong', '强'],
+                ] as Array<[InkStabilizer, string]>
+              ).map(([level, label]) => (
+                <button
+                  key={level}
+                  type="button"
+                  onClick={() => props.onStabilizer(level)}
+                  className={cn(
+                    'h-8 rounded-lg border px-2 text-2xs transition-colors',
+                    props.stabilizer === level
+                      ? 'border-foreground/30 bg-accent text-foreground'
+                      : 'border-border/60 text-muted-foreground hover:bg-accent/60',
+                  )}
+                >
+                  {label}
+                </button>
+              ))}
             </div>
           </div>
 

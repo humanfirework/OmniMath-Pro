@@ -23,51 +23,32 @@
 import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { motion } from 'framer-motion';
 import {
-  Pencil,
-  Eraser,
-  Undo2,
-  Redo2,
   Trash2,
-  Download,
   PencilRuler,
   Grid3x3,
   Minus,
   CircleDot,
   Square,
-  Grid2x2,
   Triangle,
   Circle,
   Crosshair,
   ZoomIn,
   ZoomOut,
-  Maximize2,
-  MousePointer2,
-  Lasso,
-  Highlighter,
-  PenLine,
   Sigma,
   RotateCcw,
   RotateCw,
-  MoreHorizontal,
-  Check,
   Timer,
 } from 'lucide-react';
 import { toast } from 'sonner';
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuLabel,
-  DropdownMenuSeparator,
-  DropdownMenuTrigger,
-} from '@/components/ui/dropdown-menu';
 import { cn } from '@/lib/utils';
 import { t, useLocale } from '@/lib/i18n';
 import { useSettingsStore } from '@/lib/store/settingsStore';
 import { InkCanvas, type InkCanvasHandle } from './InkCanvas';
 import { PenDock } from './PenDock';
+import { WhiteboardToolDock } from './WhiteboardToolDock';
+import { WhiteboardActionBar } from './WhiteboardActionBar';
 import { useCoarsePointer } from '@/hooks/use-coarse-pointer';
-import { PEN_COLORS, PEN_ERASER_SIZES, PEN_WIDTHS } from '@/lib/ink/presets';
+import { PEN_ERASER_SIZES } from '@/lib/ink/presets';
 import { hitTestInk, translateInk } from '@/lib/ink/hitTest';
 import { applyEraser, type EraserMode } from '@/lib/ink/eraser';
 import { rotateSelection, scaleSelection } from '@/lib/ink/transform';
@@ -252,6 +233,8 @@ export function WhiteboardCanvas() {
   const setColor = useSettingsStore((s) => s.setWhiteboardColor);
   const width = useSettingsStore((s) => s.whiteboardWidth);
   const setWidth = useSettingsStore((s) => s.setWhiteboardWidth);
+  const stabilizer = useSettingsStore((s) => s.whiteboardStabilizer);
+  const setStabilizer = useSettingsStore((s) => s.setWhiteboardStabilizer);
   const [pixelMode, setPixelMode] = useState<boolean>(false);
   const [eraserSize, setEraserSize] = useState<number>(PEN_ERASER_SIZES[1]);
   const [shapeTool, setShapeTool] = useState<ShapeId | null>(null);
@@ -272,6 +255,14 @@ export function WhiteboardCanvas() {
   const mathMode = useSettingsStore((s) => s.whiteboardMathMode);
   const setMathMode = useSettingsStore((s) => s.setWhiteboardMathMode);
   const [mathDraft, setMathDraft] = useState<MathNoteDraft | null>(null);
+  const [mathScopeBox, setMathScopeBox] = useState<{
+    x0: number;
+    y0: number;
+    x1: number;
+    y1: number;
+  } | null>(null);
+  const [recognizing, setRecognizing] = useState(false);
+  const recognizingRef = useRef(false);
   const [mathCards, setMathCards] = useState<MathCard[]>(loadMathCards);
   const [latencyProbe, setLatencyProbeOn] = useState(false);
   const [latencyStats, setLatencyStats] = useState<LatencyStats>({
@@ -290,6 +281,7 @@ export function WhiteboardCanvas() {
   const mathTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const lastMathIndexRef = useRef(0);
   const mathAnchorRef = useRef({ x: 0, y: 0 });
+  const mathScopeBoxRef = useRef<{ x0: number; y0: number; x1: number; y1: number } | null>(null);
 
   useEffect(() => {
     return () => {
@@ -314,18 +306,41 @@ export function WhiteboardCanvas() {
     latestBoardRef.current = { strokes, background };
   }, [strokes, background]);
 
+  const quotaWarnedRef = useRef(false);
   const persistBoard = useCallback(() => {
     if (typeof window === 'undefined') return;
     try {
       localStorage.setItem(STORAGE_KEY, JSON.stringify(latestBoardRef.current));
-    } catch {
-      // storage full or serialization error — don't crash the board
+    } catch (err) {
+      if (!quotaWarnedRef.current) {
+        quotaWarnedRef.current = true;
+        console.warn('[whiteboard] 画布保存失败（可能是存储空间已满）', err);
+      }
     }
   }, []);
 
+  // 落盘放到用户停笔之后：1200ms 防抖 + requestIdleCallback。大画布每写一笔
+  // 就同步 JSON.stringify 会明显卡顿，这里只在真正空闲时才序列化。
   useEffect(() => {
-    const timer = setTimeout(persistBoard, 350);
-    return () => clearTimeout(timer);
+    let idleHandle: number | null = null;
+    const w = window as typeof window & {
+      requestIdleCallback?: (cb: () => void, opts?: { timeout: number }) => number;
+      cancelIdleCallback?: (handle: number) => void;
+    };
+    const timer = setTimeout(() => {
+      if (w.requestIdleCallback) {
+        idleHandle = w.requestIdleCallback(() => {
+          idleHandle = null;
+          persistBoard();
+        }, { timeout: 2500 });
+      } else {
+        persistBoard();
+      }
+    }, 1200);
+    return () => {
+      clearTimeout(timer);
+      if (idleHandle !== null) w.cancelIdleCallback?.(idleHandle);
+    };
   }, [strokes, background, persistBoard]);
 
   useEffect(() => {
@@ -361,12 +376,35 @@ export function WhiteboardCanvas() {
     ) => {
       mathAnchorRef.current = anchor;
       lastMathIndexRef.current = strokesRef.current.length;
+      if (source && source.length > 0) {
+        let x0 = Infinity;
+        let y0 = Infinity;
+        let x1 = -Infinity;
+        let y1 = -Infinity;
+        for (const stroke of source) {
+          for (const p of stroke.points) {
+            if (!Number.isFinite(p.x) || !Number.isFinite(p.y)) continue;
+            if (p.x < x0) x0 = p.x;
+            if (p.y < y0) y0 = p.y;
+            if (p.x > x1) x1 = p.x;
+            if (p.y > y1) y1 = p.y;
+          }
+        }
+        const box = Number.isFinite(x0) ? { x0, y0, x1, y1 } : null;
+        mathScopeBoxRef.current = box;
+        setMathScopeBox(box);
+      } else {
+        mathScopeBoxRef.current = null;
+        setMathScopeBox(null);
+      }
       if (typeof window !== 'undefined') {
         // Lightweight diagnostic hook for bug reports / automated tests.
         (window as unknown as Record<string, unknown>).__omnimathRecognition = {
           text: rec.text,
           display: rec.display,
           confidence: rec.confidence,
+          usedStrokes: source?.length ?? 0,
+          scopeBox: mathScopeBoxRef.current ? { ...mathScopeBoxRef.current } : null,
           glyphs: rec.glyphs.map((g) => ({
             char: g.char,
             confidence: Number(g.confidence.toFixed(3)),
@@ -436,7 +474,8 @@ export function WhiteboardCanvas() {
   }, []);
 
   const recognizeMathFromInk = useCallback(() => {
-    if (!mathModeRef.current) return;
+    if (!mathModeRef.current || recognizingRef.current) return;
+    if (strokesRef.current.length === lastMathIndexRef.current) return;
     const all = strokesRef.current.filter((s) => !s.shape && !s.pixel);
     if (all.length === 0) return;
 
@@ -478,8 +517,18 @@ export function WhiteboardCanvas() {
       if (b.y1 > y1) y1 = b.y1;
     }
     if (!Number.isFinite(x0)) return;
-    const rec = recognizeMathInk(slice.map((s) => ({ points: s.points })));
-    applyMathRecognition(rec, { x: x1 + 18, y: y0 }, slice);
+    recognizingRef.current = true;
+    setRecognizing(true);
+    // 先让当前这一帧把最新笔画画完，再执行同步识别，避免笔尖刚抬起时掉帧。
+    requestAnimationFrame(() => {
+      try {
+        const rec = recognizeMathInk(slice.map((s) => ({ points: s.points })));
+        applyMathRecognition(rec, { x: x1 + 18, y: y0 }, slice);
+      } finally {
+        recognizingRef.current = false;
+        setRecognizing(false);
+      }
+    });
   }, [applyMathRecognition]);
 
   /** 手动识别：只识别当前选中的笔画，适合画布上同时有多个公式/标注时。 */
@@ -505,19 +554,28 @@ export function WhiteboardCanvas() {
         if (p.x > x1) x1 = p.x;
       }
     }
-    const rec = recognizeMathInk(selected.map((s) => ({ points: s.points })));
-    applyMathRecognition(
-      rec,
-      {
-        x: Number.isFinite(x1) ? x1 + 18 : 40,
-        y: Number.isFinite(y0) ? y0 : 40,
-      },
-      selected,
-    );
+    recognizingRef.current = true;
+    setRecognizing(true);
+    requestAnimationFrame(() => {
+      try {
+        const rec = recognizeMathInk(selected.map((s) => ({ points: s.points })));
+        applyMathRecognition(
+          rec,
+          {
+            x: Number.isFinite(x1) ? x1 + 18 : 40,
+            y: Number.isFinite(y0) ? y0 : 40,
+          },
+          selected,
+        );
+      } finally {
+        recognizingRef.current = false;
+        setRecognizing(false);
+      }
+    });
   }, [selectedIds, applyMathRecognition]);
 
   const scheduleMathRecognition = useCallback(
-    (delay = 1000) => {
+    (delay = 700) => {
       if (!mathModeRef.current) return;
       if (mathTimerRef.current) clearTimeout(mathTimerRef.current);
       mathTimerRef.current = setTimeout(() => {
@@ -547,6 +605,7 @@ export function WhiteboardCanvas() {
         mathTimerRef.current = null;
       }
       setMathDraft(null);
+      setMathScopeBox(null);
     }
   }, []);
 
@@ -577,6 +636,7 @@ export function WhiteboardCanvas() {
       };
       setMathCards((prev) => [...prev, card]);
       setMathDraft(null);
+      setMathScopeBox(null);
     },
     [mathDraft],
   );
@@ -605,6 +665,7 @@ export function WhiteboardCanvas() {
       glyphs: [],
       confidence: 1,
     });
+    setMathScopeBox(null);
   }, [view]);
 
   const handleLatencySample = useCallback((ms: number) => {
@@ -838,419 +899,8 @@ export function WhiteboardCanvas() {
 
   const empty = strokes.length === 0;
 
-  const toolBtn = useMemo(
-    () => ({
-      pen: tool === 'pen',
-      eraser: tool === 'eraser',
-    }),
-    [tool],
-  );
-
   return (
     <div className="flex flex-col h-full bg-background">
-      {/* Toolbar */}
-      <div
-        className={cn(
-          'shrink-0 flex items-center gap-1 px-2 sm:px-3 py-2 border-b border-border/60 bg-card/40 backdrop-blur-sm',
-          // 手机/窄屏：允许换行，所有工具与颜色都看得见，不用横向滚动猜。
-          // 平板/桌面：保持单行，避免侧边并排时工具栏变成多行。
-          'flex-wrap md:flex-nowrap md:overflow-x-auto [&>*]:shrink-0',
-        )}
-      >
-        <div className="flex items-center gap-1 mr-2">
-          <PencilRuler className="size-4 text-primary mr-1" />
-          <span className="text-[12px] font-medium text-foreground/80">
-            {t('abWhiteboard')}
-          </span>
-        </div>
-        {/* 触屏设备底部已有 PenDock：顶部不再重复工具与颜色，保持一行清爽 */}
-        {!coarse && (
-          <>
-        <div className="w-px h-5 bg-border/60" />
-        {/* Tool toggle */}
-        <button
-          type="button"
-          onClick={() => selectTool('select')}
-          className={cn(
-            'grid place-items-center size-7 rounded-md transition-colors',
-            tool === 'select'
-              ? 'bg-primary/15 text-primary'
-              : 'text-muted-foreground hover:text-foreground hover:bg-accent/60',
-          )}
-          aria-label="选择"
-          title="选择 / 拖动"
-        >
-          <MousePointer2 className="size-3.5" />
-        </button>
-        <button
-          type="button"
-          onClick={() => selectTool('lasso')}
-          className={cn(
-            'grid place-items-center size-7 rounded-md transition-colors',
-            tool === 'lasso'
-              ? 'bg-primary/15 text-primary'
-              : 'text-muted-foreground hover:text-foreground hover:bg-accent/60',
-          )}
-          aria-label="套圈"
-          title="套圈选择（圈住多个对象后可一起拖动或删除）"
-        >
-          <Lasso className="size-3.5" />
-        </button>
-        <button
-          type="button"
-          onClick={() => selectTool('pen')}
-          className={cn(
-            'grid place-items-center size-7 rounded-md transition-colors',
-            toolBtn.pen && !shapeTool && brush === 'pen'
-              ? 'bg-primary/15 text-primary'
-              : 'text-muted-foreground hover:text-foreground hover:bg-accent/60',
-          )}
-          aria-label="pen"
-          title="钢笔（手写）"
-        >
-          <Pencil className="size-3.5" />
-        </button>
-        <button
-          type="button"
-          onClick={() => selectBrush('marker')}
-          className={cn(
-            'grid place-items-center size-7 rounded-md transition-colors',
-            tool === 'pen' && brush === 'marker' && !shapeTool
-              ? 'bg-primary/15 text-primary'
-              : 'text-muted-foreground hover:text-foreground hover:bg-accent/60',
-          )}
-          aria-label="marker"
-          title="马克笔"
-        >
-          <PenLine className="size-3.5" />
-        </button>
-        <button
-          type="button"
-          onClick={() => selectBrush('highlighter')}
-          className={cn(
-            'grid place-items-center size-7 rounded-md transition-colors',
-            tool === 'pen' && brush === 'highlighter' && !shapeTool
-              ? 'bg-primary/15 text-primary'
-              : 'text-muted-foreground hover:text-foreground hover:bg-accent/60',
-          )}
-          aria-label="highlighter"
-          title="荧光笔"
-        >
-          <Highlighter className="size-3.5" />
-        </button>
-        <button
-          type="button"
-          onClick={() => selectTool('eraser')}
-          className={cn(
-            'grid place-items-center size-7 rounded-md transition-colors',
-            toolBtn.eraser && !shapeTool
-              ? 'bg-primary/15 text-primary'
-              : 'text-muted-foreground hover:text-foreground hover:bg-accent/60',
-          )}
-          aria-label="eraser"
-          title="橡皮（默认点擦，可在右侧切换划擦与尺寸）"
-        >
-          <Eraser className="size-3.5" />
-        </button>
-
-        <div className="w-px h-5 bg-border/60" />
-          </>
-        )}
-
-        {/* Math notes: handwrite → recognize → calculate / plot */}
-        <button
-          type="button"
-          onClick={toggleMathMode}
-          className={cn(
-            'grid place-items-center size-7 rounded-md transition-colors',
-            mathMode
-              ? 'bg-primary/15 text-primary'
-              : 'text-muted-foreground hover:text-foreground hover:bg-accent/60',
-          )}
-          aria-label="数学模式"
-          aria-pressed={mathMode}
-          title="数学模式：写完停 1 秒自动识别公式，计算或绘制函数图像"
-        >
-          <Sigma className="size-3.5" />
-        </button>
-
-        {!coarse && (
-          <>
-        <div className="w-px h-5 bg-border/60" />
-
-        {/* Color picker */}
-        <div className="flex items-center gap-1">
-          {PEN_COLORS.map((c) => (
-            <button
-              key={c}
-              type="button"
-              onClick={() => {
-                setColor(c);
-                inkRef.current?.setStyle({ color: c });
-              }}
-              className={cn(
-                'size-5 rounded-full border transition-all',
-                color === c
-                  ? 'ring-2 ring-primary ring-offset-1 ring-offset-background border-transparent scale-110'
-                  : 'border-border/60 hover:scale-110',
-              )}
-              style={{ backgroundColor: c }}
-              aria-label={`color ${c}`}
-              title={`颜色 ${c}`}
-            />
-          ))}
-        </div>
-
-        <div className="w-px h-5 bg-border/60" />
-
-        {/* Width / Eraser size */}
-        {tool === 'eraser' && !shapeTool ? (
-          <div className="flex items-center gap-1">
-            <div className="flex items-center gap-0.5 p-0.5 rounded-md border border-border/40 bg-muted/30">
-              {(
-                [
-                  ['partial', '点擦'],
-                  ['stroke', '划擦'],
-                ] as Array<[EraserMode, string]>
-              ).map(([mode, label]) => (
-                <button
-                  key={mode}
-                  type="button"
-                  onClick={() => setEraserMode(mode)}
-                  className={cn(
-                    'h-6 rounded px-1.5 text-[10px] transition-colors',
-                    eraserMode === mode
-                      ? 'bg-primary/15 text-primary'
-                      : 'text-muted-foreground hover:bg-accent/60',
-                  )}
-                >
-                  {label}
-                </button>
-              ))}
-            </div>
-            {PEN_ERASER_SIZES.map((s) => (
-              <button
-                key={s}
-                type="button"
-                onClick={() => {
-                  setEraserSize(s);
-                  inkRef.current?.setStyle({ eraserSize: s });
-                }}
-                className={cn(
-                  'grid place-items-center size-7 rounded-md transition-colors',
-                  eraserSize === s
-                    ? 'bg-primary/15 text-primary'
-                    : 'text-muted-foreground hover:bg-accent/60',
-                )}
-                aria-label={`eraser size ${s}`}
-                title={`${s}px`}
-              >
-                {/* 圆点直径封顶 18px，避免 48/80 号的圆点溢出 28px 按钮 */}
-                <span
-                  className="rounded-full bg-current"
-                  style={{
-                    width: Math.min(s * 0.5, 18),
-                    height: Math.min(s * 0.5, 18),
-                  }}
-                />
-              </button>
-            ))}
-          </div>
-        ) : (
-          <div className="flex items-center gap-1">
-            {PEN_WIDTHS.map((w) => (
-              <button
-                key={w}
-                type="button"
-                onClick={() => {
-                  setWidth(w);
-                  inkRef.current?.setStyle({ width: w });
-                }}
-                className={cn(
-                  'grid place-items-center size-7 rounded-md transition-colors',
-                  width === w
-                    ? 'bg-primary/15 text-primary'
-                    : 'text-muted-foreground hover:bg-accent/60',
-                )}
-                aria-label={`width ${w}`}
-                title={`笔宽 ${w}px`}
-              >
-                <span
-                  className="rounded-full bg-current"
-                  style={{ width: w + 1, height: w + 1 }}
-                />
-              </button>
-            ))}
-          </div>
-        )}
-          </>
-        )}
-
-        <div className="flex-1" />
-
-        {/* More tools: shapes, pixel mode, recognition, background, clear */}
-        <DropdownMenu>
-          <DropdownMenuTrigger asChild>
-            <button
-              type="button"
-              aria-label="更多工具"
-              title="形状 / 像素 / 背景 / 清空"
-              className={cn(
-                'grid place-items-center size-7 rounded-md transition-colors',
-                shapeTool || pixelMode || background !== 'dot'
-                  ? 'text-primary bg-primary/10'
-                  : 'text-muted-foreground hover:text-foreground hover:bg-accent/60',
-              )}
-            >
-              <MoreHorizontal className="size-4" />
-            </button>
-          </DropdownMenuTrigger>
-          <DropdownMenuContent align="end" className="w-52">
-            <DropdownMenuLabel className="text-[10px] uppercase tracking-wide text-muted-foreground">
-              形状工具
-            </DropdownMenuLabel>
-            {SHAPES.map(({ id, icon: Icon, label }) => (
-              <DropdownMenuItem
-                key={id}
-                onClick={() => selectShape(shapeTool === id ? null : id)}
-                className="gap-2 text-[11.5px]"
-              >
-                <Icon className="size-3.5" />
-                <span>{label}</span>
-                {shapeTool === id && <Check className="ml-auto size-3 text-primary" />}
-              </DropdownMenuItem>
-            ))}
-
-            <DropdownMenuSeparator />
-            <DropdownMenuLabel className="text-[10px] uppercase tracking-wide text-muted-foreground">
-              画布
-            </DropdownMenuLabel>
-            <DropdownMenuItem
-              onClick={() => {
-                const next = !pixelMode;
-                setPixelMode(next);
-                selectShape(null);
-                selectTool('pen');
-                inkRef.current?.setStyle({ pixelMode: next });
-              }}
-              className="gap-2 text-[11.5px]"
-            >
-              <Grid2x2 className="size-3.5" />
-              <span>像素画</span>
-              {pixelMode && <Check className="ml-auto size-3 text-primary" />}
-            </DropdownMenuItem>
-            <DropdownMenuItem
-              onClick={toggleLatencyProbe}
-              className="gap-2 text-[11.5px]"
-            >
-              <Timer className="size-3.5" />
-              <span>笔迹延迟测试</span>
-              {latencyProbe && <Check className="ml-auto size-3 text-primary" />}
-            </DropdownMenuItem>
-
-            <DropdownMenuSeparator />
-            <DropdownMenuLabel className="text-[10px] uppercase tracking-wide text-muted-foreground">
-              背景
-            </DropdownMenuLabel>
-            {BACKGROUNDS.map(({ id, icon: Icon, label }) => (
-              <DropdownMenuItem
-                key={id}
-                onClick={() => {
-                  setBackground(id);
-                  inkRef.current?.setStyle({ background: id });
-                }}
-                className="gap-2 text-[11.5px]"
-              >
-                <Icon className="size-3.5" />
-                <span>{label}</span>
-                {background === id && <Check className="ml-auto size-3 text-primary" />}
-              </DropdownMenuItem>
-            ))}
-
-            <DropdownMenuSeparator />
-            <DropdownMenuItem
-              onClick={handleExport}
-              disabled={empty}
-              className="gap-2 text-[11.5px]"
-            >
-              <Download className="size-3.5" />
-              <span>导出 PNG</span>
-            </DropdownMenuItem>
-            <DropdownMenuItem
-              onClick={handleClear}
-              disabled={empty}
-              className="gap-2 text-[11.5px] text-rose-500 focus:text-rose-500"
-            >
-              <Trash2 className="size-3.5" />
-              <span>清空画布</span>
-            </DropdownMenuItem>
-          </DropdownMenuContent>
-        </DropdownMenu>
-
-        {/* Zoom + actions — 手机上交给底部笔栏 / 手势，工具栏保持两行以内 */}
-        <div className="hidden md:flex items-center gap-0.5">
-          {/* Zoom controls */}
-          <div className="flex items-center gap-0.5 p-0.5 rounded-md bg-muted/40 border border-border/40">
-          <button
-            type="button"
-            onClick={() => zoomAt(1 / 1.2)}
-            className="grid place-items-center size-6 rounded text-muted-foreground hover:text-foreground hover:bg-accent/60"
-            aria-label="zoom out"
-            title={`缩小 (当前 ${Math.round(view.k * 100)}%)`}
-          >
-            <ZoomOut className="size-3.5" />
-          </button>
-          <button
-            type="button"
-            onClick={handleZoomReset}
-            className="min-w-11 h-6 px-1 rounded text-[10.5px] font-medium text-muted-foreground hover:text-foreground hover:bg-accent/60 tabular-nums"
-            aria-label="reset zoom"
-            title="重置缩放 (100%)"
-          >
-            {Math.round(view.k * 100)}%
-          </button>
-          <button
-            type="button"
-            onClick={() => zoomAt(1.2)}
-            className="grid place-items-center size-6 rounded text-muted-foreground hover:text-foreground hover:bg-accent/60"
-            aria-label="zoom in"
-            title="放大"
-          >
-            <ZoomIn className="size-3.5" />
-          </button>
-        </div>
-
-        {/* Actions */}
-        <button
-          type="button"
-          onClick={handleUndo}
-          disabled={undoStack.length === 0}
-          className="grid place-items-center size-7 rounded-md text-muted-foreground hover:text-foreground hover:bg-accent/60 transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
-          aria-label="undo"
-        >
-          <Undo2 className="size-3.5" />
-        </button>
-        <button
-          type="button"
-          onClick={handleRedo}
-          disabled={redoStack.length === 0}
-          className="grid place-items-center size-7 rounded-md text-muted-foreground hover:text-foreground hover:bg-accent/60 transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
-          aria-label="redo"
-        >
-          <Redo2 className="size-3.5" />
-        </button>
-        <button
-          type="button"
-          onClick={handleExport}
-          disabled={empty}
-          className="inline-flex items-center gap-1 h-7 px-2 rounded-md text-[11px] bg-primary/10 text-primary hover:bg-primary/15 transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
-          aria-label="export"
-        >
-          <Download className="size-3.5" />
-          PNG
-        </button>
-        </div>
-      </div>
 
       {/* Canvas */}
       <div className="flex-1 min-h-0 relative overflow-hidden">
@@ -1266,6 +916,7 @@ export function WhiteboardCanvas() {
           eraserSize={eraserSize}
           pixelMode={pixelMode}
           background={background}
+          stabilizer={stabilizer}
           selectedIds={selectedIds}
           onStrokeEnd={handleStrokeEnd}
           onEraseEnd={handleEraseEnd}
@@ -1275,6 +926,93 @@ export function WhiteboardCanvas() {
           hitTest={handleHitTest}
           onLatency={handleLatencySample}
         />
+
+        {/* 桌面/平板：左侧浮动工具坞 + 底部操作条（触屏小屏仍用 PenDock） */}
+        {!coarse && (
+          <>
+            <WhiteboardToolDock
+              tool={tool}
+              onTool={selectTool}
+              brush={brush}
+              onBrush={selectBrush}
+              eraserMode={eraserMode}
+              onEraserMode={setEraserMode}
+              color={color}
+              onColor={(c) => {
+                setColor(c);
+                inkRef.current?.setStyle({ color: c });
+              }}
+              width={width}
+              onWidth={(w) => {
+                setWidth(w);
+                inkRef.current?.setStyle({ width: w });
+              }}
+              eraserSize={eraserSize}
+              onEraserSize={(s) => {
+                setEraserSize(s);
+                inkRef.current?.setStyle({ eraserSize: s });
+              }}
+              shapeTool={shapeTool}
+              onShapeTool={selectShape}
+              pixelMode={pixelMode}
+              onPixelMode={(next) => {
+                setPixelMode(next);
+                selectShape(null);
+                selectTool('pen');
+                inkRef.current?.setStyle({ pixelMode: next });
+              }}
+              stabilizer={stabilizer}
+              onStabilizer={setStabilizer}
+              background={background}
+              onBackground={(b) => {
+                setBackground(b);
+                inkRef.current?.setStyle({ background: b });
+              }}
+              mathMode={mathMode}
+              onToggleMath={toggleMathMode}
+              latencyProbe={latencyProbe}
+              onLatencyProbe={toggleLatencyProbe}
+              onClear={handleClear}
+            />
+            <WhiteboardActionBar
+              zoomPercent={Math.round(view.k * 100)}
+              onZoomIn={() => zoomAt(1.2)}
+              onZoomOut={() => zoomAt(1 / 1.2)}
+              onResetZoom={handleZoomReset}
+              canUndo={undoStack.length > 0}
+              canRedo={redoStack.length > 0}
+              onUndo={handleUndo}
+              onRedo={handleRedo}
+              onExport={handleExport}
+              exportDisabled={empty}
+            />
+          </>
+        )}
+
+        {/* 识别范围框：让用户看到这次识别到底用了哪一段笔迹 */}
+        {mathScopeBox && mathDraft && (
+          <div
+            className="pointer-events-none absolute z-10 rounded-md border-2 border-sky-500/70"
+            style={{
+              left: mathScopeBox.x0 * view.k + view.x - 6,
+              top: mathScopeBox.y0 * view.k + view.y - 6,
+              width: Math.max(10, (mathScopeBox.x1 - mathScopeBox.x0) * view.k + 12),
+              height: Math.max(10, (mathScopeBox.y1 - mathScopeBox.y0) * view.k + 12),
+            }}
+          >
+            {[
+              '-left-1 -top-1',
+              '-right-1 -top-1',
+              '-left-1 -bottom-1',
+              '-right-1 -bottom-1',
+            ].map((c) => (
+              <span
+                key={c}
+                className={cn('absolute size-2 rounded-full bg-sky-500 shadow-sm', c)}
+              />
+            ))}
+          </div>
+        )}
 
         {/* Vector math cards (calculations / live graphs) — 引擎按需加载 */}
         <Suspense fallback={null}>
@@ -1292,11 +1030,16 @@ export function WhiteboardCanvas() {
             <MathNotePanel
               draft={mathDraft}
               raised={coarse}
+              anchor={mathAnchorRef.current}
+              view={view}
               onCorrectGlyph={handleCorrectGlyph}
               onChange={(text) => setMathDraft((prev) => (prev ? { ...prev, text } : prev))}
               onRetry={handleMathRetry}
               onInsert={handleInsertMath}
-              onClose={() => setMathDraft(null)}
+              onClose={() => {
+                setMathDraft(null);
+                setMathScopeBox(null);
+              }}
             />
           )}
         </Suspense>
@@ -1304,7 +1047,9 @@ export function WhiteboardCanvas() {
         {mathMode && !mathDraft && (
           <div className="pointer-events-none absolute left-3 top-3 z-20 flex items-center gap-1.5 rounded-full border border-border/60 bg-background/85 px-2.5 py-1 text-[10px] text-muted-foreground shadow-sm backdrop-blur">
             <Sigma className="size-3 text-primary" />
-            <span>数学模式 · 写完停 1 秒识别</span>
+            <span className={cn(recognizing && 'animate-pulse text-primary')}>
+              {recognizing ? '识别中…' : '数学模式 · 停笔 0.7 秒识别'}
+            </span>
             <button
               type="button"
               onClick={openManualMath}
@@ -1347,7 +1092,7 @@ export function WhiteboardCanvas() {
         {/* Selection actions: move is direct, scale/rotate/delete live here. */}
         {selectedIds.length > 0 && (
           <div
-            className="absolute bottom-3 left-3 z-20 flex items-center gap-0.5 rounded-full border border-border/60 bg-background/95 px-1.5 py-1 shadow-lg backdrop-blur"
+            className="absolute bottom-16 left-3 z-20 flex items-center gap-0.5 rounded-full border border-border/60 bg-background/95 px-1.5 py-1 shadow-lg backdrop-blur"
             onPointerDown={(e) => e.stopPropagation()}
             onWheel={(e) => e.stopPropagation()}
           >
@@ -1434,6 +1179,8 @@ export function WhiteboardCanvas() {
               setEraserSize(s);
               inkRef.current?.setStyle({ eraserSize: s });
             }}
+            stabilizer={stabilizer}
+            onStabilizer={setStabilizer}
             shapeTool={shapeTool}
             onShapeTool={selectShape}
             pixelMode={pixelMode}
@@ -1469,7 +1216,7 @@ export function WhiteboardCanvas() {
                 {t('abWhiteboard')}
               </p>
               <p className="text-[11.5px] text-muted-foreground max-w-xs">
-                先点顶部 Σ 开启数学模式，写公式后停 1 秒出结果
+                先点左侧 Σ 开启数学模式，写公式后停 0.7 秒出识别浮卡
               </p>
               <p className="mt-1 text-[10.5px] text-muted-foreground/70 max-w-xs">
                 sin x、y=x² 都能识别 · 笔迹不会被自动改成几何图形
@@ -1497,7 +1244,7 @@ export function WhiteboardCanvas() {
                 : '选择'}
           {selectedIds.length > 0 ? ` · 已选 ${selectedIds.length}` : ''} · 背景{' '}
           {BACKGROUNDS.find((b) => b.id === background)?.label}
-          {mathMode ? ' · 数学模式（停笔 1 秒识别）' : ''}
+          {mathMode ? ' · 数学模式（停笔 0.7 秒识别）' : ''}
           {mathCards.length > 0 ? ` · ${mathCards.length} 个结果卡` : ''}
         </span>
         <span className="hidden shrink-0 sm:block">

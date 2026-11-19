@@ -130,7 +130,7 @@ export function TitleBar() {
   const setCommandPaletteOpen = useWorkbenchStore((s) => s.setCommandPaletteOpen);
   const locale = useLocale();
   const setLocaleStore = useWorkbenchStore((s) => s.setLocale);
-  // 代码 / Demos 输入界面开关（上移到顶栏，避免挤占编辑器工具栏）。
+  // 代码 / 函数输入器开关（上移到顶栏，避免挤占编辑器工具栏）。
   const inputView = useWorkbenchStore((s) => s.inputView);
   const setInputView = useWorkbenchStore((s) => s.setInputView);
   const viewMode = useWorkbenchStore((s) => s.viewMode);
@@ -334,13 +334,14 @@ export function TitleBar() {
 
       {/* ── Center: menus ─────────────────────────────────────────── */}
       <nav className="hidden md:flex items-center gap-0.5 relative">
-        {/* 代码 / Demos 输入界面切换（上移到顶栏；仅在工作台 + 编辑器可见时显示） */}
+        {/* 代码 / 函数输入器切换（上移到顶栏；仅在工作台 + 编辑器可见时显示） */}
         {showInputViewSwitch && (
           <div className="flex items-center gap-0.5 p-0.5 rounded-lg bg-muted/60 border border-border/60 mr-1">
             <button
               type="button"
               onClick={() => setInputView('code')}
               title="代码编辑器"
+              aria-label="切换到代码编辑器"
               className={cn(
                 'flex items-center gap-1 h-6 px-2 text-[11px] rounded transition-all font-medium',
                 inputView === 'code'
@@ -354,7 +355,8 @@ export function TitleBar() {
             <button
               type="button"
               onClick={() => setInputView('demos')}
-              title="Demos 直接输入绘图"
+              title="函数输入器：输入即绘图"
+              aria-label="切换到函数输入器"
               className={cn(
                 'flex items-center gap-1 h-6 px-2 text-[11px] rounded transition-all font-medium',
                 inputView === 'demos'
@@ -363,7 +365,7 @@ export function TitleBar() {
               )}
             >
               <SquareFunction className="size-3.5" />
-              Demos
+              函数
             </button>
           </div>
         )}
