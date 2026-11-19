@@ -11,7 +11,7 @@
  * 否则第一次访问的哈希 chunk 不在 SW 控制内，离线刷新会缺文件。
  */
 
-const CACHE = 'omnimath-shell-v1';
+const CACHE = 'omnimath-shell-v2';
 const SHELL = ['/', '/manifest.webmanifest'];
 
 self.addEventListener('install', (event) => {

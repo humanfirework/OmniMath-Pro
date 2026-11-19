@@ -413,7 +413,13 @@ export const useWorkbenchStore = create<WorkbenchState>((set, get) => ({
   editorVisible: true,
   onboardingPractice: false,
 
-  setEditorContent: (content) => { set({ editorContent: content }); get().saveToStorage(); },
+  // 任何“往编辑器里写内容”的动作（打开文件、历史回填、公式示例、AI 插入）
+  // 都意味着用户要回到代码编辑器。之前默认入口改成函数输入器后，这些入口
+  // 只改了 editorContent，界面却还停在函数输入器，看起来像“代码编辑器失效”。
+  setEditorContent: (content) => {
+    set({ editorContent: content, inputView: 'code' });
+    get().saveToStorage();
+  },
   setInputMode: (mode) => { set({ inputMode: mode }); get().saveToStorage(); },
   setInputView: (view) => { set({ inputView: view }); get().saveToStorage(); },
   setDemosExpr: (v) => { set({ demosExpr: v }); get().saveToStorage(); },

@@ -430,11 +430,11 @@ export function FunctionInputPanel() {
               </DropdownMenuItem>
             </DropdownMenuContent>
           </DropdownMenu>
-          {/* 手机端顶栏没有输入界面切换，这里提供回到代码编辑器的入口。 */}
+          {/* 函数输入器里始终提供回到代码编辑器的入口（桌面顶栏也有）。 */}
           <button
             type="button"
             onClick={() => setInputView('code')}
-            className="md:hidden inline-flex h-7 shrink-0 items-center gap-1 rounded-lg border border-border/60 px-2 text-[10.5px] text-muted-foreground hover:bg-accent/60 hover:text-foreground"
+            className="inline-flex h-7 shrink-0 items-center gap-1 rounded-lg border border-border/60 px-2 text-[10.5px] text-muted-foreground hover:bg-accent/60 hover:text-foreground"
           >
             <FileCode2 className="size-3" />
             代码

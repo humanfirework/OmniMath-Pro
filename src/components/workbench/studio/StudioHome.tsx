@@ -225,6 +225,8 @@ export function StudioHome() {
       case 'codePlot':
         setEditorVisible(true);
         setPreviewVisible(true);
+        // 代码画图必须切回代码编辑器，否则默认入口是函数输入器。
+        setInputView('code');
         setActivePreviewTab('plot2d');
         setViewMode('workbench');
         // 手机端没有桌面布局：直接切到「编辑器」标签，否则点了卡片看起来没反应。
