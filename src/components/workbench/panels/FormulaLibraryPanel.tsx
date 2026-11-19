@@ -620,8 +620,9 @@ export function FormulaLibraryPanel() {
             className="h-7 pl-7 pr-2 text-[12px] bg-muted/40 border-border/60"
           />
         </div>
-        {/* Category chips */}
-        <div className="flex flex-wrap gap-1">
+        {/* Category chips — single scrollable row so a narrow side panel
+            doesn't spend three rows wrapping 10 categories. */}
+        <div className="flex gap-1 overflow-x-auto pb-0.5 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
           <Chip
             active={activeCat === 'all'}
             onClick={() => setActiveCat('all')}
@@ -1132,7 +1133,7 @@ function Chip({
       type="button"
       onClick={onClick}
       className={cn(
-        'h-5 px-2 text-[10.5px] rounded-full border transition-all',
+        'h-5 shrink-0 whitespace-nowrap px-2 text-[10.5px] rounded-full border transition-all',
         active
           ? 'bg-primary/15 text-primary border-primary/40'
           : 'bg-muted/40 text-muted-foreground border-border/60 hover:text-foreground hover:border-primary/40',

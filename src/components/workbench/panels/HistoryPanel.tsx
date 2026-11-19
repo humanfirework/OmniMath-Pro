@@ -10,7 +10,7 @@
  *    标题行不重复 SidePanel 的头部，整体更清爽。
  */
 
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
   ClipboardCopy,
@@ -286,6 +286,13 @@ export default function HistoryPanel() {
   const removeResult = useWorkbenchStore((s) => s.removeResult);
   const clearHistory = useWorkbenchStore((s) => s.clearHistory);
   const [query, setQuery] = useState('');
+  // 清空历史不可撤销：第一次点变成「确认清空」，3 秒内再点才真正删除。
+  const [confirmClear, setConfirmClear] = useState(false);
+  useEffect(() => {
+    if (!confirmClear) return;
+    const timer = window.setTimeout(() => setConfirmClear(false), 3000);
+    return () => window.clearTimeout(timer);
+  }, [confirmClear]);
 
   const filtered = useMemo(() => {
     const q = query.trim().toLowerCase();
@@ -324,20 +331,33 @@ export default function HistoryPanel() {
           />
         </div>
         {results.length > 0 && (
-          <Tooltip>
-            <TooltipTrigger asChild>
-              <Button
-                variant="ghost"
-                size="icon"
-                className="size-8 shrink-0 text-muted-foreground hover:text-destructive"
-                onClick={clearHistory}
-                aria-label={t('histClear')}
-              >
-                <Trash2 className="size-3.5" />
-              </Button>
-            </TooltipTrigger>
-            <TooltipContent side="bottom">{t('histClear')}</TooltipContent>
-          </Tooltip>
+          confirmClear ? (
+            <button
+              type="button"
+              onClick={() => {
+                clearHistory();
+                setConfirmClear(false);
+              }}
+              className="h-8 shrink-0 rounded-md border border-destructive/50 bg-destructive/10 px-2 text-[10.5px] font-medium text-destructive transition-colors hover:bg-destructive/20"
+            >
+              确认清空
+            </button>
+          ) : (
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  className="size-8 shrink-0 text-muted-foreground hover:text-destructive"
+                  onClick={() => setConfirmClear(true)}
+                  aria-label={t('histClear')}
+                >
+                  <Trash2 className="size-3.5" />
+                </Button>
+              </TooltipTrigger>
+              <TooltipContent side="bottom">{t('histClear')}</TooltipContent>
+            </Tooltip>
+          )
         )}
       </div>
 
