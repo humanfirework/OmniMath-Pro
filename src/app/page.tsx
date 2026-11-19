@@ -15,7 +15,14 @@ export default function Home() {
 
   useEffect(() => {
     try {
-      if (sessionStorage.getItem('omnimath-splash-seen') !== '1') setShowSplash(true);
+      // 品牌页只在“这台设备的第一次访问”出现；之后启动直接进工作台。
+      if (localStorage.getItem('omnimath-splash-seen-v2') === '1') return;
+      // 深链（?view=pipeline / whiteboard …）说明用户是直奔某个工具的，
+      // 不要用品牌动画再挡一次；系统开启“减少动态效果”时同样跳过。
+      const params = new URLSearchParams(window.location.search);
+      if (params.get('view')) return;
+      if (window.matchMedia?.('(prefers-reduced-motion: reduce)').matches) return;
+      setShowSplash(true);
     } catch {
       setShowSplash(true);
     }
@@ -23,7 +30,7 @@ export default function Home() {
 
   const finishSplash = useCallback(() => {
     try {
-      sessionStorage.setItem('omnimath-splash-seen', '1');
+      localStorage.setItem('omnimath-splash-seen-v2', '1');
     } catch {
       // ignore private-mode storage errors
     }
