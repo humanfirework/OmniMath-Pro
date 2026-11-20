@@ -25,6 +25,7 @@ import {
   BookOpen,
   Sparkles,
   GraduationCap,
+  MessageSquare,
 } from 'lucide-react';
 import {
   buildDailyPaper,
@@ -87,10 +88,10 @@ function QuestionControl({
               onClick={() => onChange({ choice: i })}
               disabled={disabled}
               className={cn(
-                'flex items-center gap-2 rounded-xl border px-3 py-2 text-left text-[13px] transition-all',
+                'flex items-center gap-2 rounded-lg border px-3 py-2 text-left text-[13px] transition-colors',
                 selected
                   ? 'border-primary/50 bg-primary/10 text-foreground'
-                  : 'border-border/60 bg-background/40 text-foreground/85 hover:border-primary/30 hover:bg-accent/40',
+                  : 'border-border bg-card text-foreground/85 hover:border-primary/30 hover:bg-accent/40',
                 disabled && 'opacity-70',
               )}
             >
@@ -120,11 +121,11 @@ function QuestionControl({
           disabled={disabled}
           rows={3}
           placeholder="在这里写出你的解题过程（可含 $...$ LaTeX）…"
-          className="w-full resize-y rounded-xl border border-border/60 bg-background/50 px-3 py-2 text-[13px] outline-none focus:border-primary/40 focus:ring-1 focus:ring-primary/20 disabled:opacity-60"
+          className="w-full resize-y rounded-lg border border-border bg-background/50 px-3 py-2 text-[13px] outline-none focus:border-primary/40 focus:ring-1 focus:ring-primary/20 disabled:opacity-60"
         />
         <div className="rounded-xl border border-rose-500/20 bg-rose-500/5 p-2.5">
           <p className="mb-1.5 flex items-center gap-1 text-[11px] font-medium text-rose-600 dark:text-rose-400">
-            <BookOpen className="size-3" />
+            <BookOpen className="size-3" strokeWidth={1.75} />
             评分细则 · 自评给分（勾选你写对的步骤）
           </p>
           <div className="space-y-1">
@@ -138,7 +139,7 @@ function QuestionControl({
                   'flex w-full items-start gap-2 rounded-lg border px-2.5 py-1.5 text-left transition-colors',
                   scores[i]
                     ? 'border-emerald-500/40 bg-emerald-500/10'
-                    : 'border-border/50 bg-background/30 hover:border-rose-500/30',
+                    : 'border-border bg-card hover:border-rose-500/30',
                   disabled && 'opacity-70',
                 )}
               >
@@ -150,7 +151,7 @@ function QuestionControl({
                       : 'border-border/60 text-transparent',
                   )}
                 >
-                  <Check className="size-3" />
+                  <Check className="size-3" strokeWidth={1.75} />
                 </span>
                 <span className="min-w-0 flex-1">
                   <span className="text-[12.5px] leading-relaxed text-foreground/90">
@@ -177,7 +178,7 @@ function QuestionControl({
           ? '输入表达式，例如 3*x^2'
           : '输入你的答案（数字或分数，如 5/8）'
       }
-      className="h-10 w-full rounded-xl border border-border/60 bg-background/50 px-3 text-[13.5px] outline-none focus:border-primary/40 focus:ring-1 focus:ring-primary/20 disabled:opacity-60"
+      className="h-10 w-full rounded-lg border border-border bg-background/50 px-3 text-[13.5px] outline-none focus:border-primary/40 focus:ring-1 focus:ring-primary/20 disabled:opacity-60"
     />
   );
 }
@@ -284,17 +285,17 @@ export function EducationPaper() {
   return (
     <div className="mx-auto max-w-3xl">
       {/* 卷头 */}
-      <div className="mb-4 overflow-hidden rounded-3xl border border-border/60 bg-gradient-to-br from-emerald-500/10 via-sky-500/5 to-indigo-500/10 shadow-sm backdrop-blur-sm">
+      <div className="mb-4 overflow-hidden surface-card rounded-xl">
         <div className="flex items-center gap-3 px-5 py-4">
-          <div className="grid size-11 shrink-0 place-items-center rounded-2xl bg-gradient-to-br from-emerald-500/25 to-sky-500/25">
-            <FileText className="size-5 text-emerald-600 dark:text-emerald-400" />
+          <div className="grid size-11 shrink-0 place-items-center rounded-md border border-border bg-muted/40">
+            <FileText className="size-5 text-primary" strokeWidth={1.75} />
           </div>
           <div className="min-w-0 flex-1">
             <div className="flex flex-wrap items-center gap-2">
               <h2 className="text-[17px] font-semibold tracking-tight text-foreground">
                 每日一卷
               </h2>
-              <span className="rounded-full border border-emerald-500/40 bg-emerald-500/10 px-2 py-0.5 text-[10px] font-medium text-emerald-600 dark:text-emerald-400">
+              <span className="rounded-full border border-border bg-muted/40 px-2 py-0.5 text-[10px] font-medium text-muted-foreground">
                 {STAGE_LABEL[stage]} · {date}
               </span>
             </div>
@@ -303,7 +304,7 @@ export function EducationPaper() {
             </p>
           </div>
           <div className="flex items-center gap-1.5 text-[11px] text-muted-foreground">
-            <GraduationCap className="size-3" />
+            <GraduationCap className="size-3" strokeWidth={1.75} />
             当前学段：{STAGE_LABEL[stage]}
           </div>
         </div>
@@ -314,9 +315,9 @@ export function EducationPaper() {
         {paper.sections.map((sec) => (
           <section
             key={sec.type}
-            className="overflow-hidden rounded-3xl border border-border/60 bg-card/60 shadow-sm backdrop-blur-sm"
+            className="overflow-hidden surface-card rounded-xl"
           >
-            <div className="flex items-center gap-2 border-b border-border/60 bg-background/30 px-5 py-2.5">
+            <div className="flex items-center gap-2 border-b border-border bg-muted/30 px-5 py-2.5">
               <span className={cn('size-2 rounded-full', SECTION_STYLE[sec.type].dot)} />
               <span className="text-[12.5px] font-semibold text-foreground">{sec.title}</span>
               <span className="ml-auto rounded-full border border-border/60 px-2 py-0.5 text-[10px] text-muted-foreground">
@@ -342,7 +343,7 @@ export function EducationPaper() {
                         </p>
                         {!verdict && (
                           <p className="mt-0.5 flex items-start gap-1 text-[11px] italic text-muted-foreground">
-                            <span className="shrink-0">💬</span>
+                            <MessageSquare className="mt-0.5 size-3 shrink-0" strokeWidth={1.75} />
                             <span>
                               <MathText text={q.encouragement} />
                             </span>
@@ -376,9 +377,9 @@ export function EducationPaper() {
                               )}
                             >
                               {verdict.correct ? (
-                                <Check className="size-3" />
+                                <Check className="size-3" strokeWidth={1.75} />
                               ) : (
-                                <X className="size-3" />
+                                <X className="size-3" strokeWidth={1.75} />
                               )}
                             </span>
                             <div className="min-w-0">
@@ -413,7 +414,7 @@ export function EducationPaper() {
                                             got ? 'bg-emerald-500' : 'bg-muted text-muted-foreground',
                                           )}
                                         >
-                                          {got ? <Check className="size-2" /> : <span className="text-[8px]">·</span>}
+                                          {got ? <Check className="size-2" strokeWidth={1.75} /> : <span className="text-[8px]">·</span>}
                                         </span>
                                         <span className="text-foreground/80">
                                           <MathText text={part.answer} />
@@ -428,7 +429,7 @@ export function EducationPaper() {
                           {!verdict.correct && (
                             <div className="mt-2 border-t border-border/40 pt-2">
                               <span className="flex items-center gap-1 text-[11px] font-medium text-amber-600 dark:text-amber-400">
-                                <Lightbulb className="size-3" />
+                                <Lightbulb className="size-3" strokeWidth={1.75} />
                                 提示
                               </span>
                               <p className="mt-0.5 text-[12px] text-foreground/75">
@@ -439,7 +440,7 @@ export function EducationPaper() {
                           {reveal && !verdict.correct && (
                             <div className="mt-2 border-t border-border/40 pt-2">
                               <span className="flex items-center gap-1 text-[11px] font-medium text-primary">
-                                <BookOpen className="size-3" />
+                                <BookOpen className="size-3" strokeWidth={1.75} />
                                 思路
                               </span>
                               <ol className="mt-0.5 space-y-1">
@@ -464,15 +465,15 @@ export function EducationPaper() {
       </div>
 
       {/* 底部操作区 */}
-      <div className="mt-5 flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-border/60 bg-card/60 px-5 py-4 backdrop-blur-sm">
+      <div className="mt-5 flex flex-wrap items-center justify-between gap-3 surface-card rounded-xl px-5 py-4">
         <div className="flex items-center gap-2">
           {verdicts ? (
             <span className="inline-flex items-center gap-1.5 rounded-full border border-emerald-500/40 bg-emerald-500/10 px-3 py-1 text-[12px] font-medium text-emerald-600 dark:text-emerald-400">
-              <Check className="size-3.5" />
+              <Check className="size-3.5" strokeWidth={1.75} />
               得分 {score}/{total} · {Math.round((score / total) * 100)}%
             </span>
           ) : (
-            <span className="inline-flex items-center gap-1.5 rounded-full border border-border/60 bg-background/40 px-3 py-1 text-[11.5px] text-muted-foreground">
+            <span className="inline-flex items-center gap-1.5 rounded-full border border-border bg-muted/40 px-3 py-1 text-[11.5px] text-muted-foreground">
               已作答 {Object.keys(answers).filter((k) => answers[k].choice !== undefined || answers[k].text?.trim()).length}
               /{total} 题
             </span>
@@ -484,17 +485,17 @@ export function EducationPaper() {
               <button
                 type="button"
                 onClick={() => setReveal((v) => !v)}
-                className="inline-flex h-9 items-center gap-1.5 rounded-xl border border-border/60 bg-background/40 px-3.5 text-[12px] text-muted-foreground hover:text-foreground transition-colors"
+                className="inline-flex h-9 items-center gap-1.5 rounded-lg border border-border bg-card px-3.5 text-[12px] text-muted-foreground hover:text-foreground transition-colors"
               >
-                <Lightbulb className="size-3.5" />
+                <Lightbulb className="size-3.5" strokeWidth={1.75} />
                 {reveal ? '隐藏提示' : '显示提示'}
               </button>
               <button
                 type="button"
                 onClick={handleSubmit}
-                className="inline-flex h-9 items-center gap-1.5 rounded-xl bg-primary px-4 text-[12.5px] font-medium text-primary-foreground hover:bg-primary/90 transition-colors"
+                className="inline-flex h-9 items-center gap-1.5 rounded-lg bg-primary px-4 text-[12.5px] font-medium text-primary-foreground hover:bg-primary/90 transition-colors"
               >
-                <Send className="size-3.5" />
+                <Send className="size-3.5" strokeWidth={1.75} />
                 交卷并查看成绩
               </button>
             </>
@@ -502,9 +503,9 @@ export function EducationPaper() {
             <button
               type="button"
               onClick={handleReset}
-              className="inline-flex h-9 items-center gap-1.5 rounded-xl border border-border/60 bg-background/40 px-3.5 text-[12px] text-muted-foreground hover:text-foreground transition-colors"
+              className="inline-flex h-9 items-center gap-1.5 rounded-lg border border-border bg-card px-3.5 text-[12px] text-muted-foreground hover:text-foreground transition-colors"
             >
-              <RotateCcw className="size-3.5" />
+              <RotateCcw className="size-3.5" strokeWidth={1.75} />
               重新做一遍
             </button>
           )}
@@ -513,7 +514,7 @@ export function EducationPaper() {
 
       {submitted && (
         <p className="mt-3 flex items-center justify-center gap-1.5 text-center text-[11px] text-muted-foreground">
-          <Sparkles className="size-3 text-primary" />
+          <Sparkles className="size-3 text-primary" strokeWidth={1.75} />
           卷面已计入今日打卡与错题本（全部本地保存，不上传）。
         </p>
       )}

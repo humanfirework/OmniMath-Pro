@@ -246,13 +246,13 @@ export function LinalgStudio() {
   if (advanced) {
     return (
       <div className="flex h-full w-full flex-col bg-background">
-        <div className="flex h-9 shrink-0 items-center gap-2 border-b border-border/60 bg-card/40 px-3">
+        <div className="flex h-9 shrink-0 items-center gap-2 border-b border-border/60 bg-muted/20 px-3">
           <button
             type="button"
             onClick={() => setAdvanced(false)}
             className="inline-flex h-6 items-center gap-1 rounded px-2 text-[10px] text-muted-foreground transition-colors hover:bg-accent/60 hover:text-foreground"
           >
-            <ArrowLeft className="size-3" />
+            <ArrowLeft className="size-3 stroke-[1.75]" />
             {copy.back}
           </button>
           <span className="text-[10px] text-muted-foreground">{copy.advanced}</span>
@@ -265,11 +265,11 @@ export function LinalgStudio() {
   }
 
   return (
-    <div className="h-full w-full overflow-auto bg-background/40">
+    <div className="surface-canvas h-full w-full overflow-auto">
       <div className="mx-auto flex max-w-4xl flex-col gap-4 p-4">
         <header className="flex flex-wrap items-start gap-3">
-          <div className="grid size-10 place-items-center rounded-xl bg-cyan-500/10 text-cyan-500">
-            <Grid3x3 className="size-5" />
+          <div className="grid size-10 place-items-center rounded-lg border border-border bg-card text-muted-foreground">
+            <Grid3x3 className="size-5 stroke-[1.75]" />
           </div>
           <div className="min-w-0 flex-1">
             <h1 className="text-base font-semibold text-foreground">{copy.title}</h1>
@@ -278,15 +278,15 @@ export function LinalgStudio() {
           <button
             type="button"
             onClick={() => setAdvanced(true)}
-            className="inline-flex h-8 items-center gap-1.5 rounded-lg border border-border/60 bg-background px-3 text-xs text-muted-foreground transition-colors hover:bg-accent/60 hover:text-foreground"
+            className="inline-flex h-8 items-center gap-1.5 rounded-md border border-border bg-card px-3 text-xs text-muted-foreground transition-colors hover:border-primary/40 hover:bg-accent/50 hover:text-foreground"
           >
-            <Maximize2 className="size-3.5" />
+            <Maximize2 className="size-3.5 stroke-[1.75]" />
             {copy.advanced}
           </button>
         </header>
 
         <div className="grid gap-3 lg:grid-cols-[minmax(0,1fr)_320px]">
-          <section className="rounded-2xl border border-border/60 bg-card/40 p-3">
+          <section className="surface-card rounded-xl p-3">
             <div className="flex items-center justify-between">
               <div className="text-xs font-medium text-foreground/80">{copy.matrix}</div>
               <div className="text-[10px] tabular-nums text-muted-foreground">
@@ -341,7 +341,7 @@ export function LinalgStudio() {
             </div>
           </section>
 
-          <section className="rounded-2xl border border-border/60 bg-card/40 p-3">
+          <section className="surface-card rounded-xl p-3">
             <div className="text-xs font-medium text-foreground/80">{copy.operations}</div>
             <div className="mt-2 grid grid-cols-2 gap-1.5">
               {(

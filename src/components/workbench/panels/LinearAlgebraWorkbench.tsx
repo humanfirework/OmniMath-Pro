@@ -855,7 +855,7 @@ function MatrixEditorTab({
         {/* 预览区 */}
         <div className="space-y-2">
           <div className="text-[11px] text-muted-foreground">{t('linalgKatexPreview')}</div>
-          <div className="rounded-lg border border-primary/30 bg-primary/5 p-4 glow-card-teal min-h-[140px] grid place-items-center overflow-x-auto">
+          <div className="surface-card rounded-lg p-4 min-h-[140px] grid place-items-center overflow-x-auto">
             <FormulaRenderer latex={name + ' = ' + matrixToLatex(matrix)} displayMode fitToContainer={true} />
           </div>
           <div className="text-[10.5px] text-muted-foreground leading-relaxed">
@@ -1246,7 +1246,7 @@ function OperationsTab({ matrices }: { matrices: MatrixEntry[] }) {
                 initial={{ opacity: 0, y: 4 }}
                 animate={{ opacity: 1, y: 0 }}
                 exit={{ opacity: 0 }}
-                className="rounded-md border border-primary/30 bg-primary/5 p-4 glow-card-teal"
+                className="surface-card rounded-md p-4"
               >
                 <div className="text-[11px] text-muted-foreground mb-2">{t('linalgCalcResult')}</div>
                 <div className="overflow-x-auto">
@@ -1666,10 +1666,10 @@ function VectorOpsTab() {
   // —— 可视化预览用向量 ——
   // 向量运算：A / B / 结果（结果为向量时）。
   const vectorPreviewVectors: { v: number[]; color?: string; label?: string }[] = [];
-  if (parsedA) vectorPreviewVectors.push({ v: parsedA, color: '#2dd4bf', label: 'A' });
-  if (needsB && parsedB) vectorPreviewVectors.push({ v: parsedB, color: '#f59e0b', label: 'B' });
+  if (parsedA) vectorPreviewVectors.push({ v: parsedA, color: 'var(--viz-1)', label: 'A' });
+  if (needsB && parsedB) vectorPreviewVectors.push({ v: parsedB, color: 'var(--viz-2)', label: 'B' });
   if (result?.matrix && result.matrix.length === 1) {
-    vectorPreviewVectors.push({ v: result.matrix[0], color: '#a78bfa', label: '结果' });
+    vectorPreviewVectors.push({ v: result.matrix[0], color: 'var(--viz-3)', label: '结果' });
   }
 
   return (
@@ -1783,7 +1783,7 @@ function VectorOpsTab() {
                 initial={{ opacity: 0, y: 4 }}
                 animate={{ opacity: 1, y: 0 }}
                 exit={{ opacity: 0 }}
-                className="rounded-md border border-primary/30 bg-primary/5 p-3 glow-card-teal"
+                className="surface-card rounded-md p-3"
               >
                 <div className="text-[11px] text-muted-foreground mb-2">{t('linalgResult')}</div>
                 <div className="overflow-x-auto">
@@ -1912,9 +1912,9 @@ function GramSchmidtTab() {
     }
   };
 
-  // Gram-Schmidt：原始向量组（青色系）+ 正交化基（红色系）。
-  const gsOriginColors = ['#2dd4bf', '#f59e0b', '#a78bfa', '#22c55e'];
-  const gsOrthColors = ['#ef4444', '#3b82f6', '#10b981', '#f43f5e'];
+  // Gram-Schmidt：原始向量组（蓝→青）+ 正交化基（紫系）。
+  const gsOriginColors = ['var(--viz-1)', 'var(--viz-2)', 'var(--viz-3)', 'var(--viz-4)'];
+  const gsOrthColors = ['var(--viz-5)', 'var(--viz-6)', 'var(--viz-2)', 'var(--viz-4)'];
   const gsPreviewVectors: { v: number[]; color?: string; label?: string }[] = [];
   parsedGsVectors.forEach((v, i) => {
     gsPreviewVectors.push({ v, color: gsOriginColors[i % gsOriginColors.length], label: `v${i + 1}` });
@@ -1998,7 +1998,7 @@ function GramSchmidtTab() {
                   initial={{ opacity: 0, y: 4 }}
                   animate={{ opacity: 1, y: 0 }}
                   exit={{ opacity: 0 }}
-                  className="rounded-md border border-primary/30 bg-primary/5 p-3 glow-card-teal space-y-2"
+                  className="surface-card rounded-md p-3 space-y-2"
                 >
                   <div className="text-[11px] text-muted-foreground">{t('linalgOrthogonalized')}</div>
                   {/* 正交化结果矩阵预览（每行 = 一个正交基向量 q） */}
@@ -2633,7 +2633,7 @@ function LinearSystemTab({
                     </div>
                   )}
 
-                <div className="rounded-md border border-primary/30 bg-primary/5 p-3 glow-card-teal overflow-x-auto min-w-[240px]">
+                <div className="surface-card rounded-md p-3 overflow-x-auto min-w-[240px]">
                   <div className="text-[11px] text-muted-foreground mb-1.5">
                     {solution.kind === 'infinite'
                       ? t('linalgGeneralSolution')

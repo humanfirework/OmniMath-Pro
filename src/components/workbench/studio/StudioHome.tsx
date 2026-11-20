@@ -242,10 +242,10 @@ export function StudioHome() {
         key={action}
         type="button"
         onClick={() => open(action)}
-        className="group relative flex min-h-[104px] flex-col items-start gap-3 rounded-lg border border-border bg-card p-4 text-left transition-colors hover:bg-accent/40 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
+        className="group relative flex min-h-[104px] flex-col items-start gap-3 rounded-lg border border-border bg-card p-4 text-left transition-colors duration-150 hover:border-primary/40 hover:bg-accent/30 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background"
       >
         <div className="flex w-full items-start justify-between gap-2">
-          <span className="grid size-8 place-items-center rounded-md border border-border text-muted-foreground">
+          <span className="grid size-8 place-items-center rounded-md border border-border text-muted-foreground transition-colors group-hover:border-primary/30 group-hover:text-primary">
             <Icon className="size-4" strokeWidth={1.75} />
           </span>
           <span className="rounded-[3px] border border-border px-1.5 py-0.5 font-mono text-[9px] uppercase tracking-wide text-muted-foreground">
@@ -264,13 +264,13 @@ export function StudioHome() {
   };
 
   return (
-    <div className="h-full w-full overflow-auto bg-background">
+    <div className="surface-canvas h-full w-full overflow-auto">
       {/* 手机端底部有悬浮计算器 FAB：多留一段底部空白，
           滚到底时最后一张卡片不会被 FAB 长期压住。 */}
       <div className="mx-auto flex max-w-6xl flex-col gap-8 px-5 pt-10 pb-28 sm:px-8 md:pb-10">
         <header className="flex flex-wrap items-start justify-between gap-4">
           <div className="flex items-start gap-3">
-            <div className="grid size-9 place-items-center rounded-md border border-border text-muted-foreground">
+            <div className="grid size-9 place-items-center rounded-md border border-border bg-card text-muted-foreground">
               <House className="size-4" strokeWidth={1.75} />
             </div>
             <div>
@@ -289,7 +289,7 @@ export function StudioHome() {
             <button
               type="button"
               onClick={() => setCommandPaletteOpen(true)}
-              className="inline-flex h-8 items-center gap-1.5 rounded border border-border bg-transparent px-3 text-[11.5px] text-muted-foreground transition-colors hover:bg-accent/60 hover:text-foreground"
+              className="inline-flex h-8 items-center gap-1.5 rounded-md border border-border bg-card px-3 text-[11.5px] text-muted-foreground transition-colors duration-150 hover:border-primary/40 hover:text-foreground"
             >
               <Command className="size-3.5" strokeWidth={1.75} />
               {copy.command}
@@ -299,14 +299,14 @@ export function StudioHome() {
             <button
               type="button"
               onClick={() => setViewMode('workbench')}
-              className="hidden md:inline-flex h-8 items-center gap-1.5 rounded bg-primary px-3 text-[11.5px] font-medium text-primary-foreground transition-colors hover:bg-primary/90"
+              className="motion-press hidden md:inline-flex h-8 items-center gap-1.5 rounded-md bg-primary px-3 text-[11.5px] font-medium text-primary-foreground transition-colors duration-150 hover:bg-primary/90"
             >
               {copy.back}
             </button>
           </div>
         </header>
 
-        <section className="flex flex-wrap items-center gap-2.5 rounded-lg border border-border bg-card px-4 py-3">
+        <section className="flex flex-wrap items-center gap-2.5 rounded-lg border border-border bg-card px-4 py-3 shadow-[var(--shadow-card)]">
           <Sparkles className="size-3.5 text-muted-foreground" strokeWidth={1.75} />
           <p className="text-[12.5px] text-muted-foreground">{copy.hint}</p>
         </section>
@@ -338,9 +338,9 @@ export function StudioHome() {
                     key={`${item.kind}-${item.id}`}
                     type="button"
                     onClick={() => openRecent(item)}
-                    className="group flex min-w-0 items-center gap-2.5 rounded-md border border-border bg-transparent px-3 py-2.5 text-left transition-colors hover:bg-accent/40"
+                    className="group flex min-w-0 items-center gap-2.5 rounded-lg border border-border bg-card px-3 py-2.5 text-left transition-colors duration-150 hover:border-primary/40 hover:bg-accent/30"
                   >
-                    <span className="grid size-7 shrink-0 place-items-center rounded border border-border text-muted-foreground">
+                    <span className="grid size-7 shrink-0 place-items-center rounded border border-border text-muted-foreground transition-colors group-hover:border-primary/30 group-hover:text-primary">
                       <Icon className="size-3.5" strokeWidth={1.75} />
                     </span>
                     <span className="min-w-0 flex-1">

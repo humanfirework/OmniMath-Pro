@@ -48,7 +48,7 @@ function toPoints(data: SeriesPoint[], width: number, height: number, pad: numbe
 export function LineChart({
   data,
   height = 120,
-  color = '#10b981',
+  color = 'var(--viz-1)',
   area = true,
   hideAxis = false,
 }: ChartProps) {
@@ -84,7 +84,7 @@ export function LineChart({
             x2={width - pad}
             y1={pad + (height - pad * 2) * f}
             y2={pad + (height - pad * 2) * f}
-            stroke="hsl(var(--border))"
+            stroke="var(--viz-grid)"
             strokeDasharray="3 3"
             strokeWidth={0.6}
           />
@@ -107,7 +107,7 @@ export function LineChart({
           cx={parseFloat(points.split(' ')[i].split(',')[0])}
           cy={parseFloat(points.split(' ')[i].split(',')[1])}
           r={p.value > 0 ? 2 : 1}
-          fill={p.value > 0 ? color : 'hsl(var(--muted-foreground))'}
+          fill={p.value > 0 ? color : 'var(--viz-axis)'}
           opacity={p.value > 0 ? 0.9 : 0.4}
         />
       ))}
@@ -118,7 +118,7 @@ export function LineChart({
 /** 横向条形图（用于对比各周/各模块）。 */
 export function BarList({
   items,
-  color = '#10b981',
+  color = 'var(--viz-1)',
 }: {
   items: { label: string; value: number; unit?: string }[];
   color?: string;
@@ -239,7 +239,7 @@ export function ChartCard({
   return (
     <div
       className={cn(
-        'rounded-2xl border border-border/60 bg-card/60 p-4 backdrop-blur-sm',
+        'surface-card rounded-lg p-4',
         className,
       )}
     >

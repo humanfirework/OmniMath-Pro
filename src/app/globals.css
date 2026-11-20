@@ -3656,6 +3656,22 @@ svg *::after {
   --color-chart-3: var(--chart-3);
   --color-chart-4: var(--chart-4);
   --color-chart-5: var(--chart-5);
+
+  /* Visualization tokens — exposed so charts can use text-viz-1 / bg-viz-1 /
+     border-viz-grid / fill-viz-* instead of hardcoded hex arrays. */
+  --color-viz-1: var(--viz-1);
+  --color-viz-2: var(--viz-2);
+  --color-viz-3: var(--viz-3);
+  --color-viz-4: var(--viz-4);
+  --color-viz-5: var(--viz-5);
+  --color-viz-6: var(--viz-6);
+  --color-viz-grid: var(--viz-grid);
+  --color-viz-axis: var(--viz-axis);
+  --color-viz-axis-strong: var(--viz-axis-strong);
+  --color-viz-glow: var(--viz-glow);
+  --color-viz-surface: var(--viz-surface);
+  --color-viz-tooltip: var(--viz-tooltip);
+
   --color-sidebar: var(--sidebar);
   --color-sidebar-foreground: var(--sidebar-foreground);
   --color-sidebar-primary: var(--sidebar-primary);
@@ -3666,6 +3682,8 @@ svg *::after {
   --color-sidebar-ring: var(--sidebar-ring);
 
   /* Custom semantic tokens */
+  --color-primary-2: var(--primary-2);
+  --color-cyan: var(--cyan);
   --color-teal: var(--teal);
   --color-teal-foreground: var(--teal-foreground);
   --color-amber: var(--amber);
@@ -3690,10 +3708,10 @@ svg *::after {
   --radius-2xl: 0.625rem;
   --radius-3xl: 0.75rem;
 
-  /* 收敛阴影：更低、更紧、更中性，去掉“浮夸卡片”的悬浮感 */
-  --shadow-lg: 0 4px 14px -6px oklch(0 0 0 / 14%);
-  --shadow-xl: 0 8px 22px -10px oklch(0 0 0 / 18%);
-  --shadow-2xl: 0 12px 30px -14px oklch(0 0 0 / 22%);
+  /* 收敛阴影：更低、更紧、偏冷蓝，去掉“浮夸卡片”的悬浮感 */
+  --shadow-lg: 0 4px 16px -8px oklch(0.245 0.02 260 / 18%);
+  --shadow-xl: 0 10px 28px -12px oklch(0.245 0.02 260 / 22%);
+  --shadow-2xl: 0 16px 40px -16px oklch(0.245 0.02 260 / 28%);
 }
 
 /* ------------------------------------------------------------
@@ -3706,208 +3724,210 @@ svg *::after {
    * 全局动画时长/曲线 token，所有 framer-motion 动画 + CSS transition
    * 都应引用这些变量，保证全应用动画手感一致。
    *
-   *   --motion-fast     150ms   按钮按下、hover 高亮、tab 切换
-   *   --motion-normal   200ms   面板淡入、卡片浮起（默认值）
-   *   --motion-slow     300ms   抽屉滑入、对话框出现
+   *   --motion-fast     120ms   按钮按下、hover 高亮、tab 切换
+   *   --motion-base     180ms   面板淡入、卡片浮起（默认值）
+   *   --motion-slow     240ms   抽屉滑入、对话框出现
    *
    *   --motion-ease     标准 ease-out，适合大多数出场动画
-   *   --motion-spring   带轻微回弹，适合选中态/激活态
+   *   --motion-spring   带轻微回弹，仅对话框使用
    *
    * 配合 .motion-fast / .motion-normal 工具类，可在不写 framer-motion
    * 的纯 CSS 场景复用同一套 token。
    */
-  --motion-fast: 150ms;
-  --motion-normal: 200ms;
-  --motion-slow: 300ms;
-  --motion-ease: cubic-bezier(0.4, 0, 0.2, 1);
-  --motion-spring: cubic-bezier(0.34, 1.56, 0.64, 1);
+  --motion-fast: 120ms;
+  --motion-base: 180ms;
+  --motion-normal: var(--motion-base);
+  --motion-slow: 240ms;
+  --motion-ease: cubic-bezier(0.2, 0.8, 0.2, 1);
+  --motion-spring: cubic-bezier(0.34, 1.3, 0.64, 1);
 
-  /* Backgrounds — cool paper white with a whisper of teal (not sterile pure gray) */
-  --background: oklch(0.972 0.014 190);
-  --foreground: oklch(0.235 0.03 200);   /* tinted slate ink — softer than near-black */
+  /* Backgrounds — cold paper aurora: cool off-white with a blue breath */
+  --background: oklch(0.974 0.008 255);
+  --foreground: oklch(0.245 0.02 260);   /* cool slate ink — softer than near-black */
 
   /* Node editor canvas — slightly recessed so the graph reads as a distinct surface */
-  --canvas: oklch(0.965 0.012 190);
+  --canvas: oklch(0.958 0.012 255);
 
   /* Indent guide line color (used by CodeMirror .cm-line) */
-  --indent-guide: rgba(0, 0, 0, 0.06);
-  --card: oklch(0.992 0.006 190);
-  --card-foreground: oklch(0.235 0.03 200);
-  --popover: oklch(0.992 0.006 190);
-  --popover-foreground: oklch(0.235 0.03 200);
+  --indent-guide: oklch(0.245 0.02 260 / 6%);
+  --card: oklch(0.998 0.002 255);
+  --card-foreground: oklch(0.245 0.02 260);
+  --popover: oklch(0.999 0.001 255);
+  --popover-foreground: oklch(0.245 0.02 260);
 
-  /* Primary — refined teal/emerald (slightly more vivid) */
-  --primary: oklch(0.58 0.13 168);
-  --primary-foreground: oklch(0.99 0 0);
+  /* Primary — aurora blue, secondary accent — aurora violet */
+  --primary: oklch(0.58 0.17 258);
+  --primary-foreground: oklch(0.985 0.004 255);
+  --primary-2: oklch(0.58 0.18 292);
+  --cyan: oklch(0.6 0.11 210);
 
   /* Primary soft variations — used by 3D cube faces & soft fills */
-  --primary-bg-soft: rgba(13, 148, 136, 0.08);
-  --primary-shadow: rgba(13, 148, 136, 0.12);
+  --primary-bg-soft: oklch(0.58 0.17 258 / 8%);
+  --primary-shadow: oklch(0.58 0.17 258 / 14%);
 
   /* Secondary / muted — cool light gray */
-  --secondary: oklch(0.955 0.007 185);
-  --secondary-foreground: oklch(0.27 0.02 200);
-  --muted: oklch(0.955 0.007 185);
-  --muted-foreground: oklch(0.48 0.015 195);
+  --secondary: oklch(0.948 0.012 255);
+  --secondary-foreground: oklch(0.3 0.02 260);
+  --muted: oklch(0.945 0.012 255);
+  --muted-foreground: oklch(0.52 0.02 260);
 
   /* Accent — slightly elevated surface */
-  --accent: oklch(0.935 0.014 170);
-  --accent-foreground: oklch(0.28 0.04 175);
+  --accent: oklch(0.935 0.03 255);
+  --accent-foreground: oklch(0.32 0.06 258);
 
   /* Destructive — refined rose */
-  --destructive: oklch(0.6 0.22 25);
+  --destructive: oklch(0.58 0.19 25);
   --destructive-foreground: oklch(0.99 0 0);
 
-  /* Success — vivid emerald */
-  --success: oklch(0.64 0.20 150);
+  /* Success — cool emerald (semantic, not part of the blue accent scale) */
+  --success: oklch(0.58 0.13 165);
   --success-foreground: oklch(0.99 0 0);
 
-  /* Borders / inputs / rings — subtly tinted */
-  --border: oklch(0.9 0.006 190);
-  --input: oklch(0.9 0.006 190);
-  --ring: oklch(0.58 0.13 168);
+  /* Borders / inputs / rings — subtly tinted cool blue */
+  --border: oklch(0.885 0.02 255);
+  --input: oklch(0.86 0.02 255);
+  --ring: var(--primary);
 
-  /* Chart palette — teal/amber/rose/violet/sky (NO blue-primary) */
-  --chart-1: oklch(0.55 0.13 165);   /* teal */
-  --chart-2: oklch(0.75 0.15 75);    /* amber */
-  --chart-3: oklch(0.65 0.2 15);     /* rose */
-  --chart-4: oklch(0.55 0.16 300);   /* violet */
-  --chart-5: oklch(0.6 0.14 220);    /* cyan-sky */
+  /* Chart palette — aurora blue → cyan → violet */
+  --chart-1: #3B6FE0;
+  --chart-2: #22A7C4;
+  --chart-3: #7C5CE0;
+  --chart-4: #4CC3D9;
+  --chart-5: #8B7CF6;
 
-  /* Sidebar — slight teal tint */
-  --sidebar: oklch(0.972 0.006 185);
-  --sidebar-foreground: oklch(0.24 0.02 200);
-  --sidebar-primary: oklch(0.58 0.13 168);
-  --sidebar-primary-foreground: oklch(0.99 0 0);
-  --sidebar-accent: oklch(0.935 0.014 170);
-  --sidebar-accent-foreground: oklch(0.28 0.04 175);
-  --sidebar-border: oklch(0.9 0.006 190);
-  --sidebar-ring: oklch(0.58 0.13 168);
+  /* Sidebar — cool panel surface */
+  --sidebar: oklch(0.966 0.01 255);
+  --sidebar-foreground: oklch(0.27 0.02 260);
+  --sidebar-primary: var(--primary);
+  --sidebar-primary-foreground: oklch(0.985 0.004 255);
+  --sidebar-accent: oklch(0.935 0.03 255);
+  --sidebar-accent-foreground: oklch(0.32 0.06 258);
+  --sidebar-border: oklch(0.885 0.02 255);
+  --sidebar-ring: var(--primary);
 
-  /* Custom semantic colors */
-  --teal: oklch(0.58 0.13 168);
+  /* Custom semantic colors — legacy teal aliases now live in the blue/cyan family */
+  --teal: oklch(0.6 0.11 210);
   --teal-foreground: oklch(0.99 0 0);
-  --amber: oklch(0.75 0.15 75);
-  --rose: oklch(0.65 0.2 15);
-  --node-bg: oklch(0.992 0.006 190);
-  --node-border: oklch(0.86 0.012 175);
-  --connector: oklch(0.58 0.13 168);
+  --amber: oklch(0.72 0.14 75);
+  --rose: oklch(0.6 0.19 15);
+  --node-bg: oklch(0.998 0.002 255);
+  --node-border: oklch(0.86 0.02 255);
+  --connector: oklch(0.6 0.13 255);
 
   /* Typography */
   --font-size-base: 14px;
 
-  /* Syntax highlighting — VS Code "Light+" inspired palette (used by CodeEditor) */
-  --syntax-comment:  #008000; /* 注释 - 绿 */
-  --syntax-keyword:  #af00db; /* 关键字 - 紫, 加粗 */
-  --syntax-function: #795e26; /* 函数 - 棕黄 */
-  --syntax-variable: #001080; /* 变量 - 深蓝 */
-  --syntax-number:   #098658; /* 数字 - 绿 */
-  --syntax-string:   #a31515; /* 字符串 - 深红 */
-  --syntax-operator: #000000; /* 运算符 - 黑 */
-  --syntax-punctuation: #000000; /* 标点 - 黑 */
-  --syntax-constant: #e00000; /* 常量 pi/e/inf - 红 */
-  --syntax-bool:     #0000ff; /* 布尔 true/false - 蓝 */
-  --syntax-type:     #267f99; /* 类型 - 青 */
-  --syntax-property: #001080; /* 属性 - 深蓝 */
-  --syntax-bracket:  #0431fa; /* 括号 - 蓝紫 */
+  /* Syntax highlighting — cool blue/violet palette (used by CodeEditor) */
+  --syntax-comment:  #6b7a90; /* 注释 - 冷灰蓝 */
+  --syntax-keyword:  #6d4fc4; /* 关键字 - 紫, 加粗 */
+  --syntax-function: #2d6aa8; /* 函数 - 蓝 */
+  --syntax-variable: #2b3445; /* 变量 - 深石板 */
+  --syntax-number:   #0b7d8f; /* 数字 - 青 */
+  --syntax-string:   #b04b6a; /* 字符串 - 玫红 */
+  --syntax-operator: #435066; /* 运算符 - 石板灰 */
+  --syntax-punctuation: #6b7688; /* 标点 - 中灰蓝 */
+  --syntax-constant: #1f7f9c; /* 常量 pi/e/inf - 青 */
+  --syntax-bool:     #3a56b8; /* 布尔 true/false - 蓝 */
+  --syntax-type:     #5b6ac4; /* 类型 - 蓝紫 */
+  --syntax-property: #35506e; /* 属性 - 深蓝 */
+  --syntax-bracket:  #6d4fc4; /* 括号 - 紫 */
 }
 
 /* ------------------------------------------------------------
-   DARK THEME — BRIGHT and readable (NOT pitch black)
-   Lifted from previous 0.145 → 0.18 background.
+   DARK THEME — midnight aurora (deep blue, readable, NOT pitch black)
    ------------------------------------------------------------ */
 .dark {
   --radius: 0.625rem;
 
-  /* Backgrounds — deep slate-teal (readable, NOT pitch black, tinted
-     so the whole UI shares one cohesive atmosphere with the accent) */
-  --background: oklch(0.22 0.012 200);
-  --foreground: oklch(0.95 0.008 190);    /* soft tinted near-white */
+  /* Backgrounds — midnight blue so the blue/violet accents feel native */
+  --background: oklch(0.145 0.022 265);
+  --foreground: oklch(0.94 0.01 260);    /* soft cool near-white */
 
-  /* Node editor canvas — Blender-style charcoal, clearly recessed from the
-     surrounding panels so the wire graph sits on its own surface. */
-  --canvas: oklch(0.185 0.012 200);
+  /* Node editor canvas — clearly recessed from the surrounding panels so
+     the wire graph sits on its own surface. */
+  --canvas: oklch(0.13 0.022 265);
 
-  /* Indent guide line color — lighter for dark theme */
-  --indent-guide: rgba(255, 255, 255, 0.06);
-  --card: oklch(0.275 0.014 200);
-  --card-foreground: oklch(0.95 0.008 190);
-  --popover: oklch(0.30 0.015 200);
-  --popover-foreground: oklch(0.95 0.008 190);
+  /* Indent guide line color — low-alpha cool white for dark theme */
+  --indent-guide: oklch(0.85 0.03 260 / 7%);
+  --card: oklch(0.205 0.025 265);
+  --card-foreground: oklch(0.94 0.01 260);
+  --popover: oklch(0.225 0.028 265);
+  --popover-foreground: oklch(0.94 0.01 260);
 
-  /* Primary — bright teal in dark */
-  --primary: oklch(0.78 0.13 170);
-  --primary-foreground: oklch(0.12 0.01 200);
+  /* Primary — bright aurora blue; secondary — violet */
+  --primary: oklch(0.72 0.15 255);
+  --primary-foreground: oklch(0.14 0.02 265);
+  --primary-2: oklch(0.7 0.17 295);
+  --cyan: oklch(0.8 0.12 200);
 
   /* Primary soft variations — used by 3D cube faces & soft fills */
-  --primary-bg-soft: rgba(45, 212, 191, 0.05);
-  --primary-shadow: rgba(45, 212, 191, 0.15);
+  --primary-bg-soft: oklch(0.72 0.15 255 / 8%);
+  --primary-shadow: oklch(0.72 0.15 255 / 18%);
 
   /* Secondary / muted — elevated surfaces */
-  --secondary: oklch(0.31 0.014 200);
-  --secondary-foreground: oklch(0.95 0.008 190);
-  --muted: oklch(0.31 0.014 200);
-  --muted-foreground: oklch(0.85 0.012 195);  /* tinted, WCAG AA on dark */
+  --secondary: oklch(0.235 0.022 265);
+  --secondary-foreground: oklch(0.92 0.01 260);
+  --muted: oklch(0.245 0.022 265);
+  --muted-foreground: oklch(0.69 0.02 260);  /* WCAG AA on dark */
 
   /* Accent — elevated surface */
-  --accent: oklch(0.34 0.018 195);
-  --accent-foreground: oklch(0.95 0.008 190);
+  --accent: oklch(0.27 0.03 262);
+  --accent-foreground: oklch(0.94 0.01 260);
 
   /* Destructive — bright rose */
-  --destructive: oklch(0.7 0.2 22);
+  --destructive: oklch(0.68 0.18 22);
   --destructive-foreground: oklch(0.99 0 0);
 
-  /* Success — vivid emerald */
-  --success: oklch(0.72 0.19 150);
-  --success-foreground: oklch(0.12 0.02 180);
+  /* Success — cool emerald (semantic, not part of the blue accent scale) */
+  --success: oklch(0.74 0.14 165);
+  --success-foreground: oklch(0.14 0.02 265);
 
-  /* Borders / inputs / rings — MORE visible */
-  --border: oklch(1 0 0 / 20%);
-  --input: oklch(1 0 0 / 24%);
-  --ring: oklch(0.78 0.13 170);
+  /* Borders / inputs / rings — low-alpha cool white */
+  --border: oklch(0.85 0.03 260 / 10%);
+  --input: oklch(0.85 0.03 260 / 14%);
+  --ring: var(--primary);
 
-  /* Chart palette — brightened for dark */
-  --chart-1: oklch(0.75 0.15 165);   /* teal */
-  --chart-2: oklch(0.82 0.15 75);    /* amber */
-  --chart-3: oklch(0.72 0.2 15);     /* rose */
-  --chart-4: oklch(0.75 0.16 300);   /* violet */
-  --chart-5: oklch(0.75 0.14 220);   /* cyan-sky */
+  /* Chart palette — brightened aurora blue → cyan → violet */
+  --chart-1: #5B8CFF;
+  --chart-2: #4FD1E8;
+  --chart-3: #9A7BFF;
+  --chart-4: #6FE3F0;
+  --chart-5: #B49CFF;
 
   /* Sidebar — elevated over background */
-  --sidebar: oklch(0.275 0.014 200);
-  --sidebar-foreground: oklch(0.95 0.008 190);
-  --sidebar-primary: oklch(0.78 0.13 170);
-  --sidebar-primary-foreground: oklch(0.12 0.01 200);
-  --sidebar-accent: oklch(0.34 0.018 195);
-  --sidebar-accent-foreground: oklch(0.95 0.008 190);
-  --sidebar-border: oklch(1 0 0 / 22%);
-  --sidebar-ring: oklch(0.78 0.13 170);
+  --sidebar: oklch(0.17 0.022 265);
+  --sidebar-foreground: oklch(0.9 0.012 260);
+  --sidebar-primary: var(--primary);
+  --sidebar-primary-foreground: oklch(0.14 0.02 265);
+  --sidebar-accent: oklch(0.245 0.025 265);
+  --sidebar-accent-foreground: oklch(0.94 0.01 260);
+  --sidebar-border: oklch(0.85 0.03 260 / 8%);
+  --sidebar-ring: var(--primary);
 
-  /* Custom semantic colors */
-  --teal: oklch(0.78 0.13 170);
-  --teal-foreground: oklch(0.12 0.01 200);
-  --amber: oklch(0.82 0.15 75);
-  --rose: oklch(0.72 0.2 15);
-  --node-bg: oklch(0.275 0.014 200);
-  --node-border: oklch(0.78 0.13 170 / 40%);
-  --connector: oklch(0.78 0.13 170);
+  /* Custom semantic colors — legacy teal aliases now live in the blue/cyan family */
+  --teal: oklch(0.8 0.12 200);
+  --teal-foreground: oklch(0.14 0.02 265);
+  --amber: oklch(0.8 0.13 80);
+  --rose: oklch(0.7 0.17 15);
+  --node-bg: oklch(0.205 0.025 265);
+  --node-border: oklch(0.85 0.03 260 / 14%);
+  --connector: oklch(0.72 0.15 255);
 
-  /* Syntax highlighting — VS Code "Dark+" inspired palette (used by CodeEditor).
-     Operators/punctuation were the weakest (operator used to be the same grey
-     as normal text) — bumped to distinct amber / slate so they read clearly. */
-  --syntax-comment:  #6a9955; /* 注释 - 暗绿 */
-  --syntax-keyword:  #c586c0; /* 关键字 - 紫, 加粗 */
-  --syntax-function: #dcdcaa; /* 函数 - 浅黄 */
-  --syntax-variable: #9cdcfe; /* 变量 - 浅蓝 */
-  --syntax-number:   #b5cea8; /* 数字 - 浅绿 */
-  --syntax-string:   #ce9178; /* 字符串 - 橙 */
-  --syntax-operator: #d7ba7d; /* 运算符 - 琥珀色, 与正文区分 */
-  --syntax-punctuation: #9e9e9e; /* 标点 - 亮灰 */
-  --syntax-constant: #4ec9b0; /* 常量 pi/e/inf - 青 */
-  --syntax-bool:     #569cd6; /* 布尔 true/false - 蓝 */
-  --syntax-type:     #4ec9b0; /* 类型 - 青 */
-  --syntax-property: #9cdcfe; /* 属性 - 浅蓝 */
-  --syntax-bracket:  #ffd700; /* 括号 - 金 */
+  /* Syntax highlighting — cool blue/violet palette (used by CodeEditor).
+     Comments/strings/numbers stay visibly distinct from body text. */
+  --syntax-comment:  #7c8aa5; /* 注释 - 冷灰蓝 */
+  --syntax-keyword:  #b49cff; /* 关键字 - 紫, 加粗 */
+  --syntax-function: #7fb2ff; /* 函数 - 浅蓝 */
+  --syntax-variable: #cfd8ea; /* 变量 - 冷白 */
+  --syntax-number:   #6fe3f0; /* 数字 - 青 */
+  --syntax-string:   #e59bb6; /* 字符串 - 玫瑰 */
+  --syntax-operator: #9fb0cc; /* 运算符 - 蓝灰 */
+  --syntax-punctuation: #8794ad; /* 标点 - 中灰蓝 */
+  --syntax-constant: #4fd1e8; /* 常量 pi/e/inf - 青 */
+  --syntax-bool:     #8fb6ff; /* 布尔 true/false - 蓝 */
+  --syntax-type:     #9a7bff; /* 类型 - 紫 */
+  --syntax-property: #a7c4f0; /* 属性 - 浅蓝 */
+  --syntax-bracket:  #c4b5ff; /* 括号 - 淡紫 */
 }
 
 /* ------------------------------------------------------------
@@ -3952,31 +3972,30 @@ svg *::after {
     font-feature-settings: "calt" 1, "liga" 0, "tnum" 1, "zero" 1;
   }
 
-  /* Selection color — teal-tinted */
+  /* Selection color — aurora blue tinted */
   ::selection {
-    background: oklch(0.7 0.15 165 / 25%);
+    background: oklch(0.58 0.17 258 / 18%);
     color: inherit;
   }
 
   .dark ::selection {
-    background: oklch(0.7 0.15 165 / 35%);
+    background: oklch(0.72 0.15 255 / 26%);
     color: inherit;
   }
 
-  /* Focus ring — teal */
+  /* Focus ring — aurora blue (scoped, richer rule lives at end of file) */
   :focus-visible {
-    outline: 2px solid oklch(0.7 0.15 165 / 70%);
-    outline-offset: 1px;
+    outline: 2px solid var(--ring);
+    outline-offset: 2px;
     border-radius: 4px;
   }
 
-  /* Textarea: no outline, smooth caret */
+  /* Textarea: keep the caret clean but still show a keyboard focus ring */
   textarea {
-    outline: none !important;
     resize: none;
   }
 
-  textarea:focus {
+  textarea:focus:not(:focus-visible) {
     outline: none !important;
     box-shadow: none !important;
   }
@@ -3990,7 +4009,7 @@ svg *::after {
 
   [data-panel-resize-handle-id]:hover,
   [data-panel-resize-handle-id][data-resize-handle-active] {
-    background: oklch(0.7 0.15 165 / 50%);
+    background: color-mix(in oklab, var(--primary) 45%, transparent);
   }
 
   /* Legacy compat selectors */
@@ -4002,7 +4021,7 @@ svg *::after {
 
   [data-panel-group-direction="horizontal"] > [data-resize-handle]:hover,
   [data-panel-group-direction="horizontal"] > [data-resize-handle][data-resize-handle-active] {
-    background: var(--teal);
+    background: var(--primary);
   }
 
   [data-panel-group-direction="vertical"] > [data-resize-handle] {
@@ -4013,7 +4032,7 @@ svg *::after {
 
   [data-panel-group-direction="vertical"] > [data-resize-handle]:hover,
   [data-panel-group-direction="vertical"] > [data-resize-handle][data-resize-handle-active] {
-    background: var(--teal);
+    background: var(--primary);
   }
 }
 
@@ -4026,18 +4045,18 @@ svg *::after {
 }
 
 ::-webkit-scrollbar-track {
-  background: #f5f5f5;
+  background: transparent;
 }
 
 ::-webkit-scrollbar-thumb {
-  background: #d0d0d0;
+  background: oklch(0.245 0.02 260 / 16%);
   border-radius: 5px;
   border: 2px solid transparent;
   background-clip: padding-box;
 }
 
 ::-webkit-scrollbar-thumb:hover {
-  background: #b0b0b0;
+  background: oklch(0.245 0.02 260 / 28%);
   background-clip: padding-box;
   border: 2px solid transparent;
 }
@@ -4046,25 +4065,25 @@ svg *::after {
   background: transparent;
 }
 
-/* Dark theme scrollbar — tinted slate-teal to match the palette */
+/* Dark theme scrollbar — tinted midnight blue to match the palette */
 .dark ::-webkit-scrollbar {
   width: 10px;
   height: 10px;
 }
 
 .dark ::-webkit-scrollbar-track {
-  background: #272e31;
+  background: transparent;
 }
 
 .dark ::-webkit-scrollbar-thumb {
-  background: #4a585d;
+  background: oklch(0.85 0.03 260 / 18%);
   border-radius: 5px;
   border: 2px solid transparent;
   background-clip: padding-box;
 }
 
 .dark ::-webkit-scrollbar-thumb:hover {
-  background: #5d6e74;
+  background: oklch(0.85 0.03 260 / 30%);
   background-clip: padding-box;
   border: 2px solid transparent;
 }
@@ -4222,13 +4241,13 @@ svg *::after {
 .dark .text-foreground\/80,
 .dark .text-foreground\/85,
 .dark .text-foreground\/90 {
-  color: oklch(0.95 0.008 190);
+  color: oklch(0.94 0.01 260);
 }
 
 .dark code,
 .dark pre,
 .dark .font-mono {
-  color: oklch(0.94 0.008 190);
+  color: oklch(0.93 0.01 260);
 }
 
 /* Ensure muted text remains readable in dark mode. Many components use
@@ -4237,12 +4256,12 @@ svg *::after {
 .dark .text-muted-foreground,
 .dark .text-muted-foreground\/70,
 .dark .text-muted-foreground\/80 {
-  color: oklch(0.85 0.012 195);
+  color: oklch(0.75 0.018 260);
 }
 
 .dark .text-muted-foreground\/50,
 .dark .text-muted-foreground\/60 {
-  color: oklch(0.8 0.012 195);
+  color: oklch(0.7 0.02 260);
 }
 
 /* Contrast-safe fallback for dynamic/third-party content */
@@ -4251,44 +4270,46 @@ svg *::after {
 }
 
 .dark .text-contrast-safe {
-  color: oklch(0.95 0.008 190);
+  color: oklch(0.94 0.01 260);
 }
 
 /* ------------------------------------------------------------
-   Glass morphism utility
+   Glass morphism utility — kept for API compatibility only.
+   Rendered as static surfaces (no backdrop-filter: it is the most
+   expensive compositing operation on low-end GPUs).
    ------------------------------------------------------------ */
 .glass {
-  backdrop-filter: blur(12px) saturate(140%);
-  -webkit-backdrop-filter: blur(12px) saturate(140%);
-  background: rgba(255, 255, 255, 0.6);
-  border: 1px solid rgba(255, 255, 255, 0.4);
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
+  background: var(--card);
+  border: 1px solid var(--border);
 }
 
 .dark .glass {
-  backdrop-filter: blur(12px) saturate(140%);
-  -webkit-backdrop-filter: blur(12px) saturate(140%);
-  background: rgba(23, 30, 33, 0.55);
-  border: 1px solid rgba(255, 255, 255, 0.06);
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
+  background: var(--card);
+  border: 1px solid var(--border);
 }
 
 .glass-strong {
-  backdrop-filter: blur(20px) saturate(160%);
-  -webkit-backdrop-filter: blur(20px) saturate(160%);
-  background: rgba(255, 255, 255, 0.8);
-  border: 1px solid rgba(255, 255, 255, 0.5);
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
+  background: var(--popover);
+  border: 1px solid var(--border);
 }
 
 .dark .glass-strong {
-  backdrop-filter: blur(20px) saturate(160%);
-  -webkit-backdrop-filter: blur(20px) saturate(160%);
-  background: rgba(20, 20, 22, 0.75);
-  border: 1px solid rgba(255, 255, 255, 0.08);
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
+  background: var(--popover);
+  border: 1px solid var(--border);
 }
 
 /* ------------------------------------------------------------
-   AI Panel — warm light mode (护眼暖色)
+   AI Panel — cool light mode (cool paper, not warm)
    注意：必须用 html:not(.dark) 限定根元素，否则 :not(.dark) 会匹配到
-   body/main 等没有 .dark 类的中间祖先，导致深色模式下暖色规则也被应用。
+   body/main 等没有 .dark 类的中间祖先，导致深色模式规则也被应用。
    ------------------------------------------------------------ */
 html:not(.dark) .ai-panel {
   background: var(--background);
@@ -4296,7 +4317,7 @@ html:not(.dark) .ai-panel {
 html:not(.dark) .ai-panel .border-border\/60 {
   border-color: var(--border) !important;
 }
-/* 暖色表面：覆盖 bg-muted/20、/30、/50 在白天模式下的冷灰底 */
+/* 冷色表面：覆盖 bg-muted/20、/30、/50 在白天模式下的底色 */
 html:not(.dark) .ai-panel .bg-muted\/20 {
   background-color: color-mix(in oklab, var(--muted) 45%, transparent) !important;
 }
@@ -4322,7 +4343,7 @@ html:not(.dark) .ai-panel .focus-within\:border-primary\/40:focus-within {
 }
 
 .text-gradient-teal {
-  background-image: linear-gradient(135deg, oklch(0.7 0.15 165) 0%, oklch(0.6 0.16 195) 100%);
+  background-image: linear-gradient(135deg, oklch(0.58 0.17 258) 0%, oklch(0.6 0.11 210) 100%);
   background-clip: text;
   -webkit-background-clip: text;
   color: transparent;
@@ -4330,7 +4351,7 @@ html:not(.dark) .ai-panel .focus-within\:border-primary\/40:focus-within {
 }
 
 .text-gradient-amber {
-  background-image: linear-gradient(135deg, oklch(0.78 0.15 75) 0%, oklch(0.7 0.18 50) 100%);
+  background-image: linear-gradient(135deg, oklch(0.72 0.14 75) 0%, oklch(0.65 0.16 50) 100%);
   background-clip: text;
   -webkit-background-clip: text;
   color: transparent;
@@ -4338,7 +4359,7 @@ html:not(.dark) .ai-panel .focus-within\:border-primary\/40:focus-within {
 }
 
 .text-gradient-rose {
-  background-image: linear-gradient(135deg, oklch(0.7 0.2 15) 0%, oklch(0.65 0.18 350) 100%);
+  background-image: linear-gradient(135deg, oklch(0.6 0.19 15) 0%, oklch(0.58 0.18 350) 100%);
   background-clip: text;
   -webkit-background-clip: text;
   color: transparent;
@@ -4422,24 +4443,24 @@ html:not(.dark) .ai-panel .focus-within\:border-primary\/40:focus-within {
 }
 
 .node-card:hover {
-  border-color: var(--teal);
+  border-color: var(--primary);
   box-shadow:
     0 2px 4px oklch(0 0 0 / 8%),
-    0 8px 24px oklch(0.7 0.15 165 / 18%);
+    0 8px 24px color-mix(in oklab, var(--primary) 18%, transparent);
 }
 
 .dark .node-card:hover {
   box-shadow:
     0 2px 4px oklch(0 0 0 / 35%),
-    0 8px 24px oklch(0.7 0.15 165 / 25%);
+    0 8px 24px color-mix(in oklab, var(--primary) 25%, transparent);
 }
 
 .node-card.selected,
 .node-card[data-selected="true"] {
-  border-color: var(--teal);
+  border-color: var(--primary);
   box-shadow:
-    0 0 0 1px var(--teal),
-    0 8px 24px oklch(0.7 0.15 165 / 25%);
+    0 0 0 1px var(--primary),
+    0 8px 24px color-mix(in oklab, var(--primary) 25%, transparent);
 }
 
 /* P3: 错误传播链高亮 —— 选中节点上游的节点用玫红描边，提示"问题源自这里" */
@@ -4452,7 +4473,7 @@ html:not(.dark) .ai-panel .focus-within\:border-primary\/40:focus-within {
 
 /* Node header strip */
 .node-card .node-header {
-  background: linear-gradient(180deg, oklch(0.7 0.15 165 / 12%) 0%, transparent 100%);
+  background: linear-gradient(180deg, color-mix(in oklab, var(--primary) 12%, transparent) 0%, transparent 100%);
   border-bottom: 1px solid var(--node-border);
   border-radius: 10px 10px 0 0;
   padding: 6px 10px;
@@ -4463,7 +4484,7 @@ html:not(.dark) .ai-panel .focus-within\:border-primary\/40:focus-within {
 }
 
 .dark .node-card .node-header {
-  background: linear-gradient(180deg, oklch(0.7 0.15 165 / 18%) 0%, transparent 100%);
+  background: linear-gradient(180deg, color-mix(in oklab, var(--primary) 18%, transparent) 0%, transparent 100%);
 }
 
 /* Connector lines */
@@ -4496,7 +4517,7 @@ html:not(.dark) .ai-panel .focus-within\:border-primary\/40:focus-within {
   height: 10px;
   border-radius: 50%;
   background: var(--node-bg);
-  border: 2px solid var(--teal);
+  border: 2px solid var(--primary);
   box-sizing: border-box;
   cursor: crosshair;
   transition: transform 0.15s ease, box-shadow 0.15s ease, background 0.15s ease;
@@ -4505,12 +4526,12 @@ html:not(.dark) .ai-panel .focus-within\:border-primary\/40:focus-within {
 .node-port:hover,
 .node-port.active {
   transform: scale(1.3);
-  background: var(--teal);
-  box-shadow: 0 0 0 3px oklch(0.7 0.15 165 / 30%);
+  background: var(--primary);
+  box-shadow: 0 0 0 3px color-mix(in oklab, var(--primary) 30%, transparent);
 }
 
 .node-port.connected {
-  background: var(--teal);
+  background: var(--primary);
 }
 
 /* ------------------------------------------------------------
@@ -4568,13 +4589,13 @@ html:not(.dark) .ai-panel .focus-within\:border-primary\/40:focus-within {
 @keyframes glowPulse {
   0%, 100% {
     box-shadow:
-      0 0 4px oklch(0.7 0.15 165 / 25%),
-      0 0 0 0 oklch(0.7 0.15 165 / 20%);
+      0 0 4px color-mix(in oklab, var(--primary) 25%, transparent),
+      0 0 0 0 color-mix(in oklab, var(--primary) 20%, transparent);
   }
   50% {
     box-shadow:
-      0 0 12px oklch(0.7 0.15 165 / 50%),
-      0 0 0 4px oklch(0.7 0.15 165 / 8%);
+      0 0 12px color-mix(in oklab, var(--primary) 50%, transparent),
+      0 0 0 4px color-mix(in oklab, var(--primary) 8%, transparent);
   }
 }
 .animate-glow-pulse {
@@ -4589,7 +4610,7 @@ html:not(.dark) .ai-panel .focus-within\:border-primary\/40:focus-within {
   background: linear-gradient(
     90deg,
     transparent 0%,
-    oklch(0.7 0.15 165 / 8%) 50%,
+    color-mix(in oklab, var(--primary) 8%, transparent) 50%,
     transparent 100%
   );
   background-size: 200% 100%;
@@ -4632,7 +4653,7 @@ html:not(.dark) .ai-panel .focus-within\:border-primary\/40:focus-within {
   position: absolute;
   inset: 0;
   border-radius: inherit;
-  border: 2px solid oklch(0.7 0.15 165 / 60%);
+  border: 2px solid color-mix(in oklab, var(--primary) 60%, transparent);
   animation: pulseRing 1.6s cubic-bezier(0.2, 0.8, 0.2, 1) infinite;
 }
 
@@ -4670,11 +4691,11 @@ html:not(.dark) .ai-panel .focus-within\:border-primary\/40:focus-within {
 }
 
 [cmdk-item][data-selected="true"] {
-  background: oklch(0.7 0.15 165 / 12%);
+  background: color-mix(in oklab, var(--primary) 12%, transparent);
 }
 
 .dark [cmdk-item][data-selected="true"] {
-  background: oklch(0.7 0.15 165 / 22%);
+  background: color-mix(in oklab, var(--primary) 22%, transparent);
 }
 
 /* ------------------------------------------------------------
@@ -4720,7 +4741,7 @@ textarea, pre, code, .katex, .select-text {
   inset: 0;
   border-radius: inherit;
   padding: 1px;
-  background: linear-gradient(135deg, oklch(0.7 0.15 165 / 60%), oklch(0.6 0.16 195 / 30%), transparent);
+  background: linear-gradient(135deg, color-mix(in oklab, var(--primary) 60%, transparent), color-mix(in oklab, var(--primary-2) 30%, transparent), transparent);
   -webkit-mask:
     linear-gradient(#fff 0 0) content-box,
     linear-gradient(#fff 0 0);
@@ -4732,14 +4753,14 @@ textarea, pre, code, .katex, .select-text {
 /* Glow card — for emphasis cards (AI output, results) */
 .glow-card-teal {
   box-shadow:
-    0 0 0 1px oklch(0.7 0.15 165 / 25%),
-    0 8px 24px oklch(0.7 0.15 165 / 12%);
+    0 0 0 1px color-mix(in oklab, var(--primary) 25%, transparent),
+    0 8px 24px color-mix(in oklab, var(--primary) 12%, transparent);
 }
 
 .dark .glow-card-teal {
   box-shadow:
-    0 0 0 1px oklch(0.7 0.15 165 / 35%),
-    0 8px 24px oklch(0.7 0.15 165 / 20%);
+    0 0 0 1px color-mix(in oklab, var(--primary) 35%, transparent),
+    0 8px 24px color-mix(in oklab, var(--primary) 20%, transparent);
 }
 
 /* ------------------------------------------------------------
@@ -4752,9 +4773,9 @@ textarea, pre, code, .katex, .select-text {
   transform: translateY(-50%);
   width: 2px;
   height: 60%;
-  background: var(--teal);
+  background: var(--primary);
   border-radius: 0 2px 2px 0;
-  box-shadow: 0 0 8px oklch(0.7 0.15 165 / 60%);
+  box-shadow: 0 0 8px color-mix(in oklab, var(--primary) 60%, transparent);
   transition: opacity 0.15s ease, transform 0.15s ease;
 }
 
@@ -4946,7 +4967,10 @@ input[type="number"] {
   animation: collapsibleUp var(--motion-normal) ease-out;
 }
 
-/* ── prefers-reduced-motion：尊重用户系统偏好，禁用无限动画 ─────────── */
+/* ── prefers-reduced-motion：尊重用户系统偏好 ──────────────────────
+ * 无限动画（网格漂移、脉冲、旋转、骨架微光）全部禁用；
+ * 面板/结果入场只保留透明度过渡，按钮按下不再缩放。
+ */
 @media (prefers-reduced-motion: reduce) {
   *,
   *::before,
@@ -4955,6 +4979,34 @@ input[type="number"] {
     animation-iteration-count: 1 !important;
     transition-duration: 0.01ms !important;
     scroll-behavior: auto !important;
+  }
+
+  .motion-panel-in,
+  .motion-result-in {
+    animation-name: fadeIn !important;
+    animation-duration: var(--motion-base) !important;
+    animation-timing-function: var(--motion-ease) !important;
+    animation-iteration-count: 1 !important;
+    animation-fill-mode: both !important;
+    transform: none !important;
+  }
+
+  .motion-press:active {
+    transform: none !important;
+  }
+
+  .grid-bg,
+  .grid-bg-dots,
+  .pipeline-canvas,
+  .animate-glow-pulse,
+  .animate-shimmer,
+  .animate-float,
+  .animate-gradient,
+  .animate-pulse-ring::before,
+  .animate-pulse-subtle,
+  .animate-spin-slow,
+  .node-connector.animated {
+    animation: none !important;
   }
 }
 
@@ -5003,7 +5055,7 @@ html[data-font-preset="system"] {
   opacity: 0.6;
 }
 .desmos-range:focus-visible {
-  box-shadow: 0 0 0 2px var(--ring, rgba(45, 212, 191, 0.45));
+  box-shadow: 0 0 0 2px var(--ring, rgba(59, 111, 224, 0.45));
 }
 /* WebKit / Blink 手柄 */
 .desmos-range::-webkit-slider-thumb {
@@ -5013,14 +5065,14 @@ html[data-font-preset="system"] {
   height: 16px;
   border-radius: 9999px;
   background: var(--background, #ffffff);
-  border: 2px solid var(--primary, #2dd4bf);
+  border: 2px solid var(--primary, #3b6fe0);
   box-shadow: 0 1px 3px rgba(0, 0, 0, 0.25);
   transition: transform 0.1s ease, box-shadow 0.1s ease;
   margin-top: -4px; /* 居中到 8px 轨道 */
 }
 .desmos-range::-webkit-slider-thumb:hover {
   transform: scale(1.18);
-  box-shadow: 0 0 0 6px color-mix(in srgb, var(--primary, #2dd4bf) 18%, transparent);
+  box-shadow: 0 0 0 6px color-mix(in srgb, var(--primary, #3b6fe0) 18%, transparent);
 }
 .desmos-range:active::-webkit-slider-thumb {
   transform: scale(1.25);
@@ -5031,13 +5083,13 @@ html[data-font-preset="system"] {
   height: 16px;
   border-radius: 9999px;
   background: var(--background, #ffffff);
-  border: 2px solid var(--primary, #2dd4bf);
+  border: 2px solid var(--primary, #3b6fe0);
   box-shadow: 0 1px 3px rgba(0, 0, 0, 0.25);
   transition: transform 0.1s ease, box-shadow 0.1s ease;
 }
 .desmos-range::-moz-range-thumb:hover {
   transform: scale(1.18);
-  box-shadow: 0 0 0 6px color-mix(in srgb, var(--primary, #2dd4bf) 18%, transparent);
+  box-shadow: 0 0 0 6px color-mix(in srgb, var(--primary, #3b6fe0) 18%, transparent);
 }
 .desmos-range:active::-moz-range-thumb {
   transform: scale(1.25);
@@ -5089,171 +5141,312 @@ html[data-font-preset="system"] {
 }
 
 /* ==================================================================
-   QUIET EDITOR REFRESH — 2026-11
-   参考专业排版编辑器：暖中性表面、极细边框、低饱和青绿强调、
-   静态表面替代玻璃/发光，统一双主题与动效。
+   AURORA WORKBENCH — 2026-11
+   冷纸极光（浅色）/ 午夜极光（深色）：冷蓝表面、极细边框、
+   蓝紫强调、四级表面与场景化动效；静态表面替代玻璃/整页发光。
    ================================================================== */
 
 :root {
   --radius: 0.5rem;
 
-  --motion-fast: 100ms;
-  --motion-normal: 140ms;
-  --motion-slow: 200ms;
-  --motion-ease: cubic-bezier(0.2, 0, 0, 1);
-  --motion-spring: cubic-bezier(0.2, 0, 0, 1);
+  --motion-fast: 120ms;
+  --motion-base: 180ms;
+  --motion-normal: var(--motion-base);
+  --motion-slow: 240ms;
+  --motion-ease: cubic-bezier(0.2, 0.8, 0.2, 1);
+  --motion-spring: cubic-bezier(0.34, 1.3, 0.64, 1);
 
-  --background: oklch(0.965 0.006 80);
-  --foreground: oklch(0.26 0.006 80);
-  --canvas: oklch(0.945 0.006 80);
-  --card: oklch(0.992 0.003 80);
-  --card-foreground: oklch(0.26 0.006 80);
-  --popover: oklch(0.995 0.002 80);
-  --popover-foreground: oklch(0.26 0.006 80);
+  /* ── Light: cold paper aurora ─────────────────────────────── */
+  --background: oklch(0.974 0.008 255);
+  --foreground: oklch(0.245 0.02 260);
+  --canvas: oklch(0.958 0.012 255);
+  --card: oklch(0.998 0.002 255);
+  --card-foreground: oklch(0.245 0.02 260);
+  --popover: oklch(0.999 0.001 255);
+  --popover-foreground: oklch(0.245 0.02 260);
 
-  --primary: oklch(0.52 0.06 172);
-  --primary-foreground: oklch(0.99 0.002 80);
-  --primary-bg-soft: oklch(0.52 0.06 172 / 7%);
-  --primary-shadow: oklch(0.52 0.06 172 / 10%);
+  --primary: oklch(0.58 0.17 258);
+  --primary-foreground: oklch(0.985 0.004 255);
+  --primary-2: oklch(0.58 0.18 292);
+  --cyan: oklch(0.6 0.11 210);
+  --primary-bg-soft: oklch(0.58 0.17 258 / 8%);
+  --primary-shadow: oklch(0.58 0.17 258 / 14%);
 
-  --secondary: oklch(0.94 0.005 80);
-  --secondary-foreground: oklch(0.3 0.006 80);
-  --muted: oklch(0.935 0.005 80);
-  --muted-foreground: oklch(0.5 0.008 80);
-  --accent: oklch(0.925 0.008 170);
-  --accent-foreground: oklch(0.28 0.006 80);
+  --secondary: oklch(0.948 0.012 255);
+  --secondary-foreground: oklch(0.3 0.02 260);
+  --muted: oklch(0.945 0.012 255);
+  --muted-foreground: oklch(0.52 0.02 260);
+  --accent: oklch(0.935 0.03 255);
+  --accent-foreground: oklch(0.32 0.06 258);
 
-  --destructive: oklch(0.58 0.17 25);
+  --destructive: oklch(0.58 0.19 25);
   --destructive-foreground: oklch(0.99 0 0);
-  --success: oklch(0.56 0.1 155);
+  --success: oklch(0.58 0.13 165);
   --success-foreground: oklch(0.99 0 0);
 
-  --border: oklch(0.885 0.006 80);
-  --input: oklch(0.86 0.006 80);
-  --ring: oklch(0.52 0.06 172);
+  --border: oklch(0.885 0.02 255);
+  --input: oklch(0.86 0.02 255);
+  --ring: var(--primary);
 
-  --chart-1: oklch(0.52 0.08 172);
-  --chart-2: oklch(0.66 0.09 75);
-  --chart-3: oklch(0.58 0.12 20);
-  --chart-4: oklch(0.52 0.08 300);
-  --chart-5: oklch(0.55 0.07 230);
+  /* Chart / visualization — blue → cyan → violet */
+  --viz-1: #3B6FE0;
+  --viz-2: #22A7C4;
+  --viz-3: #7C5CE0;
+  --viz-4: #4CC3D9;
+  --viz-5: #8B7CF6;
+  --viz-6: #2E8BFF;
+  --viz-grid: oklch(0.245 0.02 260 / 7%);
+  --viz-axis: oklch(0.52 0.02 260 / 55%);
+  --viz-axis-strong: oklch(0.35 0.02 260 / 75%);
+  --viz-glow: oklch(0.58 0.17 258 / 22%);
+  --viz-surface: oklch(0.998 0.002 255);
+  --viz-tooltip: oklch(0.999 0.001 255);
 
-  --sidebar: oklch(0.955 0.005 80);
-  --sidebar-foreground: oklch(0.28 0.006 80);
-  --sidebar-primary: oklch(0.52 0.06 172);
-  --sidebar-primary-foreground: oklch(0.99 0 0);
-  --sidebar-accent: oklch(0.915 0.008 170);
-  --sidebar-accent-foreground: oklch(0.28 0.006 80);
-  --sidebar-border: oklch(0.885 0.006 80);
-  --sidebar-ring: oklch(0.52 0.06 172);
+  --chart-1: var(--viz-1);
+  --chart-2: var(--viz-2);
+  --chart-3: var(--viz-3);
+  --chart-4: var(--viz-4);
+  --chart-5: var(--viz-5);
 
-  --teal: oklch(0.52 0.06 172);
+  --sidebar: oklch(0.966 0.01 255);
+  --sidebar-foreground: oklch(0.27 0.02 260);
+  --sidebar-primary: var(--primary);
+  --sidebar-primary-foreground: oklch(0.985 0.004 255);
+  --sidebar-accent: oklch(0.935 0.03 255);
+  --sidebar-accent-foreground: oklch(0.32 0.06 258);
+  --sidebar-border: oklch(0.885 0.02 255);
+  --sidebar-ring: var(--primary);
+
+  --teal: oklch(0.6 0.11 210);
   --teal-foreground: oklch(0.99 0 0);
-  --amber: oklch(0.66 0.09 75);
-  --rose: oklch(0.58 0.12 20);
-  --node-bg: oklch(0.992 0.003 80);
-  --node-border: oklch(0.87 0.006 80);
-  --connector: oklch(0.52 0.06 172);
+  --amber: oklch(0.72 0.14 75);
+  --rose: oklch(0.6 0.19 15);
+  --node-bg: oklch(0.998 0.002 255);
+  --node-border: oklch(0.86 0.02 255);
+  --connector: oklch(0.6 0.13 255);
 
-  --editor-bg: oklch(0.975 0.004 80);
-  --editor-gutter: oklch(0.955 0.005 80);
-  --editor-active-line: oklch(0.55 0.006 80 / 6%);
-  --editor-selection: oklch(0.52 0.06 172 / 16%);
-  --preview-canvas: oklch(0.94 0.006 80);
-  --paper: oklch(0.995 0.003 80);
-  --paper-foreground: oklch(0.22 0.006 80);
+  --editor-bg: oklch(0.995 0.002 255);
+  --editor-gutter: oklch(0.966 0.008 255);
+  --editor-active-line: oklch(0.58 0.05 255 / 6%);
+  --editor-selection: oklch(0.58 0.17 258 / 16%);
+  --preview-canvas: oklch(0.958 0.012 255);
+  --paper: oklch(0.995 0.003 255);
+  --paper-foreground: oklch(0.235 0.02 260);
 
-  --syntax-comment: #6f7a6b;
-  --syntax-keyword: #7d618b;
-  --syntax-function: #80652f;
-  --syntax-variable: #3f4a55;
-  --syntax-number: #4f6b4c;
-  --syntax-string: #8a5a48;
-  --syntax-operator: #4a4741;
-  --syntax-punctuation: #7a756d;
-  --syntax-constant: #3f7f75;
-  --syntax-bool: #3e5f86;
-  --syntax-type: #3f7f75;
-  --syntax-property: #3f4a55;
-  --syntax-bracket: #7a5f2a;
+  /* 四级表面阴影：冷调、低、紧 */
+  --shadow-card:
+    0 1px 2px oklch(0.245 0.02 260 / 5%),
+    0 4px 12px -6px oklch(0.245 0.02 260 / 8%);
+  --shadow-float:
+    0 2px 8px -2px oklch(0.245 0.02 260 / 10%),
+    0 12px 32px -12px oklch(0.245 0.02 260 / 22%);
+
+  /* Syntax — cool blue/violet, comments/numbers/strings stay distinct */
+  --syntax-comment: #6b7a90;
+  --syntax-keyword: #6d4fc4;
+  --syntax-function: #2d6aa8;
+  --syntax-variable: #2b3445;
+  --syntax-number: #0b7d8f;
+  --syntax-string: #b04b6a;
+  --syntax-operator: #435066;
+  --syntax-punctuation: #6b7688;
+  --syntax-constant: #1f7f9c;
+  --syntax-bool: #3a56b8;
+  --syntax-type: #5b6ac4;
+  --syntax-property: #35506e;
+  --syntax-bracket: #6d4fc4;
 }
 
 .dark {
   --radius: 0.5rem;
 
-  --background: oklch(0.185 0.005 80);
-  --foreground: oklch(0.9 0.006 80);
-  --canvas: oklch(0.16 0.005 80);
-  --card: oklch(0.215 0.005 80);
-  --card-foreground: oklch(0.9 0.006 80);
-  --popover: oklch(0.24 0.005 80);
-  --popover-foreground: oklch(0.9 0.006 80);
+  /* ── Dark: midnight aurora ────────────────────────────────── */
+  --background: oklch(0.145 0.022 265);
+  --foreground: oklch(0.94 0.01 260);
+  --canvas: oklch(0.13 0.022 265);
+  --card: oklch(0.205 0.025 265);
+  --card-foreground: oklch(0.94 0.01 260);
+  --popover: oklch(0.225 0.028 265);
+  --popover-foreground: oklch(0.94 0.01 260);
 
-  --primary: oklch(0.72 0.055 172);
-  --primary-foreground: oklch(0.16 0.004 80);
-  --primary-bg-soft: oklch(0.72 0.055 172 / 6%);
-  --primary-shadow: oklch(0.72 0.055 172 / 10%);
+  --primary: oklch(0.72 0.15 255);
+  --primary-foreground: oklch(0.14 0.02 265);
+  --primary-2: oklch(0.7 0.17 295);
+  --cyan: oklch(0.8 0.12 200);
+  --primary-bg-soft: oklch(0.72 0.15 255 / 8%);
+  --primary-shadow: oklch(0.72 0.15 255 / 18%);
 
-  --secondary: oklch(0.25 0.005 80);
-  --secondary-foreground: oklch(0.9 0.006 80);
-  --muted: oklch(0.255 0.005 80);
-  --muted-foreground: oklch(0.66 0.006 80);
-  --accent: oklch(0.285 0.006 80);
-  --accent-foreground: oklch(0.9 0.006 80);
+  --secondary: oklch(0.235 0.022 265);
+  --secondary-foreground: oklch(0.92 0.01 260);
+  --muted: oklch(0.245 0.022 265);
+  --muted-foreground: oklch(0.69 0.02 260);
+  --accent: oklch(0.27 0.03 262);
+  --accent-foreground: oklch(0.94 0.01 260);
 
-  --destructive: oklch(0.67 0.16 25);
+  --destructive: oklch(0.68 0.18 22);
   --destructive-foreground: oklch(0.99 0 0);
-  --success: oklch(0.7 0.09 155);
-  --success-foreground: oklch(0.16 0.004 80);
+  --success: oklch(0.74 0.14 165);
+  --success-foreground: oklch(0.14 0.02 265);
 
-  --border: oklch(1 0 0 / 8%);
-  --input: oklch(1 0 0 / 10%);
-  --ring: oklch(0.72 0.055 172);
+  --border: oklch(0.85 0.03 260 / 10%);
+  --input: oklch(0.85 0.03 260 / 14%);
+  --ring: var(--primary);
 
-  --chart-1: oklch(0.72 0.07 172);
-  --chart-2: oklch(0.78 0.08 75);
-  --chart-3: oklch(0.68 0.12 20);
-  --chart-4: oklch(0.7 0.08 300);
-  --chart-5: oklch(0.7 0.06 230);
+  /* Chart / visualization — brightened aurora sequence */
+  --viz-1: #5B8CFF;
+  --viz-2: #4FD1E8;
+  --viz-3: #9A7BFF;
+  --viz-4: #6FE3F0;
+  --viz-5: #B49CFF;
+  --viz-6: #7FB2FF;
+  --viz-grid: oklch(0.85 0.03 260 / 8%);
+  --viz-axis: oklch(0.75 0.02 260 / 45%);
+  --viz-axis-strong: oklch(0.9 0.02 260 / 70%);
+  --viz-glow: oklch(0.72 0.15 255 / 30%);
+  --viz-surface: oklch(0.205 0.025 265);
+  --viz-tooltip: oklch(0.235 0.03 265);
 
-  --sidebar: oklch(0.175 0.005 80);
-  --sidebar-foreground: oklch(0.87 0.006 80);
-  --sidebar-primary: oklch(0.72 0.055 172);
-  --sidebar-primary-foreground: oklch(0.16 0.004 80);
-  --sidebar-accent: oklch(0.255 0.006 80);
-  --sidebar-accent-foreground: oklch(0.9 0.006 80);
-  --sidebar-border: oklch(1 0 0 / 7%);
-  --sidebar-ring: oklch(0.72 0.055 172);
+  --chart-1: var(--viz-1);
+  --chart-2: var(--viz-2);
+  --chart-3: var(--viz-3);
+  --chart-4: var(--viz-4);
+  --chart-5: var(--viz-5);
 
-  --teal: oklch(0.72 0.055 172);
-  --teal-foreground: oklch(0.16 0.004 80);
-  --amber: oklch(0.78 0.08 75);
-  --rose: oklch(0.68 0.12 20);
-  --node-bg: oklch(0.215 0.005 80);
-  --node-border: oklch(1 0 0 / 12%);
-  --connector: oklch(0.72 0.055 172);
+  --sidebar: oklch(0.17 0.022 265);
+  --sidebar-foreground: oklch(0.9 0.012 260);
+  --sidebar-primary: var(--primary);
+  --sidebar-primary-foreground: oklch(0.14 0.02 265);
+  --sidebar-accent: oklch(0.245 0.025 265);
+  --sidebar-accent-foreground: oklch(0.94 0.01 260);
+  --sidebar-border: oklch(0.85 0.03 260 / 8%);
+  --sidebar-ring: var(--primary);
 
-  --editor-bg: oklch(0.19 0.005 80);
-  --editor-gutter: oklch(0.17 0.005 80);
-  --editor-active-line: oklch(1 0 0 / 4%);
-  --editor-selection: oklch(0.72 0.055 172 / 18%);
-  --preview-canvas: oklch(0.225 0.005 80);
-  --paper: oklch(0.975 0.004 80);
-  --paper-foreground: oklch(0.2 0.006 80);
+  --teal: oklch(0.8 0.12 200);
+  --teal-foreground: oklch(0.14 0.02 265);
+  --amber: oklch(0.8 0.13 80);
+  --rose: oklch(0.7 0.17 15);
+  --node-bg: oklch(0.205 0.025 265);
+  --node-border: oklch(0.85 0.03 260 / 14%);
+  --connector: oklch(0.72 0.15 255);
 
-  --syntax-comment: #7f8a7f;
-  --syntax-keyword: #b9a3c4;
-  --syntax-function: #c9b77e;
-  --syntax-variable: #cfc9bf;
-  --syntax-number: #a9c3a2;
-  --syntax-string: #c9a58e;
-  --syntax-operator: #b5aea3;
-  --syntax-punctuation: #8b857b;
-  --syntax-constant: #8fbfb6;
-  --syntax-bool: #9fb8cf;
-  --syntax-type: #8fbfb6;
-  --syntax-property: #b9c7c9;
-  --syntax-bracket: #c9b77e;
+  --editor-bg: oklch(0.155 0.02 265);
+  --editor-gutter: oklch(0.14 0.02 265);
+  --editor-active-line: oklch(0.7 0.05 255 / 8%);
+  --editor-selection: oklch(0.72 0.15 255 / 22%);
+  --preview-canvas: oklch(0.175 0.022 265);
+  /* Result cards keep a document-like paper surface in dark mode */
+  --paper: oklch(0.97 0.004 255);
+  --paper-foreground: oklch(0.2 0.02 260);
+
+  /* 深色表面：更深的投影 + 顶部内高光 */
+  --shadow-card:
+    inset 0 1px 0 oklch(1 0 0 / 4%),
+    0 2px 8px -4px oklch(0 0 0 / 55%);
+  --shadow-float:
+    inset 0 1px 0 oklch(1 0 0 / 6%),
+    0 18px 44px -18px oklch(0 0 0 / 70%);
+
+  --syntax-comment: #7c8aa5;
+  --syntax-keyword: #b49cff;
+  --syntax-function: #7fb2ff;
+  --syntax-variable: #cfd8ea;
+  --syntax-number: #6fe3f0;
+  --syntax-string: #e59bb6;
+  --syntax-operator: #9fb0cc;
+  --syntax-punctuation: #8794ad;
+  --syntax-constant: #4fd1e8;
+  --syntax-bool: #8fb6ff;
+  --syntax-type: #9a7bff;
+  --syntax-property: #a7c4f0;
+  --syntax-bracket: #c4b5ff;
+}
+
+/* ------------------------------------------------------------
+   四级表面（L0 画布 → L1 面板 → L2 卡片 → L3 浮层）
+   不依赖 glass / backdrop-filter，用底色 + 1px 边框 + 阴影表达层级。
+   ------------------------------------------------------------ */
+.surface-canvas {
+  background: var(--canvas);
+}
+
+.surface-panel {
+  background: var(--sidebar);
+  border: 1px solid var(--sidebar-border);
+}
+
+.surface-card {
+  background: var(--card);
+  border: 1px solid var(--border);
+  box-shadow: var(--shadow-card);
+}
+
+.surface-floating {
+  background: var(--popover);
+  border: 1px solid var(--border);
+  box-shadow: var(--shadow-float);
+  border-radius: 12px;
+}
+
+/* L0 画布纹理：极淡点阵，不参与动画 */
+.canvas-dots {
+  background-color: var(--canvas);
+  background-image: radial-gradient(circle, var(--viz-grid) 1px, transparent 1px);
+  background-size: 24px 24px;
+  background-position: center center;
+}
+
+/* ------------------------------------------------------------
+   场景化动效：只动画 transform / opacity
+   ------------------------------------------------------------ */
+@keyframes panelIn {
+  from { opacity: 0; transform: translateY(4px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes resultIn {
+  from { opacity: 0; transform: translateY(6px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+.motion-panel-in {
+  animation: panelIn var(--motion-base) var(--motion-ease) both;
+}
+
+.motion-result-in {
+  animation: resultIn 220ms var(--motion-ease) both;
+}
+
+.motion-press {
+  transition: transform var(--motion-fast) var(--motion-ease);
+}
+
+.motion-press:active {
+  transform: scale(0.98);
+}
+
+/* ------------------------------------------------------------
+   图标规范：Lucide 1.75 线宽，14 / 16 / 18 三档
+   ------------------------------------------------------------ */
+.ui-icon-sm,
+.ui-icon-md,
+.ui-icon-lg {
+  flex: none;
+  stroke-width: 1.75;
+}
+
+.ui-icon-sm {
+  width: 14px;
+  height: 14px;
+}
+
+.ui-icon-md {
+  width: 16px;
+  height: 16px;
+}
+
+.ui-icon-lg {
+  width: 18px;
+  height: 18px;
 }
 
 /* 静态表面替代玻璃：去掉 backdrop-filter（最明显的 GPU 开销之一） */
@@ -5317,10 +5510,12 @@ html[data-font-preset="system"] {
   animation: none;
 }
 
-/* 选中态、命令面板、滚动条统一到低饱和中性 */
-[cmdk-item][data-selected='true'],
+/* 选中态、命令面板、滚动条统一到蓝色强调 */
+[cmdk-item][data-selected='true'] {
+  background: color-mix(in oklab, var(--primary) 12%, transparent);
+}
 .dark [cmdk-item][data-selected='true'] {
-  background: var(--accent);
+  background: color-mix(in oklab, var(--primary) 22%, transparent);
 }
 
 ::selection {
@@ -5392,6 +5587,22 @@ html[data-font-preset="system"] {
 /* 活动栏图标统一细线宽，避免 Lucide 默认 2px 显得“粗壮” */
 .activity-bar svg {
   stroke-width: 1.75;
+}
+
+/* ------------------------------------------------------------
+   键盘焦点：2px 极光蓝 ring + 2px offset。
+   仅作用于可交互控件，刻意不包含 .cm-content（CodeMirror 自绘光标/选区）。
+   ------------------------------------------------------------ */
+button:focus-visible,
+a:focus-visible,
+input:focus-visible,
+textarea:focus-visible,
+select:focus-visible,
+[role="button"]:focus-visible,
+[role="tab"]:focus-visible,
+[role="menuitem"]:focus-visible {
+  outline: 2px solid var(--ring);
+  outline-offset: 2px;
 }
 
 /* 遗留毛玻璃全部降级为实色：backdrop-filter 是移动端与低端 GPU 上

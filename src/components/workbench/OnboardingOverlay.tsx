@@ -10,38 +10,35 @@
  *   第 4 步  一键示例   → 四个示例卡片，点击立即体验完整链路
  *
  * 交互：
- *   - 顶部步骤指示器（圆点 + 进度），可点击跳转；
- *   - 底部「上一步 / 下一步」导航，最后一步显示「开始使用」；
+ *   - 顶部品牌行 + 4px 进度条（宽度 180ms 过渡）；
+ *   - 底部「跳过 / 上一步 / 下一步」导航，最后一步显示「开始练习」；
  *   - 键盘：← / → 切换步骤，Esc 关闭；
  *   - 每个示例点击后立即生效并关闭引导；
  *   - 用 localStorage 标记是否已看过，二次启动不再弹出。
  *
- * 动画全部由 framer-motion 驱动（stagger 入场 / 布局 / hover / tap），
- * 与现有 VSCode 玻璃质感 UI 一致，桌面 / Web 共用。
+ * 动效只使用 opacity + 4px 位移，180ms；减少动态效果时只保留透明度。
  */
 
 import { useCallback, useEffect, useState } from 'react';
-import { motion, AnimatePresence } from 'framer-motion';
+import { motion, AnimatePresence, useReducedMotion } from 'framer-motion';
 import {
   Activity,
   ImageIcon,
   Play,
   Sigma,
-  Sparkles,
   X,
   ArrowRight,
   ArrowLeft,
   Waves,
   Grid3x3,
-  Workflow,
-  PenLine,
   Check,
   type LucideIcon,
 } from 'lucide-react';
 import { useWorkbenchStore } from '@/lib/store/workbench';
+import { cn } from '@/lib/utils';
 
 /** localStorage 标记：是否已完成首次引导。 */
-const ONBOARDED_KEY = 'omnimath-pro-onboarded-v1';
+const ONBOARDED_KEY = 'omnimath-pro-onboarded-v2';
 
 /* ── 一键示例：填入编辑器的脚本 ────────────────────────────────── */
 const SCRIPT_TRIANGLE = `# 三角曲线可视化
@@ -64,7 +61,6 @@ plot(sin(x))`;
 interface ExampleDef {
   id: string;
   icon: LucideIcon;
-  accent: string; // 卡片强调色（hex），用于图标/描边
   title: string;
   desc: string;
   tag: string;
@@ -74,7 +70,6 @@ const EXAMPLES: ExampleDef[] = [
   {
     id: 'plot',
     icon: Waves,
-    accent: '#2dd4bf',
     title: '三角曲线可视化',
     desc: '一键填入脚本并运行，自动绘制 sin / cos 曲线',
     tag: '绘图',
@@ -82,7 +77,6 @@ const EXAMPLES: ExampleDef[] = [
   {
     id: 'vision',
     icon: ImageIcon,
-    accent: '#a78bfa',
     title: '图像转函数',
     desc: '上传图片 → 识别边缘 → 拟合贝塞尔曲线',
     tag: '视觉',
@@ -90,7 +84,6 @@ const EXAMPLES: ExampleDef[] = [
   {
     id: 'sim',
     icon: Activity,
-    accent: '#f59e0b',
     title: '弹簧振子仿真',
     desc: '一阶反馈闭环，数值求解 ODE 并实时示波',
     tag: '仿真',
@@ -98,7 +91,6 @@ const EXAMPLES: ExampleDef[] = [
   {
     id: 'matrix',
     icon: Grid3x3,
-    accent: '#fb7185',
     title: '矩阵与特征值',
     desc: '行列式、逆矩阵、特征值一键求解',
     tag: '线性代数',
@@ -108,21 +100,18 @@ const EXAMPLES: ExampleDef[] = [
 /* ── 分步引导内容 ──────────────────────────────────────────────── */
 interface StepDef {
   id: string;
-  icon: LucideIcon;
-  accent: string;
+  /** 进度条下方的小标签。 */
+  label: string;
   title: string;
   desc: string;
   /** 关键要点，渲染为带对勾的列表。 */
   bullets: string[];
-  /** 可选的自定义主按钮（有则替代「下一步 / 开始使用」）。 */
-  primaryAction?: { label: string; run: () => void };
 }
 
 const STEPS: StepDef[] = [
   {
     id: 'welcome',
-    icon: Sparkles,
-    accent: '#818cf8',
+    label: '欢迎',
     title: '欢迎使用 OmniMath Pro',
     desc: '一站式数学工作台：计算、绘图、图像转函数、ODE 仿真与 AI 解释，全部在同一个窗口完成。',
     bullets: [
@@ -134,8 +123,7 @@ const STEPS: StepDef[] = [
   },
   {
     id: 'editor',
-    icon: PenLine,
-    accent: '#34d399',
+    label: '编辑器',
     title: '在编辑器里输入并运行',
     desc: '左侧编辑器支持多行表达式。输入后按 Ctrl+Enter 运行，结果与绘图会实时出现在右侧预览区。',
     bullets: [
@@ -148,8 +136,7 @@ const STEPS: StepDef[] = [
   },
   {
     id: 'pipeline',
-    icon: Workflow,
-    accent: '#fbbf24',
+    label: '蓝图',
     title: '用节点蓝图搭建流程',
     desc: '需要图像转曲线、ODE 仿真等高级流程时，切换到「蓝图」：拖入节点、连线接通数据，自动按顺序执行。',
     bullets: [
@@ -161,18 +148,16 @@ const STEPS: StepDef[] = [
   },
   {
     id: 'examples',
-    icon: Play,
-    accent: '#f472b6',
+    label: '示例',
     title: '选择示例快速上手',
     desc: '点击下方示例卡片，即可自动填入脚本或加载蓝图，直接体验完整链路。',
     bullets: [],
   },
   {
     id: 'practice',
-    icon: PenLine,
-    accent: '#34d399',
+    label: '练习',
     title: '动手练习：跑通第一个结果',
-    desc: '点击「开始练习」进入工作台，我已在左侧编辑器填好示例代码。你只需找到编辑器右上角绿色的「▶ 运行」按钮并点击，就能在右侧看到结果——这就完成了你的第一次运行！',
+    desc: '点击「开始练习」进入工作台，我已在左侧编辑器填好示例代码。你只需找到编辑器右上角的「▶ 运行」按钮并点击，就能在右侧看到结果——这就完成了你的第一次运行！',
     bullets: [
       '进入工作台后，左侧编辑器已自动填入几行示例代码',
       '点击右上角「▶ 运行」按钮（或按 Ctrl+Enter），右侧出现计算结果',
@@ -182,12 +167,73 @@ const STEPS: StepDef[] = [
   },
 ];
 
+/**
+ * 引导内的品牌插画：极淡网格 + 一条蓝→紫正弦曲线。
+ * 纯静态，不使用无限动画；颜色全部来自可视化 token。
+ */
+function StepIllustration() {
+  return (
+    <svg
+      viewBox="0 0 200 64"
+      width={200}
+      height={64}
+      fill="none"
+      aria-hidden
+      className="h-16 w-[200px] max-w-full"
+    >
+      <defs>
+        <linearGradient
+          id="onboarding-curve"
+          x1="0"
+          y1="0"
+          x2="200"
+          y2="0"
+          gradientUnits="userSpaceOnUse"
+        >
+          <stop style={{ stopColor: 'var(--viz-1)' }} />
+          <stop offset="1" style={{ stopColor: 'var(--viz-3)' }} />
+        </linearGradient>
+      </defs>
+
+      {/* 极淡网格 */}
+      <g style={{ stroke: 'var(--viz-grid)' }} strokeWidth="1">
+        {[0, 40, 80, 120, 160, 200].map((x) => (
+          <line key={`v${x}`} x1={x} y1="0" x2={x} y2="64" />
+        ))}
+        {[0, 16, 32, 48, 64].map((y) => (
+          <line key={`h${y}`} x1="0" y1={y} x2="200" y2={y} />
+        ))}
+      </g>
+
+      {/* 坐标轴 */}
+      <line
+        x1="0"
+        y1="32"
+        x2="200"
+        y2="32"
+        style={{ stroke: 'var(--viz-axis)' }}
+        strokeWidth="1"
+        strokeOpacity="0.55"
+      />
+
+      {/* 正弦曲线（蓝 → 紫） */}
+      <path
+        d="M0 32 L10 23.2 L20 17.7 L30 17.7 L40 23.2 L50 32 L60 40.8 L70 46.3 L80 46.3 L90 40.8 L100 32 L110 23.2 L120 17.7 L130 17.7 L140 23.2 L150 32 L160 40.8 L170 46.3 L180 46.3 L190 40.8 L200 32"
+        stroke="url(#onboarding-curve)"
+        strokeWidth="1.75"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+    </svg>
+  );
+}
+
 export function OnboardingOverlay() {
   const [visible, setVisible] = useState(false);
   const [step, setStep] = useState(0);
+  const reduceMotion = useReducedMotion();
 
   const setEditorContent = useWorkbenchStore((s) => s.setEditorContent);
-  const setInputMode = useWorkbenchStore((s) => s.setInputMode);
   const setActivePreviewTab = useWorkbenchStore((s) => s.setActivePreviewTab);
   const setViewMode = useWorkbenchStore((s) => s.setViewMode);
   const setPendingPipelineTemplate = useWorkbenchStore((s) => s.setPendingPipelineTemplate);
@@ -275,7 +321,6 @@ export function OnboardingOverlay() {
   }, [step, lastStep, runPractice, dismiss]);
 
   const stepDef = STEPS[step];
-  const StepIcon = stepDef.icon;
 
   return (
     <AnimatePresence>
@@ -285,200 +330,201 @@ export function OnboardingOverlay() {
           initial={{ opacity: 0 }}
           animate={{ opacity: 1 }}
           exit={{ opacity: 0 }}
-          transition={{ duration: 0.35 }}
-          className="fixed inset-0 z-[100] flex items-center justify-center overflow-y-auto bg-background/70 backdrop-blur-xl"
+          transition={{ duration: 0.2 }}
+          className="fixed inset-0 z-[100] flex items-center justify-center overflow-y-auto bg-black/45 p-4 dark:bg-black/65"
         >
-          {/* 柔和光斑背景 */}
-          <div className="pointer-events-none absolute inset-0 overflow-hidden">
-            <div className="absolute -top-40 -left-32 size-96 rounded-full bg-primary/15 blur-3xl" />
-            <div className="absolute -bottom-40 -right-32 size-96 rounded-full bg-violet-500/15 blur-3xl" />
-          </div>
-
           <motion.div
-            initial={{ y: 24, opacity: 0, scale: 0.98 }}
-            animate={{ y: 0, opacity: 1, scale: 1 }}
-            exit={{ y: 12, opacity: 0, scale: 0.98 }}
-            transition={{ type: 'spring', stiffness: 260, damping: 26 }}
-            className="relative w-full max-w-3xl px-6 py-10 sm:py-14"
+            initial={reduceMotion ? { opacity: 0 } : { opacity: 0, y: 8 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: reduceMotion ? 0 : 4 }}
+            transition={{ duration: 0.18, ease: [0.2, 0.8, 0.2, 1] }}
+            role="dialog"
+            aria-labelledby="onboarding-title"
+            className="surface-floating relative max-h-[calc(100dvh_-_2rem)] w-full max-w-[600px] overflow-y-auto rounded-xl p-7 sm:p-8"
           >
-            {/* 关闭按钮 */}
-            <button
-              type="button"
-              onClick={dismiss}
-              aria-label="关闭引导"
-              className="absolute right-2 top-2 grid size-9 place-items-center rounded-full text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
-            >
-              <X className="size-4" />
-            </button>
-
-            {/* 步骤指示器 */}
-            <div className="mb-8 flex items-center justify-center gap-2">
-              {STEPS.map((s, i) => (
+            {/* ── 品牌行：Σ 标识 + 产品名 + 步骤计数 + 关闭 ── */}
+            <div className="flex items-center gap-3">
+              <span className="grid size-8 shrink-0 place-items-center rounded-lg border border-border bg-[var(--primary-bg-soft)] text-primary">
+                <Sigma className="size-4" strokeWidth={1.75} />
+              </span>
+              <div className="min-w-0 leading-tight">
+                <p className="truncate text-[13px] font-semibold tracking-tight text-foreground">
+                  OmniMath Pro
+                </p>
+                <p className="mt-0.5 text-[10.5px] uppercase tracking-[0.16em] text-muted-foreground">
+                  快速上手
+                </p>
+              </div>
+              <div className="ml-auto flex shrink-0 items-center gap-1.5">
+                <span className="font-mono text-[11px] tabular-nums text-muted-foreground">
+                  {String(step + 1).padStart(2, '0')} / {String(STEPS.length).padStart(2, '0')}
+                </span>
                 <button
-                  key={s.id}
                   type="button"
-                  onClick={() => setStep(i)}
-                  aria-label={`第 ${i + 1} 步：${s.title}`}
-                  className="group flex items-center gap-2"
+                  onClick={dismiss}
+                  aria-label="关闭引导"
+                  className="grid size-7 place-items-center rounded-md text-muted-foreground transition-colors duration-150 hover:bg-accent/60 hover:text-foreground"
                 >
-                  <span
-                    className={[
-                      'grid size-7 place-items-center rounded-full text-[11px] font-semibold transition-all',
-                      i === step
-                        ? 'bg-primary text-primary-foreground shadow-md shadow-primary/30'
-                        : i < step
-                          ? 'bg-primary/20 text-primary'
-                          : 'bg-muted text-muted-foreground group-hover:bg-accent',
-                    ].join(' ')}
-                  >
-                    {i < step ? <Check className="size-3.5" /> : i + 1}
-                  </span>
-                  {/* 连接线 */}
-                  {i < lastStep && (
-                    <span
-                      className={[
-                        'h-px w-6 transition-colors sm:w-10',
-                        i < step ? 'bg-primary/40' : 'bg-border',
-                      ].join(' ')}
-                    />
-                  )}
+                  <X className="size-3.5" strokeWidth={1.75} />
                 </button>
-              ))}
+              </div>
             </div>
 
-            {/* 当前步骤内容（AnimatePresence 切换动画） */}
-            <AnimatePresence mode="wait">
-              <motion.div
-                key={step}
-                initial={{ opacity: 0, x: 24 }}
-                animate={{ opacity: 1, x: 0 }}
-                exit={{ opacity: 0, x: -24 }}
-                transition={{ duration: 0.22, ease: 'easeOut' }}
-                className="text-center"
+            {/* ── 4px 分段进度条（可点击跳转） + 小标签行 ── */}
+            <div className="mt-5">
+              <div
+                role="progressbar"
+                aria-valuemin={1}
+                aria-valuemax={STEPS.length}
+                aria-valuenow={step + 1}
+                aria-label="引导进度"
+                className="flex h-1 w-full gap-1"
               >
-                <div
-                  className="mx-auto mb-4 grid size-14 place-items-center rounded-2xl shadow-lg"
-                  style={{
-                    backgroundColor: `color-mix(in oklab, ${stepDef.accent} 15%, transparent)`,
-                    color: stepDef.accent,
-                    boxShadow: `0 8px 24px -8px ${stepDef.accent}55`,
-                  }}
+                {STEPS.map((s, i) => (
+                  <button
+                    key={s.id}
+                    type="button"
+                    onClick={() => setStep(i)}
+                    aria-label={`第 ${i + 1} 步：${s.title}`}
+                    aria-current={i === step ? 'step' : undefined}
+                    className="group relative h-1 flex-1 overflow-hidden rounded-full bg-muted"
+                  >
+                    <span
+                      className={cn(
+                        'absolute inset-y-0 left-0 w-full rounded-full bg-primary transition-[width] duration-[180ms] ease-[var(--motion-ease)]',
+                        i <= step ? 'scale-x-100' : 'scale-x-0',
+                      )}
+                      style={{ transformOrigin: 'left center' }}
+                    />
+                  </button>
+                ))}
+              </div>
+              <div className="mt-1.5 flex items-center justify-between text-[10.5px] text-muted-foreground">
+                <span>
+                  第 {step + 1} 步 · {stepDef.label}
+                </span>
+                <span>共 {STEPS.length} 步</span>
+              </div>
+            </div>
+
+            {/* ── 步骤内容：整块 180ms 透明度 + 4px 位移 ── */}
+            <motion.div
+              key={step}
+              initial={reduceMotion ? { opacity: 0 } : { opacity: 0, y: 4 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ duration: 0.18, ease: [0.2, 0.8, 0.2, 1] }}
+              className="mt-6 text-left"
+            >
+                <StepIllustration />
+
+                <h2
+                  id="onboarding-title"
+                  className="mt-4 text-[21px] font-semibold leading-tight tracking-tight text-foreground"
                 >
-                  <StepIcon className="size-6" />
-                </div>
-                <h1 className="text-2xl font-semibold tracking-tight text-foreground sm:text-3xl">
                   {stepDef.title}
-                </h1>
-                <p className="mx-auto mt-2 max-w-md text-[13px] leading-relaxed text-muted-foreground">
+                </h2>
+                <p className="mt-2 max-w-[52ch] text-[12.5px] leading-relaxed text-muted-foreground">
                   {stepDef.desc}
                 </p>
-              </motion.div>
-            </AnimatePresence>
 
-            {/* 要点列表（有要点的步骤渲染；示例步骤用卡片，练习步骤用要点） */}
-            {stepDef.bullets.length > 0 && (
-              <motion.ul
-                initial={{ opacity: 0, y: 8 }}
-                animate={{ opacity: 1, y: 0 }}
-                transition={{ delay: 0.15, duration: 0.3 }}
-                className="mx-auto mt-6 grid max-w-lg grid-cols-1 gap-2 text-left sm:grid-cols-2"
-              >
-                {stepDef.bullets.map((b) => (
-                  <li
-                    key={b}
-                    className="flex items-start gap-2 rounded-lg border border-border/60 bg-card/60 px-3 py-2 text-[12px] leading-relaxed text-foreground/90"
-                  >
-                    <Check className="mt-0.5 size-3.5 shrink-0 text-primary" />
-                    <span>{b}</span>
-                  </li>
-                ))}
-              </motion.ul>
-            )}
+                {/* 要点：两列卡片 */}
+                {stepDef.bullets.length > 0 && (
+                  <ul className="mt-5 grid grid-cols-1 gap-2 sm:grid-cols-2">
+                    {stepDef.bullets.map((b) => (
+                      <li
+                        key={b}
+                        className="surface-card flex items-start gap-2 rounded-lg px-3 py-2 text-[12px] leading-relaxed text-foreground/90"
+                      >
+                        <Check className="mt-0.5 size-3.5 shrink-0 text-primary" strokeWidth={1.75} />
+                        <span>{b}</span>
+                      </li>
+                    ))}
+                  </ul>
+                )}
 
-            {/* 示例卡片网格（示例步骤） */}
-            {step === EXAMPLES_STEP && (
-              <div className="mt-8 grid grid-cols-1 gap-3 sm:grid-cols-2">
-                {EXAMPLES.map((ex, i) => {
-                  const Icon = ex.icon;
-                  return (
-                    <motion.button
-                      key={ex.id}
-                      type="button"
-                      onClick={() => handleExample(ex.id)}
-                      initial={{ opacity: 0, y: 12 }}
-                      animate={{ opacity: 1, y: 0 }}
-                      transition={{ delay: 0.08 + i * 0.05, duration: 0.18 }}
-                      className="group relative flex items-start gap-3 rounded-lg border border-border bg-card p-4 text-left transition-colors hover:bg-accent/40"
-                    >
-                      <div className="grid size-9 shrink-0 place-items-center rounded-md border border-border text-muted-foreground">
-                        <Icon className="size-4" strokeWidth={1.75} />
-                      </div>
-                      <div className="min-w-0 flex-1">
-                        <div className="flex items-center gap-2">
-                          <span className="text-[12.5px] font-medium text-foreground">{ex.title}</span>
-                          <span className="rounded-[3px] border border-border px-1.5 py-px text-[9px] text-muted-foreground">
-                            {ex.tag}
+                {/* 示例卡片：两列，hover 仅变边框 / 图标颜色 */}
+                {step === EXAMPLES_STEP && (
+                  <div className="mt-5 grid grid-cols-1 gap-2.5 sm:grid-cols-2">
+                    {EXAMPLES.map((ex, i) => {
+                      const Icon = ex.icon;
+                      return (
+                        <motion.button
+                          key={ex.id}
+                          type="button"
+                          onClick={() => handleExample(ex.id)}
+                          initial={reduceMotion ? { opacity: 0 } : { opacity: 0, y: 6 }}
+                          animate={{ opacity: 1, y: 0 }}
+                          transition={{ delay: reduceMotion ? 0 : 0.04 + i * 0.04, duration: 0.18 }}
+                          className="surface-card group flex w-full items-start gap-3 rounded-lg p-3.5 text-left transition-colors duration-150 hover:border-primary/45!"
+                        >
+                          <span className="grid size-8 shrink-0 place-items-center rounded-md border border-border bg-muted/40 text-muted-foreground transition-colors duration-150 group-hover:border-primary/40 group-hover:text-primary">
+                            <Icon className="size-4" strokeWidth={1.75} />
                           </span>
-                        </div>
-                        <p className="mt-1 text-[11px] leading-relaxed text-muted-foreground">{ex.desc}</p>
-                        <span className="mt-2 inline-flex items-center gap-1 text-[10.5px] text-muted-foreground opacity-0 transition-opacity group-hover:opacity-100">
-                          打开示例
-                          <ArrowRight className="size-3" strokeWidth={1.75} />
-                        </span>
-                      </div>
-                    </motion.button>
-                  );
-                })}
-              </div>
-            )}
+                          <span className="min-w-0 flex-1">
+                            <span className="flex items-center gap-2">
+                              <span className="text-[12.5px] font-medium text-foreground">
+                                {ex.title}
+                              </span>
+                              <span className="rounded-[3px] border border-border px-1.5 py-px text-[9px] text-muted-foreground">
+                                {ex.tag}
+                              </span>
+                            </span>
+                            <span className="mt-1 block text-[11px] leading-relaxed text-muted-foreground">
+                              {ex.desc}
+                            </span>
+                            <span className="mt-2 inline-flex items-center gap-1 text-[10.5px] text-muted-foreground opacity-0 transition-opacity duration-150 group-hover:opacity-100">
+                              打开示例
+                              <ArrowRight className="size-3" strokeWidth={1.75} />
+                            </span>
+                          </span>
+                        </motion.button>
+                      );
+                    })}
+                  </div>
+                )}
+              </motion.div>
 
-            {/* 底部导航（非示例步骤显示上一步 / 下一步；示例步骤显示开始使用） */}
-            <motion.div
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-              transition={{ delay: 0.3, duration: 0.4 }}
-              className="mt-8 flex items-center justify-center gap-3"
-            >
-              {step > 0 && (
-                <button
-                  type="button"
-                  onClick={() => setStep((s) => s - 1)}
-                  className="inline-flex items-center gap-1.5 rounded border border-border px-5 py-2 text-[12px] font-medium text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
-                >
-                  <ArrowLeft className="size-4" strokeWidth={1.75} />
-                  上一步
-                </button>
-              )}
-
-              {step < lastStep ? (
-                <button
-                  type="button"
-                  onClick={onPrimary}
-                  className="inline-flex items-center gap-2 rounded bg-primary px-6 py-2 text-[12px] font-medium text-primary-foreground transition-colors hover:bg-primary/90"
-                >
-                  下一步
-                  <ArrowRight className="size-4" strokeWidth={1.75} />
-                </button>
-              ) : (
-                <button
-                  type="button"
-                  onClick={onPrimary}
-                  className="inline-flex items-center gap-2 rounded bg-primary px-6 py-2 text-[12px] font-medium text-primary-foreground transition-colors hover:bg-primary/90"
-                >
-                  <Play className="size-4" fill="currentColor" strokeWidth={1.75} />
-                  开始练习
-                </button>
-              )}
-
+            {/* ── 底部：跳过居左，上一步 / 下一步居右 ── */}
+            <div className="mt-7 flex flex-wrap items-center justify-between gap-2">
               <button
                 type="button"
                 onClick={dismiss}
-                className="inline-flex items-center gap-1.5 rounded-xl border border-border bg-background/60 px-5 py-2.5 text-[13px] font-medium text-muted-foreground transition-colors hover:text-foreground"
+                className="rounded-md px-2.5 py-2 text-[12px] font-medium text-muted-foreground transition-colors duration-150 hover:bg-accent/60 hover:text-foreground"
               >
-                <Sigma className="size-4" />
                 跳过
               </button>
-            </motion.div>
+
+              <div className="flex items-center gap-2">
+                {step > 0 && (
+                  <button
+                    type="button"
+                    onClick={() => setStep((s) => s - 1)}
+                    className="inline-flex items-center gap-1.5 rounded-md border border-border px-4 py-2 text-[12px] font-medium text-muted-foreground transition-colors duration-150 hover:bg-accent/60 hover:text-foreground"
+                  >
+                    <ArrowLeft className="size-4" strokeWidth={1.75} />
+                    上一步
+                  </button>
+                )}
+
+                <button
+                  type="button"
+                  onClick={onPrimary}
+                  className="motion-press inline-flex items-center gap-1.5 rounded-md bg-primary px-5 py-2 text-[12px] font-medium text-primary-foreground transition-colors duration-150 hover:bg-primary/90"
+                >
+                  {step === lastStep ? (
+                    <>
+                      <Play className="size-4" fill="currentColor" strokeWidth={1.75} />
+                      开始练习
+                    </>
+                  ) : (
+                    <>
+                      下一步
+                      <ArrowRight className="size-4" strokeWidth={1.75} />
+                    </>
+                  )}
+                </button>
+              </div>
+            </div>
           </motion.div>
         </motion.div>
       )}

@@ -487,17 +487,17 @@ export function SettingsPanel() {
 
   return (
     <Dialog open={open} onOpenChange={setOpen}>
-      <DialogContent className="sm:max-w-2xl min-h-[460px] max-h-[85vh] p-0 gap-0 overflow-hidden flex flex-col">
+      <DialogContent className="sm:max-w-2xl min-h-[460px] max-h-[85vh] p-0 gap-0 overflow-hidden flex flex-col rounded-xl border-border bg-popover shadow-[var(--shadow-float)]">
         <DialogHeader className="shrink-0 px-5 py-3 border-b border-border/60">
-          <DialogTitle className="flex items-center gap-2 text-base">
-            <Palette className="size-4 text-primary" />
+          <DialogTitle className="flex items-center gap-2 text-[15px]">
+            <Palette className="size-4 text-primary" strokeWidth={1.75} />
             {t('settingsTitle')}
           </DialogTitle>
         </DialogHeader>
 
         <div className="flex flex-1 min-h-0">
           {/* 左侧分类导航 */}
-          <div className="w-44 shrink-0 border-r border-border/60 bg-muted/20 p-2 space-y-0.5">
+          <div className="w-[220px] max-sm:w-[168px] shrink-0 border-r border-border/60 bg-muted/25 p-2 space-y-0.5">
             {categories.map((cat) => {
               const Icon = cat.icon;
               const isActive = category === cat.id;
@@ -507,13 +507,13 @@ export function SettingsPanel() {
                   type="button"
                   onClick={() => setCategory(cat.id)}
                   className={cn(
-                    'w-full flex items-center gap-2 px-2.5 py-2 rounded-md text-[12px] font-medium transition-colors',
+                    'w-full flex items-center gap-2 rounded-md px-2.5 py-2 text-[12px] font-medium transition-colors duration-150',
                     isActive
                       ? 'bg-primary/10 text-primary'
-                      : 'text-muted-foreground hover:text-foreground hover:bg-accent/40',
+                      : 'text-muted-foreground hover:text-foreground hover:bg-accent/50',
                   )}
                 >
-                  <Icon className="size-3.5" />
+                  <Icon className="size-3.5 stroke-[1.75]" />
                   {cat.labelKey ? t(cat.labelKey) : cat.label}
                 </button>
               );
@@ -525,20 +525,21 @@ export function SettingsPanel() {
                 onClick={handleReset}
                 className="w-full justify-start gap-2 text-[11px] text-muted-foreground hover:text-destructive"
               >
-                <RotateCcw className="size-3" />
+                <RotateCcw className="size-3 stroke-[1.75]" />
                 {t('settingsResetAll')}
               </Button>
             </div>
           </div>
 
           {/* 右侧设置内容 */}
-          <div className="flex-1 min-h-0 overflow-y-auto p-5">
+          <div className="flex-1 min-h-0 overflow-y-auto p-4">
+            <div className="surface-card rounded-xl p-4">
             {category === 'appearance' && (
               <motion.div
                 initial={{ opacity: 0, x: 8 }}
                 animate={{ opacity: 1, x: 0 }}
                 transition={{ duration: 0.15 }}
-                className="space-y-5"
+                className="space-y-4"
               >
                 <SettingRow label={t('settingsTheme')}>
                   <RadioGroup
@@ -622,7 +623,7 @@ export function SettingsPanel() {
                 initial={{ opacity: 0, x: 8 }}
                 animate={{ opacity: 1, x: 0 }}
                 transition={{ duration: 0.15 }}
-                className="space-y-5"
+                className="space-y-4"
               >
                 <SettingRow label={t('editorTitle') + ' ' + t('menuRun')}>
                   <Select value={inputMode} onValueChange={(v) => setInputMode(v as typeof inputMode)}>
@@ -686,7 +687,7 @@ export function SettingsPanel() {
                 initial={{ opacity: 0, x: 8 }}
                 animate={{ opacity: 1, x: 0 }}
                 transition={{ duration: 0.15 }}
-                className="space-y-5"
+                className="space-y-4"
               >
                 <SettingRow label={t('layoutSwitch')}>
                   <RadioGroup
@@ -731,7 +732,7 @@ export function SettingsPanel() {
                 initial={{ opacity: 0, x: 8 }}
                 animate={{ opacity: 1, x: 0 }}
                 transition={{ duration: 0.15 }}
-                className="space-y-5"
+                className="space-y-4"
               >
                 <SettingRow label="学段">
                   <div className="flex flex-wrap items-center gap-1 rounded-xl border border-border/60 bg-background/40 p-1">
@@ -761,9 +762,9 @@ export function SettingsPanel() {
                   </p>
                 </SettingRow>
 
-                <div className="rounded-2xl border border-border/60 bg-background/40 p-4">
+                <div className="rounded-lg border border-destructive/30 bg-destructive/5 p-4">
                   <div className="flex items-center gap-2 text-[12.5px] font-semibold text-foreground/90">
-                    <AlertTriangle className="size-4 text-rose-500" />
+                    <AlertTriangle className="size-4 text-destructive" strokeWidth={1.75} />
                     一键清空学习数据
                   </div>
                   <p className="mt-1 text-[11px] leading-relaxed text-muted-foreground">
@@ -774,9 +775,9 @@ export function SettingsPanel() {
                     variant="outline"
                     size="sm"
                     onClick={() => setEduClearConfirm(true)}
-                    className="mt-3 h-8 gap-1.5 text-[11.5px] text-rose-600 hover:text-rose-500 hover:border-rose-500/40"
+                    className="mt-3 h-8 gap-1.5 border-destructive/40 text-[11.5px] text-destructive hover:bg-destructive/10 hover:text-destructive"
                   >
-                    <Trash2 className="size-3.5" />
+                    <Trash2 className="size-3.5 stroke-[1.75]" />
                     清空学习数据
                   </Button>
                 </div>
@@ -1002,7 +1003,7 @@ export function SettingsPanel() {
                 initial={{ opacity: 0, x: 8 }}
                 animate={{ opacity: 1, x: 0 }}
                 transition={{ duration: 0.15 }}
-                className="space-y-5"
+                className="space-y-4"
               >
                 <SettingRow label={t('settingsDefaultExportDpi')}>
                   <Select
@@ -1044,7 +1045,7 @@ export function SettingsPanel() {
                 initial={{ opacity: 0, x: 8 }}
                 animate={{ opacity: 1, x: 0 }}
                 transition={{ duration: 0.15 }}
-                className="space-y-5"
+                className="space-y-4"
               >
                 <SettingRow label={t('languageLabel')}>
                   <RadioGroup
@@ -1089,7 +1090,7 @@ export function SettingsPanel() {
                 initial={{ opacity: 0, x: 8 }}
                 animate={{ opacity: 1, x: 0 }}
                 transition={{ duration: 0.15 }}
-                className="space-y-5"
+                className="space-y-4"
               >
                 <AdvancedSettings />
               </motion.div>
@@ -1100,7 +1101,7 @@ export function SettingsPanel() {
                 initial={{ opacity: 0, x: 8 }}
                 animate={{ opacity: 1, x: 0 }}
                 transition={{ duration: 0.15 }}
-                className="space-y-5"
+                className="space-y-4"
               >
                 {/* Version info */}
                 <div className="rounded-lg border border-border bg-card p-4 text-center">
@@ -1170,9 +1171,9 @@ export function SettingsPanel() {
                           key={link.label}
                           type="button"
                           onClick={() => window.open(link.url, '_blank', 'noopener,noreferrer')}
-                          className="inline-flex items-center gap-1.5 rounded-md border border-border px-3 py-2 text-xs text-left text-muted-foreground hover:bg-accent/40 hover:text-foreground transition-colors"
+                          className="inline-flex items-center gap-1.5 rounded-md border border-border bg-card px-3 py-2 text-xs text-left text-muted-foreground transition-colors duration-150 hover:border-primary/40 hover:text-foreground"
                         >
-                          <Icon className="size-3.5" strokeWidth={1.75} />
+                          <Icon className="size-3.5 stroke-[1.75]" />
                           {link.label}
                         </button>
                       );
@@ -1185,6 +1186,7 @@ export function SettingsPanel() {
                 </div>
               </motion.div>
             )}
+            </div>
           </div>
         </div>
       </DialogContent>
@@ -1349,7 +1351,7 @@ function ShortcutsList({
                 className={cn(
                   'inline-flex items-center gap-0.5 rounded border px-1.5 py-0.5 font-mono text-[10px]',
                   isListening
-                    ? 'border-primary bg-primary/10 text-primary animate-pulse'
+                    ? 'border-primary bg-primary/10 text-primary'
                     : 'border-border/60 bg-muted/40 text-foreground/70',
                 )}
               >

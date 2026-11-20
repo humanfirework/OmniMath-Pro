@@ -139,7 +139,7 @@ export function DistributionExplorer() {
 
   const draw = useMemo(
     () => (ctx: CanvasRenderingContext2D, view: ResultView, size: { w: number; h: number }, d: ExplorerData) => {
-      renderLine(ctx, view, size, d.pdf, '#38bdf8');
+      renderLine(ctx, view, size, d.pdf, '#3B6FE0');
     },
     [],
   );

@@ -31,7 +31,7 @@ interface VectorPreviewCanvasProps {
   emptyText?: string;
 }
 
-const PALETTE = ['#2dd4bf', '#f59e0b', '#a78bfa', '#ef4444', '#22c55e', '#3b82f6'];
+const PALETTE = ['var(--viz-1)', 'var(--viz-2)', 'var(--viz-3)', 'var(--viz-4)', 'var(--viz-5)', 'var(--viz-6)'];
 
 function project(v: number[], dim: 2 | 3): [number, number] {
   if (dim === 3) {

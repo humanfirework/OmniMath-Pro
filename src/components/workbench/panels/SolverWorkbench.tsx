@@ -86,6 +86,7 @@ import {
   type SymbolicResult,
 } from '@/lib/engine/symbolic';
 import { inputToLatex } from '@/lib/engine/latex';
+import { getVizPalette } from '@/lib/plots/vizPalette';
 import { t, useLocale, type TranslationDict } from '@/lib/i18n';
 import { cn } from '@/lib/utils';
 import { toast } from 'sonner';
@@ -116,7 +117,8 @@ interface ExampleGroup {
   items: Array<{ expr: string; label: string; hint?: string }>;
 }
 
-const PLOT_COLORS = ['#2dd4bf', '#fbbf24', '#fb7185', '#34d399', '#a78bfa', '#fb923c'];
+/** 兜底曲线色（无法读取 CSS token 时使用，与 vizPalette 的浅色序列一致）。 */
+const PLOT_COLORS_FALLBACK = ['#3B6FE0', '#22A7C4', '#7C5CE0', '#4CC3D9', '#8B7CF6', '#2E8BFF'];
 
 /** 将表达式/方程送入 2D 绘图并跳转回 workbench 视图 */
 function useSendToPlot() {
@@ -126,6 +128,8 @@ function useSendToPlot() {
   const setActivePreviewTab = useWorkbenchStore((s) => s.setActivePreviewTab);
 
   return (expressions: string[]) => {
+    const palette = getVizPalette();
+    const PLOT_COLORS = palette.length > 0 ? palette : PLOT_COLORS_FALLBACK;
     let added = 0;
     expressions.forEach((expression, i) => {
       if (!expression.trim()) return;
@@ -189,7 +193,7 @@ function ResultBlock({
           initial={{ opacity: 0, y: 4 }}
           animate={{ opacity: 1, y: 0 }}
           exit={{ opacity: 0 }}
-          className="rounded-md border border-primary/30 bg-primary/5 p-4 glow-card-teal"
+          className="surface-card rounded-md p-4"
         >
           {result}
         </motion.div>

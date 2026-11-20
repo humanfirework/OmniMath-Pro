@@ -701,7 +701,7 @@ export function FormulaLibraryPanel() {
                       </Badge>
                     )}
                   </div>
-                  <div className="rounded-lg border border-primary/30 bg-primary/5 p-3 glow-card-teal">
+                  <div className="surface-card rounded-lg p-3">
                     <FormulaRenderer latex={selected.latex} displayMode />
                   </div>
                   <p className="text-[12px] text-foreground/80 leading-relaxed">
@@ -1038,7 +1038,7 @@ function CustomFormulaDialog({
             />
           </div>
           {latex.trim() && (
-            <div className="rounded-lg border border-primary/30 bg-primary/5 p-3 glow-card-teal">
+            <div className="surface-card rounded-lg p-3">
               <FormulaRenderer latex={latex} displayMode />
             </div>
           )}

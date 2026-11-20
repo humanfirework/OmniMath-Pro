@@ -145,23 +145,22 @@ export function GlobalCalcBar() {
           className="fixed inset-0 z-[80] flex items-start justify-center pt-[12vh] px-4"
           onClick={() => setOpen(false)}
         >
-          {/* Backdrop blur */}
-          <div className="absolute inset-0 bg-background/40 backdrop-blur-sm" />
+          {/* Backdrop dim (no blur) */}
+          <div className="absolute inset-0 bg-black/25 dark:bg-black/50" />
 
           {/* Card */}
           <motion.div
-            initial={{ opacity: 0, y: -16, scale: 0.96 }}
-            animate={{ opacity: 1, y: 0, scale: 1 }}
-            exit={{ opacity: 0, y: -16, scale: 0.96 }}
-            transition={{ type: 'spring', stiffness: 280, damping: 24 }}
+            initial={{ opacity: 0, y: -8 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: -8 }}
+            transition={{ duration: 0.15, ease: [0.2, 0.8, 0.2, 1] }}
             onClick={(e) => e.stopPropagation()}
-            className="relative w-full max-w-[560px] glass-strong rounded-xl border border-border shadow-2xl overflow-hidden"
-            style={{ boxShadow: '0 0 0 1px oklch(0.7 0.15 165 / 25%), 0 12px 40px rgba(0,0,0,0.18)' }}
+            className="surface-floating relative w-full max-w-[560px] overflow-hidden"
           >
             {/* Input row */}
             <div className="flex items-center gap-2 px-3 py-2.5 border-b border-border/60">
-              <div className="grid place-items-center size-6 rounded-md bg-primary/10 border border-primary/30">
-                <Sigma className="size-3.5 text-primary" />
+              <div className="grid place-items-center size-6 rounded-md bg-primary/10 border border-primary/25">
+                <Sigma className="size-3.5 text-primary" strokeWidth={1.75} />
               </div>
               <input
                 ref={inputRef}
@@ -199,7 +198,7 @@ export function GlobalCalcBar() {
                   className="px-3 py-2.5 border-b border-border/60 bg-primary/5"
                 >
                   <div className="flex items-center gap-2">
-                    <ArrowRight className="size-3.5 text-primary shrink-0" />
+                    <ArrowRight className="size-3.5 text-primary shrink-0" strokeWidth={1.75} />
                     <code className="flex-1 font-mono text-[13px] text-foreground break-all">
                       {result}
                     </code>
@@ -210,9 +209,9 @@ export function GlobalCalcBar() {
                       aria-label={t('previewCopy')}
                     >
                       {copied ? (
-                        <Check className="size-3.5 text-emerald-500" />
+                        <Check className="size-3.5 text-primary" strokeWidth={1.75} />
                       ) : (
-                        <Copy className="size-3.5" />
+                        <Copy className="size-3.5" strokeWidth={1.75} />
                       )}
                     </button>
                   </div>

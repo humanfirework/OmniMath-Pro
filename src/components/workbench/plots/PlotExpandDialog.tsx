@@ -179,63 +179,63 @@ export function PlotExpandDialog({ open, onClose, curveSpecs }: PlotExpandDialog
       animate={{ opacity: 1 }}
       exit={{ opacity: 0 }}
       transition={{ duration: 0.2 }}
-      className="fixed inset-0 z-[200] flex flex-col bg-background/95 backdrop-blur-md"
+      className="fixed inset-0 z-[200] flex flex-col bg-background"
       role="dialog"
       aria-modal="true"
       aria-label="放大查看绘图"
     >
-      {/* Header bar */}
-      <div className="flex items-center justify-between border-b border-border/60 bg-background/80 px-4 py-2.5 backdrop-blur">
-        <div className="flex items-center gap-3">
-          <h2 className="text-sm font-semibold text-foreground">绘图大图查看</h2>
-          <span className="text-xs text-muted-foreground">
+      {/* Header bar — 32px，实色，不使用模糊 */}
+      <div className="flex h-8 items-center justify-between border-b border-border bg-card px-3">
+        <div className="flex min-w-0 items-center gap-3">
+          <h2 className="section-label truncate">绘图大图查看</h2>
+          <span className="truncate font-mono text-[10.5px] text-muted-foreground">
             {plots.length} 条曲线 · 滚轮缩放 · 拖拽平移 · 双击重置
           </span>
         </div>
         <div className="flex items-center gap-1">
           <button
             onClick={handleZoomIn}
-            className="grid place-items-center size-8 rounded-md text-muted-foreground hover:bg-muted hover:text-foreground transition-colors"
+            className="motion-press grid place-items-center size-7 rounded-[6px] text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
             aria-label="放大"
           >
-            <ZoomIn className="size-4" />
+            <ZoomIn className="size-3.5" strokeWidth={1.75} />
           </button>
           <button
             onClick={handleZoomOut}
-            className="grid place-items-center size-8 rounded-md text-muted-foreground hover:bg-muted hover:text-foreground transition-colors"
+            className="motion-press grid place-items-center size-7 rounded-[6px] text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
             aria-label="缩小"
           >
-            <ZoomOut className="size-4" />
+            <ZoomOut className="size-3.5" strokeWidth={1.75} />
           </button>
           <button
             onClick={handleReset}
-            className="grid place-items-center size-8 rounded-md text-muted-foreground hover:bg-muted hover:text-foreground transition-colors"
+            className="motion-press grid place-items-center size-7 rounded-[6px] text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
             aria-label="重置视图"
           >
-            <RotateCcw className="size-4" />
+            <RotateCcw className="size-3.5" strokeWidth={1.75} />
           </button>
-          <div className="mx-1 h-5 w-px bg-border/60" />
+          <div className="mx-1 h-4 w-px bg-border" />
           <button
             onClick={handleExportPNG}
-            className="flex items-center gap-1.5 h-8 px-2.5 rounded-md text-xs text-muted-foreground hover:bg-muted hover:text-foreground transition-colors"
+            className="motion-press flex items-center gap-1.5 h-7 px-2 rounded-[6px] text-[11px] text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
           >
-            <Download className="size-3.5" />
+            <Download className="size-3.5" strokeWidth={1.75} />
             <span className="hidden sm:inline">导出 PNG</span>
           </button>
           <button
             onClick={handleCopyLatex}
-            className="flex items-center gap-1.5 h-8 px-2.5 rounded-md text-xs text-muted-foreground hover:bg-muted hover:text-foreground transition-colors"
+            className="motion-press flex items-center gap-1.5 h-7 px-2 rounded-[6px] text-[11px] text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
           >
-            <Copy className="size-3.5" />
+            <Copy className="size-3.5" strokeWidth={1.75} />
             <span className="hidden sm:inline">复制 LaTeX</span>
           </button>
-          <div className="mx-1 h-5 w-px bg-border/60" />
+          <div className="mx-1 h-4 w-px bg-border" />
           <button
             onClick={onClose}
-            className="grid place-items-center size-8 rounded-md text-muted-foreground hover:bg-destructive/10 hover:text-destructive transition-colors"
+            className="motion-press grid place-items-center size-7 rounded-[6px] text-muted-foreground transition-colors hover:bg-destructive/10 hover:text-destructive"
             aria-label="关闭"
           >
-            <X className="size-4" />
+            <X className="size-3.5" strokeWidth={1.75} />
           </button>
         </div>
       </div>
@@ -247,18 +247,18 @@ export function PlotExpandDialog({ open, onClose, curveSpecs }: PlotExpandDialog
 
       {/* Footer: plot list */}
       {plots.length > 0 && (
-        <div className="border-t border-border/60 bg-background/80 px-4 py-2 backdrop-blur">
+        <div className="border-t border-border bg-background px-4 py-2">
           <div className="flex flex-wrap items-center gap-2">
             {plots.map((p) => (
               <div
                 key={p.id}
-                className="flex items-center gap-1.5 rounded-md border border-border/60 bg-muted/40 px-2 py-1"
+                className="flex items-center gap-1.5 rounded-[6px] border border-border bg-card px-2 py-1"
               >
                 <span
                   className="inline-block h-2.5 w-2.5 rounded-full"
-                  style={{ backgroundColor: p.color, boxShadow: `0 0 6px ${p.color}80` }}
+                  style={{ backgroundColor: p.color }}
                 />
-                <span className="max-w-[260px] truncate font-mono text-xs text-foreground/90">
+                <span className="max-w-[260px] truncate font-mono text-[11px] text-foreground/90">
                   {p.plotType === 'polar' ? 'r = ' : p.plotType === 'parametric' ? '(t) = ' : 'y = '}
                   {p.expression}
                 </span>

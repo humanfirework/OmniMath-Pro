@@ -130,7 +130,7 @@ export function MatrixTransformViz() {
   return (
     <div className="flex h-full flex-col gap-3 p-3">
       {/* 顶部工具栏：预设 + 当前矩阵 + 重置 */}
-      <div className="flex flex-wrap items-center gap-2 rounded-lg border border-border/60 bg-card/40 p-2 backdrop-blur-sm">
+      <div className="flex flex-wrap items-center gap-2 rounded-lg border border-border bg-card p-2">
         <div className="flex items-center gap-1.5">
           <span className="text-[11px] font-medium text-muted-foreground">预设:</span>
           <div className="flex flex-wrap gap-1">
@@ -160,7 +160,7 @@ export function MatrixTransformViz() {
           <Tooltip>
             <TooltipTrigger asChild>
               <Button variant="ghost" size="sm" className="h-7 w-7 p-0" onClick={handleReset}>
-                <RotateCcw className="size-3.5" />
+                <RotateCcw className="size-3.5" strokeWidth={1.75} />
               </Button>
             </TooltipTrigger>
             <TooltipContent side="bottom">重置为单位矩阵</TooltipContent>
@@ -172,23 +172,23 @@ export function MatrixTransformViz() {
       <Tabs value={activeTab} onValueChange={setActiveTab} className="flex min-h-0 flex-1 flex-col">
         <TabsList className="self-start">
           <TabsTrigger value="2d" className="gap-1.5 text-xs">
-            <Box className="size-3.5" />
+            <Box className="size-3.5" strokeWidth={1.75} />
             2D 变换
           </TabsTrigger>
           <TabsTrigger value="3d" className="gap-1.5 text-xs">
-            <Boxes className="size-3.5" />
+            <Boxes className="size-3.5" strokeWidth={1.75} />
             3D 变换
           </TabsTrigger>
           <TabsTrigger value="eigen" className="gap-1.5 text-xs">
-            <Variable className="size-3.5" />
+            <Variable className="size-3.5" strokeWidth={1.75} />
             特征分析
           </TabsTrigger>
           <TabsTrigger value="quadratic" className="gap-1.5 text-xs">
-            <Spline className="size-3.5" />
+            <Spline className="size-3.5" strokeWidth={1.75} />
             二次型
           </TabsTrigger>
           <TabsTrigger value="affine" className="gap-1.5 text-xs">
-            <Move3d className="size-3.5" />
+            <Move3d className="size-3.5" strokeWidth={1.75} />
             平移/仿射/透视
           </TabsTrigger>
         </TabsList>
@@ -208,7 +208,7 @@ export function MatrixTransformViz() {
           <motion.div
             initial={{ opacity: 0, y: 8 }}
             animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.25 }}
+            transition={{ duration: 0.18 }}
             className="h-full"
           >
             <Transform2D matrix={matrix2D} onMatrixChange={handleMatrix2DChange} />
@@ -226,7 +226,7 @@ export function MatrixTransformViz() {
           <motion.div
             initial={{ opacity: 0, y: 8 }}
             animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.25 }}
+            transition={{ duration: 0.18 }}
             className="h-full"
           >
             <Transform3D matrix={matrix3D} onMatrixChange={handleMatrix3DChange} />
@@ -244,7 +244,7 @@ export function MatrixTransformViz() {
           <motion.div
             initial={{ opacity: 0, y: 8 }}
             animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.25 }}
+            transition={{ duration: 0.18 }}
             className="h-full"
           >
             <EigenVisualizer matrix={matrix2D} onMatrixChange={handleMatrix2DChange} dimension={2} />
@@ -262,7 +262,7 @@ export function MatrixTransformViz() {
           <motion.div
             initial={{ opacity: 0, y: 8 }}
             animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.25 }}
+            transition={{ duration: 0.18 }}
             className="h-full"
           >
             <QuadraticFormViz matrix={matrix2D} onMatrixChange={handleMatrix2DChange} />
@@ -280,7 +280,7 @@ export function MatrixTransformViz() {
           <motion.div
             initial={{ opacity: 0, y: 8 }}
             animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.25 }}
+            transition={{ duration: 0.18 }}
             className="h-full"
           >
             <AffineTransform2D />

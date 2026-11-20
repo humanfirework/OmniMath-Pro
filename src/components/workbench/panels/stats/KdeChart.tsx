@@ -42,7 +42,7 @@ export function KdeChart({ data, bandwidth, className, minHeight = 220 }: KdeCha
 
   const draw = useMemo(
     () => (ctx: CanvasRenderingContext2D, view: ResultView, size: { w: number; h: number }, pts: XYPoint[]) => {
-      renderArea(ctx, view, size, pts, '#38bdf8');
+      renderArea(ctx, view, size, pts, '#3B6FE0');
     },
     [],
   );

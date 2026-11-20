@@ -150,7 +150,7 @@ export function TitleBar() {
   const showInputViewSwitch = viewMode === 'workbench' && editorVisible;
 
   const menuTriggerClass =
-    'px-2 h-6 text-[11px] rounded text-muted-foreground hover:text-foreground hover:bg-accent/50 transition-colors';
+    'px-2 h-6 text-[11px] rounded text-muted-foreground hover:text-primary hover:bg-primary/10 transition-colors';
 
   /** 打开文件浏览器：回到工作台并展开文件侧栏。 */
   const openFileExplorer = () => {
@@ -251,7 +251,7 @@ export function TitleBar() {
           type="button"
           onDoubleClick={handleLogoDoubleClick}
           title="OmniMath Pro"
-          className="grid size-6 shrink-0 place-items-center rounded border border-border bg-transparent text-muted-foreground transition-colors hover:text-foreground"
+          className="grid size-6 shrink-0 place-items-center rounded-md border border-border bg-transparent text-muted-foreground transition-colors hover:bg-accent/60 hover:text-foreground"
         >
           <Sigma className="size-3.5" strokeWidth={1.75} />
         </button>
@@ -266,7 +266,7 @@ export function TitleBar() {
               exit={{ opacity: 0 }}
               transition={{ duration: 0.12, ease: 'easeOut' }}
               onClick={() => setEgg(null)}
-              className="absolute top-full left-0 mt-2 z-50 max-w-[260px] rounded-md border border-border bg-popover px-3 py-2 text-[11.5px] leading-relaxed text-popover-foreground shadow-lg cursor-pointer"
+              className="surface-floating absolute top-full left-0 mt-2 z-50 max-w-[260px] cursor-pointer px-3 py-2 text-[11.5px] leading-relaxed text-popover-foreground"
             >
               {egg}
             </motion.div>
@@ -293,7 +293,7 @@ export function TitleBar() {
       <nav className="hidden md:flex items-center gap-0.5 relative">
         {/* 代码 / 函数输入器切换（上移到顶栏；仅在工作台 + 编辑器可见时显示） */}
         {showInputViewSwitch && (
-          <div className="flex items-center gap-0.5 p-0.5 rounded border border-border mr-1">
+          <div className="flex items-center gap-0.5 p-0.5 rounded-md border border-border bg-muted/40 mr-1">
             <button
               type="button"
               onClick={() => setInputView('code')}
@@ -302,11 +302,11 @@ export function TitleBar() {
               className={cn(
                 'flex items-center gap-1 h-5 px-2 text-[10.5px] rounded-[3px] transition-colors',
                 inputView === 'code'
-                  ? 'bg-accent text-foreground'
+                  ? 'bg-primary/15 text-primary'
                   : 'text-muted-foreground hover:text-foreground',
               )}
             >
-              <FileCode2 className="size-3" strokeWidth={1.75} />
+              <FileCode2 className="size-3.5" strokeWidth={1.75} />
               代码
             </button>
             <button
@@ -317,11 +317,11 @@ export function TitleBar() {
               className={cn(
                 'flex items-center gap-1 h-5 px-2 text-[10.5px] rounded-[3px] transition-colors',
                 inputView === 'demos'
-                  ? 'bg-accent text-foreground'
+                  ? 'bg-primary/15 text-primary'
                   : 'text-muted-foreground hover:text-foreground',
               )}
             >
-              <SquareFunction className="size-3" strokeWidth={1.75} />
+              <SquareFunction className="size-3.5" strokeWidth={1.75} />
               函数
             </button>
           </div>
@@ -333,11 +333,11 @@ export function TitleBar() {
           </DropdownMenuTrigger>
           <DropdownMenuContent align="start" className="w-52">
             <DropdownMenuItem className="gap-2 text-[12px]" onClick={openFileExplorer}>
-              <FolderOpen className="size-3.5 text-muted-foreground" />
+              <FolderOpen className="size-3.5 text-muted-foreground" strokeWidth={1.75} />
               {t('menuOpenFiles')}
             </DropdownMenuItem>
             <DropdownMenuItem className="gap-2 text-[12px]" onClick={() => setSettingsOpen(true)}>
-              <Settings className="size-3.5 text-muted-foreground" />
+              <Settings className="size-3.5 text-muted-foreground" strokeWidth={1.75} />
               {t('settingsTitle')}
             </DropdownMenuItem>
             <DropdownMenuSeparator />
@@ -345,7 +345,7 @@ export function TitleBar() {
               className="gap-2 text-[12px]"
               onClick={() => window.open(GITHUB_URL, '_blank', 'noopener,noreferrer')}
             >
-              <Github className="size-3.5 text-muted-foreground" />
+              <Github className="size-3.5 text-muted-foreground" strokeWidth={1.75} />
               {t('menuGithub')}
             </DropdownMenuItem>
           </DropdownMenuContent>
@@ -358,7 +358,7 @@ export function TitleBar() {
           </DropdownMenuTrigger>
           <DropdownMenuContent align="start" className="w-56">
             <DropdownMenuItem className="gap-2 text-[12px]" onClick={runScript}>
-              <Play className="size-3.5 text-muted-foreground" />
+              <Play className="size-3.5 text-muted-foreground" strokeWidth={1.75} />
               {t('cpRunAll')}
               <span className="ml-auto text-[10px] text-muted-foreground/70">Ctrl+Enter</span>
             </DropdownMenuItem>
@@ -366,23 +366,23 @@ export function TitleBar() {
               className="gap-2 text-[12px]"
               onClick={() => window.dispatchEvent(new CustomEvent('omnimath:run-independent'))}
             >
-              <Maximize className="size-3.5 text-muted-foreground" />
+              <Maximize className="size-3.5 text-muted-foreground" strokeWidth={1.75} />
               {t('cpRunIndependent')}
             </DropdownMenuItem>
             <DropdownMenuItem
               className="gap-2 text-[12px]"
               onClick={() => setEditorContent('')}
             >
-              <Eraser className="size-3.5 text-muted-foreground" />
+              <Eraser className="size-3.5 text-muted-foreground" strokeWidth={1.75} />
               {t('cpClearEditor')}
             </DropdownMenuItem>
             <DropdownMenuItem
               className="gap-2 text-[12px]"
               onClick={() => setSymbolPaletteOpen(!symbolPaletteOpen)}
             >
-              <Sigma className="size-3.5 text-muted-foreground" />
+              <Sigma className="size-3.5 text-muted-foreground" strokeWidth={1.75} />
               {t('symbolPaletteToggle')}
-              {symbolPaletteOpen && <Check className="ml-auto size-3.5 text-primary" />}
+              {symbolPaletteOpen && <Check className="ml-auto size-3.5 text-primary" strokeWidth={1.75} />}
             </DropdownMenuItem>
           </DropdownMenuContent>
         </DropdownMenu>
@@ -394,10 +394,10 @@ export function TitleBar() {
           </DropdownMenuTrigger>
           <DropdownMenuContent align="start" className="w-56">
             <DropdownMenuItem className="gap-2 text-[12px]" onClick={handleToggleSidebar}>
-              <PanelLeft className="size-3.5 text-muted-foreground" />
+              <PanelLeft className="size-3.5 text-muted-foreground" strokeWidth={1.75} />
               {sidePanelCollapsed ? t('abShowSidebar') : t('abHideSidebar')}
               {!sidePanelCollapsed && viewMode !== 'home' && (
-                <Check className="ml-auto size-3.5 text-primary" />
+                <Check className="ml-auto size-3.5 text-primary" strokeWidth={1.75} />
               )}
             </DropdownMenuItem>
             <DropdownMenuItem
@@ -405,10 +405,10 @@ export function TitleBar() {
               disabled={viewMode === 'home'}
               onClick={() => setEditorVisible(!editorVisible)}
             >
-              <LayoutTemplate className="size-3.5 text-muted-foreground" />
+              <LayoutTemplate className="size-3.5 text-muted-foreground" strokeWidth={1.75} />
               {t('abToggleEditor')}
               {editorVisible && viewMode !== 'home' && (
-                <Check className="ml-auto size-3.5 text-primary" />
+                <Check className="ml-auto size-3.5 text-primary" strokeWidth={1.75} />
               )}
             </DropdownMenuItem>
             <DropdownMenuItem
@@ -416,18 +416,18 @@ export function TitleBar() {
               disabled={viewMode === 'home'}
               onClick={() => setPreviewVisible(!previewVisible)}
             >
-              <PanelRight className="size-3.5 text-muted-foreground" />
+              <PanelRight className="size-3.5 text-muted-foreground" strokeWidth={1.75} />
               {t('abTogglePreview')}
               {previewVisible && viewMode !== 'home' && (
-                <Check className="ml-auto size-3.5 text-primary" />
+                <Check className="ml-auto size-3.5 text-primary" strokeWidth={1.75} />
               )}
             </DropdownMenuItem>
             <DropdownMenuSeparator />
             <DropdownMenuItem className="gap-2 text-[12px]" onClick={toggleTheme}>
               {theme === 'dark' ? (
-                <Sun className="size-3.5 text-muted-foreground" />
+                <Sun className="size-3.5 text-muted-foreground" strokeWidth={1.75} />
               ) : (
-                <Moon className="size-3.5 text-muted-foreground" />
+                <Moon className="size-3.5 text-muted-foreground" strokeWidth={1.75} />
               )}
               {theme === 'dark' ? t('cpSwitchLight') : t('cpSwitchDark')}
             </DropdownMenuItem>
@@ -444,12 +444,12 @@ export function TitleBar() {
               className="gap-2 text-[12px]"
               onClick={() => setCommandPaletteOpen(true)}
             >
-              <CommandIcon className="size-3.5 text-muted-foreground" />
+              <CommandIcon className="size-3.5 text-muted-foreground" strokeWidth={1.75} />
               {t('menuCommandPalette')}
               <span className="ml-auto text-[10px] text-muted-foreground/70">Ctrl+K</span>
             </DropdownMenuItem>
             <DropdownMenuItem className="gap-2 text-[12px]" onClick={() => setSettingsOpen(true)}>
-              <Keyboard className="size-3.5 text-muted-foreground" />
+              <Keyboard className="size-3.5 text-muted-foreground" strokeWidth={1.75} />
               {t('menuShortcuts')}
             </DropdownMenuItem>
             <DropdownMenuSeparator />
@@ -457,7 +457,7 @@ export function TitleBar() {
               className="gap-2 text-[12px]"
               onClick={() => toast(`OmniMath Pro v${pkg.version}`)}
             >
-              <Info className="size-3.5 text-muted-foreground" />
+              <Info className="size-3.5 text-muted-foreground" strokeWidth={1.75} />
               {t('menuAbout')}
             </DropdownMenuItem>
           </DropdownMenuContent>
@@ -469,10 +469,10 @@ export function TitleBar() {
         {/* Language switcher */}
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
-            <Button variant="ghost" size="sm" className="h-6 px-2 gap-1 text-[11px] text-muted-foreground hover:text-foreground">
+            <Button variant="ghost" size="sm" className="h-6 px-2 gap-1 text-[11px] text-muted-foreground hover:text-primary">
               <Languages className="size-3.5" strokeWidth={1.75} />
               <span className="hidden sm:inline">{locale === 'zh-CN' ? '中' : 'EN'}</span>
-              <ChevronDown className="size-3 opacity-60" />
+              <ChevronDown className="size-3.5 opacity-60" strokeWidth={1.75} />
             </Button>
           </DropdownMenuTrigger>
           <DropdownMenuContent align="end" className="w-40">
@@ -490,7 +490,7 @@ export function TitleBar() {
             </DropdownMenuItem>
             <DropdownMenuSeparator />
             <DropdownMenuItem className="gap-2" onClick={() => setSettingsOpen(true)}>
-              <Settings className="size-3.5" />
+              <Settings className="size-3.5" strokeWidth={1.75} />
               {t('settingsTitle')}
             </DropdownMenuItem>
             <DropdownMenuItem onClick={() => setCommandPaletteOpen(true)}>
@@ -506,7 +506,7 @@ export function TitleBar() {
               type="button"
               onClick={toggleTheme}
               aria-label="Toggle theme"
-              className="grid place-items-center size-6 rounded border border-border text-muted-foreground hover:bg-accent hover:text-foreground transition-colors"
+              className="grid place-items-center size-6 rounded-md border border-border text-muted-foreground hover:border-primary/40 hover:bg-primary/10 hover:text-primary transition-colors"
             >
               {theme === 'dark' ? (
                 <Moon className="size-3.5" strokeWidth={1.75} />
@@ -533,7 +533,7 @@ export function TitleBar() {
               type="button"
               onClick={() => void getCurrentWindow().minimize()}
               aria-label="Minimize window"
-              className="grid place-items-center size-6 rounded text-muted-foreground hover:bg-accent hover:text-foreground transition-colors"
+              className="grid place-items-center size-6 rounded text-muted-foreground hover:bg-accent/70 hover:text-foreground transition-colors"
             >
               <Minus className="size-3.5" strokeWidth={1.75} />
             </button>
@@ -541,9 +541,9 @@ export function TitleBar() {
               type="button"
               onClick={() => void getCurrentWindow().toggleMaximize()}
               aria-label="Maximize or restore window"
-              className="grid place-items-center size-6 rounded text-muted-foreground hover:bg-accent hover:text-foreground transition-colors"
+              className="grid place-items-center size-6 rounded text-muted-foreground hover:bg-accent/70 hover:text-foreground transition-colors"
             >
-              <Square className="size-3" strokeWidth={1.75} />
+              <Square className="size-3.5" strokeWidth={1.75} />
             </button>
             <Tooltip>
               <TooltipTrigger asChild>
@@ -551,7 +551,7 @@ export function TitleBar() {
                   type="button"
                   onClick={handleToggleFullscreen}
                   aria-label={isFullscreen ? 'Exit fullscreen' : 'Enter fullscreen'}
-                  className="grid place-items-center size-6 rounded text-muted-foreground hover:bg-accent hover:text-foreground transition-colors"
+                  className="grid place-items-center size-6 rounded text-muted-foreground hover:bg-accent/70 hover:text-foreground transition-colors"
                 >
                   {isFullscreen ? (
                     <Minimize2 className="size-3.5" strokeWidth={1.75} />

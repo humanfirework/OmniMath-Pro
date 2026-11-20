@@ -30,6 +30,7 @@ import {
 } from '@/lib/store/workbench';
 import { useFileSystemStore } from '@/lib/store/fileSystemStore';
 import { useAIContextStore } from '@/lib/store/aiContextStore';
+import { getVizPalette } from '@/lib/plots/vizPalette';
 import type { AIToolDef } from './ai-client';
 
 /* ================================================================== *
@@ -475,8 +476,8 @@ export interface WorkbenchToolDeps {
   ) => { ok: boolean; message: string };
 }
 
-/** 2D 曲线配色（与 EditorPanel / SolverWorkbench 的调色板一致）。 */
-const PLOT_COLORS = ['#2dd4bf', '#fbbf24', '#fb7185', '#34d399', '#a78bfa', '#fb923c'];
+/** 2D 曲线配色兜底（与 vizPalette 的浅色序列一致）。 */
+const PLOT_COLORS_FALLBACK = ['#3B6FE0', '#22A7C4', '#7C5CE0', '#4CC3D9', '#8B7CF6', '#2E8BFF'];
 
 /**
  * 工具分发器：解析参数 JSON → 调用对应依赖 → 把结果编码为文本。
@@ -548,11 +549,13 @@ export async function dispatchTool(
       const expr = typeof args.expr === 'string' ? args.expr.trim() : '';
       if (!expr) return { ok: false, content: '缺少必需参数 expr（关于 x 的表达式）' };
       try {
+        const palette = getVizPalette();
+        const plotColors = palette.length > 0 ? palette : PLOT_COLORS_FALLBACK;
         deps.addPlot({
           expression: expr,
           xRange: [...DEFAULT_CARTESIAN_RANGE] as [number, number],
           yRange: [-50, 50],
-          color: PLOT_COLORS[deps.getPlotCount() % PLOT_COLORS.length],
+          color: plotColors[deps.getPlotCount() % plotColors.length],
           plotType: 'cartesian',
           visible: true,
         });

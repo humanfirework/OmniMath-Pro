@@ -35,6 +35,7 @@ import {
 } from 'react';
 import {
   Play,
+  Check,
   Eraser,
   Trash2,
   FileCode2,
@@ -76,6 +77,7 @@ import type { CalculationResult } from '@/lib/store/workbench';
 import { useRunResultsStore } from '@/lib/store/runResultsStore';
 import type { Plot2DType } from '@/lib/plots/plot2d';
 import { buildPlotConfig } from '@/lib/plots/fromResult';
+import { getVizPalette } from '@/lib/plots/vizPalette';
 import { CodeEditor, type InlineResult } from '@/components/workbench/layout/CodeEditor';
 import { registerShortcutHandler } from '@/lib/hooks/useGlobalShortcuts';
 import { SymbolPalette } from '@/components/workbench/SymbolPalette';
@@ -88,11 +90,19 @@ const FunctionInputPanel = lazy(() =>
   })),
 );
 
-/** 延迟加载函数输入器时的占位。 */
+/** 延迟加载函数输入器时的占位：轻骨架，避免居中转圈。 */
 function FunctionInputLoading() {
   return (
-    <div className="h-full w-full grid place-items-center">
-      <div className="size-3.5 animate-spin rounded-full border-[1.5px] border-border border-t-muted-foreground" />
+    <div className="h-full w-full p-3" aria-busy="true">
+      <div className="mb-3 h-3 w-24 rounded-full bg-muted-foreground/15 animate-pulse" />
+      <div className="space-y-2">
+        {[0, 1, 2, 3].map((i) => (
+          <div
+            key={i}
+            className="h-9 rounded-md border border-border/60 bg-card/60 animate-pulse"
+          />
+        ))}
+      </div>
     </div>
   );
 }
@@ -142,6 +152,8 @@ export function EditorPanel() {
   const variables = useWorkbenchStore((s) => s.variables);
 
   const [isRunning, setIsRunning] = useState(false);
+  // 运行完成后短暂显示对勾（约 900ms），让「运行」有明确的完成反馈。
+  const [justRan, setJustRan] = useState(false);
   const [previewLine, setPreviewLine] = useState(1);
   // 运行后行尾的结果胶囊（MATLAB live editor 风格）：任何编辑都会清空，
   // 避免结果与代码行错位。
@@ -149,6 +161,7 @@ export function EditorPanel() {
   // 输入界面：'code'（代码编辑器） | 'demos'（Desmos 式直接输入）。
   // 状态已提升到 workbench store，供顶栏 TitleBar 与 EditorPanel 共享。
   const previewTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const runSuccessTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const editorContainerRef = useRef<HTMLDivElement | null>(null);
 
   /* ─── Editor font size from settings store ───────────────────── */
@@ -324,6 +337,13 @@ export function EditorPanel() {
     setInlineResults([]);
   }, [editorContent]);
 
+  // 编辑器被清空时让状态栏回到「就绪」；有内容则保留上一次运行状态。
+  useEffect(() => {
+    if (editorContent.trim() === '') {
+      window.dispatchEvent(new CustomEvent('omnimath:run-state', { detail: { state: 'idle' } }));
+    }
+  }, [editorContent]);
+
   /* ─── Run script ───────────────────────────────────────────────── */
   const runScriptTimerRef = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
   // P2-1: target='independent' 时，把绘图结果额外送入「独立运行结果面板」
@@ -331,6 +351,10 @@ export function EditorPanel() {
   const runScript = useCallback((target: 'preview' | 'independent' = 'preview', source?: string, sourceStartLine = 1) => {
     if (isRunning) return;
     setIsRunning(true);
+    setJustRan(false);
+    // 状态栏同步：运行时立即广播，结果/错误在下方广播，不新增持久化字段。
+    window.dispatchEvent(new CustomEvent('omnimath:run-state', { detail: { state: 'running' } }));
+    if (runSuccessTimerRef.current) clearTimeout(runSuccessTimerRef.current);
     // Defer to allow UI to show running state.
     clearTimeout(runScriptTimerRef.current);
     runScriptTimerRef.current = setTimeout(async () => {
@@ -347,7 +371,7 @@ export function EditorPanel() {
         const runPlots: Array<{ expression: string; xRange: [number, number]; plotType: Plot2DType; color: string }> = [];
         // 行尾结果胶囊：行号 = 源起始行 + 循环下标（选区运行也能对回原文件）。
         const nextInline: InlineResult[] = [];
-        const PLOT_COLORS = ['#2dd4bf', '#fbbf24', '#fb7185', '#34d399', '#a78bfa', '#fb923c'];
+        const PLOT_COLORS = getVizPalette();
         let plotColorIdx = 0;
 
         for (let i = 0; i < lines.length; i++) {
@@ -476,12 +500,25 @@ export function EditorPanel() {
         }
 
         toast.success(`运行完成 · ${resultCount} 个结果`, { duration: 1200 });
+        window.dispatchEvent(
+          new CustomEvent('omnimath:run-state', {
+            detail: { state: 'success', count: resultCount },
+          }),
+        );
+        // 运行按钮短暂切换为对勾，给「运行完成」一个不打扰的确认。
+        setJustRan(true);
+        if (runSuccessTimerRef.current) clearTimeout(runSuccessTimerRef.current);
+        runSuccessTimerRef.current = setTimeout(() => setJustRan(false), 900);
         // 手机端：运行选中后切到预览，结果 / 曲线才看得见。
         if (source) {
           window.dispatchEvent(new CustomEvent('omnimath:mobile-tab', { detail: 'preview' }));
         }
       } catch (err) {
-        toast.error('运行出错', { description: (err as Error).message });
+        const message = (err as Error).message;
+        window.dispatchEvent(
+          new CustomEvent('omnimath:run-state', { detail: { state: 'error', message } }),
+        );
+        toast.error('运行出错', { description: message });
       } finally {
         setIsRunning(false);
       }
@@ -503,6 +540,7 @@ export function EditorPanel() {
     return () => {
       if (previewTimerRef.current) clearTimeout(previewTimerRef.current);
       if (runScriptTimerRef.current) clearTimeout(runScriptTimerRef.current);
+      if (runSuccessTimerRef.current) clearTimeout(runSuccessTimerRef.current);
     };
   }, []);
 
@@ -583,7 +621,7 @@ export function EditorPanel() {
               窄容器用下拉框替代三段按钮，避免挤压。 */}
           {inputView === 'code' && (
             <>
-              <div className="hidden @[430px]:flex items-center gap-0.5 p-0.5 rounded border border-border">
+              <div className="hidden @[430px]:flex items-center gap-0.5 p-0.5 rounded-md border border-border bg-muted/30">
                 {MODES.map((m) => (
                   <Tooltip key={m.id}>
                     <TooltipTrigger asChild>
@@ -593,7 +631,7 @@ export function EditorPanel() {
                         className={cn(
                           'h-5 px-2 text-[10.5px] rounded-[3px] transition-colors font-medium',
                           inputMode === m.id
-                            ? 'bg-accent text-foreground'
+                            ? 'bg-primary/15 text-primary'
                             : 'text-muted-foreground hover:text-foreground',
                         )}
                       >
@@ -692,7 +730,7 @@ export function EditorPanel() {
                 onClick={() => runScript()}
                 disabled={isRunning}
                 className={cn(
-                  'relative flex items-center gap-1.5 h-6 px-2.5 ml-1 rounded text-[11px] font-medium',
+                  'relative flex items-center gap-1.5 h-[26px] px-2.5 ml-1 rounded-md text-[11px] font-medium motion-press',
                   'bg-primary text-primary-foreground transition-colors hover:bg-primary/90',
                   'disabled:opacity-70 disabled:pointer-events-none',
                 )}
@@ -700,6 +738,8 @@ export function EditorPanel() {
               >
                 {isRunning ? (
                   <Loader2 className="size-3.5 animate-spin" strokeWidth={1.75} />
+                ) : justRan ? (
+                  <Check className="size-3.5" strokeWidth={1.75} />
                 ) : (
                   <Play className="size-3" fill="currentColor" strokeWidth={1.75} />
                 )}
@@ -793,10 +833,10 @@ export function EditorPanel() {
         {inputMode === 'simple' && previewLatex && (
           <div
             aria-hidden
-            className="pointer-events-none absolute bottom-2 right-3 z-10 max-w-[62%] overflow-hidden rounded border border-border bg-card px-2.5 py-1"
+            className="surface-floating motion-panel-in pointer-events-none absolute bottom-2 right-3 z-10 max-w-[62%] overflow-hidden px-2.5 py-1.5"
           >
             <div className="flex items-center gap-2">
-              <span className="shrink-0 text-[10px] font-medium uppercase tracking-wide text-muted-foreground/70">
+              <span className="shrink-0 text-[10px] font-medium uppercase tracking-wide text-primary">
                 {t('editorLivePreview')}
               </span>
               <FormulaRenderer

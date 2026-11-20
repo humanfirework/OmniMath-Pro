@@ -354,8 +354,8 @@ export function ParameterSliders({
     const hasVisiblePlot = plots.some((p) => p.visible && p.plotType !== 'surface3d');
     if (!hasVisiblePlot) return null;
     return (
-      <div className="flex h-6 items-center gap-1.5 border-t border-border/60 bg-background/40 px-3 text-[10.5px] text-muted-foreground">
-        <SlidersHorizontal className="size-3" />
+      <div className="flex h-6 items-center gap-1.5 border-t border-border bg-card px-3 text-[10.5px] text-muted-foreground">
+        <SlidersHorizontal className="size-3" strokeWidth={1.75} />
         <span>参数滑块</span>
         <span className="text-border">·</span>
         <span className="truncate">表达式里加 a、b 等字母即可实时调节</span>
@@ -364,19 +364,19 @@ export function ParameterSliders({
   }
 
   return (
-    <Collapsible open={!slidersCollapsed} onOpenChange={(o) => setSlidersCollapsed(!o)} className={`border-t border-border/60 bg-background/40 ${className ?? ''}`}>
+    <Collapsible open={!slidersCollapsed} onOpenChange={(o) => setSlidersCollapsed(!o)} className={`border-t border-border bg-card ${className ?? ''}`}>
       {/* Task 9.C: 头部一行 — 左侧折叠触发器，右侧「重置全部」按钮 */}
       <div className="flex items-center justify-between px-1">
         <CollapsibleTrigger asChild>
           <button
             type="button"
-            className="flex h-7 flex-1 items-center gap-1.5 px-1.5 text-[11px] font-medium text-muted-foreground hover:bg-accent/40 hover:text-foreground transition-colors rounded"
+            className="flex h-7 flex-1 items-center gap-1.5 rounded-[4px] px-1.5 text-[10.5px] font-medium text-muted-foreground transition-colors hover:bg-accent/50 hover:text-foreground"
             aria-label={slidersCollapsed ? '展开参数滑块' : '折叠参数滑块'}
           >
-            {!slidersCollapsed ? <ChevronDown className="size-3" /> : <ChevronRight className="size-3" />}
-            <SlidersHorizontal className="size-3" />
+            {!slidersCollapsed ? <ChevronDown className="size-3" strokeWidth={1.75} /> : <ChevronRight className="size-3" strokeWidth={1.75} />}
+            <SlidersHorizontal className="size-3 text-primary" strokeWidth={1.75} />
             <span>参数滑块</span>
-            <span className="rounded-full bg-muted px-1.5 py-0.5 text-[9px]">
+            <span className="rounded-[4px] border border-border bg-muted/60 px-1.5 py-0.5 font-mono text-[9px] tabular-nums">
               {params.length}
             </span>
           </button>
@@ -385,7 +385,7 @@ export function ParameterSliders({
           size="sm"
           variant="ghost"
           onClick={handleResetAll}
-          className="h-7 px-2 text-[11px]"
+          className="motion-press h-7 px-2 text-[10.5px]"
         >
           ↺ 重置全部
         </Button>
@@ -439,7 +439,7 @@ function ParamRow({
       title={isPlaying ? '动画播放中，点击 ⏸ 暂停' : undefined}
     >
       {/* 参数名：等宽斜体，对齐数学排版习惯 */}
-      <code className="w-7 shrink-0 truncate font-mono text-[12px] italic font-semibold text-primary">
+      <code className="w-7 shrink-0 truncate font-mono text-[10.5px] italic font-semibold text-primary">
         {name}
       </code>
       {/* 播放/暂停：点击在 [min, max] 间按正弦波动画参数值 */}
@@ -447,15 +447,15 @@ function ParamRow({
         type="button"
         onClick={onTogglePlay}
         className={
-          'grid size-6 shrink-0 place-items-center rounded transition-colors ' +
+          'motion-press grid size-6 shrink-0 place-items-center rounded-[4px] transition-colors ' +
           (isPlaying
             ? 'bg-primary/15 text-primary'
-            : 'text-muted-foreground hover:bg-accent hover:text-primary')
+            : 'text-primary hover:bg-primary/10')
         }
         aria-label={isPlaying ? `暂停参数 ${name} 动画` : `播放参数 ${name} 动画`}
         title={isPlaying ? '暂停动画' : '播放动画'}
       >
-        {isPlaying ? <Pause className="size-3.5" /> : <Play className="size-3.5" />}
+        {isPlaying ? <Pause className="size-3.5" strokeWidth={1.75} /> : <Play className="size-3.5" strokeWidth={1.75} />}
       </button>
       <DesmosSlider
         value={value}
@@ -466,16 +466,16 @@ function ParamRow({
         onChange={onValueChange}
         ariaLabel={`参数 ${name}`}
       />
-      {/* Task 9.D: 播放时在数值输入框左侧显示绿色播放徽标 */}
+      {/* Task 9.D: 播放时在数值输入框左侧显示蓝色播放徽标 */}
       {isPlaying && (
-        <Play className="h-3 w-3 shrink-0 text-green-400 inline-block mr-1" />
+        <Play className="h-3 w-3 shrink-0 text-primary inline-block mr-1" strokeWidth={1.75} />
       )}
       <NumberField
         value={value}
         onCommit={onValueChange}
         className={
-          'h-6 w-16 shrink-0 rounded border border-border/60 bg-muted/40 px-1.5 text-right font-mono text-[12px] tabular-nums focus:border-primary/60 focus:outline-none ' +
-          (isPlaying ? 'text-green-400' : 'text-foreground')
+          'h-6 w-16 shrink-0 rounded-[4px] border border-border bg-muted/40 px-1.5 text-right font-mono text-[10.5px] tabular-nums transition-shadow focus:border-primary/60 focus:outline-none focus:ring-2 focus:ring-primary/15 ' +
+          (isPlaying ? 'text-primary' : 'text-foreground')
         }
         ariaLabel={`参数 ${name} 的值`}
       />
@@ -483,10 +483,10 @@ function ParamRow({
         <PopoverTrigger asChild>
           <button
             type="button"
-            className="grid size-5 shrink-0 place-items-center rounded text-muted-foreground hover:bg-accent hover:text-foreground transition-colors"
+            className="grid size-5 shrink-0 place-items-center rounded-[4px] text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
             aria-label={`参数 ${name} 的范围与步长设置`}
           >
-            <Settings2 className="size-3" />
+            <Settings2 className="size-3" strokeWidth={1.75} />
           </button>
         </PopoverTrigger>
         <PopoverContent align="end" className="w-64 p-2.5">
@@ -529,10 +529,10 @@ function ParamRow({
                     type="button"
                     onClick={() => onConfigChange({ playMode: m })}
                     className={
-                      'h-6 rounded border px-1.5 text-[10px] font-medium transition-colors ' +
+                      'h-6 rounded-[4px] border px-1.5 text-[10px] font-medium transition-colors ' +
                       (playMode === m
                         ? 'border-primary/50 bg-primary/15 text-primary'
-                        : 'border-border/60 text-muted-foreground hover:bg-accent hover:text-foreground')
+                        : 'border-border text-muted-foreground hover:bg-accent hover:text-foreground')
                     }
                   >
                     {PLAY_MODE_LABELS[m]}
@@ -547,7 +547,7 @@ function ParamRow({
                   <button
                     type="button"
                     onClick={() => onConfigChange({ speed: Math.max(0.1, Math.round((speed / 2) * 10) / 10) })}
-                    className="grid size-5 place-items-center rounded border border-border/60 text-[11px] text-muted-foreground hover:bg-accent"
+                    className="grid size-5 place-items-center rounded-[4px] border border-border text-[11px] text-muted-foreground hover:bg-accent"
                     aria-label="放慢速度"
                   >
                     −
@@ -565,7 +565,7 @@ function ParamRow({
                   <button
                     type="button"
                     onClick={() => onConfigChange({ speed: Math.min(5, Math.round(speed * 2 * 10) / 10) })}
-                    className="grid size-5 place-items-center rounded border border-border/60 text-[11px] text-muted-foreground hover:bg-accent"
+                    className="grid size-5 place-items-center rounded-[4px] border border-border text-[11px] text-muted-foreground hover:bg-accent"
                     aria-label="加快速度"
                   >
                     +
@@ -627,10 +627,10 @@ function DesmosSlider({
       className="desmos-range h-2 min-w-0 flex-1"
       style={{
         background:
-          `linear-gradient(to right, var(--primary, #2dd4bf) 0%, ` +
-          `var(--primary, #2dd4bf) ${safePct}%, ` +
-          `var(--muted, #3a3a3a) ${safePct}%, ` +
-          `var(--muted, #3a3a3a) 100%)`,
+          `linear-gradient(to right, var(--primary, #3B6FE0) 0%, ` +
+          `var(--primary, #3B6FE0) ${safePct}%, ` +
+          `var(--muted, #E7ECF6) ${safePct}%, ` +
+          `var(--muted, #E7ECF6) 100%)`,
       }}
       aria-label={ariaLabel}
     />
@@ -705,7 +705,7 @@ function RangeField({
       <NumberField
         value={value}
         onCommit={onCommit}
-        className="h-6 w-full rounded border border-border/60 bg-muted/40 px-1.5 font-mono text-[11px] tabular-nums focus:border-primary/60 focus:outline-none"
+        className="h-6 w-full rounded-[4px] border border-border bg-muted/40 px-1.5 font-mono text-[10.5px] tabular-nums focus:border-primary/60 focus:outline-none focus:ring-2 focus:ring-primary/15"
         ariaLabel={label}
       />
     </div>

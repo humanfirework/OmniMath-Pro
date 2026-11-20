@@ -669,7 +669,7 @@ function HistogramChart({ data, zoomed = false, binRule = 'sturges', density = f
                 y={y}
                 width={Math.max(1, barW - 2)}
                 height={Math.max(0, h)}
-                fill="#2dd4bf"
+                fill="var(--viz-1)"
                 fillOpacity={hover === i ? 0.95 : 0.65}
                 rx={1}
               />
@@ -707,7 +707,7 @@ function HistogramChart({ data, zoomed = false, binRule = 'sturges', density = f
           <polyline
             points={normCurve.map((p) => `${p.x.toFixed(1)},${p.y.toFixed(1)}`).join(' ')}
             fill="none"
-            stroke="#f59e0b"
+            stroke="var(--viz-3)"
             strokeWidth={1.8}
             strokeDasharray="5 3"
           />
@@ -724,8 +724,8 @@ function HistogramChart({ data, zoomed = false, binRule = 'sturges', density = f
         )}
         {/* 均值 / 中位数标记线：两标签 x 距离过近时把中位下移到第二行错开，避免文字重叠。
             两行都位于顶部专用条带（0..topBand）内，柱体从 CHART_PAD.t 起，永不相交。 */}
-        {marker(mean, `均值 ${fmt(mean, 3)}`, '#f59e0b', row1Y)}
-        {marker(median, `中位 ${fmt(median, 3)}`, '#0ea5e9', Math.abs(sx(mean) - sx(median)) < 72 ? row2Y : row1Y)}
+        {marker(mean, `均值 ${fmt(mean, 3)}`, 'var(--viz-5)', row1Y)}
+        {marker(median, `中位 ${fmt(median, 3)}`, 'var(--viz-2)', Math.abs(sx(mean) - sx(median)) < 72 ? row2Y : row1Y)}
         {/* 数据点 rug 条带：在底部绘制每个观测值，便于观察个体分布与稀疏区 */}
         {showPoints && (
           <g>
@@ -733,7 +733,7 @@ function HistogramChart({ data, zoomed = false, binRule = 'sturges', density = f
               const x = sx(v);
               const y = CHART_PAD.t + plotH - 4 - ((i * 7919) % 11) * 1.5;
               return (
-                <circle key={i} cx={x} cy={y} r={1.4} fill="#34d399" fillOpacity={0.75}>
+                <circle key={i} cx={x} cy={y} r={1.4} fill="var(--viz-2)" fillOpacity={0.75}>
                   <title>{`第 ${i + 1} 个观测: ${fmt(v, 4)}`}</title>
                 </circle>
               );
@@ -874,52 +874,52 @@ function BoxPlotChart({ data, vertical = false, showPoints = false, minHeight = 
         {vertical ? (
           <>
             {/* whiskers */}
-            {vLine(whiskerLo, cMid, cMid - boxH / 2, '#2dd4bf')}
-            {vLine(whiskerHi, cMid, cMid + boxH / 2, '#2dd4bf')}
-            {vLine(whiskerLo, CHART_PAD.l + plotW / 2 - 4, CHART_PAD.l + plotW / 2 + 4, '#2dd4bf')}
-            {vLine(whiskerHi, CHART_PAD.l + plotW / 2 - 4, CHART_PAD.l + plotW / 2 + 4, '#2dd4bf')}
+            {vLine(whiskerLo, cMid, cMid - boxH / 2, 'var(--viz-1)')}
+            {vLine(whiskerHi, cMid, cMid + boxH / 2, 'var(--viz-1)')}
+            {vLine(whiskerLo, CHART_PAD.l + plotW / 2 - 4, CHART_PAD.l + plotW / 2 + 4, 'var(--viz-1)')}
+            {vLine(whiskerHi, CHART_PAD.l + plotW / 2 - 4, CHART_PAD.l + plotW / 2 + 4, 'var(--viz-1)')}
             {/* box */}
-            <rect x={cMid - boxH / 2} y={sy(q3)} width={boxH} height={Math.max(1, sy(q1) - sy(q3))} fill="#2dd4bf" fillOpacity={0.25} stroke="#2dd4bf" strokeWidth={1.5} rx={2} />
+            <rect x={cMid - boxH / 2} y={sy(q3)} width={boxH} height={Math.max(1, sy(q1) - sy(q3))} fill="var(--viz-1)" fillOpacity={0.25} stroke="var(--viz-1)" strokeWidth={1.5} rx={2} />
             {/* median */}
-            <line x1={cMid - boxH / 2} y1={sy(median)} x2={cMid + boxH / 2} y2={sy(median)} stroke="#0f766e" strokeWidth={2} />
+            <line x1={cMid - boxH / 2} y1={sy(median)} x2={cMid + boxH / 2} y2={sy(median)} stroke="var(--viz-3)" strokeWidth={2} />
             {/* outliers */}
             {outliers.map((o, i) => (
               <circle key={i} cx={cMid} cy={sy(o)} r={2.5} fill="none" stroke="#f43f5e" strokeWidth={1.2} />
             ))}
             {/* mean diamond */}
-            <rect x={cMid - 3.5} y={sy(mean) - 3.5} width={7} height={7} transform={`rotate(45 ${cMid} ${sy(mean)})`} fill="#f59e0b" stroke="#fff" strokeWidth={0.8} />
+            <rect x={cMid - 3.5} y={sy(mean) - 3.5} width={7} height={7} transform={`rotate(45 ${cMid} ${sy(mean)})`} fill="var(--viz-5)" stroke="#fff" strokeWidth={0.8} />
             {/* 数值标注 */}
-            {valLabel(whiskerLo, '下须', '#2dd4bf')}
+            {valLabel(whiskerLo, '下须', 'var(--viz-1)')}
             {valLabel(q1, 'Q1', '#94a3b8')}
             {valLabel(median, '中位', '#94a3b8')}
             {valLabel(q3, 'Q3', '#94a3b8')}
-            {valLabel(whiskerHi, '上须', '#2dd4bf')}
-            {valLabel(mean, '均值', '#f59e0b')}
+            {valLabel(whiskerHi, '上须', 'var(--viz-1)')}
+            {valLabel(mean, '均值', 'var(--viz-5)')}
           </>
         ) : (
           <>
             {/* whiskers */}
-            {hLine(whiskerLo, cMid, cMid - boxH / 2, '#2dd4bf')}
-            {hLine(whiskerHi, cMid, cMid + boxH / 2, '#2dd4bf')}
-            {hLine(whiskerLo, cMid - boxH / 3, cMid + boxH / 3, '#2dd4bf')}
-            {hLine(whiskerHi, cMid - boxH / 3, cMid + boxH / 3, '#2dd4bf')}
+            {hLine(whiskerLo, cMid, cMid - boxH / 2, 'var(--viz-1)')}
+            {hLine(whiskerHi, cMid, cMid + boxH / 2, 'var(--viz-1)')}
+            {hLine(whiskerLo, cMid - boxH / 3, cMid + boxH / 3, 'var(--viz-1)')}
+            {hLine(whiskerHi, cMid - boxH / 3, cMid + boxH / 3, 'var(--viz-1)')}
             {/* box */}
-            <rect x={sx(q1)} y={cMid - boxH / 2} width={Math.max(1, sx(q3) - sx(q1))} height={boxH} fill="#2dd4bf" fillOpacity={0.25} stroke="#2dd4bf" strokeWidth={1.5} rx={2} />
+            <rect x={sx(q1)} y={cMid - boxH / 2} width={Math.max(1, sx(q3) - sx(q1))} height={boxH} fill="var(--viz-1)" fillOpacity={0.25} stroke="var(--viz-1)" strokeWidth={1.5} rx={2} />
             {/* median */}
-            <line x1={sx(median)} y1={cMid - boxH / 2} x2={sx(median)} y2={cMid + boxH / 2} stroke="#0f766e" strokeWidth={2} />
+            <line x1={sx(median)} y1={cMid - boxH / 2} x2={sx(median)} y2={cMid + boxH / 2} stroke="var(--viz-3)" strokeWidth={2} />
             {/* outliers */}
             {outliers.map((o, i) => (
               <circle key={i} cx={sx(o)} cy={cMid} r={2.5} fill="none" stroke="#f43f5e" strokeWidth={1.2} />
             ))}
             {/* mean diamond */}
-            <rect x={sx(mean) - 3.5} y={cMid - 3.5} width={7} height={7} transform={`rotate(45 ${sx(mean)} ${cMid})`} fill="#f59e0b" stroke="#fff" strokeWidth={0.8} />
+            <rect x={sx(mean) - 3.5} y={cMid - 3.5} width={7} height={7} transform={`rotate(45 ${sx(mean)} ${cMid})`} fill="var(--viz-5)" stroke="#fff" strokeWidth={0.8} />
             {/* 数值标注 */}
-            {valLabel(whiskerLo, '下须', '#2dd4bf')}
+            {valLabel(whiskerLo, '下须', 'var(--viz-1)')}
             {valLabel(q1, 'Q1', '#94a3b8')}
             {valLabel(median, '中位', '#94a3b8')}
             {valLabel(q3, 'Q3', '#94a3b8')}
-            {valLabel(whiskerHi, '上须', '#2dd4bf')}
-            {valLabel(mean, '均值', '#f59e0b')}
+            {valLabel(whiskerHi, '上须', 'var(--viz-1)')}
+            {valLabel(mean, '均值', 'var(--viz-5)')}
           </>
         )}
         {/* 抖动数据点：叠加在箱体上，展示每个观测的实际位置 */}
@@ -930,11 +930,11 @@ function BoxPlotChart({ data, vertical = false, showPoints = false, minHeight = 
               const jx = jitter * boxH * 0.9;
               const jy = jitter * boxH * 0.9;
               return vertical ? (
-                <circle key={i} cx={cMid + jx} cy={sy(v)} r={1.6} fill="#34d399" fillOpacity={0.7}>
+                <circle key={i} cx={cMid + jx} cy={sy(v)} r={1.6} fill="var(--viz-2)" fillOpacity={0.7}>
                   <title>{`第 ${i + 1} 个观测: ${fmt(v, 4)}`}</title>
                 </circle>
               ) : (
-                <circle key={i} cx={sx(v)} cy={cMid + jy} r={1.6} fill="#34d399" fillOpacity={0.7}>
+                <circle key={i} cx={sx(v)} cy={cMid + jy} r={1.6} fill="var(--viz-2)" fillOpacity={0.7}>
                   <title>{`第 ${i + 1} 个观测: ${fmt(v, 4)}`}</title>
                 </circle>
               );
@@ -1074,7 +1074,7 @@ function ScatterChart({ points, regressionLine, residuals = false, band = false,
             y1={sy(regressionLine.slope * loX + regressionLine.intercept)}
             x2={sx(hiX)}
             y2={sy(regressionLine.slope * hiX + regressionLine.intercept)}
-            stroke="#f59e0b"
+            stroke="var(--viz-3)"
             strokeWidth={1.8}
           />
         )}
@@ -1086,7 +1086,7 @@ function ScatterChart({ points, regressionLine, residuals = false, band = false,
                 ...bandLower.map((p) => `${sx(p.x).toFixed(1)},${sy(p.y).toFixed(1)}`),
                 ...[...bandUpper].reverse().map((p) => `${sx(p.x).toFixed(1)},${sy(p.y).toFixed(1)}`),
               ].join(' ')}
-              fill="#f59e0b"
+              fill="var(--viz-3)"
               fillOpacity={0.12}
               stroke="none"
             />
@@ -1118,9 +1118,9 @@ function ScatterChart({ points, regressionLine, residuals = false, band = false,
               cx={sx(p.x)}
               cy={sy(p.y)}
               r={hover === i ? 4 : 2.6}
-              fill="#2dd4bf"
+              fill="var(--viz-1)"
               fillOpacity={hover === i ? 1 : 0.8}
-              stroke="#0f766e"
+              stroke="var(--viz-3)"
               strokeWidth={0.6}
             />
           </g>
@@ -1251,13 +1251,13 @@ function QQPlotChart({ data }: { data: number[] }) {
         <line
           x1={sx(loQ)} y1={sy(slope * loQ + intercept)}
           x2={sx(hiQ)} y2={sy(slope * hiQ + intercept)}
-          stroke="#f59e0b" strokeWidth={1.6} strokeDasharray="5 3"
+          stroke="var(--viz-3)" strokeWidth={1.6} strokeDasharray="5 3"
         />
         {/* 数据点 */}
         {pts.map((p, i) => (
           <g key={i} onMouseEnter={() => setHover(i)} onMouseLeave={() => setHover(null)}>
             <title>{`第 ${i + 1} 个: 值=${fmt(p.v, 4)}, 理论分位 z=${fmt(p.q, 3)}`}</title>
-            <circle cx={sx(p.q)} cy={sy(p.v)} r={hover === i ? 4 : 2.6} fill="#2dd4bf" fillOpacity={hover === i ? 1 : 0.8} stroke="#0f766e" strokeWidth={0.6} />
+            <circle cx={sx(p.q)} cy={sy(p.v)} r={hover === i ? 4 : 2.6} fill="var(--viz-1)" fillOpacity={hover === i ? 1 : 0.8} stroke="var(--viz-3)" strokeWidth={0.6} />
           </g>
         ))}
         <line x1={CHART_PAD.l} y1={CHART_PAD.t} x2={CHART_PAD.l} y2={CHART_PAD.t + plotH} stroke="currentColor" strokeOpacity={0.3} />
@@ -2287,7 +2287,7 @@ export function DescriptiveStatsTab({ fullscreen = false }: { fullscreen?: boole
             initial={{ opacity: 0, y: 4 }}
             animate={{ opacity: 1, y: 0 }}
             exit={{ opacity: 0 }}
-            className="rounded-md border border-primary/30 bg-primary/5 p-2.5 glow-card-teal"
+            className="surface-card rounded-md p-2.5"
           >
             <div className="text-[11px] text-muted-foreground mb-2 flex items-center gap-1.5">
               <Calculator className="size-3" />
@@ -2959,7 +2959,7 @@ export function DistributionTab({ fullscreen = false }: { fullscreen?: boolean }
       expression: expr,
       xRange: [xMin, xMax],
       yRange: [0, 1],
-      color: '#2dd4bf',
+      color: '#3B6FE0',
       plotType: 'cartesian',
       visible: true,
       width: 2,
@@ -3049,7 +3049,7 @@ export function DistributionTab({ fullscreen = false }: { fullscreen?: boolean }
             exit={{ opacity: 0 }}
             className="space-y-2"
           >
-            <div className="rounded-md border border-primary/30 bg-primary/5 p-2.5 glow-card-teal">
+            <div className="surface-card rounded-md p-2.5">
               <div className="flex items-center justify-between">
                 <span className="text-[10.5px] text-muted-foreground">{pdfLabel}</span>
                 <span className="text-[12px] font-mono font-semibold text-primary tabular-nums">
@@ -3359,7 +3359,7 @@ function TTestForm() {
               </div>
             </div>
 
-            <div className="rounded-md border border-primary/30 bg-primary/5 p-2.5 formula-card-glow min-w-[260px]">
+            <div className="surface-card rounded-md p-2.5 min-w-[260px]">
               <div className="text-[10.5px] text-muted-foreground mb-1.5">检验统计量</div>
               <div className="overflow-x-auto">
                 <FormulaRenderer
@@ -3535,7 +3535,7 @@ function ChiSquareForm() {
               </div>
             </div>
 
-            <div className="rounded-md border border-primary/30 bg-primary/5 p-2.5 formula-card-glow min-w-[260px]">
+            <div className="surface-card rounded-md p-2.5 min-w-[260px]">
               <div className="overflow-x-auto mb-2">
                 <FormulaRenderer
                   latex={`\\chi^2 = \\sum \\frac{(O - E)^2}{E} = ${fmt(result.chi2)}`}
@@ -3692,7 +3692,7 @@ function ShapiroWilkForm() {
         )}
         {result && !error && (
           <motion.div key="res" initial={{ opacity: 0, y: 4 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0 }} className="space-y-2">
-            <div className="rounded-md border border-primary/30 bg-primary/5 p-2.5 formula-card-glow min-w-[260px]">
+            <div className="surface-card rounded-md p-2.5 min-w-[260px]">
               <div className="text-[10.5px] text-muted-foreground mb-1.5">检验统计量 W</div>
               <div className="flex justify-between text-[11px]">
                 <span className="text-muted-foreground">W</span>
@@ -3748,7 +3748,7 @@ function ADForm() {
         )}
         {result && !error && (
           <motion.div key="res" initial={{ opacity: 0, y: 4 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0 }} className="space-y-2">
-            <div className="rounded-md border border-primary/30 bg-primary/5 p-2.5 formula-card-glow min-w-[260px]">
+            <div className="surface-card rounded-md p-2.5 min-w-[260px]">
               <div className="text-[10.5px] text-muted-foreground mb-1.5">检验统计量 A²</div>
               <div className="flex justify-between text-[11px]">
                 <span className="text-muted-foreground">A²</span>
@@ -3804,7 +3804,7 @@ function LillieforsForm() {
         )}
         {result && !error && (
           <motion.div key="res" initial={{ opacity: 0, y: 4 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0 }} className="space-y-2">
-            <div className="rounded-md border border-primary/30 bg-primary/5 p-2.5 formula-card-glow min-w-[260px]">
+            <div className="surface-card rounded-md p-2.5 min-w-[260px]">
               <div className="text-[10.5px] text-muted-foreground mb-1.5">检验统计量 D</div>
               <div className="flex justify-between text-[11px]">
                 <span className="text-muted-foreground">D</span>
@@ -3875,7 +3875,7 @@ function KSForm() {
         )}
         {result && !error && (
           <motion.div key="res" initial={{ opacity: 0, y: 4 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0 }} className="space-y-2">
-            <div className="rounded-md border border-primary/30 bg-primary/5 p-2.5 formula-card-glow min-w-[260px]">
+            <div className="surface-card rounded-md p-2.5 min-w-[260px]">
               <div className="text-[10.5px] text-muted-foreground mb-1.5">检验统计量 D</div>
               <div className="flex justify-between text-[11px]">
                 <span className="text-muted-foreground">D</span>
@@ -3985,7 +3985,7 @@ function BootstrapForm() {
         )}
         {result && !error && (
           <motion.div key="res" initial={{ opacity: 0, y: 4 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0 }} className="space-y-2">
-            <div className="rounded-md border border-primary/30 bg-primary/5 p-2.5 formula-card-glow min-w-[260px]">
+            <div className="surface-card rounded-md p-2.5 min-w-[260px]">
               <div className="text-[10.5px] text-muted-foreground mb-1.5">
                 {statLabel[statKey]} 的 {(result.level * 100).toFixed(0)}% 百分位自助区间
               </div>

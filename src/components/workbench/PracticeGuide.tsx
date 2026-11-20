@@ -60,12 +60,12 @@ export function PracticeGuide() {
           transition={{ duration: 0.18 }}
           className="fixed bottom-5 right-5 z-[90] w-[340px] max-w-[calc(100vw-2.5rem)]"
         >
-          <div className="relative overflow-hidden rounded-lg border border-border bg-popover p-4 shadow-xl">
+          <div className="surface-floating relative overflow-hidden p-4">
 
             {/* 标题 + 关闭 */}
             <div className="flex items-start justify-between gap-2">
               <div className="flex items-center gap-2">
-                <span className="grid size-7 place-items-center rounded-md border border-border text-muted-foreground">
+                <span className="grid size-7 place-items-center rounded-md border border-border bg-card text-muted-foreground">
                   <Sparkles className="size-3.5" strokeWidth={1.75} />
                 </span>
                 <span className="text-[12px] font-medium text-foreground">
@@ -86,12 +86,13 @@ export function PracticeGuide() {
             <div className="mt-3">
               {done ? (
                 <motion.div
-                  initial={{ opacity: 0, scale: 0.96 }}
-                  animate={{ opacity: 1, scale: 1 }}
+                  initial={{ opacity: 0, y: 4 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  transition={{ duration: 0.18 }}
                   className="space-y-3"
                 >
                   <p className="text-[12.5px] leading-relaxed text-foreground">
-                    太棒了，你已经成功运行出一行结果！🎉
+                    太棒了，你已经成功运行出一行结果。
                   </p>
                   <p className="text-[12px] leading-relaxed text-muted-foreground">
                     你已经掌握了 OmniMath Pro 的核心用法。接下来放心自由探索：
@@ -101,10 +102,10 @@ export function PracticeGuide() {
                   <button
                     type="button"
                     onClick={finish}
-                    className="flex items-center gap-1.5 rounded bg-primary px-4 py-2 text-[11.5px] font-medium text-primary-foreground transition-colors hover:bg-primary/90"
+                    className="motion-press flex items-center gap-1.5 rounded-md bg-primary px-4 py-2 text-[11.5px] font-medium text-primary-foreground transition-colors duration-150 hover:bg-primary/90"
                   >
                     开始使用
-                    <ArrowRight className="size-3.5" strokeWidth={1.75} />
+                    <ArrowRight className="size-3.5 stroke-[1.75]" />
                   </button>
                 </motion.div>
               ) : (
@@ -119,7 +120,7 @@ export function PracticeGuide() {
                     index={2}
                     done={false}
                     title="点击「▶ 运行」"
-                    desc="在编辑器右上角找到绿色的「运行」按钮并点击，右侧会出现结果。"
+                    desc="在编辑器右上角找到「运行」按钮并点击，右侧会出现结果。"
                   />
                 </div>
               )}
@@ -143,15 +144,15 @@ function StepRow({
   desc: string;
 }) {
   return (
-    <div className="flex items-start gap-2.5 rounded-xl border border-border/60 bg-background/50 px-3 py-2.5">
+    <div className="surface-card flex items-start gap-2.5 rounded-lg px-3 py-2.5">
       <span
         className={
           done
-            ? 'mt-0.5 grid size-5 shrink-0 place-items-center rounded-full bg-primary/20 text-primary'
+            ? 'mt-0.5 grid size-5 shrink-0 place-items-center rounded-full bg-primary/15 text-primary'
             : 'mt-0.5 grid size-5 shrink-0 place-items-center rounded-full bg-muted text-[10px] font-semibold text-muted-foreground'
         }
       >
-        {done ? <Check className="size-3" /> : index}
+        {done ? <Check className="size-3 stroke-[1.75]" /> : index}
       </span>
       <div className="min-w-0">
         <div className="flex items-center gap-1.5 text-[12px] font-semibold text-foreground">

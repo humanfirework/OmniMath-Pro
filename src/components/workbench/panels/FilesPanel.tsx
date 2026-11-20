@@ -248,7 +248,7 @@ export function FilesPanel() {
         >
           {rootChildren.length === 0 ? (
             <div className="flex flex-col items-center justify-center gap-2 px-4 py-8 text-center">
-              <Folder className="size-8 text-muted-foreground/40" />
+              <Folder className="size-8 text-muted-foreground/40" strokeWidth={1.75} />
               <p className="text-[11px] text-muted-foreground">暂无文件</p>
               <button
                 type="button"
@@ -471,9 +471,9 @@ function FileTreeNode({ node, depth }: { node: FileNode; depth: number }) {
               style={{ paddingLeft: 8 + depth * 12 }}
             >
               {isFolder ? (
-                <Folder className="size-3.5 shrink-0 text-amber-500/80" />
+                <Folder className="size-3.5 shrink-0 text-muted-foreground" strokeWidth={1.75} />
               ) : (
-                <FileCode2 className="size-3.5 shrink-0 text-primary/80" />
+                <FileCode2 className="size-3.5 shrink-0 text-primary/80" strokeWidth={1.75} />
               )}
               <input
                 type="text"
@@ -503,7 +503,7 @@ function FileTreeNode({ node, depth }: { node: FileNode; depth: number }) {
                 'flex w-full items-center gap-1 py-0.5 pr-2 text-left transition-colors',
                 isActive
                   ? 'bg-primary/12 text-primary'
-                  : 'text-foreground/80 hover:bg-accent/50 hover:text-foreground',
+                  : 'text-foreground/80 hover:bg-accent/40 hover:text-foreground',
                 dragOver && 'ring-2 ring-primary/50 bg-primary/10',
               )}
               style={{ paddingLeft: 8 + depth * 12 }}
@@ -516,15 +516,15 @@ function FileTreeNode({ node, depth }: { node: FileNode; depth: number }) {
                     <ChevronRight className="size-3 shrink-0 text-muted-foreground" />
                   )}
                   {expanded ? (
-                    <FolderOpen className="size-3.5 shrink-0 text-amber-500/80" />
+                    <FolderOpen className="size-3.5 shrink-0 text-primary/70" strokeWidth={1.75} />
                   ) : (
-                    <Folder className="size-3.5 shrink-0 text-amber-500/80" />
+                    <Folder className="size-3.5 shrink-0 text-muted-foreground" strokeWidth={1.75} />
                   )}
                 </>
               ) : (
                 <>
                   <span className="w-3 shrink-0" />
-                  <FileCode2 className="size-3.5 shrink-0 text-primary/70" />
+                  <FileCode2 className="size-3.5 shrink-0 text-primary/70" strokeWidth={1.75} />
                 </>
               )}
               <span className="truncate font-mono text-[11px]">{node.name}</span>

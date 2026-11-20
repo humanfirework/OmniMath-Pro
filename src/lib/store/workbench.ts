@@ -224,7 +224,7 @@ function sanitizePlot(p: unknown): PlotConfig | null {
     expression: expr,
     xRange: [xRange[0], xRange[1]] as [number, number],
     yRange: [yRange[0], yRange[1]] as [number, number],
-    color: typeof o.color === 'string' ? o.color : '#2dd4bf',
+    color: typeof o.color === 'string' ? o.color : '#3B6FE0',
     plotType: (o.plotType === 'cartesian' || o.plotType === 'polar' ||
       o.plotType === 'parametric' || o.plotType === 'surface3d')
       ? o.plotType : 'cartesian',

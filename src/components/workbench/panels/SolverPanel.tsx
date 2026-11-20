@@ -308,14 +308,14 @@ function EquationSolverSection() {
         <>
           {result.symbolicFallback && (
             <div className="text-[10.5px] text-amber-600 dark:text-amber-300 bg-amber-500/10 border border-amber-500/30 rounded px-2 py-1 mb-1.5">
-              ⚠️ 符号解失败，已回退到数值解
+              符号解失败，已回退到数值解
             </div>
           )}
           {result.info && (
             <div className="text-[10.5px] text-primary/80 bg-primary/5 border border-primary/20 rounded px-2 py-1 mb-1.5">
-              {result.kind === 'polynomial' && '🧮 多项式方程 · '}
-              {result.kind === 'transcendental' && '📈 超越方程 · '}
-              {result.kind === 'symbolic' && '🔤 符号解 · '}
+              {result.kind === 'polynomial' && '多项式方程 · '}
+              {result.kind === 'transcendental' && '超越方程 · '}
+              {result.kind === 'symbolic' && '符号解 · '}
               {result.info}
             </div>
           )}
@@ -1481,7 +1481,7 @@ function ResultBlock({
           initial={{ opacity: 0, y: 4 }}
           animate={{ opacity: 1, y: 0 }}
           exit={{ opacity: 0 }}
-          className="rounded-md border border-primary/30 bg-primary/5 p-2.5 glow-card-teal"
+          className="surface-card rounded-md p-2.5"
         >
           {result}
         </motion.div>

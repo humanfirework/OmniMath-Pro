@@ -27,10 +27,10 @@ const QF_VIEW = QF_SIZE / 2 / QF_SCALE; // 3.75 units 半宽
 
 const CONTOURS = [-8, -4, -2, -1, -0.5, 0.5, 1, 2, 4, 8];
 
-const POS_COLOR = 'oklch(0.7 0.15 165)'; // 正等高线 — 青色
+const POS_COLOR = 'oklch(0.62 0.17 258)'; // 正等高线 — 极光蓝
 const NEG_COLOR = 'oklch(0.72 0.19 70)'; // 负等高线 — 橙色
-const ZERO_COLOR = 'oklch(0.6 0.2 280)'; // 零等高线 — 紫色
-const AXIS_EIGEN = 'oklch(0.6 0.2 280)'; // 主轴方向
+const ZERO_COLOR = 'oklch(0.6 0.18 292)'; // 零等高线 — 紫色
+const AXIS_EIGEN = 'oklch(0.6 0.18 292)'; // 主轴方向
 
 interface QuadraticFormVizProps {
   /** 对称矩阵 [a, b, b, c] = [[a, b], [b, c]] */

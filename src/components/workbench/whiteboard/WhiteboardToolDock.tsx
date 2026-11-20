@@ -98,9 +98,9 @@ function DockButton({
       title={label}
       onClick={onClick}
       className={cn(
-        'grid size-9 place-items-center rounded-md transition-colors',
+        'motion-press grid size-9 place-items-center rounded-lg transition-colors',
         active
-          ? 'bg-accent text-foreground'
+          ? 'bg-primary/15 text-primary'
           : 'text-muted-foreground hover:bg-accent/60 hover:text-foreground',
       )}
     >
@@ -121,12 +121,12 @@ export function WhiteboardToolDock(props: WhiteboardToolDockProps) {
 
   return (
     <div className="pointer-events-none absolute left-3 top-1/2 z-30 -translate-y-1/2">
-      <div className="pointer-events-auto flex flex-col items-center gap-0.5 rounded-lg border border-border bg-popover p-1 shadow-lg">
+      <div className="pointer-events-auto flex flex-col items-center gap-0.5 rounded-xl border border-border bg-popover p-1 shadow-[var(--shadow-float)]">
         <DockButton label="选择" active={props.tool === 'select'} onClick={() => applyTool('select')}>
-          <MousePointer2 className="size-4" />
+          <MousePointer2 className="size-4" strokeWidth={1.75} />
         </DockButton>
         <DockButton label="套圈" active={props.tool === 'lasso'} onClick={() => applyTool('lasso')}>
-          <Lasso className="size-4" />
+          <Lasso className="size-4" strokeWidth={1.75} />
         </DockButton>
         <DockButton
           label="钢笔"
@@ -136,7 +136,7 @@ export function WhiteboardToolDock(props: WhiteboardToolDockProps) {
             toggle('pen');
           }}
         >
-          <Pencil className="size-4" />
+          <Pencil className="size-4" strokeWidth={1.75} />
         </DockButton>
         <DockButton
           label="橡皮"
@@ -146,7 +146,7 @@ export function WhiteboardToolDock(props: WhiteboardToolDockProps) {
             toggle('eraser');
           }}
         >
-          <Eraser className="size-4" />
+          <Eraser className="size-4" strokeWidth={1.75} />
         </DockButton>
         <DockButton
           label="形状"
@@ -156,10 +156,10 @@ export function WhiteboardToolDock(props: WhiteboardToolDockProps) {
             toggle('shape');
           }}
         >
-          <Shapes className="size-4" />
+          <Shapes className="size-4" strokeWidth={1.75} />
         </DockButton>
 
-        <span className="my-0.5 h-px w-6 bg-border/70" />
+        <span className="my-0.5 h-px w-6 bg-border" />
 
         <DockButton label="颜色与笔刷" onClick={() => toggle('color')}>
           <span className="relative grid size-6 place-items-center rounded-full border border-border/70">
@@ -174,16 +174,16 @@ export function WhiteboardToolDock(props: WhiteboardToolDockProps) {
             setPanel(null);
           }}
         >
-          <Sigma className="size-4" />
+          <Sigma className="size-4" strokeWidth={1.75} />
         </DockButton>
         <DockButton label="更多" active={panel === 'more'} onClick={() => toggle('more')}>
-          <MoreHorizontal className="size-4" />
+          <MoreHorizontal className="size-4" strokeWidth={1.75} />
         </DockButton>
       </div>
 
       {panel && (
-        <div className="pointer-events-auto absolute left-full top-1/2 ml-2 max-h-[min(78vh,560px)] w-[270px] -translate-y-1/2 overflow-y-auto rounded-lg border border-border bg-popover p-3 shadow-xl">
-          <div className="flex items-center justify-between">
+        <div className="surface-floating motion-panel-in pointer-events-auto absolute left-full top-1/2 ml-2 max-h-[min(78vh,560px)] w-[270px] -translate-y-1/2 overflow-y-auto p-3">
+          <div className="-mx-3 -mt-3 mb-2 flex h-8 items-center justify-between border-b border-border px-2.5">
             <span className="text-[10px] font-medium uppercase tracking-[0.14em] text-muted-foreground">
               {panel === 'pen'
                 ? '笔刷'
@@ -216,10 +216,10 @@ export function WhiteboardToolDock(props: WhiteboardToolDockProps) {
                     aria-label={`颜色 ${c}`}
                     onClick={() => props.onColor(c)}
                     className={cn(
-                      'size-7 rounded-full border transition-transform',
+                      'size-7 rounded-full border transition-colors',
                       props.color === c
-                        ? 'scale-110 border-foreground/40 ring-2 ring-foreground/20'
-                        : 'border-border/60',
+                        ? 'border-primary/50 ring-2 ring-primary/35 ring-offset-2 ring-offset-popover'
+                        : 'border-border/60 hover:border-border',
                     )}
                     style={{ backgroundColor: c }}
                   />
@@ -243,7 +243,7 @@ export function WhiteboardToolDock(props: WhiteboardToolDockProps) {
                           : 'border-border/60 text-muted-foreground hover:bg-accent/60',
                       )}
                     >
-                      <Icon className="size-3.5" />
+                      <Icon className="size-3.5" strokeWidth={1.75} />
                     </button>
                   ))}
                 </div>
@@ -370,7 +370,7 @@ export function WhiteboardToolDock(props: WhiteboardToolDockProps) {
                       : 'text-muted-foreground hover:bg-accent/60 hover:text-foreground',
                   )}
                 >
-                  <Icon className="size-4" />
+                  <Icon className="size-4" strokeWidth={1.75} />
                 </button>
               ))}
             </div>
@@ -392,7 +392,7 @@ export function WhiteboardToolDock(props: WhiteboardToolDockProps) {
                         : 'text-muted-foreground hover:bg-accent/60',
                     )}
                   >
-                    <Icon className="size-3.5" />
+                    <Icon className="size-3.5" strokeWidth={1.75} />
                     {label}
                   </button>
                 ))}
@@ -407,7 +407,7 @@ export function WhiteboardToolDock(props: WhiteboardToolDockProps) {
                     : 'text-muted-foreground hover:bg-accent/60',
                 )}
               >
-                <Grid2x2 className="size-3.5" />
+                <Grid2x2 className="size-3.5" strokeWidth={1.75} />
                 像素画
               </button>
               <button
@@ -420,7 +420,7 @@ export function WhiteboardToolDock(props: WhiteboardToolDockProps) {
                     : 'text-muted-foreground hover:bg-accent/60',
                 )}
               >
-                <Timer className="size-3.5" />
+                <Timer className="size-3.5" strokeWidth={1.75} />
                 笔迹延迟测试
               </button>
               <button
@@ -431,7 +431,7 @@ export function WhiteboardToolDock(props: WhiteboardToolDockProps) {
                 }}
                 className="flex h-8 w-full items-center gap-2 rounded-lg px-2 text-[10.5px] text-rose-500 transition-colors hover:bg-rose-500/10"
               >
-                <Trash2 className="size-3.5" />
+                <Trash2 className="size-3.5" strokeWidth={1.75} />
                 清空画布
               </button>
             </div>

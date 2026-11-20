@@ -171,10 +171,9 @@ export function MathNotePanel({
     <div
       ref={cardRef}
       className={cn(
-        'absolute z-30 w-[min(94vw,430px)]',
+        'surface-floating motion-panel-in absolute z-30 w-[min(94vw,430px)]',
         anchored ? '' : 'left-1/2 -translate-x-1/2',
         !anchored && (raised ? 'bottom-[76px]' : 'bottom-3'),
-        'rounded-lg border border-border bg-popover shadow-xl',
       )}
       style={anchored ? { left: pos.left, top: pos.top } : undefined}
       onPointerDown={(e) => e.stopPropagation()}
@@ -183,7 +182,7 @@ export function MathNotePanel({
       aria-label="手写识别结果"
     >
       {/* 标题栏 */}
-      <div className="flex h-8 items-center gap-1.5 border-b border-border bg-muted/40 px-2.5">
+      <div className="flex h-8 items-center gap-1.5 rounded-t-xl border-b border-border bg-muted/30 px-2.5">
         <Sigma className="size-3.5 text-muted-foreground" strokeWidth={1.75} />
         <span className="text-[11px] font-medium">识别结果</span>
         <span
@@ -204,7 +203,7 @@ export function MathNotePanel({
           aria-label="关闭"
           className="grid size-5 place-items-center rounded text-muted-foreground hover:bg-accent hover:text-foreground"
         >
-          <X className="size-3" strokeWidth={1.75} />
+          <X className="size-3.5" strokeWidth={1.75} />
         </button>
       </div>
 
@@ -238,9 +237,9 @@ export function MathNotePanel({
                 type="button"
                 onClick={() => onInsert(draft.text)}
                 disabled={!evaluation.ok}
-                className="inline-flex h-7 flex-1 items-center justify-center gap-1 rounded bg-primary px-2.5 text-[11px] font-medium text-primary-foreground transition-opacity hover:opacity-90 disabled:opacity-40"
+                className="motion-press inline-flex h-7 flex-1 items-center justify-center gap-1 rounded-md bg-primary px-2.5 text-[11px] font-medium text-primary-foreground transition-opacity hover:opacity-90 disabled:opacity-40"
               >
-                <Check className="size-3" />
+                <Check className="size-3.5" strokeWidth={1.75} />
                 识别为公式
               </button>
               <button
@@ -250,7 +249,7 @@ export function MathNotePanel({
                 aria-expanded={expanded}
               >
                 {expanded ? '收起' : '展开'}
-                <ChevronDown className={cn('size-3 transition-transform', expanded && 'rotate-180')} />
+                <ChevronDown className={cn('size-3.5 transition-transform', expanded && 'rotate-180')} />
               </button>
               <button
                 type="button"
@@ -259,7 +258,7 @@ export function MathNotePanel({
                 title="重试识别"
                 className="grid h-7 w-7 shrink-0 place-items-center rounded border border-border text-muted-foreground hover:bg-accent hover:text-foreground"
               >
-                <RefreshCw className="size-3" />
+                <RefreshCw className="size-3.5" strokeWidth={1.75} />
               </button>
             </div>
           </div>
@@ -372,7 +371,7 @@ export function MathNotePanel({
                 className="inline-flex items-center gap-1 rounded border border-border px-2 py-1 text-[10.5px] text-muted-foreground hover:bg-accent hover:text-foreground disabled:opacity-50"
                 title="只把当前表达式发送给已配置的 AI"
               >
-                <Sparkles className={cn('size-3', explaining && 'animate-pulse')} />
+                <Sparkles className="size-3.5" strokeWidth={1.75} />
                 AI 解释
               </button>
             </div>

@@ -16,7 +16,7 @@
 
 import { useEffect, useRef, useState, type ReactNode } from 'react';
 import { motion, useAnimationControls } from 'framer-motion';
-import { ChevronLeft, ChevronRight, Play, Pause, RotateCcw } from 'lucide-react';
+import { ChevronLeft, ChevronRight, ChevronDown, ChevronUp, Play, Pause, RotateCcw } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
 export interface ZoomStep {
@@ -69,7 +69,7 @@ export function ZoomLens({
       .start({
         opacity: 1,
         scale: 1,
-        transition: { duration: 0.6, ease: [0.4, 0, 0.2, 1] },
+        transition: { duration: 0.18, ease: [0.2, 0.8, 0.2, 1] },
       })
       .then(() => setProgress(1));
   }, [safeStep, controls, total]);
@@ -120,14 +120,14 @@ export function ZoomLens({
   const currentStepData = steps[safeStep];
 
   return (
-    <div className={cn('flex flex-col rounded-lg border border-border/60 bg-card/30 overflow-hidden', className)}>
+    <div className={cn('flex flex-col rounded-lg border border-border bg-card overflow-hidden', className)}>
       {/* 主视图区域 */}
       <motion.div animate={controls} className="relative flex-1 min-h-0">
         {children({ step: currentStepData, progress, stepIndex: safeStep })}
       </motion.div>
 
       {/* 控制条 */}
-      <div className="shrink-0 border-t border-border/60 bg-background/60 backdrop-blur-sm">
+      <div className="shrink-0 border-t border-border bg-card">
         {/* 步骤标签 + 说明 */}
         <div className="px-3 pt-2 flex items-center justify-between gap-2">
           <div className="min-w-0 flex-1">
@@ -143,10 +143,14 @@ export function ZoomLens({
           <button
             type="button"
             onClick={() => setCollapsed((c) => !c)}
-            className="text-[10px] text-muted-foreground hover:text-foreground px-1"
+            className="text-muted-foreground hover:text-foreground px-1"
             aria-label={collapsed ? '展开控制条' : '折叠控制条'}
           >
-            {collapsed ? '▾' : '▴'}
+            {collapsed ? (
+              <ChevronDown className="size-3.5" strokeWidth={1.75} />
+            ) : (
+              <ChevronUp className="size-3.5" strokeWidth={1.75} />
+            )}
           </button>
         </div>
 
@@ -157,10 +161,10 @@ export function ZoomLens({
               type="button"
               onClick={goPrev}
               disabled={safeStep === 0}
-              className="grid place-items-center size-6 rounded border border-border/60 bg-background text-muted-foreground hover:text-foreground hover:bg-accent/40 disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
+              className="grid place-items-center size-8 rounded-md border border-border bg-card text-muted-foreground hover:text-primary hover:bg-accent/60 disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
               aria-label="上一步"
             >
-              <ChevronLeft className="size-3.5" />
+              <ChevronLeft className="size-3.5" strokeWidth={1.75} />
             </button>
 
             {/* 步骤圆点指示器 */}
@@ -187,10 +191,10 @@ export function ZoomLens({
               type="button"
               onClick={goNext}
               disabled={safeStep === total - 1}
-              className="grid place-items-center size-6 rounded border border-border/60 bg-background text-muted-foreground hover:text-foreground hover:bg-accent/40 disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
+              className="grid place-items-center size-8 rounded-md border border-border bg-card text-muted-foreground hover:text-primary hover:bg-accent/60 disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
               aria-label="下一步"
             >
-              <ChevronRight className="size-3.5" />
+              <ChevronRight className="size-3.5" strokeWidth={1.75} />
             </button>
 
             <div className="w-px h-4 bg-border/60 mx-0.5" />
@@ -198,19 +202,19 @@ export function ZoomLens({
             <button
               type="button"
               onClick={togglePlay}
-              className="grid place-items-center size-6 rounded border border-border/60 bg-background text-muted-foreground hover:text-foreground hover:bg-accent/40 transition-colors"
+              className="grid place-items-center size-8 rounded-md border border-border bg-card text-muted-foreground hover:text-primary hover:bg-accent/60 transition-colors"
               aria-label={playing ? '暂停' : '播放'}
             >
-              {playing ? <Pause className="size-3.5" /> : <Play className="size-3.5" />}
+              {playing ? <Pause className="size-3.5" strokeWidth={1.75} /> : <Play className="size-3.5" strokeWidth={1.75} />}
             </button>
 
             <button
               type="button"
               onClick={goReset}
-              className="grid place-items-center size-6 rounded border border-border/60 bg-background text-muted-foreground hover:text-foreground hover:bg-accent/40 transition-colors"
+              className="grid place-items-center size-8 rounded-md border border-border bg-card text-muted-foreground hover:text-primary hover:bg-accent/60 transition-colors"
               aria-label="重置到第一步"
             >
-              <RotateCcw className="size-3.5" />
+              <RotateCcw className="size-3.5" strokeWidth={1.75} />
             </button>
           </div>
         )}

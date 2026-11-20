@@ -40,6 +40,7 @@ import {
   Paperclip,
 } from 'lucide-react';
 import { useWorkbenchStore } from '@/lib/store/workbench';
+import { cn } from '@/lib/utils';
 import { useFileSystemStore } from '@/lib/store/fileSystemStore';
 import { useAIContextStore } from '@/lib/store/aiContextStore';
 import { useT, t as translateRaw, type TranslationDict } from '@/lib/i18n';
@@ -142,7 +143,7 @@ function renderAssistantContent(
           {scripts.map((s, i) => (
             <div
               key={i}
-              className="rounded-lg border border-primary/20 bg-primary/5 p-2 group"
+              className="surface-card rounded-lg p-2 group"
             >
               <pre className="text-[11.5px] font-mono text-foreground/80 whitespace-pre-wrap break-all max-h-32 overflow-y-auto scrollbar-none">
                 {s}
@@ -220,11 +221,7 @@ function ToolCallStrip({ record }: { record: AIToolCallRecord }) {
     <Collapsible
       open={open}
       onOpenChange={setOpen}
-      className="backdrop-blur-sm border rounded-md p-2"
-      style={{
-        backgroundColor: 'var(--ai-tool-bg)',
-        borderColor: 'var(--ai-tool-border)',
-      }}
+      className="surface-card rounded-lg p-2"
     >
       <CollapsibleTrigger
         className="flex w-full items-center gap-1.5 px-2 py-1.5 text-left text-[11px] rounded-lg transition-colors"
@@ -299,11 +296,7 @@ function ConfigCard({
     <motion.div
       initial={{ opacity: 0, y: -6 }}
       animate={{ opacity: 1, y: 0 }}
-      className="backdrop-blur-sm border rounded-lg p-3 space-y-2.5"
-      style={{
-        backgroundColor: 'var(--ai-card-bg)',
-        borderColor: 'var(--ai-card-border)',
-      }}
+      className="surface-card rounded-lg p-3 space-y-2.5"
     >
       <div className="flex items-center gap-2" style={{ color: 'var(--primary)' }}>
         <KeyRound className="size-3.5" />
@@ -669,17 +662,15 @@ export function AIPanel() {
       {/* Header */}
       <div className="flex items-center justify-between px-3 py-2 border-b border-border/60 bg-muted/20">
         <div className="flex items-center gap-2">
-          <motion.div
-            animate={{ rotate: [0, 8, -8, 0] }}
-            transition={{ duration: 5, repeat: Infinity, ease: 'easeInOut' }}
-            className="grid place-items-center size-6 rounded-lg border"
+          <div
+            className="grid place-items-center size-6 rounded-md border"
             style={{
               backgroundColor: 'color-mix(in oklab, var(--primary) 10%, transparent)',
               borderColor: 'color-mix(in oklab, var(--primary) 25%, transparent)',
             }}
           >
-            <Sparkles className="size-3.5" style={{ color: 'var(--primary)' }} />
-          </motion.div>
+            <Sparkles className="size-3.5" style={{ color: 'var(--primary)' }} strokeWidth={1.75} />
+          </div>
           <span className="text-[12px] font-medium text-foreground">
             {t('aiTitle')}
           </span>
@@ -742,24 +733,14 @@ export function AIPanel() {
 
           {messages.length === 0 && !showConfig && (
             <motion.div
-              initial={{ opacity: 0, y: 8 }}
+              initial={{ opacity: 0, y: 6 }}
               animate={{ opacity: 1, y: 0 }}
+              transition={{ duration: 0.18 }}
               className="flex flex-col items-center justify-center text-center py-8"
             >
-              <motion.div
-                animate={{ y: [0, -6, 0] }}
-                transition={{ duration: 3, repeat: Infinity, ease: 'easeInOut' }}
-                className="grid place-items-center size-12 rounded-2xl border mb-3"
-                style={{
-                  backgroundColor: 'color-mix(in oklab, var(--primary) 8%, transparent)',
-                  borderColor: 'color-mix(in oklab, var(--primary) 20%, transparent)',
-                }}
-              >
-                <Sparkles
-                  className="size-5"
-                  style={{ color: 'color-mix(in oklab, var(--primary) 80%, transparent)' }}
-                />
-              </motion.div>
+              <div className="mb-3 grid size-11 place-items-center rounded-lg border border-border bg-card text-muted-foreground">
+                <Sparkles className="size-4" strokeWidth={1.75} />
+              </div>
               <p className="text-[12.5px] font-medium text-foreground/85 mb-1">
                 {t('aiTitle')}
               </p>
@@ -771,25 +752,9 @@ export function AIPanel() {
                   <button
                     key={p}
                     onClick={() => send(p)}
-                    className="backdrop-blur-sm border rounded-md px-2.5 py-1.5 text-xs cursor-pointer transition-colors text-left text-foreground/80 hover:text-foreground"
-                    style={{
-                      backgroundColor: 'var(--ai-quick-bg)',
-                      borderColor: 'var(--ai-quick-border)',
-                    }}
-                    onMouseEnter={(e) => {
-                      (e.currentTarget as HTMLButtonElement).style.backgroundColor =
-                        'var(--ai-quick-hover-bg)';
-                      (e.currentTarget as HTMLButtonElement).style.borderColor =
-                        'var(--ai-quick-hover-border)';
-                    }}
-                    onMouseLeave={(e) => {
-                      (e.currentTarget as HTMLButtonElement).style.backgroundColor =
-                        'var(--ai-quick-bg)';
-                      (e.currentTarget as HTMLButtonElement).style.borderColor =
-                        'var(--ai-quick-border)';
-                    }}
+                    className="rounded-md border border-border bg-card px-2.5 py-1.5 text-left text-[11.5px] text-foreground/80 transition-colors duration-150 hover:border-primary/40 hover:bg-primary/5 hover:text-foreground"
                   >
-                    ✦ {p}
+                    {p}
                   </button>
                 ))}
               </div>
@@ -800,42 +765,34 @@ export function AIPanel() {
             {messages.map((m) => (
               <motion.div
                 key={m.id}
-                initial={{ opacity: 0, y: 8, scale: 0.98 }}
-                animate={{ opacity: 1, y: 0, scale: 1 }}
-                exit={{ opacity: 0, scale: 0.98 }}
+                initial={{ opacity: 0, y: 6 }}
+                animate={{ opacity: 1, y: 0 }}
+                exit={{ opacity: 0 }}
                 transition={{ duration: 0.18 }}
                 className={`flex gap-2 ${
                   m.role === 'user' ? 'flex-row-reverse' : 'flex-row'
                 }`}
               >
                 <div
-                  className="flex-shrink-0 grid place-items-center size-6 rounded-lg border"
+                  className="flex-shrink-0 grid place-items-center size-6 rounded-md border"
                   style={{
                     backgroundColor: 'color-mix(in oklab, var(--primary) 10%, transparent)',
                     borderColor: 'color-mix(in oklab, var(--primary) 25%, transparent)',
                   }}
                 >
                   {m.role === 'user' ? (
-                    <User className="size-3.5" style={{ color: 'var(--primary)' }} />
+                    <User className="size-3.5" style={{ color: 'var(--primary)' }} strokeWidth={1.75} />
                   ) : (
-                    <Bot className="size-3.5" style={{ color: 'var(--primary)' }} />
+                    <Bot className="size-3.5" style={{ color: 'var(--primary)' }} strokeWidth={1.75} />
                   )}
                 </div>
                 <div
-                  className="max-w-[82%] rounded-xl px-3 py-2 backdrop-blur-sm border"
-                  style={
+                  className={cn(
+                    'max-w-[82%] rounded-lg border px-3 py-2',
                     m.role === 'user'
-                      ? {
-                          backgroundColor: 'var(--ai-user-bg)',
-                          borderColor: 'var(--ai-user-border)',
-                          color: 'var(--ai-user-fg)',
-                        }
-                      : {
-                          backgroundColor: 'var(--ai-assistant-bg)',
-                          borderColor: 'var(--ai-assistant-border)',
-                          color: 'var(--ai-assistant-fg)',
-                        }
-                  }
+                      ? 'border-primary/25 bg-primary/10 text-foreground'
+                      : 'border-border bg-muted/60 text-foreground',
+                  )}
                 >
                   {m.role === 'user' ? (
                     <p className="text-[12.5px] leading-relaxed whitespace-pre-wrap break-words">
@@ -866,13 +823,13 @@ export function AIPanel() {
               className="flex gap-2"
             >
               <div
-                className="flex-shrink-0 grid place-items-center size-6 rounded-lg border"
+                className="flex-shrink-0 grid place-items-center size-6 rounded-md border"
                 style={{
                   backgroundColor: 'color-mix(in oklab, var(--primary) 10%, transparent)',
                   borderColor: 'color-mix(in oklab, var(--primary) 25%, transparent)',
                 }}
               >
-                <Wrench className="size-3.5" style={{ color: 'var(--primary)' }} />
+                <Wrench className="size-3.5" style={{ color: 'var(--primary)' }} strokeWidth={1.75} />
               </div>
               <div className="max-w-[82%] flex-1 space-y-1">
                 {activeToolCalls.map((tc) => (
@@ -886,41 +843,21 @@ export function AIPanel() {
             <motion.div
               initial={{ opacity: 0 }}
               animate={{ opacity: 1 }}
+              transition={{ duration: 0.15 }}
               className="flex gap-2 items-center text-muted-foreground"
             >
               <div
-                className="flex-shrink-0 grid place-items-center size-6 rounded-lg border"
+                className="flex-shrink-0 grid place-items-center size-6 rounded-md border"
                 style={{
                   backgroundColor: 'color-mix(in oklab, var(--primary) 10%, transparent)',
                   borderColor: 'color-mix(in oklab, var(--primary) 25%, transparent)',
                 }}
               >
-                <Bot className="size-3.5" style={{ color: 'var(--primary)' }} />
+                <Bot className="size-3.5" style={{ color: 'var(--primary)' }} strokeWidth={1.75} />
               </div>
-              <div
-                className="rounded-xl px-3 py-2.5 backdrop-blur-sm border flex items-center gap-2"
-                style={{
-                  backgroundColor: 'var(--ai-assistant-bg)',
-                  borderColor: 'var(--ai-assistant-border)',
-                  color: 'var(--ai-assistant-fg)',
-                }}
-              >
-                <Loader2 className="size-3.5 animate-spin text-primary" />
-                <span className="text-[11.5px]">{t('aiThinking')}</span>
-                <span className="flex gap-0.5">
-                  {[0, 1, 2].map((i) => (
-                    <motion.span
-                      key={i}
-                      animate={{ opacity: [0.3, 1, 0.3] }}
-                      transition={{
-                        duration: 1.2,
-                        repeat: Infinity,
-                        delay: i * 0.2,
-                      }}
-                      className="size-1 rounded-full bg-primary"
-                    />
-                  ))}
-                </span>
+              <div className="flex min-w-0 flex-1 items-center gap-2 rounded-lg border border-border bg-muted/50 px-3 py-2">
+                <span className="h-0.5 w-10 shrink-0 rounded-full bg-primary" />
+                <span className="text-[11.5px] text-muted-foreground">{t('aiThinking')}</span>
               </div>
             </motion.div>
           )}
@@ -969,9 +906,7 @@ export function AIPanel() {
             </span>
           )}
         </div>
-        <div
-          className="flex items-end gap-2 rounded-xl border border-border/60 bg-background focus-within:border-primary/40 focus-within:ring-1 focus-within:ring-primary/20 transition-all"
-        >
+        <div className="flex items-end gap-2 rounded-[10px] border border-border bg-card transition-colors duration-150 focus-within:border-primary/50 focus-within:ring-2 focus-within:ring-ring/30">
           <textarea
             ref={inputRef}
             value={input}
@@ -979,11 +914,7 @@ export function AIPanel() {
             onKeyDown={handleKeyDown}
             placeholder={t('aiAskPlaceholder')}
             rows={2}
-            className="flex-1 resize-none text-[12.5px] leading-relaxed px-3 py-2 outline-none placeholder:text-muted-foreground/60 max-h-32 rounded-xl"
-            style={{
-              backgroundColor: 'var(--ai-input-bg)',
-              borderColor: 'var(--ai-input-border)',
-            }}
+            className="flex-1 resize-none rounded-[10px] px-3 py-2 text-[12.5px] leading-relaxed outline-none placeholder:text-muted-foreground/60 max-h-32 bg-transparent"
           />
           <Button
             size="sm"

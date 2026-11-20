@@ -54,29 +54,29 @@ export function EducationProgress() {
       label: '当前连续',
       value: `${stats.streak} 天`,
       icon: Flame,
-      color: 'text-orange-500',
-      bg: 'bg-orange-500/10',
+      color: 'text-primary',
+      bg: 'bg-primary/10',
     },
     {
       label: '历史最高',
       value: `${stats.bestStreak} 天`,
       icon: Trophy,
-      color: 'text-amber-500',
-      bg: 'bg-amber-500/10',
+      color: 'text-primary',
+      bg: 'bg-primary/10',
     },
     {
       label: '累计答对',
       value: `${stats.totalSolved} 题`,
       icon: CheckCircle2,
-      color: 'text-emerald-500',
-      bg: 'bg-emerald-500/10',
+      color: 'text-primary',
+      bg: 'bg-primary/10',
     },
     {
       label: '累计活动量',
       value: `${stats.totalActivities}`,
       icon: Activity,
-      color: 'text-sky-500',
-      bg: 'bg-sky-500/10',
+      color: 'text-primary',
+      bg: 'bg-primary/10',
     },
   ];
 
@@ -89,10 +89,10 @@ export function EducationProgress() {
           return (
             <div
               key={c.label}
-              className="rounded-2xl border border-border/60 bg-card/60 p-4 backdrop-blur-sm"
+              className="surface-card rounded-lg p-4"
             >
-              <div className={cn('mb-2 grid size-8 place-items-center rounded-xl', c.bg)}>
-                <Icon className={cn('size-4', c.color)} />
+              <div className={cn('mb-2 grid size-8 place-items-center rounded-md', c.bg)}>
+                <Icon className={cn('size-4', c.color)} strokeWidth={1.75} />
               </div>
               <div className="text-[20px] font-semibold leading-tight text-foreground">
                 {c.value}
@@ -104,9 +104,9 @@ export function EducationProgress() {
       </div>
 
       {/* 难度解锁状态 */}
-      <div className="rounded-2xl border border-border/60 bg-card/60 p-4 backdrop-blur-sm">
+      <div className="surface-card rounded-lg p-4">
         <div className="mb-3 flex items-center gap-2">
-          <Target className="size-4 text-primary" />
+          <Target className="size-4 text-primary" strokeWidth={1.75} />
           <span className="text-[12.5px] font-semibold text-foreground/90">难度解锁</span>
           <span className="text-[10.5px] text-muted-foreground">
             连续学习天数越多，解锁的题目越有挑战
@@ -161,15 +161,15 @@ export function EducationProgress() {
       {/* 曲线图 */}
       <div className="grid gap-4 lg:grid-cols-2">
         <ChartCard title="近 30 天活动量" subtitle="折线 + 面积">
-          <LineChart data={daily} color="#10b981" area />
+          <LineChart data={daily} color="var(--viz-1)" area />
         </ChartCard>
         <ChartCard title="累计完成每日一题" subtitle="阶梯增长">
-          <LineChart data={cumulative} color="#6366f1" area={false} />
+          <LineChart data={cumulative} color="var(--viz-3)" area={false} />
         </ChartCard>
       </div>
 
       <ChartCard title="近 8 周对比" subtitle="每周活动总量">
-        <BarList items={weekly} color="#f59e0b" />
+        <BarList items={weekly} color="var(--viz-2)" />
       </ChartCard>
     </div>
   );

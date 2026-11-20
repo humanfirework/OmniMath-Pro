@@ -97,9 +97,9 @@ function DockButton({
       disabled={disabled}
       onClick={onClick}
       className={cn(
-        'grid size-9 place-items-center rounded-md transition-colors',
+        'motion-press grid size-9 place-items-center rounded-lg transition-colors',
         active
-          ? 'bg-accent text-foreground'
+          ? 'bg-primary/15 text-primary'
           : 'text-muted-foreground hover:bg-accent/60 hover:text-foreground',
         disabled && 'opacity-35',
       )}
@@ -123,8 +123,8 @@ export function PenDock(props: PenDockProps) {
       className="pointer-events-none absolute inset-x-0 bottom-3 z-30 flex flex-col items-center gap-2 px-2"
     >
       {panelOpen && (
-        <div className="pointer-events-auto w-[min(92vw,360px)] rounded-lg border border-border bg-popover p-3 shadow-xl">
-          <div className="flex items-center justify-between">
+        <div className="surface-floating motion-panel-in pointer-events-auto w-[min(92vw,360px)] p-3">
+          <div className="-mx-3 -mt-3 mb-2 flex h-8 items-center justify-between border-b border-border px-2.5">
             <span className="text-2xs font-medium uppercase tracking-[0.14em] text-muted-foreground">
               笔刷设置
             </span>
@@ -149,8 +149,8 @@ export function PenDock(props: PenDockProps) {
                 className={cn(
                   'size-8 rounded-full border transition-colors',
                   props.color === c
-                    ? 'border-foreground/40 ring-1 ring-foreground/20'
-                    : 'border-border/60',
+                    ? 'border-primary/50 ring-2 ring-primary/35 ring-offset-2 ring-offset-popover'
+                    : 'border-border/60 hover:border-border',
                 )}
                 style={{ backgroundColor: c }}
               />
@@ -170,11 +170,11 @@ export function PenDock(props: PenDockProps) {
                   className={cn(
                     'grid size-8 place-items-center rounded-md border transition-colors',
                     props.tool === 'pen' && props.brush === id
-                      ? 'border-foreground/30 bg-accent text-foreground'
+                      ? 'border-primary/40 bg-primary/10 text-primary'
                       : 'border-border/60 text-muted-foreground hover:bg-accent/60',
                   )}
                 >
-                  <Icon className="size-4" />
+                  <Icon className="size-4" strokeWidth={1.75} />
                 </button>
               ))}
             </div>
@@ -197,7 +197,7 @@ export function PenDock(props: PenDockProps) {
                     className={cn(
                       'h-8 rounded-lg border px-2 text-2xs transition-colors',
                       props.eraserMode === mode
-                        ? 'border-foreground/30 bg-accent text-foreground'
+                        ? 'border-primary/40 bg-primary/10 text-primary'
                         : 'border-border/60 text-muted-foreground hover:bg-accent/60',
                     )}
                   >
@@ -226,7 +226,7 @@ export function PenDock(props: PenDockProps) {
                     className={cn(
                       'grid size-8 place-items-center rounded-md border transition-colors',
                       active
-                        ? 'border-foreground/30 bg-accent text-foreground'
+                        ? 'border-primary/40 bg-primary/10 text-primary'
                         : 'border-border/60 text-muted-foreground hover:bg-accent/60',
                     )}
                   >
@@ -260,7 +260,7 @@ export function PenDock(props: PenDockProps) {
                   className={cn(
                     'h-8 rounded-lg border px-2 text-2xs transition-colors',
                     props.stabilizer === level
-                      ? 'border-foreground/30 bg-accent text-foreground'
+                      ? 'border-primary/40 bg-primary/10 text-primary'
                       : 'border-border/60 text-muted-foreground hover:bg-accent/60',
                   )}
                 >
@@ -281,11 +281,11 @@ export function PenDock(props: PenDockProps) {
                 className={cn(
                   'grid size-9 place-items-center rounded-lg transition-colors',
                   props.shapeTool === id
-                    ? 'bg-accent text-foreground'
+                    ? 'bg-primary/15 text-primary'
                     : 'text-muted-foreground hover:bg-accent/60 hover:text-foreground',
                 )}
               >
-                <Icon className="size-4" />
+                <Icon className="size-4" strokeWidth={1.75} />
               </button>
             ))}
           </div>
@@ -297,11 +297,11 @@ export function PenDock(props: PenDockProps) {
               className={cn(
                 'inline-flex h-8 flex-1 items-center justify-center gap-1.5 rounded-lg border text-2xs transition-colors',
                 props.pixelMode
-                  ? 'border-foreground/30 bg-accent text-foreground'
+                  ? 'border-primary/40 bg-primary/10 text-primary'
                   : 'border-border/60 text-muted-foreground hover:bg-accent/60',
               )}
             >
-              <Grid2x2 className="size-3.5" />
+              <Grid2x2 className="size-3.5" strokeWidth={1.75} />
               像素画
             </button>
             <button
@@ -324,25 +324,25 @@ export function PenDock(props: PenDockProps) {
         </div>
       )}
 
-      <div className="pointer-events-auto flex items-center gap-0.5 rounded-lg border border-border bg-popover p-1 shadow-lg">
+      <div className="pointer-events-auto flex items-center gap-0.5 rounded-xl border border-border bg-popover p-1 shadow-[var(--shadow-float)]">
         <DockButton label="撤销" disabled={!props.canUndo} onClick={props.onUndo}>
-          <Undo2 className="size-4" />
+          <Undo2 className="size-4" strokeWidth={1.75} />
         </DockButton>
         <DockButton label="重做" disabled={!props.canRedo} onClick={props.onRedo}>
-          <Redo2 className="size-4" />
+          <Redo2 className="size-4" strokeWidth={1.75} />
         </DockButton>
         <span className="mx-0.5 h-6 w-px bg-border" />
         <DockButton label="笔" active={props.tool === 'pen' && !props.shapeTool} onClick={() => applyTool('pen')}>
-          <Pencil className="size-4" />
+          <Pencil className="size-4" strokeWidth={1.75} />
         </DockButton>
         <DockButton label="橡皮" active={props.tool === 'eraser' && !props.shapeTool} onClick={() => applyTool('eraser')}>
-          <Eraser className="size-4" />
+          <Eraser className="size-4" strokeWidth={1.75} />
         </DockButton>
         <DockButton label="套圈" active={props.tool === 'lasso'} onClick={() => applyTool('lasso')}>
-          <Lasso className="size-4" />
+          <Lasso className="size-4" strokeWidth={1.75} />
         </DockButton>
         <DockButton label="选择" active={props.tool === 'select'} onClick={() => applyTool('select')}>
-          <MousePointer2 className="size-4" />
+          <MousePointer2 className="size-4" strokeWidth={1.75} />
         </DockButton>
         <span className="mx-0.5 h-6 w-px bg-border" />
         <button
@@ -350,13 +350,16 @@ export function PenDock(props: PenDockProps) {
           aria-label="颜色与笔刷"
           onClick={() => setPanelOpen((v) => !v)}
           className={cn(
-            'grid size-9 place-items-center rounded-md transition-colors',
-            panelOpen ? 'bg-accent' : 'hover:bg-accent/60',
+            'motion-press grid size-9 place-items-center rounded-lg transition-colors',
+            panelOpen ? 'bg-primary/15 text-primary' : 'hover:bg-accent/60',
           )}
         >
           <span className="relative grid size-6 place-items-center rounded-full border border-border/60">
             <span className="size-4 rounded-full" style={{ backgroundColor: props.color }} />
-            <Shapes className="absolute -bottom-1 -right-1 size-3 rounded bg-background p-px text-muted-foreground" />
+            <Shapes
+              className="absolute -bottom-1 -right-1 size-3.5 rounded bg-background p-px text-muted-foreground"
+              strokeWidth={1.75}
+            />
           </span>
         </button>
       </div>

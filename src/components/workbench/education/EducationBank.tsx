@@ -340,17 +340,17 @@ export function EducationBank() {
       <div className="mb-4 grid gap-3 sm:grid-cols-3">
         {[
           { label: '自定义题目', value: stats.total, icon: Library, color: 'text-primary' },
-          { label: '覆盖学段', value: stats.stages, icon: GraduationCap, color: 'text-emerald-600' },
-          { label: '可联动专业工具', value: stats.withTools, icon: Sparkles, color: 'text-indigo-500' },
+          { label: '覆盖学段', value: stats.stages, icon: GraduationCap, color: 'text-primary' },
+          { label: '可联动专业工具', value: stats.withTools, icon: Sparkles, color: 'text-primary' },
         ].map((c) => {
           const Icon = c.icon;
           return (
             <div
               key={c.label}
-              className="flex items-center gap-3 rounded-2xl border border-border/60 bg-card/60 px-4 py-3 backdrop-blur-sm"
+              className="flex items-center gap-3 surface-card rounded-lg px-4 py-3"
             >
-              <div className={cn('grid size-9 place-items-center rounded-xl bg-muted/40', c.color)}>
-                <Icon className="size-4" />
+              <div className={cn('grid size-9 place-items-center rounded-md bg-muted/40', c.color)}>
+                <Icon className="size-4" strokeWidth={1.75} />
               </div>
               <div>
                 <div className={cn('text-xl font-semibold', c.color)}>{c.value}</div>
@@ -362,11 +362,11 @@ export function EducationBank() {
       </div>
 
       {/* 导入区 */}
-      <div className="mb-4 rounded-3xl border border-border/60 bg-card/60 p-5 backdrop-blur-sm">
+      <div className="mb-4 surface-card rounded-xl p-5">
         <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
           <div className="flex items-center gap-2">
-            <div className="grid size-8 place-items-center rounded-xl bg-primary/10">
-              <Upload className="size-4 text-primary" />
+            <div className="grid size-8 place-items-center rounded-md border border-border bg-muted/40">
+              <Upload className="size-4 text-primary" strokeWidth={1.75} />
             </div>
             <div>
               <div className="text-[13px] font-semibold text-foreground">导入题目</div>
@@ -375,7 +375,7 @@ export function EducationBank() {
               </div>
             </div>
           </div>
-          <div className="flex items-center gap-1 rounded-lg border border-border/60 bg-background/40 p-0.5">
+          <div className="flex items-center gap-1 rounded-lg border border-border bg-muted/30 p-0.5">
             {(
               [
                 { id: 'json', label: '粘贴 JSON', icon: FileJson },
@@ -408,8 +408,8 @@ export function EducationBank() {
           </div>
         </div>
 
-        <div className="mb-3 flex items-start gap-2 rounded-xl border border-sky-500/20 bg-sky-500/5 p-3 text-[11.5px] text-foreground/80">
-          <Info className="mt-0.5 size-3.5 shrink-0 text-sky-500" />
+        <div className="mb-3 flex items-start gap-2 rounded-lg border border-primary/20 bg-primary/5 p-3 text-[11.5px] text-foreground/80">
+          <Info className="mt-0.5 size-3.5 shrink-0 text-primary" strokeWidth={1.75} />
           <span>
             {mode === 'json'
               ? '粘贴一个题目对象数组（字段见下方模板）。每道题需包含 id / level / text / kind / solution；kind 为 choice 时需带 options 与 correctIndex。'
@@ -435,10 +435,10 @@ export function EducationBank() {
             handleFiles(e.dataTransfer.files);
           }}
           className={cn(
-            'relative rounded-2xl border-2 border-dashed transition-colors',
+            'relative rounded-xl border border-dashed transition-colors',
             dragging
               ? 'border-primary/60 bg-primary/5'
-              : 'border-border/60 bg-background/40',
+              : 'border-border bg-background/40',
           )}
         >
           <textarea
@@ -454,8 +454,8 @@ export function EducationBank() {
             spellCheck={false}
             rows={8}
             className={cn(
-              'w-full resize-y rounded-2xl border-0 bg-transparent px-3.5 py-3 font-mono text-[12px] leading-relaxed outline-none placeholder:text-muted-foreground/50',
-              mode === 'json' && 'border border-border/60 bg-background/50',
+              'w-full resize-y rounded-xl border-0 bg-transparent px-3.5 py-3 font-mono text-[12px] leading-relaxed outline-none placeholder:text-muted-foreground/50',
+              mode === 'json' && 'border border-border bg-background/50',
             )}
           />
           {/* 拖拽遮罩提示 */}
@@ -465,10 +465,10 @@ export function EducationBank() {
                 initial={{ opacity: 0 }}
                 animate={{ opacity: 1 }}
                 exit={{ opacity: 0 }}
-                className="pointer-events-none absolute inset-0 grid place-items-center rounded-2xl bg-background/80 backdrop-blur-sm"
+                className="pointer-events-none absolute inset-0 grid place-items-center rounded-xl bg-card/95"
               >
                 <div className="flex flex-col items-center gap-1 text-center">
-                  <FileUp className="size-6 text-primary" />
+                  <FileUp className="size-6 text-primary" strokeWidth={1.75} />
                   <span className="text-[13px] font-medium text-foreground">
                     {fileReading ? '正在读取文件…' : '松开以导入文件'}
                   </span>
@@ -495,9 +495,9 @@ export function EducationBank() {
             type="button"
             onClick={() => fileInputRef.current?.click()}
             disabled={fileReading}
-            className="inline-flex h-7 items-center gap-1.5 rounded-lg border border-border/60 px-2.5 text-[11px] text-muted-foreground hover:text-foreground hover:border-primary/40 transition-colors disabled:opacity-40"
+            className="inline-flex h-7 items-center gap-1.5 rounded-md border border-border px-2.5 text-[11px] text-muted-foreground hover:text-foreground hover:border-primary/40 transition-colors disabled:opacity-40"
           >
-            {fileReading ? <Loader2 className="size-3 animate-spin" /> : <FileText className="size-3" />}
+            {fileReading ? <Loader2 className="size-3 animate-spin" strokeWidth={1.75} /> : <FileText className="size-3" strokeWidth={1.75} />}
             {fileName ?? (fileReading ? '正在读取…' : '选择文件导入')}
           </button>
           {fileName && (
@@ -509,7 +509,7 @@ export function EducationBank() {
               }}
               className="inline-flex h-7 items-center gap-1 rounded-lg px-2 text-[11px] text-muted-foreground hover:text-rose-500 transition-colors"
             >
-              <X className="size-3" />
+              <X className="size-3" strokeWidth={1.75} />
               清除
             </button>
           )}
@@ -521,9 +521,9 @@ export function EducationBank() {
               type="button"
               onClick={handleImportJson}
               disabled={!text.trim()}
-              className="inline-flex h-9 items-center gap-1.5 rounded-xl bg-primary px-4 text-[12.5px] font-medium text-primary-foreground hover:bg-primary/90 disabled:opacity-40 transition-colors"
+              className="inline-flex h-9 items-center gap-1.5 rounded-lg bg-primary px-4 text-[12.5px] font-medium text-primary-foreground hover:bg-primary/90 disabled:opacity-40 transition-colors"
             >
-              <FileJson className="size-3.5" />
+              <FileJson className="size-3.5" strokeWidth={1.75} />
               校验并导入
             </button>
           ) : mode === 'text' ? (
@@ -531,12 +531,12 @@ export function EducationBank() {
               type="button"
               onClick={handleAiImport}
               disabled={!text.trim() || aiLoading}
-              className="inline-flex h-9 items-center gap-1.5 rounded-xl bg-primary px-4 text-[12.5px] font-medium text-primary-foreground hover:bg-primary/90 disabled:opacity-40 transition-colors"
+              className="inline-flex h-9 items-center gap-1.5 rounded-lg bg-primary px-4 text-[12.5px] font-medium text-primary-foreground hover:bg-primary/90 disabled:opacity-40 transition-colors"
             >
               {aiLoading ? (
-                <Loader2 className="size-3.5 animate-spin" />
+                <Loader2 className="size-3.5 animate-spin" strokeWidth={1.75} />
               ) : (
-                <Sparkles className="size-3.5" />
+                <Sparkles className="size-3.5" strokeWidth={1.75} />
               )}
               {aiLoading ? '正在整理…' : 'AI 整理成题目'}
             </button>
@@ -546,37 +546,37 @@ export function EducationBank() {
                 type="button"
                 onClick={handleExtractNotes}
                 disabled={notesLoading}
-                className="inline-flex h-9 items-center gap-1.5 rounded-xl border border-primary/40 bg-primary/10 px-4 text-[12.5px] font-medium text-primary hover:bg-primary/15 transition-colors disabled:opacity-40"
+                className="inline-flex h-9 items-center gap-1.5 rounded-lg border border-primary/40 bg-primary/10 px-4 text-[12.5px] font-medium text-primary hover:bg-primary/15 transition-colors disabled:opacity-40"
               >
-                {notesLoading ? <Loader2 className="size-3.5 animate-spin" /> : <NotebookPen className="size-3.5" />}
+                {notesLoading ? <Loader2 className="size-3.5 animate-spin" strokeWidth={1.75} /> : <NotebookPen className="size-3.5" strokeWidth={1.75} />}
                 {notesLoading ? '正在提炼…' : 'AI 提取重点'}
               </button>
               <button
                 type="button"
                 onClick={handleGenerateFromTextbook}
                 disabled={quizLoading}
-                className="inline-flex h-9 items-center gap-1.5 rounded-xl bg-primary px-4 text-[12.5px] font-medium text-primary-foreground hover:bg-primary/90 transition-colors disabled:opacity-40"
+                className="inline-flex h-9 items-center gap-1.5 rounded-lg bg-primary px-4 text-[12.5px] font-medium text-primary-foreground hover:bg-primary/90 transition-colors disabled:opacity-40"
               >
-                {quizLoading ? <Loader2 className="size-3.5 animate-spin" /> : <Sparkles className="size-3.5" />}
+                {quizLoading ? <Loader2 className="size-3.5 animate-spin" strokeWidth={1.75} /> : <Sparkles className="size-3.5" strokeWidth={1.75} />}
                 {quizLoading ? '正在出题…' : '根据教材出题'}
               </button>
             </>
           )}
           {notesResult !== null && (
-            <span className="inline-flex items-center gap-1.5 rounded-lg border border-sky-500/40 bg-sky-500/10 px-3 py-1.5 text-[11.5px] font-medium text-sky-600 dark:text-sky-400">
-              <NotebookPen className="size-3.5" />
+            <span className="inline-flex items-center gap-1.5 rounded-lg border border-primary/40 bg-primary/10 px-3 py-1.5 text-[11.5px] font-medium text-primary">
+              <NotebookPen className="size-3.5" strokeWidth={1.75} />
               已提炼 {notesResult} 条重点
             </span>
           )}
           {result && (
             <span className="inline-flex items-center gap-1.5 rounded-lg border border-emerald-500/40 bg-emerald-500/10 px-3 py-1.5 text-[11.5px] font-medium text-emerald-600 dark:text-emerald-400">
-              <Check className="size-3.5" />
+              <Check className="size-3.5" strokeWidth={1.75} />
               已新增 {result.added} 道，跳过 {result.skipped} 道
             </span>
           )}
           {error && (
             <span className="inline-flex items-center gap-1.5 rounded-lg border border-rose-500/40 bg-rose-500/10 px-3 py-1.5 text-[11.5px] font-medium text-rose-500">
-              <X className="size-3.5" />
+              <X className="size-3.5" strokeWidth={1.75} />
               {error}
             </span>
           )}
@@ -585,11 +585,11 @@ export function EducationBank() {
 
       {/* 已导入教材 · 摘要 + 重点 */}
       {mode === 'textbook' && textbook && (
-        <div className="mb-4 rounded-3xl border border-border/60 bg-card/60 p-5 backdrop-blur-sm">
+        <div className="mb-4 surface-card rounded-xl p-5">
           <div className="mb-3 flex items-center justify-between gap-2">
             <div className="flex items-center gap-2">
-              <div className="grid size-8 place-items-center rounded-xl bg-sky-500/10">
-                <BookOpen className="size-4 text-sky-600 dark:text-sky-400" />
+              <div className="grid size-8 place-items-center rounded-md border border-border bg-muted/40">
+                <BookOpen className="size-4 text-primary" strokeWidth={1.75} />
               </div>
               <div>
                 <div className="text-[13px] font-semibold text-foreground">
@@ -608,19 +608,19 @@ export function EducationBank() {
               }}
               className="inline-flex h-7 items-center gap-1 rounded-lg border border-border/60 px-2.5 text-[11px] text-muted-foreground hover:text-rose-500 hover:border-rose-500/40 transition-colors"
             >
-              <Trash2 className="size-3" />
+              <Trash2 className="size-3" strokeWidth={1.75} />
               移除教材
             </button>
           </div>
           {textbook.notes.length > 0 && (
-            <div className="rounded-xl border border-border/60 bg-background/40 p-3">
+            <div className="rounded-lg border border-border bg-background/40 p-3">
               <div className="mb-1.5 text-[10.5px] font-medium text-muted-foreground">
                 AI 提炼的重点（AI 助教也会参考这些内容）
               </div>
               <ul className="space-y-1">
                 {textbook.notes.map((n, i) => (
                   <li key={i} className="flex items-start gap-1.5 text-[12px] leading-relaxed text-foreground/85">
-                    <span className="mt-0.5 size-1.5 shrink-0 rounded-full bg-sky-500/70" />
+                    <span className="mt-0.5 size-1.5 shrink-0 rounded-full bg-primary/70" />
                     <span>{n}</span>
                   </li>
                 ))}
@@ -632,7 +632,7 @@ export function EducationBank() {
 
 
       {/* 自定义题目列表 */}
-      <div className="rounded-3xl border border-border/60 bg-card/60 backdrop-blur-sm">
+      <div className="surface-card rounded-xl">
         <div className="flex items-center justify-between border-b border-border/60 px-5 py-3">
           <span className="text-[13px] font-semibold text-foreground">我的题库</span>
           {customQuestions.length > 0 && (
@@ -641,7 +641,7 @@ export function EducationBank() {
               onClick={() => setConfirmClear(true)}
               className="inline-flex h-7 items-center gap-1 rounded-lg border border-border/60 px-2.5 text-[11px] text-muted-foreground hover:text-rose-500 hover:border-rose-500/40 transition-colors"
             >
-              <Trash2 className="size-3" />
+              <Trash2 className="size-3" strokeWidth={1.75} />
               清空全部
             </button>
           )}
@@ -649,7 +649,7 @@ export function EducationBank() {
 
         {customQuestions.length === 0 ? (
           <div className="flex flex-col items-center justify-center py-12 text-center">
-            <Library className="mb-2 size-8 text-muted-foreground/40" />
+            <Library className="mb-2 size-8 text-muted-foreground/40" strokeWidth={1.75} />
             <p className="text-[13px] font-medium text-foreground/80">题库还是空的</p>
             <p className="mt-1 text-[11px] text-muted-foreground">
               导入你的自定义题目，让「每日一题」更贴合你的学习计划。
@@ -669,7 +669,7 @@ export function EducationBank() {
                         {q.topic}
                       </span>
                       {q.tools && q.tools.length > 0 && (
-                        <span className="rounded-full border border-indigo-400/30 bg-indigo-500/10 px-2 py-0.5 text-[10px] font-medium text-indigo-600 dark:text-indigo-300">
+                        <span className="rounded-full border border-primary/30 bg-primary/10 px-2 py-0.5 text-[10px] font-medium text-primary">
                           可联动工具
                         </span>
                       )}
@@ -684,7 +684,7 @@ export function EducationBank() {
                     className="grid size-7 shrink-0 place-items-center rounded-lg text-muted-foreground hover:bg-rose-500/10 hover:text-rose-500 transition-colors"
                     title="删除该题"
                   >
-                    <X className="size-3.5" />
+                    <X className="size-3.5" strokeWidth={1.75} />
                   </button>
                 </div>
               ))}
@@ -698,7 +698,7 @@ export function EducationBank() {
         <DialogContent className="max-w-sm">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
-              <Trash2 className="size-4 text-rose-500" />
+              <Trash2 className="size-4 text-rose-500" strokeWidth={1.75} />
               清空全部自定义题目？
             </DialogTitle>
             <DialogDescription>
@@ -717,7 +717,7 @@ export function EducationBank() {
                 setConfirmClear(false);
               }}
             >
-              <Trash2 className="size-3.5" />
+              <Trash2 className="size-3.5" strokeWidth={1.75} />
               确认清空
             </Button>
           </DialogFooter>

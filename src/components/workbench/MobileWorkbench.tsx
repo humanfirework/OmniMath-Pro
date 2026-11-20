@@ -90,9 +90,9 @@ export function MobileWorkbench({ initialView }: { initialView?: ViewMode | null
         <AnimatePresence mode="wait" initial={false}>
           <motion.div
             key={tab}
-            initial={{ opacity: 0, x: 8 }}
-            animate={{ opacity: 1, x: 0 }}
-            exit={{ opacity: 0, x: -8 }}
+            initial={{ opacity: 0, y: 4 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0 }}
             transition={{ duration: 0.18 }}
             className="absolute inset-0"
           >
@@ -137,14 +137,14 @@ export function MobileWorkbench({ initialView }: { initialView?: ViewMode | null
             className={cn(
               'relative flex-1 flex flex-col items-center justify-center gap-0.5 h-12 text-[10px] transition-colors',
               tab === id
-                ? 'text-foreground'
+                ? 'text-primary'
                 : 'text-muted-foreground hover:text-foreground',
             )}
           >
             <span
               className={cn(
                 'absolute top-0 left-1/2 -translate-x-1/2 h-px w-7 transition-opacity',
-                tab === id ? 'bg-foreground/40 opacity-100' : 'opacity-0',
+                tab === id ? 'bg-primary opacity-100' : 'opacity-0',
               )}
             />
             <Icon className="size-4" strokeWidth={1.75} />

@@ -47,9 +47,9 @@ function level(count: number): 0 | 1 | 2 | 3 {
 
 const LEVEL_CLASS: Record<number, string> = {
   0: 'bg-border/40',
-  1: 'bg-emerald-500/25 hover:bg-emerald-500/40',
-  2: 'bg-emerald-500/55 hover:bg-emerald-500/70',
-  3: 'bg-emerald-500/90 hover:bg-emerald-500',
+  1: 'bg-primary/20 hover:bg-primary/30',
+  2: 'bg-primary/45 hover:bg-primary/60',
+  3: 'bg-primary/80 hover:bg-primary',
 };
 
 const WEEKDAY_LABEL = ['', '一', '', '三', '', '五', ''];
@@ -207,7 +207,7 @@ export function ContributionChart({
         ))}
         <span>多</span>
         <span className="ml-2 inline-flex items-center gap-1">
-          <span className="size-2 rounded-[3px] ring-1 ring-amber-400/70 bg-emerald-500/25" />
+          <span className="size-2 rounded-[3px] ring-1 ring-amber-400/70 bg-primary/20" />
           有圆环 = 当天完成每日一题
         </span>
       </div>

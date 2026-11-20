@@ -300,14 +300,14 @@ function pushTransferResults(
           {
             id: `${n.id}_mag`,
             label: '幅值 (dB)',
-            color: '#a78bfa',
+            color: '#3B6FE0',
             width: 2,
             points: analysis.bode.map((p) => [p.f, p.db] as [number, number]),
           },
           {
             id: `${n.id}_phase`,
             label: '相位 (°)',
-            color: '#f59e0b',
+            color: '#7C5CE0',
             width: 2,
             points: analysis.bode.map((p) => [p.f, p.phaseDeg] as [number, number]),
           },
@@ -343,21 +343,21 @@ const ICONS: Record<string, LucideIcon> = {
  * Category colors — drives the left stripe + icon tint
  * ------------------------------------------------------------------ */
 const CATEGORY_COLOR: Record<NodeCategory, { stripe: string; text: string; bg: string }> = {
-  input:      { stripe: 'bg-teal-500',     text: 'text-teal-500',     bg: 'bg-teal-500/10' },
-  operation:  { stripe: 'bg-amber-500',    text: 'text-amber-500',    bg: 'bg-amber-500/10' },
-  function:   { stripe: 'bg-rose-500',     text: 'text-rose-500',     bg: 'bg-rose-500/10' },
-  plot:       { stripe: 'bg-violet-500',   text: 'text-violet-500',   bg: 'bg-violet-500/10' },
-  matrix:     { stripe: 'bg-emerald-500',  text: 'text-emerald-500',  bg: 'bg-emerald-500/10' },
-  calculus:   { stripe: 'bg-orange-500',   text: 'text-orange-500',   bg: 'bg-orange-500/10' },
-  output:     { stripe: 'bg-cyan-500',     text: 'text-cyan-500',     bg: 'bg-cyan-500/10' },
-  mapping:    { stripe: 'bg-sky-500',      text: 'text-sky-500',      bg: 'bg-sky-500/10' },
-  vector:     { stripe: 'bg-indigo-500',   text: 'text-indigo-500',   bg: 'bg-indigo-500/10' },
-  curve:      { stripe: 'bg-pink-500',     text: 'text-pink-500',     bg: 'bg-pink-500/10' },
-  statistics: { stripe: 'bg-lime-600',     text: 'text-lime-600',     bg: 'bg-lime-600/10' },
-  logic:      { stripe: 'bg-slate-500',    text: 'text-slate-500',    bg: 'bg-slate-500/10' },
-  vision:     { stripe: 'bg-fuchsia-600',  text: 'text-fuchsia-600',  bg: 'bg-fuchsia-600/10' },
-  simulation: { stripe: 'bg-violet-600',   text: 'text-violet-600',   bg: 'bg-violet-600/10' },
-  control:    { stripe: 'bg-rose-600',     text: 'text-rose-600',     bg: 'bg-rose-600/10' },
+  input:      { stripe: 'bg-teal-500',     text: 'text-teal-500',     bg: 'bg-muted/50' },
+  operation:  { stripe: 'bg-amber-500',    text: 'text-amber-500',    bg: 'bg-muted/50' },
+  function:   { stripe: 'bg-rose-500',     text: 'text-rose-500',     bg: 'bg-muted/50' },
+  plot:       { stripe: 'bg-violet-500',   text: 'text-violet-500',   bg: 'bg-muted/50' },
+  matrix:     { stripe: 'bg-emerald-500',  text: 'text-emerald-500',  bg: 'bg-muted/50' },
+  calculus:   { stripe: 'bg-orange-500',   text: 'text-orange-500',   bg: 'bg-muted/50' },
+  output:     { stripe: 'bg-cyan-500',     text: 'text-cyan-500',     bg: 'bg-muted/50' },
+  mapping:    { stripe: 'bg-sky-500',      text: 'text-sky-500',      bg: 'bg-muted/50' },
+  vector:     { stripe: 'bg-indigo-500',   text: 'text-indigo-500',   bg: 'bg-muted/50' },
+  curve:      { stripe: 'bg-pink-500',     text: 'text-pink-500',     bg: 'bg-muted/50' },
+  statistics: { stripe: 'bg-lime-600',     text: 'text-lime-600',     bg: 'bg-muted/50' },
+  logic:      { stripe: 'bg-slate-500',    text: 'text-slate-500',    bg: 'bg-muted/50' },
+  vision:     { stripe: 'bg-fuchsia-600',  text: 'text-fuchsia-600',  bg: 'bg-muted/50' },
+  simulation: { stripe: 'bg-violet-600',   text: 'text-violet-600',   bg: 'bg-muted/50' },
+  control:    { stripe: 'bg-rose-600',     text: 'text-rose-600',     bg: 'bg-muted/50' },
 };
 
 const CATEGORY_LABEL_KEY: Record<NodeCategory, keyof TranslationDict> = {
@@ -381,20 +381,19 @@ const CATEGORY_LABEL_KEY: Record<NodeCategory, keyof TranslationDict> = {
 /* ------------------------------------------------------------------ *
  * 端口类型颜色编码（类 Unreal Blueprint）
  * ------------------------------------------------------------------ */
-// 端口颜色随数据类型编码，让「连得对（P2）」成为视觉直觉：
-//   number 绿 / expression 蓝 / matrix 紫 / curve·curves 橙 /
-//   image 红 / animation 青 / plot 天蓝 / any 灰。
-// 与 config-schema.test.ts 的 PORT_TYPE_COLORS 保持一致。
+// 端口颜色收敛到「极光蓝 → 紫罗兰」两族，避免七彩线缆抢画面；
+// 具体数据类型仍靠端口图标区分。
+// 与 config-schema.test.ts 的 PORT_TYPE_COLORS 覆盖范围保持一致。
 const PORT_TYPE_STYLE: Record<PortDataType, { border: string; bg: string }> = {
-  number:     { border: 'oklch(0.72 0.16 155)', bg: 'oklch(0.72 0.16 155 / 0.35)' },
-  expression: { border: 'oklch(0.62 0.19 250)', bg: 'oklch(0.62 0.19 250 / 0.35)' },
-  matrix:     { border: 'oklch(0.6 0.2 310)',   bg: 'oklch(0.6 0.2 310 / 0.35)' },
-  curve:      { border: 'oklch(0.75 0.16 60)',  bg: 'oklch(0.75 0.16 60 / 0.35)' },
-  curves:     { border: 'oklch(0.75 0.16 60)',  bg: 'oklch(0.75 0.16 60 / 0.35)' },
-  image:      { border: 'oklch(0.62 0.21 25)',  bg: 'oklch(0.62 0.21 25 / 0.35)' },
-  animation:  { border: 'oklch(0.72 0.13 195)', bg: 'oklch(0.72 0.13 195 / 0.35)' },
-  plot:       { border: 'oklch(0.7 0.15 220)',  bg: 'oklch(0.7 0.15 220 / 0.35)' },
-  any:        { border: 'oklch(0.65 0 0)',      bg: 'oklch(0.65 0 0 / 0.35)' },
+  number:     { border: 'var(--primary)', bg: 'color-mix(in oklab, var(--primary) 30%, transparent)' },
+  expression: { border: 'color-mix(in oklab, var(--primary) 78%, var(--primary-2))', bg: 'color-mix(in oklab, var(--primary) 30%, transparent)' },
+  matrix:     { border: 'var(--primary-2)', bg: 'color-mix(in oklab, var(--primary-2) 30%, transparent)' },
+  curve:      { border: 'color-mix(in oklab, var(--primary-2) 82%, var(--primary))', bg: 'color-mix(in oklab, var(--primary-2) 30%, transparent)' },
+  curves:     { border: 'color-mix(in oklab, var(--primary-2) 82%, var(--primary))', bg: 'color-mix(in oklab, var(--primary-2) 30%, transparent)' },
+  image:      { border: 'color-mix(in oklab, var(--primary-2) 65%, var(--primary))', bg: 'color-mix(in oklab, var(--primary-2) 30%, transparent)' },
+  animation:  { border: 'color-mix(in oklab, var(--primary) 60%, var(--primary-2))', bg: 'color-mix(in oklab, var(--primary) 30%, transparent)' },
+  plot:       { border: 'color-mix(in oklab, var(--primary) 88%, var(--primary-2))', bg: 'color-mix(in oklab, var(--primary) 30%, transparent)' },
+  any:        { border: 'var(--muted-foreground)', bg: 'color-mix(in oklab, var(--muted-foreground) 30%, transparent)' },
 };
 
 // 端口类型图标 —— 让「数据是什么」不只靠颜色，还靠形状（类 Unreal 数据线/执行线）。
@@ -948,7 +947,7 @@ function NodePipelineInner() {
         const curves: RunCurve[] = [{
           id: n.id,
           label: plot.expr || nodeTitle(n),
-          color: '#a78bfa',
+          color: '#3B6FE0',
           width: 2,
           points: plot.samples ?? [],
         }];
@@ -959,7 +958,7 @@ function NodePipelineInner() {
         const width = typeof o.width === 'number' ? o.width : 0;
         const height = typeof o.height === 'number' ? o.height : 0;
         if (paths.length <= 0 || width <= 0 || height <= 0) continue;
-        const color = typeof n.config.color === 'string' ? n.config.color : '#a78bfa';
+        const color = typeof n.config.color === 'string' ? n.config.color : '#3B6FE0';
         const strokeWidth = typeof n.config.width === 'number' ? n.config.width : 2;
         const curves: RunCurve[] = paths
           .filter((p) => Array.isArray(p.segments) && p.segments.length > 0)
@@ -1009,7 +1008,7 @@ function NodePipelineInner() {
         if (firstFrame.length <= 0 || width <= 0 || height <= 0) continue;
         const curves: RunCurve[] = [{
           id: n.id,
-          color: anim.color ?? '#a78bfa',
+          color: anim.color ?? '#3B6FE0',
           width: anim.strokeWidth ?? 2,
           points: normalizeFramePoints(firstFrame, height),
         }];
@@ -2416,6 +2415,11 @@ function NodePipelineInner() {
       <div
         ref={canvasRef}
         className="relative flex-1 min-h-0 overflow-hidden pipeline-canvas"
+        style={{
+          animation: 'none',
+          backgroundImage: 'radial-gradient(circle, var(--viz-grid) 1px, transparent 1px)',
+          backgroundSize: '24px 24px',
+        }}
         onPointerDown={onCanvasPointerDown}
         onDoubleClick={onCanvasDoubleClick}
         onContextMenu={onCanvasContextMenu}
@@ -2429,8 +2433,8 @@ function NodePipelineInner() {
               exit={{ opacity: 0 }}
               className="pointer-events-none absolute inset-0 z-30 flex items-center justify-center"
             >
-              <div className="flex flex-col items-center gap-3 rounded-lg border border-border bg-popover px-6 py-5 shadow-xl">
-                <Loader2 className="size-5 animate-spin text-muted-foreground" />
+              <div className="surface-floating motion-panel-in flex flex-col items-center gap-3 px-6 py-5">
+                <Loader2 className="size-[18px] animate-spin text-muted-foreground" strokeWidth={1.75} />
                 <div className="flex flex-col items-center gap-1">
                   <span className="text-[12.5px] font-medium text-foreground">
                     蓝图运行中…
@@ -2566,11 +2570,11 @@ function NodePipelineInner() {
         {/* Simulink 仿真配置弹窗 */}
         {simConfigOpen && (
           <div
-            className="absolute inset-0 z-30 flex items-center justify-center bg-black/40 backdrop-blur-sm"
+            className="absolute inset-0 z-30 flex items-center justify-center bg-black/30"
             onPointerDown={(e) => { e.stopPropagation(); setSimConfigOpen(false); }}
           >
             <div
-              className="w-80 glass-strong border border-border rounded-xl shadow-2xl p-4 space-y-3"
+              className="surface-floating motion-panel-in w-80 p-4 space-y-3"
               onPointerDown={(e) => e.stopPropagation()}
             >
               <div className="flex items-center justify-between">
@@ -2582,7 +2586,7 @@ function NodePipelineInner() {
                   onClick={() => setSimConfigOpen(false)}
                   className="size-5 grid place-items-center rounded text-muted-foreground hover:text-foreground hover:bg-accent"
                 >
-                  <X className="size-3" />
+                  <X className="size-3.5" />
                 </button>
               </div>
               <div className="space-y-2">
@@ -2624,7 +2628,7 @@ function NodePipelineInner() {
                   关闭
                 </Button>
                 <Button size="sm" className="h-7 text-[12px]" onClick={() => { setSimConfigOpen(false); runPipeline(); }}>
-                  <Play className="size-3 mr-1" /> 运行仿真
+                  <Play className="size-3.5 mr-1" strokeWidth={1.75} /> 运行仿真
                 </Button>
               </div>
             </div>
@@ -2634,7 +2638,7 @@ function NodePipelineInner() {
         {/* P3 诊断面板：列出出错节点 + 错误传播链 */}
         {diagnosticsOpen && (
           <div
-            className="absolute top-3 right-3 z-30 w-80 max-h-[70%] glass-strong border border-border rounded-xl shadow-2xl flex flex-col pointer-events-auto"
+            className="surface-floating motion-panel-in absolute top-3 right-3 z-30 w-80 max-h-[70%] flex flex-col pointer-events-auto"
             onPointerDown={(e) => e.stopPropagation()}
           >
             <div className="flex items-center justify-between px-3 h-9 border-b border-border/60 shrink-0">
@@ -2646,7 +2650,7 @@ function NodePipelineInner() {
                 onClick={() => setDiagnosticsOpen(false)}
                 className="size-5 grid place-items-center rounded text-muted-foreground hover:text-foreground hover:bg-accent"
               >
-                <X className="size-3" />
+                <X className="size-3.5" />
               </button>
             </div>
             <div className="flex-1 min-h-0 overflow-auto p-2.5 space-y-2">
@@ -2680,10 +2684,10 @@ function NodePipelineInner() {
           type="button"
           onPointerDown={(e) => e.stopPropagation()}
           onClick={() => setView({ x: 40, y: 40, scale: 1 })}
-          className="absolute bottom-3 right-3 flex items-center gap-1.5 px-2 py-1 rounded-md glass border border-border text-[11px] text-muted-foreground hover:bg-accent hover:text-foreground transition-colors cursor-pointer"
+          className="absolute bottom-3 right-3 flex items-center gap-1.5 rounded-full border border-border bg-popover px-2.5 py-1 text-[11px] text-muted-foreground shadow-[var(--shadow-card)] hover:bg-accent hover:text-foreground transition-colors cursor-pointer"
           title="点击重置视图到 100%"
         >
-          <ZoomIn className="size-3" />
+          <ZoomIn className="size-3.5" strokeWidth={1.75} />
           <span className="font-mono">{Math.round(view.scale * 100)}%</span>
         </button>
 
@@ -2692,10 +2696,10 @@ function NodePipelineInner() {
           type="button"
           onPointerDown={(e) => e.stopPropagation()}
           onClick={() => setMinimapOpen((v) => !v)}
-          className="absolute bottom-3 right-[78px] flex items-center gap-1 px-2 py-1 rounded-md glass border border-border text-[10px] text-muted-foreground hover:bg-accent hover:text-foreground transition-colors cursor-pointer"
+          className="absolute bottom-3 right-[82px] flex items-center gap-1 rounded-full border border-border bg-popover px-2 py-1 text-[10px] text-muted-foreground shadow-[var(--shadow-card)] hover:bg-accent hover:text-foreground transition-colors cursor-pointer"
           title={minimapOpen ? '隐藏小地图' : '显示小地图'}
         >
-          <MapIcon className="size-3" />
+          <MapIcon className="size-3.5" strokeWidth={1.75} />
         </button>
 
         {/* 小地图 */}
@@ -2707,7 +2711,7 @@ function NodePipelineInner() {
             onCenter={centerOnWorld}
           />
         )}
-        <div className="absolute bottom-3 left-3 hidden sm:flex items-center gap-1.5 px-2 py-1 rounded-md glass border border-border text-[10px] text-muted-foreground/80">
+        <div className="absolute bottom-3 left-3 hidden sm:flex items-center gap-1.5 rounded-full border border-border bg-popover px-2.5 py-1 text-[10px] text-muted-foreground/80 shadow-[var(--shadow-card)]">
           <button
             type="button"
             onPointerDown={(e) => e.stopPropagation()}
@@ -2715,7 +2719,7 @@ function NodePipelineInner() {
             className="grid place-items-center size-4 rounded hover:bg-accent hover:text-foreground transition-colors"
             title={hintsOpen ? '收起提示' : '展开操作提示'}
           >
-            <Info className="size-3" />
+            <Info className="size-3.5" strokeWidth={1.75} />
           </button>
           {hintsOpen && (
             <span>滚轮缩放 · Shift+滚轮上下平移 · 方向键移动</span>
@@ -2766,7 +2770,7 @@ function PipelineToolbar({
 }: ToolbarProps) {
   const [galleryOpen, setGalleryOpen] = useState(false);
   return (
-    <div className="shrink-0 h-9 flex items-center justify-between px-3 gap-3 bg-background border-b border-border">
+    <div className="shrink-0 h-9 flex items-center justify-between px-3 gap-3 bg-background border-b border-border [&_svg]:stroke-[1.75]">
       <div className="flex items-center gap-2 min-w-0">
         <Button
           variant="ghost"
@@ -2792,7 +2796,7 @@ function PipelineToolbar({
             {edgeCount} {t('npEdges')}
           </span>
           {selectedCount > 0 && (
-            <span className="px-1.5 py-0.5 rounded-[3px] border border-border bg-accent text-foreground font-mono">
+            <span className="px-1.5 py-0.5 rounded-[3px] border border-border bg-muted text-foreground font-mono">
               {selectedCount} 选中
             </span>
           )}
@@ -2801,7 +2805,7 @@ function PipelineToolbar({
           <Button
             variant="outline"
             size="sm"
-            className="h-8 px-2.5 gap-1.5 text-[12px] border-blue-500/50 text-blue-500 hover:bg-blue-500/10"
+            className="motion-press h-8 px-2.5 gap-1.5 text-[12px] text-destructive hover:bg-destructive/10 hover:text-destructive"
             onClick={onDeleteSelected}
           >
             <Trash2 className="size-3.5" />
@@ -2813,7 +2817,7 @@ function PipelineToolbar({
             <Button
               variant="outline"
               size="sm"
-              className="h-8 px-2.5 gap-1.5 text-[12px] border-teal-500/50 text-teal-500 hover:bg-teal-500/10"
+              className="h-8 px-2.5 gap-1.5 text-[12px]"
               onClick={onGroup}
               title="把选中节点归入一个可命名的 Frame"
             >
@@ -2838,7 +2842,7 @@ function PipelineToolbar({
         <Button
           variant="default"
           size="sm"
-          className="h-8 px-3 gap-1.5 text-[12px] bg-primary/90 hover:bg-primary"
+          className="motion-press h-8 px-3 gap-1.5 text-[12px] bg-primary hover:bg-primary/90"
           onClick={onRun}
           disabled={running}
         >
@@ -2853,7 +2857,7 @@ function PipelineToolbar({
           <Button
             variant="destructive"
             size="sm"
-            className="h-8 px-3 gap-1.5 text-[12px]"
+            className="motion-press h-8 px-3 gap-1.5 text-[12px]"
             onClick={onStop}
             title="终止当前运行"
           >
@@ -3037,7 +3041,7 @@ function nodeHasTunableParams(def: NodeTypeDef | undefined): boolean {
 }
 
 function NodeCard({
-  node, selected, multiSelected, computeTick, isConnecting, connectingFromType, inErrorChain, snapPortId,
+  node, selected, multiSelected, isConnecting, connectingFromType, inErrorChain, snapPortId,
   onPointerDownHeader, onDelete, onSelect, onToggleMute,
   onConfigChange, onStartConnection, onCompleteConnection,
   variables, onPlotOpen, measureScale,
@@ -3052,25 +3056,6 @@ function NodeCard({
   // 配置项多的节点（视觉/仿真等）默认折叠，画布先呈现「结构 + 结果」，
   // 需要调参时再展开，避免每张卡片都摊开一整墙控件。
   const [collapsed, setCollapsed] = useState((def?.configSchema?.length ?? 0) > 2);
-
-  // Compute-pulse glow: re-trigger on computeTick bump via direct DOM
-  // manipulation (avoids setState-in-effect lint error).
-  const lastTick = useRef(0);
-  useEffect(() => {
-    if (computeTick > 0 && computeTick !== lastTick.current) {
-      lastTick.current = computeTick;
-      const el = cardRef.current;
-      if (el) {
-        el.classList.remove('animate-glow-pulse');
-        // Force reflow so the animation restarts.
-        void el.offsetWidth;
-        el.classList.add('animate-glow-pulse');
-        const id = setTimeout(() => el.classList.remove('animate-glow-pulse'), 900);
-        return () => clearTimeout(id);
-      }
-    }
-    return;
-  }, [computeTick]);
 
   // ── 防御性渲染：如果 node.type 不在注册表中（脏数据/旧版本数据），
   // 显示错误卡片而不是崩溃白屏。用户可看到错误并删除该节点。
@@ -3127,9 +3112,9 @@ function NodeCard({
       exit={{ opacity: 0, scale: 0.9 }}
       transition={{ duration: 0.22, ease: [0.2, 0.8, 0.2, 1] }}
       className={cn(
-        'absolute node-card group overflow-visible',
+        'surface-card absolute node-card group overflow-visible [&_svg]:stroke-[1.75]',
         selected && 'selected',
-        multiSelected && 'ring-2 ring-blue-500 ring-offset-0',
+        multiSelected && 'ring-2 ring-primary ring-offset-0',
         inErrorChain && !selected && 'with-error-chain',
         node.muted && 'saturate-50',
       )}
@@ -3155,7 +3140,7 @@ function NodeCard({
         onPointerDown={onPointerDownHeader}
       >
         <div className="flex items-center gap-1.5 min-w-0">
-          <Icon className={cn('size-3.5 shrink-0', cat.text)} strokeWidth={2.2} />
+          <Icon className={cn('size-3.5 shrink-0', cat.text)} strokeWidth={1.75} />
           <span className="text-[12px] truncate">{t(def.labelKey)}</span>
         </div>
         <div className="flex items-center gap-0.5 shrink-0">
@@ -3174,7 +3159,7 @@ function NodeCard({
             )}
             aria-label={node.muted ? t('pipelineUnmute') : t('pipelineMute')}
           >
-            {node.muted ? <VolumeX className="size-3" /> : <Volume2 className="size-3" />}
+            {node.muted ? <VolumeX className="size-3.5" /> : <Volume2 className="size-3.5" />}
           </button>
           {/* P1-3 折叠配置面板（最小暴露，Blender 风格） */}
           <button
@@ -3188,7 +3173,7 @@ function NodeCard({
             )}
             aria-label={collapsed ? t('pipelineExpand') : t('pipelineCollapse')}
           >
-            {collapsed ? <ChevronRight className="size-3" /> : <ChevronDown className="size-3" />}
+            {collapsed ? <ChevronRight className="size-3.5" /> : <ChevronDown className="size-3.5" />}
           </button>
           <button
             type="button"
@@ -3200,7 +3185,7 @@ function NodeCard({
             )}
             aria-label={t('pipelineDelete')}
           >
-            <X className="size-3" />
+            <X className="size-3.5" />
           </button>
         </div>
       </div>
@@ -3346,26 +3331,26 @@ function PortLabel({
           connected && 'connected',
           (hover || (isConnecting && !isOutput && compatible)) && 'active',
           isConnecting && !isOutput && !compatible && 'opacity-30',
-          snapped && 'ring-2 ring-cyan-400 scale-125',
+          snapped && 'ring-2 ring-primary',
         )}
         style={{
           borderColor: snapped
-            ? 'oklch(0.75 0.18 195)'
-            : PORT_TYPE_STYLE[port.type]?.border ?? 'oklch(0.7 0.15 165)',
+            ? 'var(--primary)'
+            : PORT_TYPE_STYLE[port.type]?.border ?? 'var(--primary)',
           background: snapped
-            ? 'oklch(0.75 0.18 195 / 0.35)'
+            ? 'color-mix(in oklab, var(--primary) 35%, transparent)'
             : connected
-              ? (PORT_TYPE_STYLE[port.type]?.border ?? 'oklch(0.7 0.15 165)')
+              ? (PORT_TYPE_STYLE[port.type]?.border ?? 'var(--primary)')
               : 'var(--node-bg)',
         }}
       />
       <TypeIcon
         className={cn(
-          'size-3 shrink-0',
+          'size-3.5 shrink-0',
           isConnecting && !isOutput && !compatible ? 'opacity-30' : 'opacity-60',
         )}
         style={{ color: PORT_TYPE_STYLE[port.type]?.border }}
-        strokeWidth={2}
+        strokeWidth={1.75}
       />
       <span className="text-muted-foreground/80 select-none truncate max-w-[140px]">
         {t(port.labelKey)}
@@ -3954,7 +3939,7 @@ function NodeConfig({ node, onConfigChange, variables }: NodeConfigProps) {
             <label className="text-[10px] text-muted-foreground/80 uppercase tracking-wider">描边颜色 Color</label>
             <input
               type="color"
-              value={String(node.config.color ?? '#a78bfa')}
+              value={String(node.config.color ?? '#3B6FE0')}
               onChange={(e) => onConfigChange({ color: e.target.value })}
               className="h-7 w-full rounded-md border border-border/60 bg-muted/40 cursor-pointer"
             />
@@ -3984,7 +3969,7 @@ function NodeConfig({ node, onConfigChange, variables }: NodeConfigProps) {
             <label className="text-[10px] text-muted-foreground/80 uppercase tracking-wider">动画颜色 Color</label>
             <input
               type="color"
-              value={String(node.config.color ?? '#a78bfa')}
+              value={String(node.config.color ?? '#3B6FE0')}
               onChange={(e) => onConfigChange({ color: e.target.value })}
               className="h-7 w-full rounded-md border border-border/60 bg-muted/40 cursor-pointer"
             />
@@ -4345,7 +4330,7 @@ function DiagnosticRow({
       className="w-full text-left rounded-lg border border-destructive/40 bg-destructive/5 hover:bg-destructive/10 px-2.5 py-2 transition-colors"
     >
       <div className="flex items-center gap-1.5">
-        <AlertCircle className="size-3 shrink-0 text-destructive" />
+        <AlertCircle className="size-3.5 shrink-0 text-destructive" strokeWidth={1.75} />
         <span className="text-[11px] font-medium text-foreground truncate flex-1">
           {label}
         </span>
@@ -4373,7 +4358,7 @@ function NodeResultFooter({
   if (node.error) {
     return (
       <div className="flex items-center gap-1.5 text-[11px] text-destructive w-full">
-        <AlertCircle className="size-3 shrink-0" />
+        <AlertCircle className="size-3.5 shrink-0" strokeWidth={1.75} />
         <span className="truncate">{node.error}</span>
       </div>
     );
@@ -4383,7 +4368,7 @@ function NodeResultFooter({
     const graph = node.outputs.graph as { summary?: string };
     return (
       <div className="flex items-center gap-1.5 w-full min-w-0 text-[11px]">
-        <GitBranch className="size-3 shrink-0 text-cyan-500" />
+        <GitBranch className="size-3.5 shrink-0 text-primary" strokeWidth={1.75} />
         <span className="truncate text-foreground/80">{graph.summary || '—'}</span>
       </div>
     );
@@ -4393,7 +4378,7 @@ function NodeResultFooter({
     const shapes = node.outputs.shapes as { summary?: string; total?: number };
     return (
       <div className="flex items-center gap-1.5 w-full min-w-0 text-[11px]">
-        <Triangle className="size-3 shrink-0 text-cyan-500" />
+        <Triangle className="size-3.5 shrink-0 text-primary" strokeWidth={1.75} />
         <span className="truncate text-foreground/80">{shapes.summary || '—'}</span>
       </div>
     );
@@ -4505,7 +4490,7 @@ function Sparkline({
     const yRange = yMax - yMin || 1;
 
     // Curve
-    ctx.strokeStyle = '#a78bfa';
+    ctx.strokeStyle = '#3B6FE0';
     ctx.lineWidth = 1.5;
     ctx.lineJoin = 'round';
     ctx.lineCap = 'round';
@@ -4690,8 +4675,8 @@ function NodePalette({
         exit={{ opacity: 0, scale: 0.95, y: -8 }}
         transition={{ duration: 0.18, ease: [0.2, 0.8, 0.2, 1] }}
         className={cn(
-          'absolute z-40 glass-strong border border-border rounded-xl shadow-2xl',
-          'w-64 flex flex-col max-h-[70vh] overflow-hidden',
+          'surface-floating absolute z-40',
+          'w-64 flex flex-col max-h-[70vh] overflow-hidden [&_svg]:stroke-[1.75]',
         )}
         style={style}
         onPointerDown={(e) => e.stopPropagation()}
@@ -4707,7 +4692,7 @@ function NodePalette({
             onClick={onClose}
             className="size-5 grid place-items-center rounded text-muted-foreground hover:text-foreground hover:bg-accent"
           >
-            <X className="size-3" />
+            <X className="size-3.5" />
           </button>
         </div>
         {/* Search input */}
@@ -4747,11 +4732,11 @@ function NodePalette({
                   <span className={cn('size-1.5 rounded-full', CATEGORY_COLOR[group.category].stripe)} />
                   {group.pinned === 'fav' ? (
                     <span className="inline-flex items-center gap-1">
-                      <Star className="size-2.5" /> 收藏
+                      <Star className="size-3.5" /> 收藏
                     </span>
                   ) : group.pinned === 'recent' ? (
                     <span className="inline-flex items-center gap-1">
-                      <Clock3 className="size-2.5" /> 最近使用
+                      <Clock3 className="size-3.5" /> 最近使用
                     </span>
                   ) : (
                     t(CATEGORY_LABEL_KEY[group.category])
@@ -4777,7 +4762,7 @@ function NodePalette({
                           key={type}
                           type="button"
                           onClick={() => { recordRecent(type); onPick(type); }}
-                          className="group/row w-full flex items-center gap-2 px-2 py-1.5 rounded-md text-[12px] text-left transition-all hover:bg-accent hover:translate-x-0.5 interactive-card"
+                          className="group/row w-full flex items-center gap-2 px-2 py-1.5 rounded-md text-[12px] text-left transition-colors hover:bg-accent interactive-card"
                         >
                           <div className={cn('size-6 grid place-items-center rounded-md shrink-0', cat.bg)}>
                             <Icon className={cn('size-3.5', cat.text)} />
@@ -4794,7 +4779,7 @@ function NodePalette({
                               isFav ? 'opacity-100 text-amber-400' : 'text-muted-foreground hover:text-amber-400 hover:bg-accent',
                             )}
                           >
-                            <Star className={cn('size-3', isFav && 'fill-amber-400')} />
+                            <Star className={cn('size-3.5', isFav && 'fill-amber-400')} />
                           </span>
                         </button>
                       );
@@ -4817,19 +4802,14 @@ function EmptyState({ onAdd }: { onAdd: () => void }) {
   return (
     <div className="absolute inset-0 grid place-items-center pointer-events-none">
       <motion.div
-        initial={{ opacity: 0, y: 8 }}
-        animate={{ opacity: 1, y: 0 }}
-        transition={{ duration: 0.4 }}
+        initial={{ opacity: 0 }}
+        animate={{ opacity: 1 }}
+        transition={{ duration: 0.18, ease: [0.2, 0.8, 0.2, 1] }}
         className="text-center pointer-events-auto"
       >
-        <motion.div
-          animate={{ y: [0, -8, 0], rotate: [0, 4, -4, 0] }}
-          transition={{ duration: 5, repeat: Infinity, ease: 'easeInOut' }}
-          className="grid place-items-center size-16 rounded-2xl bg-primary/8 border border-primary/20 mb-4 mx-auto"
-          style={{ boxShadow: '0 0 32px oklch(0.7 0.15 165 / 18%)' }}
-        >
-          <Workflow className="size-7 text-primary/70" />
-        </motion.div>
+        <div className="mx-auto mb-4 grid size-12 place-items-center rounded-xl border border-border bg-card">
+          <Workflow className="size-[18px] text-muted-foreground" strokeWidth={1.75} />
+        </div>
         <p className="text-[14px] font-medium text-foreground/80 mb-1">
           {t('pipelineTitle')}
         </p>
@@ -4839,10 +4819,10 @@ function EmptyState({ onAdd }: { onAdd: () => void }) {
         <Button
           variant="outline"
           size="sm"
-          className="h-8 px-3 gap-1.5 text-[12px]"
+          className="motion-press h-8 px-3 gap-1.5 text-[12px]"
           onClick={onAdd}
         >
-          <Plus className="size-3.5" />
+          <Plus className="size-3.5" strokeWidth={1.75} />
           {t('npAddNodeTitle')}
         </Button>
       </motion.div>

@@ -3,7 +3,7 @@
 /**
  * OmniMath Pro — ActivityBar
  *
- * VSCode-style far-left icon strip (w-12) with glass background.
+ * VSCode-style far-left icon strip (w-10) with a flat quiet surface.
  * All icons (including view-mode switches and utility toggles) are freely
  * draggable and their order is persisted in settingsStore.
  */
@@ -278,10 +278,10 @@ export function ActivityBar() {
     return (
       <div
         className={cn(
-          'grid place-items-center size-8 rounded-md pointer-events-none',
-          'bg-card text-foreground',
+          'grid place-items-center size-8 rounded-lg pointer-events-none',
+          'bg-popover text-foreground',
           'border border-border',
-          'shadow-lg',
+          'shadow-[var(--shadow-float)]',
         )}
       >
         <Icon className="size-4" strokeWidth={1.75} />
@@ -308,21 +308,13 @@ export function ActivityBar() {
               onClick={() => handlePanelClick(id as SidePanelTab)}
               aria-label={t(reg.labelKey)}
               className={cn(
-                'relative grid place-items-center size-8 rounded-md transition-colors',
+                'relative grid place-items-center size-9 rounded-md transition-colors',
                 isActive
-                  ? 'bg-accent text-foreground'
+                  ? 'bg-primary/12 text-primary'
                   : 'text-muted-foreground hover:text-foreground hover:bg-accent/50',
               )}
             >
-              <Icon className="size-4" strokeWidth={1.75} />
-              {isActive && (
-                <span
-                  className={cn(
-                    'absolute top-1/2 -translate-y-1/2 w-[2px] h-4 bg-primary',
-                    isRight ? 'right-0 rounded-l' : 'left-0 rounded-r',
-                  )}
-                />
-              )}
+              <Icon className="size-[18px]" strokeWidth={1.75} />
             </button>
           </TooltipTrigger>
           <TooltipContent side={tooltipSide}>{t(reg.labelKey)}</TooltipContent>
@@ -341,21 +333,13 @@ export function ActivityBar() {
               onClick={() => setViewMode(viewMode === id ? 'workbench' : id as ViewMode)}
               aria-label={t(reg.labelKey)}
               className={cn(
-                'relative grid place-items-center size-8 rounded-md transition-colors',
+                'relative grid place-items-center size-9 rounded-md transition-colors',
                 isActive
-                  ? 'bg-accent text-foreground'
+                  ? 'bg-primary/12 text-primary'
                   : 'text-muted-foreground hover:text-foreground hover:bg-accent/50',
               )}
             >
-              <Icon className="size-4" strokeWidth={1.75} />
-              {isActive && (
-                <span
-                  className={cn(
-                    'absolute top-1/2 -translate-y-1/2 w-[2px] h-4 bg-primary',
-                    isRight ? 'right-0 rounded-l' : 'left-0 rounded-r',
-                  )}
-                />
-              )}
+              <Icon className="size-[18px]" strokeWidth={1.75} />
             </button>
           </TooltipTrigger>
           <TooltipContent side={tooltipSide}>{t(reg.labelKey)}</TooltipContent>
@@ -376,11 +360,11 @@ export function ActivityBar() {
               className={cn(
                 'grid place-items-center size-8 rounded-md transition-colors',
                 isActive
-                  ? 'bg-accent text-foreground'
+                  ? 'bg-primary/12 text-primary'
                   : 'text-muted-foreground hover:text-foreground hover:bg-accent/60',
               )}
             >
-              <LayoutTemplate className="size-4" />
+              <LayoutTemplate className="size-4" strokeWidth={1.75} />
             </button>
           </TooltipTrigger>
           <TooltipContent side={tooltipSide}>{t(reg.labelKey)}</TooltipContent>
@@ -401,11 +385,11 @@ export function ActivityBar() {
               className={cn(
                 'grid place-items-center size-8 rounded-md transition-colors',
                 isActive
-                  ? 'bg-accent text-foreground'
+                  ? 'bg-primary/12 text-primary'
                   : 'text-muted-foreground hover:text-foreground hover:bg-accent/60',
               )}
             >
-              <PanelRight className="size-4" />
+              <PanelRight className="size-4" strokeWidth={1.75} />
             </button>
           </TooltipTrigger>
           <TooltipContent side={tooltipSide}>{t(reg.labelKey)}</TooltipContent>
@@ -425,9 +409,9 @@ export function ActivityBar() {
               className="grid place-items-center size-8 rounded-md text-muted-foreground hover:text-foreground hover:bg-accent/60 transition-colors"
             >
               {sidePanelCollapsed ? (
-                <PanelLeftOpen className="size-4" />
+                <PanelLeftOpen className="size-4" strokeWidth={1.75} />
               ) : (
-                <PanelLeftClose className="size-4" />
+                <PanelLeftClose className="size-4" strokeWidth={1.75} />
               )}
             </button>
           </TooltipTrigger>
@@ -451,11 +435,11 @@ export function ActivityBar() {
                   className={cn(
                     'grid place-items-center size-8 rounded-md transition-colors',
                     activityBarLocked || activityBarAutoHide
-                      ? 'bg-accent text-foreground'
+                      ? 'bg-primary/12 text-primary'
                       : 'text-muted-foreground hover:text-foreground hover:bg-accent/60',
                   )}
                 >
-                  <MoreHorizontal className="size-4" />
+                  <MoreHorizontal className="size-4" strokeWidth={1.75} />
                 </button>
               </DropdownMenuTrigger>
             </TooltipTrigger>
@@ -513,7 +497,7 @@ export function ActivityBar() {
               aria-label={t(reg.labelKey)}
               className="grid place-items-center size-8 rounded-md text-muted-foreground hover:text-foreground hover:bg-accent/60 transition-colors"
             >
-              <Settings className="size-4" />
+              <Settings className="size-4" strokeWidth={1.75} />
             </button>
           </TooltipTrigger>
           <TooltipContent side={tooltipSide}>{t(reg.labelKey)}</TooltipContent>
@@ -690,7 +674,7 @@ export function ActivityBar() {
       <aside
         className={cn(
           'relative shrink-0 z-20 flex flex-col items-center',
-          'w-1.5 hover:w-12 transition-[width] duration-200 ease-out',
+          'w-1.5 hover:w-10 transition-[width] duration-200 ease-out',
           'hover:bg-sidebar hover:border-border',
           isRight ? 'border-l border-transparent hover:border-border' : 'border-r border-transparent hover:border-border',
         )}
@@ -738,7 +722,7 @@ export function ActivityBar() {
       >
         <div className="flex flex-col items-center gap-1 w-full">
           {COMPACT_PRIMARY_IDS.map((id) => renderItem(id, false))}
-          <div className="w-6 h-px bg-border/50 my-1 mx-auto rounded-full" />
+          <div className="mx-2 h-px bg-border/60 my-1" />
           <DropdownMenu>
             <Tooltip delayDuration={200}>
               <TooltipTrigger asChild>
@@ -748,7 +732,7 @@ export function ActivityBar() {
                     aria-label={t('abAllTools')}
                     className="grid place-items-center size-8 rounded-md text-muted-foreground hover:text-foreground hover:bg-accent/60 transition-colors"
                   >
-                    <MoreHorizontal className="size-4" />
+                    <MoreHorizontal className="size-4" strokeWidth={1.75} />
                   </button>
                 </DropdownMenuTrigger>
               </TooltipTrigger>
@@ -818,7 +802,7 @@ export function ActivityBar() {
   return (
     <aside
       className={cn(
-        'activity-bar relative w-12 shrink-0 flex flex-col items-center justify-between py-2 gap-1',
+        'activity-bar relative w-10 shrink-0 flex flex-col items-center justify-between py-2 gap-1',
         'bg-sidebar border-r border-sidebar-border',
         'select-none',
         isRight && 'border-r-0 border-l border-border',
@@ -839,18 +823,18 @@ export function ActivityBar() {
         <div
           role="separator"
           aria-label="基础面板与数学功能分隔线"
-          className="w-6 h-px bg-border/50 my-1 mx-auto rounded-full"
+          className="mx-2 h-px bg-border/60 my-1"
         />
         {renderGroup2(group2Ids)}
         <div
           role="separator"
           aria-label="数学功能与创意扩展分隔线"
-          className="w-6 h-px bg-border/50 my-1 mx-auto rounded-full"
+          className="mx-2 h-px bg-border/60 my-1"
         />
         {renderGroup3(group3Ids)}
       </div>
       {/* Visual separator between the top navigation groups and the bottom utility group. */}
-      <div className="w-6 border-t border-border/40 my-2 mx-auto" />
+      <div className="mx-2 h-px bg-border/60 my-2" />
       <div className="flex flex-col items-center gap-1 w-full mt-auto">
         {renderBottomGroup(bottomUtilIds)}
       </div>

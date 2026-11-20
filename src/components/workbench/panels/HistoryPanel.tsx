@@ -116,8 +116,8 @@ function HistoryCard({ result, onLoad, onDelete }: HistoryCardProps) {
       exit={{ opacity: 0 }}
       transition={{ duration: 0.12, ease: 'easeOut' }}
       className={cn(
-        'group relative rounded-md border px-2.5 py-2 transition-colors',
-        'bg-card hover:bg-accent/30',
+        'group relative rounded-lg border px-2.5 py-2 transition-colors duration-150',
+        'bg-card shadow-[var(--shadow-card)] hover:bg-accent/30',
         isError ? 'border-destructive/30' : 'border-border',
         'before:absolute before:left-0 before:top-1.5 before:bottom-1.5 before:w-[2px] before:rounded-full',
         isError
@@ -175,7 +175,7 @@ function HistoryCard({ result, onLoad, onDelete }: HistoryCardProps) {
               {/* Input */}
               <div className="space-y-1">
                 <div className="text-[10px] uppercase tracking-wider text-muted-foreground/70 flex items-center gap-1">
-                  <span className="size-1.5 rounded-full bg-amber-500/70" />
+                  <span className="size-1.5 rounded-full bg-primary/70" />
                   {t('previewInput')}
                 </div>
                 <code className="block font-mono text-[12px] text-foreground/90 break-all bg-muted/40 rounded-md px-2 py-1.5">
@@ -192,7 +192,7 @@ function HistoryCard({ result, onLoad, onDelete }: HistoryCardProps) {
                   {isError ? (
                     <AlertCircle className="size-3" />
                   ) : (
-                    <span className="size-1.5 rounded-full bg-emerald-500/70" />
+                    <span className="size-1.5 rounded-full bg-[var(--viz-2)]" />
                   )}
                   {isError ? t('previewError') : t('previewResult')}
                 </div>
@@ -389,8 +389,8 @@ export default function HistoryPanel() {
               animate={{ opacity: 1 }}
               className="flex flex-col items-center justify-center py-10 text-center"
             >
-              <div className="grid place-items-center size-12 rounded-2xl bg-muted/50 border border-border/60 mb-3">
-                <History className="size-5 text-muted-foreground/60" />
+              <div className="mb-3 grid size-12 place-items-center rounded-lg border border-border bg-card">
+                <History className="size-5 text-muted-foreground/60" strokeWidth={1.75} />
               </div>
               <p className="text-[12px] font-medium text-foreground/70 mb-1">
                 {query ? t('noSearchResults') : t('histNoHistory')}
