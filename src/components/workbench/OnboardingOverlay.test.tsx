@@ -17,7 +17,7 @@ import '@testing-library/jest-dom';
 import { OnboardingOverlay } from './OnboardingOverlay';
 import { useWorkbenchStore } from '@/lib/store/workbench';
 
-const ONBOARDED_KEY = 'omnimath-pro-onboarded-v2';
+const ONBOARDED_KEY = 'omnimath-pro-onboarded-v1';
 const LAST_STEP_LABEL = '第 4 步：选择示例快速上手';
 
 function resetStore() {

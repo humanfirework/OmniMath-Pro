@@ -13,9 +13,9 @@ import type { BodePoint, StepPoint, RlocusPoint, NyquistPoint, StabilityMargins 
 const GRID = 'rgba(148,163,184,0.14)';
 const AXIS = 'rgba(148,163,184,0.55)';
 const INK = 'rgba(226,232,240,0.9)';
-const ACCENT = '#3B6FE0';
-const ACCENT2 = '#7C5CE0';
-const ACCENT3 = '#22A7C4';
+const ACCENT = '#38bdf8';
+const ACCENT2 = '#f472b6';
+const ACCENT3 = '#a3e635';
 
 function drawGrid(ctx: CanvasRenderingContext2D, view: ResultView, size: { w: number; h: number }) {
   const { w, h } = size;
@@ -216,7 +216,7 @@ export function renderBodeMag(
       x: Math.log10(margins.wpc / (2 * Math.PI)),
       y: 0,
       label: `GM ${margins.gm.toFixed(1)} dB`,
-      color: '#22A7C4',
+      color: '#a3e635',
     });
   }
 }
@@ -238,7 +238,7 @@ export function renderBodePhase(
       x: Math.log10(margins.wgc / (2 * Math.PI)),
       y: -180,
       label: `PM ${margins.pm.toFixed(1)}°`,
-      color: '#7C5CE0',
+      color: '#fbbf24',
     });
   }
 }
@@ -392,8 +392,8 @@ export function renderRlocus(
   ctx.save();
   ctx.lineWidth = 1.6;
   if (poles) {
-    ctx.strokeStyle = '#22A7C4';
-    ctx.fillStyle = '#22A7C4';
+    ctx.strokeStyle = '#a3e635';
+    ctx.fillStyle = '#a3e635';
     for (const z of poles) {
       if (!Number.isFinite(z.re) || !Number.isFinite(z.im)) continue;
       const s = worldToScreen(z.re, z.im, size, view);
@@ -407,7 +407,7 @@ export function renderRlocus(
     }
   }
   if (zeros) {
-    ctx.strokeStyle = '#3B6FE0';
+    ctx.strokeStyle = '#38bdf8';
     for (const z of zeros) {
       if (!Number.isFinite(z.re) || !Number.isFinite(z.im)) continue;
       const s = worldToScreen(z.re, z.im, size, view);
@@ -424,7 +424,7 @@ export function renderRlocus(
     ctx.textBaseline = 'alphabetic';
     let ly = 14;
     if (poles) {
-      ctx.strokeStyle = '#22A7C4';
+      ctx.strokeStyle = '#a3e635';
       ctx.beginPath();
       ctx.moveTo(8, ly - 3);
       ctx.lineTo(16, ly - 3);
@@ -433,18 +433,18 @@ export function renderRlocus(
       ctx.stroke();
       ctx.fillStyle = 'rgba(15,23,42,0.65)';
       ctx.fillRect(4, ly - 9, 40, 13);
-      ctx.fillStyle = '#22A7C4';
+      ctx.fillStyle = '#a3e635';
       ctx.fillText('极点 ×', 20, ly);
       ly += 15;
     }
     if (zeros) {
-      ctx.strokeStyle = '#3B6FE0';
+      ctx.strokeStyle = '#38bdf8';
       ctx.beginPath();
       ctx.arc(12, ly - 3, 4, 0, Math.PI * 2);
       ctx.stroke();
       ctx.fillStyle = 'rgba(15,23,42,0.65)';
       ctx.fillRect(4, ly - 9, 40, 13);
-      ctx.fillStyle = '#3B6FE0';
+      ctx.fillStyle = '#38bdf8';
       ctx.fillText('零点 ○', 20, ly);
     }
     ctx.restore();
@@ -470,7 +470,7 @@ export function renderNyquist(
   // 关键点 (-1, j0)：穿越判稳参考。若曲线有效给出绕 -1 包络次数与大圆环映射提示。
   ctx.save();
   // 参考虚线十字
-  ctx.strokeStyle = 'rgba(124,92,224,0.35)';
+  ctx.strokeStyle = 'rgba(163,230,53,0.35)';
   ctx.lineWidth = 1;
   ctx.setLineDash([4, 4]);
   const r = worldToScreen(-1, 0, size, view);
@@ -485,12 +485,12 @@ export function renderNyquist(
   ctx.restore();
   // 关键点实心 + 外圈
   ctx.save();
-  ctx.strokeStyle = '#7C5CE0';
+  ctx.strokeStyle = '#f472b6';
   ctx.lineWidth = 1.5;
   ctx.beginPath();
   ctx.arc(r.x, r.y, 6, 0, Math.PI * 2);
   ctx.stroke();
-  ctx.fillStyle = '#7C5CE0';
+  ctx.fillStyle = '#f472b6';
   ctx.beginPath();
   ctx.arc(r.x, r.y, 2.8, 0, Math.PI * 2);
   ctx.fill();

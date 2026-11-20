@@ -343,7 +343,7 @@ describe('dispatchTool', () => {
       expect(plot.plotType).toBe('cartesian');
       expect(plot.visible).toBe(true);
       expect(plot.xRange).toEqual([-10, 10]);
-      expect(plot.color).toBe('#22A7C4'); // 调色板第 2 个（已有 1 条）
+      expect(plot.color).toBe('#fbbf24'); // 调色板第 2 个（已有 1 条）
       expect(r.content).toContain('sin(x)');
     });
 

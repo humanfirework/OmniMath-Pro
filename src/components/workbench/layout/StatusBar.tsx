@@ -8,7 +8,7 @@
  * of the status bar.
  */
 
-import { useEffect, useMemo, useState } from 'react';
+import { useMemo, useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
   AlertTriangle,
@@ -49,21 +49,6 @@ export function StatusBar() {
 
   const locale = useLocale();
 
-  // 运行状态由 EditorPanel 通过 `omnimath:run-state` 广播驱动，
-  // 不新增持久化字段；默认就绪，直到下一次运行 / 编辑器被清空。
-  type RunState = 'idle' | 'running' | 'success' | 'error';
-  const [runState, setRunState] = useState<RunState>('idle');
-  useEffect(() => {
-    const handler = (e: Event) => {
-      const next = (e as CustomEvent<{ state?: unknown }>).detail?.state;
-      if (next === 'idle' || next === 'running' || next === 'success' || next === 'error') {
-        setRunState(next);
-      }
-    };
-    window.addEventListener('omnimath:run-state', handler);
-    return () => window.removeEventListener('omnimath:run-state', handler);
-  }, []);
-
   const conflicts = useMemo<Conflict[]>(
     () => detectConflicts(),
     [
@@ -87,51 +72,34 @@ export function StatusBar() {
   // 否则底部会挂着与当前画布无关的「9 行 · simple」。
   const showEditorSummary = editorVisible && viewMode !== 'focus' && viewMode !== 'home';
 
-  // 运行状态标签 / 指示点：idle=就绪、running=运行中、success=完成、error=失败。
-  const runLabel =
-    runState === 'running'
-      ? t('statusCalculating')
-      : runState === 'success'
-        ? '运行完成'
-        : runState === 'error'
-          ? '运行失败'
-          : t('statusReady');
-  const runDot =
-    runState === 'error'
-      ? 'bg-destructive'
-      : runState === 'success'
-        ? 'bg-[var(--success)]'
-        : 'bg-primary';
-
   return (
     <footer
       className={cn(
         'relative shrink-0 h-6 flex items-center justify-between gap-2 px-2',
-        'bg-background border-t border-border text-[10.5px] font-mono',
+        'glass border-t border-border text-[10.5px] font-mono',
         'select-none',
       )}
     >
-      {/* Left: command palette + run state */}
+      <div
+        aria-hidden
+        className="absolute left-0 top-0 bottom-0 w-0.5 bg-primary"
+        style={{ boxShadow: '0 0 6px oklch(0.7 0.15 165 / 60%)' }}
+      />
+
+      {/* Left: command palette + ready */}
       <div className="flex items-center gap-2 pl-1.5">
         <button
           type="button"
           onClick={() => setCommandPaletteOpen(true)}
-          className="flex items-center gap-1 text-muted-foreground transition-colors hover:text-primary"
+          className="flex items-center gap-1 text-muted-foreground transition-colors hover:text-foreground"
         >
-          <CommandIcon className="size-3.5" strokeWidth={1.75} />
+          <CommandIcon className="size-3" />
           <span className="hidden md:inline">{t('menuCommandPalette')}</span>
-          <kbd className="hidden rounded border border-border bg-muted/50 px-1 py-px text-[9px] leading-none text-muted-foreground/80 lg:inline">
-            Ctrl K
-          </kbd>
         </button>
-        <span aria-hidden className="hidden h-3 w-px bg-border sm:inline-block" />
-        <span
-          className="flex items-center gap-1 text-muted-foreground"
-          title={runLabel}
-          aria-live="polite"
-        >
-          <span className={cn('size-1.5 rounded-full', runDot)} />
-          <span className="hidden sm:inline">{runLabel}</span>
+        <span className="text-border hidden sm:inline">|</span>
+        <span className="flex items-center gap-1 text-emerald-500">
+          <span className="size-1.5 rounded-full bg-emerald-500" />
+          <span className="hidden sm:inline">{t('statusReady')}</span>
         </span>
       </div>
 
@@ -141,18 +109,14 @@ export function StatusBar() {
           <span>{lineCount} {t('editorLines')}</span>
           <span className="text-border/60">·</span>
           <span className="flex items-center gap-1">
-            <Sigma className="size-3.5 text-muted-foreground" strokeWidth={1.75} />
+            <Sigma className="size-2.5 text-primary" />
             {inputMode}
           </span>
         </div>
       )}
 
-      {/* Right: vars / plots → conflicts → theme → language */}
+      {/* Right: data + preferences */}
       <div className="flex items-center gap-1.5">
-        <span className="hidden px-1 text-muted-foreground sm:inline">
-          {varCount} {t('statusVars')} · {plotCount} {t('statusPlots')}
-        </span>
-
         <button
           type="button"
           onClick={() => setConflictPanelOpen((v) => !v)}
@@ -170,26 +134,26 @@ export function StatusBar() {
           )}
         >
           {summary.hasActionable ? (
-            <AlertTriangle className="size-3.5" strokeWidth={1.75} />
+            <AlertTriangle className="size-2.5" />
           ) : (
-            <CheckCircle2 className="size-3.5" strokeWidth={1.75} />
+            <CheckCircle2 className="size-2.5" />
           )}
         </button>
 
-        <span className="flex items-center gap-1 px-1 text-muted-foreground">
-          {theme === 'dark' ? (
-            <Moon className="size-3.5" strokeWidth={1.75} />
-          ) : (
-            <Sun className="size-3.5" strokeWidth={1.75} />
-          )}
+        <span className="hidden px-1.5 text-muted-foreground sm:inline">
+          {varCount} {t('statusVars')} · {plotCount} {t('statusPlots')}
         </span>
-        <span className="hidden items-center gap-1 pr-1 text-muted-foreground sm:flex">
-          <Languages className="size-3.5" strokeWidth={1.75} />
-          {locale === 'zh-CN' ? '中' : 'EN'}
+
+        <span className="flex items-center gap-1.5 px-1.5 text-muted-foreground">
+          {theme === 'dark' ? <Moon className="size-2.5" /> : <Sun className="size-2.5 text-amber-500" />}
+          <span className="hidden sm:flex items-center gap-1">
+            <Languages className="size-2.5" />
+            {locale === 'zh-CN' ? '中' : 'EN'}
+          </span>
         </span>
       </div>
 
-      {/* Conflict detail popover — L3 浮层：不透明表面 + 阴影 */}
+      {/* Conflict detail popover */}
       <AnimatePresence>
         {conflictPanelOpen && (
           <motion.div
@@ -197,11 +161,11 @@ export function StatusBar() {
             animate={{ opacity: 1, y: 0 }}
             exit={{ opacity: 0, y: 6 }}
             transition={{ duration: 0.14 }}
-            className="surface-floating absolute bottom-7 right-2 z-50 max-h-[60vh] w-80 overflow-auto text-popover-foreground"
+            className="absolute bottom-7 right-2 z-50 max-h-[60vh] w-80 overflow-auto rounded-md border border-border bg-popover text-popover-foreground shadow-xl"
           >
             <div className="flex items-center justify-between border-b border-border px-3 py-2">
               <div className="flex items-center gap-1.5 text-xs font-semibold">
-                <AlertTriangle className="size-3.5 text-amber-500" strokeWidth={1.75} />
+                <AlertTriangle className="size-3.5 text-amber-500" />
                 {t('statusConflictTooltip')}
                 <span className="font-normal text-muted-foreground">({summary.total})</span>
               </div>
@@ -211,13 +175,13 @@ export function StatusBar() {
                 className="text-muted-foreground hover:text-foreground"
                 aria-label="close"
               >
-                <X className="size-3.5" strokeWidth={1.75} />
+                <X className="size-3" />
               </button>
             </div>
 
             {conflicts.length === 0 ? (
-              <div className="flex items-center gap-2 px-3 py-4 text-xs text-muted-foreground">
-                <CheckCircle2 className="size-3.5" strokeWidth={1.75} />
+              <div className="flex items-center gap-2 px-3 py-4 text-xs text-emerald-500">
+                <CheckCircle2 className="size-3.5" />
                 {t('statusNoConflicts')}
               </div>
             ) : (

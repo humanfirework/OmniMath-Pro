@@ -100,12 +100,12 @@ export const EdgeRenderer = memo(function EdgeRenderer({
     >
       <defs>
         <linearGradient id="edge-gradient" x1="0%" y1="0%" x2="100%" y2="0%">
-          <stop offset="0%" stopColor="var(--primary)" stopOpacity={0.9} />
-          <stop offset="100%" stopColor="var(--primary-2)" stopOpacity={0.9} />
+          <stop offset="0%" stopColor="oklch(0.7 0.15 165)" stopOpacity={0.9} />
+          <stop offset="100%" stopColor="oklch(0.78 0.15 75)" stopOpacity={0.9} />
         </linearGradient>
         <linearGradient id="edge-gradient-active" x1="0%" y1="0%" x2="100%" y2="0%">
-          <stop offset="0%" stopColor="var(--primary)" stopOpacity={1} />
-          <stop offset="100%" stopColor="var(--primary-2)" stopOpacity={1} />
+          <stop offset="0%" stopColor="oklch(0.7 0.15 165)" stopOpacity={1} />
+          <stop offset="100%" stopColor="oklch(0.7 0.15 165)" stopOpacity={1} />
         </linearGradient>
       </defs>
 
@@ -128,9 +128,10 @@ export const EdgeRenderer = memo(function EdgeRenderer({
         <path
           d={bezierPath(pendingPath.from, pendingPath.to)}
           fill="none"
-          stroke="var(--primary)"
+          stroke="oklch(0.7 0.15 165)"
           strokeWidth={2}
           strokeDasharray="6 4"
+          className="animate-pulse-subtle"
           opacity={0.85}
         />
       )}
@@ -142,8 +143,8 @@ export const EdgeRenderer = memo(function EdgeRenderer({
           y={Math.min(marquee.start.y, marquee.current.y)}
           width={Math.abs(marquee.current.x - marquee.start.x)}
           height={Math.abs(marquee.current.y - marquee.start.y)}
-          fill="color-mix(in oklab, var(--primary) 8%, transparent)"
-          stroke="color-mix(in oklab, var(--primary) 70%, transparent)"
+          fill="oklch(0.7 0.15 165 / 0.08)"
+          stroke="oklch(0.7 0.15 165 / 0.7)"
           strokeWidth={1 / viewScale}
           strokeDasharray={`${4 / viewScale} ${2 / viewScale}`}
           className="pointer-events-none"
@@ -229,7 +230,7 @@ function EdgePath({ edge, from, to, color, selected, reconnecting, onDelete, onS
         fill="none"
         stroke={reconnecting ? 'transparent' : (color ?? 'url(#edge-gradient)')}
         strokeWidth={hover || selected ? 2.5 : 2}
-        className="node-connector"
+        className="node-connector animated"
         style={{ opacity: hover || selected ? 1 : 0.85 }}
       />
 
@@ -241,7 +242,7 @@ function EdgePath({ edge, from, to, color, selected, reconnecting, onDelete, onS
             cy={fromHandle.y}
             r={5.5}
             fill="var(--node-bg, oklch(0.2 0.02 250))"
-            stroke={color ?? 'var(--primary)'}
+            stroke={color ?? 'oklch(0.7 0.15 165)'}
             strokeWidth={1.4}
             className="cursor-grab"
             onPointerDown={startReconnect('from')}
@@ -251,7 +252,7 @@ function EdgePath({ edge, from, to, color, selected, reconnecting, onDelete, onS
             cy={toHandle.y}
             r={5.5}
             fill="var(--node-bg, oklch(0.2 0.02 250))"
-            stroke={color ?? 'var(--primary)'}
+            stroke={color ?? 'oklch(0.7 0.15 165)'}
             strokeWidth={1.4}
             className="cursor-grab"
             onPointerDown={startReconnect('to')}

@@ -70,8 +70,7 @@ function usePreview(tpl: PipelineTemplate) {
 
 function TemplateThumb({ tpl }: { tpl: PipelineTemplate }) {
   const { nodes, nodeW, nodeH, edges } = usePreview(tpl);
-  const color = 'var(--primary)';
-  const edgeColor = 'var(--primary-2)';
+  const color = tpl.thumbnailColor ?? '#6366f1';
   return (
     <svg
       viewBox={`0 0 ${VIEW_W} ${VIEW_H}`}
@@ -86,8 +85,8 @@ function TemplateThumb({ tpl }: { tpl: PipelineTemplate }) {
           y1={e.y1}
           x2={e.x2}
           y2={e.y2}
-          stroke={edgeColor}
-          strokeOpacity={0.45}
+          stroke={color}
+          strokeOpacity={0.55}
           strokeWidth={1}
         />
       ))}
@@ -100,9 +99,9 @@ function TemplateThumb({ tpl }: { tpl: PipelineTemplate }) {
           height={nodeH}
           rx={2}
           fill={color}
-          fillOpacity={0.1}
+          fillOpacity={0.16}
           stroke={color}
-          strokeOpacity={0.55}
+          strokeOpacity={0.7}
           strokeWidth={0.8}
         />
       ))}
@@ -122,7 +121,7 @@ export function TemplateGallery({ open, onOpenChange, onLoad }: TemplateGalleryP
       <DialogContent className="max-w-3xl gap-0 p-0 sm:max-w-3xl">
         <DialogHeader className="gap-1 border-b border-border/60 px-4 py-3.5">
           <DialogTitle className="flex items-center gap-2 text-[14px]">
-            <LayoutTemplate className="size-4 text-primary" strokeWidth={1.75} />
+            <LayoutTemplate className="size-4 text-primary" />
             蓝图模板
           </DialogTitle>
           <DialogDescription className="text-[11px] leading-relaxed">
@@ -150,13 +149,12 @@ export function TemplateGallery({ open, onOpenChange, onLoad }: TemplateGalleryP
                         onLoad(tpl.id);
                         onOpenChange(false);
                       }}
-                      className="group flex flex-col overflow-hidden rounded-xl border border-border bg-card text-left transition-colors hover:border-primary/40 hover:bg-accent/40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50"
+                      className="group flex flex-col overflow-hidden rounded-xl border border-border/70 bg-card/50 text-left transition-colors hover:border-primary/50 hover:bg-accent/40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50"
                     >
                       <div
-                        className="h-[88px] w-full border-b border-border bg-muted/20 p-1.5"
+                        className="h-[88px] w-full border-b border-border/50 bg-muted/20 p-1.5"
                         style={{
-                          backgroundImage:
-                            'radial-gradient(circle at 1px 1px, var(--viz-grid) 1px, transparent 0)',
+                          backgroundImage: `radial-gradient(circle at 1px 1px, ${tpl.thumbnailColor ?? '#6366f1'}22 1px, transparent 0)`,
                           backgroundSize: '10px 10px',
                         }}
                       >
@@ -181,7 +179,7 @@ export function TemplateGallery({ open, onOpenChange, onLoad }: TemplateGalleryP
           })}
 
           <div className="flex items-center gap-1.5 rounded-lg border border-dashed border-border/60 px-3 py-2 text-[10.5px] text-muted-foreground">
-            <Sparkles className="size-3.5 text-primary/70" strokeWidth={1.75} />
+            <Sparkles className="size-3 text-primary/70" />
             想从零开始？关闭这个窗口，双击画布空白处即可添加第一个节点。
           </div>
         </div>

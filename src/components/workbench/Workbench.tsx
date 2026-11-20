@@ -21,6 +21,7 @@
  */
 
 import { lazy, Suspense, useCallback, useEffect, useRef, useState } from 'react';
+import { motion } from 'framer-motion';
 import { PanelLeftClose, PanelLeftOpen, PanelRight, PanelRightOpen, LayoutTemplate, X, Maximize2 } from 'lucide-react';
 import { getCurrentWindow } from '@tauri-apps/api/window';
 import {
@@ -90,15 +91,13 @@ const EducationModule = lazy(() =>
   import('@/components/workbench/education/EducationModule').then((m) => ({ default: m.EducationModule })),
 );
 
-/** 懒加载视图切换时的骨架屏，避免白屏闪烁（仅透明度 pulse，无流光）。 */
+/** 懒加载视图切换时的轻量占位图，避免白屏闪烁。 */
 function ViewLoading() {
   return (
-    <div className="flex h-full w-full items-center justify-center bg-[var(--canvas)]">
-      <div className="motion-panel-in flex w-44 flex-col gap-2" aria-busy="true">
-        <div className="h-2.5 w-1/2 rounded-full bg-muted animate-pulse" />
-        <div className="h-2 w-full rounded-full bg-muted animate-pulse" />
-        <div className="h-2 w-4/5 rounded-full bg-muted animate-pulse" />
-        <div className="h-2 w-3/5 rounded-full bg-muted animate-pulse" />
+    <div className="flex h-full w-full items-center justify-center bg-background/40">
+      <div className="flex flex-col items-center gap-2">
+        <div className="size-5 animate-spin rounded-full border-2 border-primary/20 border-t-primary" />
+        <span className="text-[11px] text-muted-foreground">加载中…</span>
       </div>
     </div>
   );
@@ -113,12 +112,6 @@ const PWA_VIEW_MODES: ViewMode[] = ['home', 'workbench', ...FULLSCREEN_VIEWS];
 function isFullScreenView(vm: ViewMode): boolean {
   return FULLSCREEN_VIEWS.includes(vm);
 }
-
-/** 拖拽手柄：1px 细线 + 8px 隐形命中区；hover / 拖动时显示蓝色提示线。 */
-const RESIZE_HANDLE_COLUMN =
-  'bg-border after:w-2 hover:bg-primary data-[resize-handle-active]:bg-primary focus-visible:ring-primary/40';
-const RESIZE_HANDLE_ROW =
-  'bg-border hover:bg-primary data-[resize-handle-active]:bg-primary focus-visible:ring-primary/40';
 
 function fullScreenLabel(vm: ViewMode): string {
   switch (vm) {
@@ -166,51 +159,51 @@ function FullScreenPanel({
       {/* 轻量标题条：只保留视图名 + 三个图标操作。
           之前这里还有「并排视图」和两个文字按钮，和视图自己的标题重复，
           白板 / 蓝图等工具顶部因此叠了两行 chrome。 */}
-      <div className="shrink-0 h-8 flex items-center gap-2 border-b border-border bg-background px-2">
+      <div className="shrink-0 h-8 flex items-center gap-2 border-b border-border/60 bg-card/40 px-2">
         <span className="size-1.5 rounded-full bg-primary" />
-        <span className="text-[10.5px] font-medium tracking-[0.08em] uppercase text-foreground/80">{fullScreenLabel(viewMode)}</span>
+        <span className="text-[11px] font-medium text-foreground/75">{fullScreenLabel(viewMode)}</span>
         <div className="flex-1" />
         {onToggleSide && (
           <button
             type="button"
             onClick={onToggleSide}
-            className="grid size-6 place-items-center rounded text-muted-foreground transition-colors hover:bg-primary/10 hover:text-primary"
+            className="grid size-6 place-items-center rounded text-muted-foreground transition-colors hover:bg-accent/60 hover:text-foreground"
             title={sideOpen ? '收起左侧栏' : '展开左侧栏（变量 / 历史）'}
             aria-label={sideOpen ? '收起左侧栏' : '展开左侧栏'}
           >
-            {sideOpen ? <PanelLeftClose className="size-3.5" strokeWidth={1.75} /> : <PanelLeftOpen className="size-3.5" strokeWidth={1.75} />}
+            {sideOpen ? <PanelLeftClose className="size-3.5" /> : <PanelLeftOpen className="size-3.5" />}
           </button>
         )}
         {onToggleEditor && (
           <button
             type="button"
             onClick={onToggleEditor}
-            className="grid size-6 place-items-center rounded text-muted-foreground transition-colors hover:bg-primary/10 hover:text-primary"
+            className="grid size-6 place-items-center rounded text-muted-foreground transition-colors hover:bg-accent/60 hover:text-foreground"
             title={editorVisible ? '隐藏编辑器，让当前视图占满宽度' : '显示编辑器'}
             aria-label={editorVisible ? '隐藏编辑器' : '显示编辑器'}
           >
-            {editorVisible ? <PanelLeftClose className="size-3.5" strokeWidth={1.75} /> : <PanelLeftOpen className="size-3.5" strokeWidth={1.75} />}
+            {editorVisible ? <PanelLeftClose className="size-3.5" /> : <PanelLeftOpen className="size-3.5" />}
           </button>
         )}
         {onFocus && (
           <button
             type="button"
             onClick={onFocus}
-            className="grid size-6 place-items-center rounded text-muted-foreground transition-colors hover:bg-primary/10 hover:text-primary"
+            className="grid size-6 place-items-center rounded text-muted-foreground transition-colors hover:bg-accent/60 hover:text-foreground"
             title="收起其他面板，全宽显示当前视图"
             aria-label="专注模式"
           >
-            <Maximize2 className="size-3.5" strokeWidth={1.75} />
+            <Maximize2 className="size-3.5" />
           </button>
         )}
         <button
           type="button"
           onClick={onClose}
-          className="grid size-6 place-items-center rounded text-muted-foreground transition-colors hover:bg-primary/10 hover:text-primary"
+          className="grid size-6 place-items-center rounded text-muted-foreground transition-colors hover:bg-accent/60 hover:text-foreground"
           title="关闭并返回工作台"
           aria-label="关闭"
         >
-          <X className="size-3.5" strokeWidth={1.75} />
+          <X className="size-3.5" />
         </button>
       </div>
       <div className="flex-1 min-h-0 relative">
@@ -562,16 +555,15 @@ export function Workbench() {
         <>
           <div className="h-[100dvh] w-screen flex flex-col overflow-hidden bg-background text-foreground">
             <TitleBar />
-            <div className="shrink-0 h-9 flex items-center gap-2 border-b border-border bg-background px-2">
+            <div className="shrink-0 h-9 flex items-center gap-2 border-b border-border/60 bg-card/40 px-2">
               <button
                 type="button"
                 onClick={() => setViewMode('workbench')}
-                className="inline-flex h-7 items-center gap-1 rounded px-2 text-[11px] text-muted-foreground hover:bg-primary/10 hover:text-primary"
+                className="inline-flex h-7 items-center gap-1 rounded-md px-2 text-[11px] text-muted-foreground hover:bg-accent/60 hover:text-foreground"
               >
                 ← 返回
               </button>
-              <span className="size-1.5 rounded-full bg-primary" />
-              <span className="text-[11px] font-medium text-foreground/80">
+              <span className="text-[11.5px] font-medium text-foreground/80">
                 {fullScreenLabel(viewMode)}
               </span>
             </div>
@@ -602,7 +594,10 @@ export function Workbench() {
   }
 
   return (
-    <div
+    <motion.div
+      initial={{ opacity: 0 }}
+      animate={{ opacity: 1 }}
+      transition={{ duration: 0.3 }}
       className="h-screen w-screen flex flex-col overflow-hidden bg-background text-foreground"
     >
       <TitleBar />
@@ -613,8 +608,8 @@ export function Workbench() {
         {viewMode === 'focus' ? (
           /* 专注模式：收起活动栏 / 侧栏 / 编辑器，只留当前主工作区。 */
           <div className="flex-1 min-w-0 min-h-0 flex flex-col bg-background">
-            <div className="shrink-0 h-8 flex items-center gap-2 border-b border-border bg-background px-3">
-              <span className="rounded-[3px] border border-primary/30 bg-primary/10 px-1.5 py-0.5 text-[9.5px] font-medium text-primary">
+            <div className="shrink-0 h-8 flex items-center gap-2 border-b border-border/60 bg-card/40 px-3">
+              <span className="rounded border border-primary/30 bg-primary/10 px-1.5 py-0.5 text-[9.5px] font-medium text-primary">
                 专注模式
               </span>
               <span className="text-[11px] text-muted-foreground">
@@ -628,7 +623,7 @@ export function Workbench() {
               <button
                 type="button"
                 onClick={exitFocus}
-                className="h-6 rounded px-2 text-[10px] text-muted-foreground transition-colors hover:bg-primary/10 hover:text-primary"
+                className="h-6 rounded px-2 text-[10px] text-muted-foreground transition-colors hover:bg-accent/60 hover:text-foreground"
               >
                 退出专注 · F11
               </button>
@@ -660,7 +655,7 @@ export function Workbench() {
           <ResizablePanelGroup
             direction="horizontal"
             autoSaveId="omnimath-side-fs-v1"
-            className="flex-1 min-w-0 bg-[var(--canvas)]"
+            className="flex-1 min-w-0"
           >
             {showFsSide && (
               <>
@@ -669,7 +664,7 @@ export function Workbench() {
                     <LazySidePanel />
                   </ErrorBoundary>
                 </ResizablePanel>
-                <ResizableHandle className={RESIZE_HANDLE_COLUMN} />
+                <ResizableHandle withHandle className="data-[resize-handle-active]:bg-primary/60" />
               </>
             )}
             {editorVisible && !focusWhiteboard && (
@@ -688,7 +683,7 @@ export function Workbench() {
                     )}
                   </ErrorBoundary>
                 </ResizablePanel>
-                <ResizableHandle className={RESIZE_HANDLE_COLUMN} />
+                <ResizableHandle withHandle className="data-[resize-handle-active]:bg-primary/60" />
               </>
             )}
             <ResizablePanel
@@ -720,7 +715,7 @@ export function Workbench() {
           </ResizablePanelGroup>
         ) : !editorVisible && !previewVisible ? (
           /* Plain layout when both main panels are hidden — avoids empty resizable group. */
-          <ResizablePanelGroup direction="horizontal" autoSaveId="omnimath-side-only" className="flex-1 min-w-0 bg-[var(--canvas)]">
+          <ResizablePanelGroup direction="horizontal" autoSaveId="omnimath-side-only" className="flex-1 min-w-0">
             {!sidePanelCollapsed && (
               <>
                 <ResizablePanel defaultSize={25} minSize={12} maxSize={40} id="side-only-panel" order={1}>
@@ -728,54 +723,52 @@ export function Workbench() {
                     <LazySidePanel />
                   </ErrorBoundary>
                 </ResizablePanel>
-                <ResizableHandle className={RESIZE_HANDLE_COLUMN} />
+                <ResizableHandle withHandle className="data-[resize-handle-active]:bg-primary/60" />
               </>
             )}
             <ResizablePanel defaultSize={sidePanelCollapsed ? 100 : 75} minSize={50} id="side-only-empty" order={2}>
-              <div className="h-full w-full flex items-center justify-center bg-[var(--canvas)] px-6">
-                <div className="surface-card flex w-full max-w-sm flex-col items-center gap-3 rounded-xl px-8 py-9 text-center">
-                  <div className="grid place-items-center size-10 rounded-lg border border-primary/20 bg-primary/10 text-primary">
-                    <PanelLeftClose className="size-4" strokeWidth={1.75} />
-                  </div>
-                  <p className="text-[12.5px] font-medium text-foreground">
-                    {t('wbAllPanelsHidden')}
-                  </p>
-                  <p className="text-[11.5px] text-muted-foreground max-w-xs">
-                    {t('wbAllPanelsHiddenHint')}
-                  </p>
-                  <div className="flex flex-wrap items-center justify-center gap-2 pt-1">
-                    <button
-                      type="button"
-                      onClick={() => setEditorVisible(true)}
-                      className="inline-flex items-center gap-1.5 rounded-md bg-primary px-3 py-1.5 text-xs font-medium text-primary-foreground hover:bg-primary/90 transition-colors"
-                    >
-                      <LayoutTemplate className="size-3.5" strokeWidth={1.75} />
-                      {t('abToggleEditor')}
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => setPreviewVisible(true)}
-                      className="inline-flex items-center gap-1.5 rounded-md border border-border bg-transparent px-3 py-1.5 text-xs font-medium text-foreground hover:bg-accent transition-colors"
-                    >
-                      <PanelRight className="size-3.5" strokeWidth={1.75} />
-                      {t('abTogglePreview')}
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => toggleActivityBarHidden()}
-                      className="inline-flex items-center gap-1.5 rounded-md border border-border bg-transparent px-3 py-1.5 text-xs font-medium text-foreground hover:bg-accent transition-colors"
-                    >
-                      <PanelRightOpen className="size-3.5" strokeWidth={1.75} />
-                      {t('abShowTaskbar')}
-                    </button>
-                  </div>
+              <div className="h-full w-full flex flex-col items-center justify-center gap-3 px-6 text-center bg-background/40">
+                <div className="grid place-items-center size-14 rounded-2xl bg-primary/8 border border-primary/20">
+                  <PanelLeftClose className="size-6 text-primary/70" />
+                </div>
+                <p className="text-[13px] font-medium text-foreground/80">
+                  {t('wbAllPanelsHidden')}
+                </p>
+                <p className="text-[11.5px] text-muted-foreground max-w-xs">
+                  {t('wbAllPanelsHiddenHint')}
+                </p>
+                <div className="flex items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={() => setEditorVisible(true)}
+                    className="inline-flex items-center gap-1.5 rounded-md bg-primary px-3 py-1.5 text-xs font-medium text-primary-foreground hover:bg-primary/90 transition-colors"
+                  >
+                    <LayoutTemplate className="size-3.5" />
+                    {t('abToggleEditor')}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setPreviewVisible(true)}
+                    className="inline-flex items-center gap-1.5 rounded-md border border-border bg-background px-3 py-1.5 text-xs font-medium text-foreground hover:bg-accent transition-colors"
+                  >
+                    <PanelRight className="size-3.5" />
+                    {t('abTogglePreview')}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => toggleActivityBarHidden()}
+                    className="inline-flex items-center gap-1.5 rounded-md border border-border bg-background px-3 py-1.5 text-xs font-medium text-foreground hover:bg-accent transition-colors"
+                  >
+                    <PanelRightOpen className="size-3.5" />
+                    {t('abShowTaskbar')}
+                  </button>
                 </div>
               </div>
             </ResizablePanel>
           </ResizablePanelGroup>
         ) : editorVisible && previewVisible ? (
           /* 双面板布局：外层 side | main，内层 editor | preview（方向由 previewPosition 决定） */
-          <ResizablePanelGroup direction="horizontal" autoSaveId="omnimath-side-v2" className="flex-1 min-w-0 bg-[var(--canvas)]">
+          <ResizablePanelGroup direction="horizontal" autoSaveId="omnimath-side-v2" className="flex-1 min-w-0">
             {!sidePanelCollapsed && (
               <>
                 <ResizablePanel
@@ -789,7 +782,7 @@ export function Workbench() {
                     <LazySidePanel />
                   </ErrorBoundary>
                 </ResizablePanel>
-                <ResizableHandle className={RESIZE_HANDLE_COLUMN} />
+                <ResizableHandle withHandle className="data-[resize-handle-active]:bg-primary/60" />
               </>
             )}
 
@@ -802,7 +795,7 @@ export function Workbench() {
               <ResizablePanelGroup
                 direction={effectivePreviewPosition === 'right' ? 'horizontal' : 'vertical'}
                 autoSaveId={`omnimath-main-${effectivePreviewPosition}-${previewSize}`}
-                className="h-full w-full bg-[var(--canvas)]"
+                className="h-full w-full"
               >
                 <ResizablePanel
                   defaultSize={previewSize === 'large' ? 36 : 58}
@@ -815,11 +808,7 @@ export function Workbench() {
                     <LazyEditorPanel />
                   </ErrorBoundary>
                 </ResizablePanel>
-                <ResizableHandle
-                  className={
-                    effectivePreviewPosition === 'right' ? RESIZE_HANDLE_COLUMN : RESIZE_HANDLE_ROW
-                  }
-                />
+                <ResizableHandle withHandle className="data-[resize-handle-active]:bg-primary/60" />
                 <ResizablePanel
                   defaultSize={previewSize === 'large' ? 64 : 42}
                   minSize={previewSize === 'large' ? 30 : 20}
@@ -836,7 +825,7 @@ export function Workbench() {
           </ResizablePanelGroup>
         ) : (
           /* 单面板布局：side | (editor 或 preview)，沿用旧的扁平结构 */
-          <ResizablePanelGroup direction="horizontal" autoSaveId={`omnimath-layout-${previewSize}`} className="flex-1 min-w-0 bg-[var(--canvas)]">
+          <ResizablePanelGroup direction="horizontal" autoSaveId={`omnimath-layout-${previewSize}`} className="flex-1 min-w-0">
             {/* Side panel — collapsible (hidden in focus mode) */}
             {!sidePanelCollapsed && (
               <>
@@ -851,7 +840,7 @@ export function Workbench() {
                     <LazySidePanel />
                   </ErrorBoundary>
                 </ResizablePanel>
-                <ResizableHandle className={RESIZE_HANDLE_COLUMN} />
+                <ResizableHandle withHandle className="data-[resize-handle-active]:bg-primary/60" />
               </>
             )}
 
@@ -870,7 +859,7 @@ export function Workbench() {
               </ResizablePanel>
             )}
 
-            {editorVisible && previewVisible && <ResizableHandle className={RESIZE_HANDLE_COLUMN} />}
+            {editorVisible && previewVisible && <ResizableHandle withHandle className="data-[resize-handle-active]:bg-primary/60" />}
 
             {/* Preview */}
             {previewVisible && (
@@ -902,6 +891,6 @@ export function Workbench() {
       {settingsMounted && <LazySettingsPanel />}
       <OnboardingOverlay />
       <PracticeGuide />
-    </div>
+    </motion.div>
   );
 }

@@ -475,9 +475,9 @@ export function SignalFlowGraphEditor() {
             <button
               type="button"
               onClick={() => setPendingFrom(null)}
-              className="h-7 px-3 rounded-md text-[11px] font-medium border border-amber-500/50 bg-amber-500/10 text-amber-600 dark:text-amber-300 pointer-events-auto"
+              className="h-7 px-3 rounded-md text-[11px] font-medium border border-amber-500/60 bg-amber-500/15 text-amber-600 dark:text-amber-300 animate-pulse pointer-events-auto"
             >
-              连线中：从「{pendingFrom === sourceId ? 'R' : pendingFrom === sinkId ? 'Y' : 'x' + pendingFrom}」出发 → 点击目标节点完成（点此取消）
+              🔗 连线中：从「{pendingFrom === sourceId ? 'R' : pendingFrom === sinkId ? 'Y' : 'x' + pendingFrom}」出发 → 点击目标节点完成（点此取消）
             </button>
           )}
         </div>
@@ -501,7 +501,7 @@ export function SignalFlowGraphEditor() {
             // 回程边：目标在源的左侧（右→左）或反馈边，向下弯曲成弧线，避免与正向边重叠。
             const isBackward = b.x < a.x - 1 || isFeedback;
             const selected = selectedEdge === e.id;
-            const edgeColor = selected ? 'var(--viz-1)' : isFeedback ? '#fb923c' : '#94a3b8';
+            const edgeColor = selected ? '#f472b6' : isFeedback ? '#fb923c' : '#94a3b8';
             const selfLoopPath = `M ${a.x} ${a.y - NODE_R} C ${a.x + 60} ${a.y - 60}, ${a.x + 60} ${a.y + 30}, ${a.x} ${a.y + NODE_R}`;
             const midX = (a.x + b.x) / 2;
             const midY = isBackward ? Math.max(a.y, b.y) + BACK_EDGE_BEND / 2 : (a.y + b.y) / 2;
@@ -590,7 +590,7 @@ export function SignalFlowGraphEditor() {
             const isSink = n.id === sinkId;
             const isSel = selectedNode === n.id;
             const isPending = pendingFrom === n.id;
-            const fill = isSource ? 'var(--viz-1)' : isSink ? 'var(--viz-2)' : isPending ? 'var(--viz-4)' : '#334155';
+            const fill = isSource ? '#10b981' : isSink ? '#3b82f6' : isPending ? '#f59e0b' : '#334155';
             return (
               <g
                 key={n.id}
@@ -599,7 +599,7 @@ export function SignalFlowGraphEditor() {
                 className="cursor-pointer"
                 onContextMenu={(e) => e.preventDefault()}
               >
-                <circle cx={n.x} cy={n.y} r={NODE_R} fill={fill} stroke={isSel ? 'var(--viz-5)' : '#1e293b'} strokeWidth={isSel ? 2.5 : 1.5} />
+                <circle cx={n.x} cy={n.y} r={NODE_R} fill={fill} stroke={isSel ? '#f472b6' : '#1e293b'} strokeWidth={isSel ? 2.5 : 1.5} />
                 <text x={n.x} y={n.y + 3.5} textAnchor="middle" fontSize={11} fontWeight={600} fill="#fff">
                   {n.id === sourceId ? 'R' : n.id === sinkId ? 'Y' : 'x' + n.id}
                 </text>
@@ -658,10 +658,10 @@ export function SignalFlowGraphEditor() {
             <span className="text-[#fb923c]">回程</span>）
           </span>
           <span className="flex items-center gap-1">
-            <span className="inline-block size-2.5 rounded-full" style={{ background: 'var(--viz-1)' }} /> 输入 R
+            <span className="inline-block size-2.5 rounded-full bg-emerald-500" /> 输入 R
           </span>
           <span className="flex items-center gap-1">
-            <span className="inline-block size-2.5 rounded-full" style={{ background: 'var(--viz-2)' }} /> 输出 Y
+            <span className="inline-block size-2.5 rounded-full bg-blue-500" /> 输出 Y
           </span>
           <span className="flex items-center gap-1">
             <span className="inline-block size-2.5 rounded-full bg-slate-600" /> 状态节点

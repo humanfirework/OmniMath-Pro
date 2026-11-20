@@ -63,8 +63,8 @@ export function GroupFrameLayer({ nodes, onRename }: GroupFrameLayerProps) {
           width={w}
           height={h}
           rx={8}
-          fill="color-mix(in oklab, var(--primary) 5%, transparent)"
-          stroke="color-mix(in oklab, var(--primary) 45%, transparent)"
+          fill="rgba(56,189,248,0.04)"
+          stroke="rgba(56,189,248,0.45)"
           strokeWidth={1.2}
           strokeDasharray="6 4"
         />
@@ -76,12 +76,12 @@ export function GroupFrameLayer({ nodes, onRename }: GroupFrameLayerProps) {
             if (title != null && title.trim()) onRename(g.id, title.trim());
           }}
         >
-          <rect x={x + 8} y={y - 11} width={g.title.length * 7 + 18} height={18} rx={5} fill="var(--primary)" />
+          <rect x={x + 8} y={y - 11} width={g.title.length * 7 + 18} height={18} rx={5} fill="rgba(56,189,248,0.9)" />
           <text
             x={x + 17}
             y={y + 2}
             fontSize={10}
-            fill="var(--primary-foreground)"
+            fill="#0b1220"
             fontWeight={600}
             style={{ pointerEvents: 'none' }}
           >

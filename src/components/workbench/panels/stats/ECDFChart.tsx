@@ -34,7 +34,7 @@ export function ECDFChart({ data, className, minHeight = 220 }: ECDFChartProps) 
 
   const draw = useMemo(
     () => (ctx: CanvasRenderingContext2D, view: ResultView, size: { w: number; h: number }, pts: XYPoint[]) => {
-      renderLine(ctx, view, size, pts, '#3B6FE0');
+      renderLine(ctx, view, size, pts, '#38bdf8');
     },
     [],
   );

@@ -39,11 +39,11 @@ export function ControlTheoryWorkbench() {
   const [signalSub, setSignalSub] = useState<SignalSub>('visual');
 
   return (
-    <div className="h-full w-full flex min-h-0 bg-background">
+    <div className="h-full w-full flex min-h-0 bg-background/40">
       {/* ─── 左侧章节导航 ─────────────────────────────────────── */}
-      <aside className="w-56 shrink-0 flex flex-col border-r border-border bg-sidebar">
-        <div className="shrink-0 h-8 px-3 flex items-center gap-1.5 border-b border-border bg-transparent">
-          <span className="text-[11px] font-medium tracking-tight">控制理论</span>
+      <aside className="w-56 shrink-0 flex flex-col border-r border-border/60 bg-card/30 backdrop-blur-sm">
+        <div className="shrink-0 h-10 px-3 flex items-center gap-1.5 border-b border-border/60 bg-background/40">
+          <span className="text-[12px] font-semibold tracking-tight">控制理论</span>
         </div>
         <ScrollArea className="flex-1 min-h-0">
           <ul className="p-2 space-y-1">
@@ -73,11 +73,11 @@ export function ControlTheoryWorkbench() {
 
       {/* ─── 右侧主区域 ──────────────────────────────────────── */}
       <main className="flex-1 min-w-0 min-h-0 flex flex-col">
-        <div className="shrink-0 h-9 px-4 flex items-center gap-2 border-b border-border bg-transparent">
-          <span className="text-[12px] font-medium tracking-tight">
+        <div className="shrink-0 h-11 px-4 flex items-center gap-2 border-b border-border/60 bg-background/30">
+          <span className="text-[13px] font-semibold tracking-tight">
             {NAV.find((n) => n.id === tab)?.label}
           </span>
-          <span className="text-[10.5px] text-muted-foreground">
+          <span className="text-[11px] text-muted-foreground">
             {NAV.find((n) => n.id === tab)?.desc}
           </span>
         </div>

@@ -37,7 +37,6 @@ import {
 } from 'lucide-react';
 import { useWorkbenchStore } from '@/lib/store/workbench';
 import { sampleSurface, trySampleSurface, type Surface3DData } from '@/lib/plots/plot3d';
-import { getVizPalette } from '@/lib/plots/vizPalette';
 import { useScopeVersion } from '@/lib/hooks/useScopeVersion';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -76,17 +75,20 @@ const Plot3DScene = dynamic(
   () => import('./Plot3DScene').then((m) => m.Plot3DScene),
   {
     ssr: false,
-    loading: () => (
-      // 静态骨架：不播放无限 shimmer，只给出一块安静的加载表面。
-      <div className="surface-canvas flex h-full w-full flex-col gap-2 p-3" aria-hidden>
-        <div className="h-3 w-1/3 rounded-[4px] bg-muted/60" />
-        <div className="flex-1 rounded-[8px] bg-muted/30" />
-      </div>
-    ),
+    loading: () => <div className="h-full w-full bg-background/40" />,
   },
 );
 
 /* ----------------------- Constants ----------------------------------- */
+
+const PLOT_COLORS = [
+  '#2dd4bf', // teal
+  '#fbbf24', // amber
+  '#fb7185', // rose
+  '#34d399', // emerald
+  '#a78bfa', // violet
+  '#fb923c', // orange
+];
 
 const EXAMPLE_GROUPS = [
   {
@@ -116,8 +118,6 @@ export function Plot3DPanel() {
   const t = useT();
   const plots = useWorkbenchStore((s) => s.plots);
   const theme = useWorkbenchStore((s) => s.theme);
-  // 一次 render 读取一次调色板（按主题缓存），供列表色点兜底使用。
-  const vizPalette = getVizPalette();
   const addPlot = useWorkbenchStore((s) => s.addPlot);
   const removePlot = useWorkbenchStore((s) => s.removePlot);
   const togglePlotVisibility = useWorkbenchStore((s) => s.togglePlotVisibility);
@@ -174,7 +174,6 @@ export function Plot3DPanel() {
       data: Surface3DData | null;
       error: string | null;
     }> = [];
-    const palette = getVizPalette();
     for (let i = 0; i < surface3dPlots.length; i++) {
       const p = surface3dPlots[i];
       if (!p.visible) continue;
@@ -183,7 +182,7 @@ export function Plot3DPanel() {
         p.xRange,
         p.yRange,
         resolution,
-        p.color || palette[i % palette.length],
+        p.color || PLOT_COLORS[i % PLOT_COLORS.length],
       );
       out.push({ plotId: p.id, expression: p.expression, data, error });
     }
@@ -231,13 +230,12 @@ export function Plot3DPanel() {
       return;
     }
     // Quick sanity check before adding — sample at low resolution.
-    const palette = getVizPalette();
     const { data: probe, error: probeError } = trySampleSurface(
       expr,
       xRange,
       yRange,
       8,
-      palette[0],
+      '#2dd4bf',
     );
     if (probeError) {
       // Surface the concrete error instead of a generic "无法求值".
@@ -248,12 +246,12 @@ export function Plot3DPanel() {
       toast.error(t('plot3dErrEvalVars'));
       return;
     }
-    const colorIdx = surface3dPlots.length % palette.length;
+    const colorIdx = surface3dPlots.length % PLOT_COLORS.length;
     addPlot({
       expression: expr,
       xRange,
       yRange,
-      color: palette[colorIdx],
+      color: PLOT_COLORS[colorIdx],
       plotType: 'surface3d',
       visible: true,
     });
@@ -263,13 +261,12 @@ export function Plot3DPanel() {
 
   const handleAddExample = useCallback(
     (expr: string) => {
-      const palette = getVizPalette();
       const { data: probe, error: probeError } = trySampleSurface(
         expr,
         xRange,
         yRange,
         8,
-        palette[0],
+        '#2dd4bf',
       );
       if (probeError) {
         toast.error(tf('plot3dErrExampleEval', { err: probeError }));
@@ -279,12 +276,12 @@ export function Plot3DPanel() {
         toast.error(t('plot3dErrExampleEvalVars'));
         return;
       }
-      const colorIdx = surface3dPlots.length % palette.length;
+      const colorIdx = surface3dPlots.length % PLOT_COLORS.length;
       addPlot({
         expression: expr,
         xRange,
         yRange,
-        color: palette[colorIdx],
+        color: PLOT_COLORS[colorIdx],
         plotType: 'surface3d',
         visible: true,
       });
@@ -327,9 +324,9 @@ export function Plot3DPanel() {
     <TooltipProvider delayDuration={250}>
       <div className="plot-3d-panel flex h-full min-h-0 flex-col bg-background">
         {/* ---------- Top bar: function input + add ---------- */}
-        <div className="flex flex-col gap-1.5 border-b border-border bg-background px-2 py-1.5">
+        <div className="flex flex-col gap-1.5 border-b border-border/60 bg-background/60 px-2 py-1.5">
           <div className="flex flex-wrap items-center gap-1.5">
-            <span className="font-mono text-[11px] text-muted-foreground">z =</span>
+            <span className="font-mono text-xs text-muted-foreground">z =</span>
             <Input
               type="text"
               value={exprInput}
@@ -341,18 +338,18 @@ export function Plot3DPanel() {
                 }
               }}
               placeholder={t('plot3dInputPlaceholder')}
-              className="h-7 min-w-0 flex-1 rounded-[5px] border-border bg-card px-2 font-mono text-[11.5px]"
+              className="h-8 min-w-0 flex-1 rounded border-border/60 bg-background/40 px-2 font-mono text-xs"
               aria-label={t('plot3dExprInputAria')}
             />
             <Tooltip>
               <TooltipTrigger asChild>
                 <Button
                   size="sm"
-                  className="motion-press h-7 gap-1.5 px-2.5"
+                  className="h-8 gap-1.5 bg-primary/90 px-2.5 text-primary-foreground hover:bg-primary"
                   onClick={handleAddSurface}
                 >
-                  <Plus className="h-3.5 w-3.5" strokeWidth={1.75} />
-                  <span className="text-[11px]">{t('plot3dAdd')}</span>
+                  <Plus className="h-3.5 w-3.5" />
+                  <span className="text-xs">{t('plot3dAdd')}</span>
                 </Button>
               </TooltipTrigger>
               <TooltipContent side="bottom">{t('plot3dAddSurface')}</TooltipContent>
@@ -412,7 +409,7 @@ export function Plot3DPanel() {
               (via inputToLatex) so they can confirm the parsing before
               adding the surface. The container is horizontally scrollable
               for long expressions and shows a placeholder when empty. */}
-          <div className="flex min-h-6 items-center gap-1.5 overflow-x-auto rounded-[6px] border border-border bg-card px-2 py-0.5">
+          <div className="flex min-h-6 items-center gap-1.5 overflow-x-auto rounded-md border border-border/40 bg-background/40 px-2 py-0.5">
             <span className="shrink-0 font-mono text-[10px] text-muted-foreground">
               {t('plot3dPreview')}
             </span>
@@ -431,7 +428,7 @@ export function Plot3DPanel() {
 
           {/* ---------- Collapsible controls panel ---------- */}
           {showControls && (
-            <div className="surface-card mt-0.5 grid grid-cols-2 gap-x-3 gap-y-2 rounded-[10px] p-2 text-xs sm:grid-cols-3 lg:grid-cols-4">
+            <div className="glass mt-0.5 grid grid-cols-2 gap-x-3 gap-y-2 rounded-md border border-border/50 p-2 text-xs sm:grid-cols-3 lg:grid-cols-4">
               {/* Wireframe toggle */}
               <ToggleRow
                 label={t('plot3dWireframe')}
@@ -579,7 +576,7 @@ export function Plot3DPanel() {
               <DropdownMenuTrigger asChild>
                 <button
                   type="button"
-                  className="motion-press flex items-center gap-1 rounded-[5px] border border-border bg-card px-2 py-0.5 text-[10px] text-foreground/80 transition-colors hover:border-primary/50 hover:text-primary"
+                  className="flex items-center gap-1 rounded-md border border-border/60 bg-background/40 px-2 py-0.5 text-[10px] text-foreground/80 transition-theme hover:border-primary/60 hover:text-primary"
                   aria-label={t('plot3dOpenExamplesAria')}
                 >
                   <Sparkles className="h-3 w-3" />
@@ -617,15 +614,16 @@ export function Plot3DPanel() {
               {surface3dPlots.map((p, i) => (
                 <div
                   key={p.id}
-                  className="group flex items-center gap-1.5 rounded-[7px] border border-border bg-card px-1.5 py-1 transition-colors hover:border-primary/30"
+                  className="group flex items-center gap-1.5 rounded-md border border-border/60 bg-background/40 px-1.5 py-0.5 transition-theme hover:border-border"
                 >
                   <span
                     className="inline-block h-2.5 w-2.5 shrink-0 rounded-full"
                     style={{
-                      backgroundColor: p.color || vizPalette[i % vizPalette.length],
+                      backgroundColor: p.color || PLOT_COLORS[i % PLOT_COLORS.length],
+                      boxShadow: `0 0 6px ${p.color || PLOT_COLORS[i % PLOT_COLORS.length]}80`,
                     }}
                   />
-                  <span className="max-w-[200px] truncate font-mono text-[11px] text-foreground/90">
+                  <span className="max-w-[200px] truncate font-mono text-xs text-foreground/90">
                     {p.expression}
                   </span>
                   <Tooltip>
@@ -633,7 +631,7 @@ export function Plot3DPanel() {
                       <button
                         type="button"
                         onClick={() => togglePlotVisibility(p.id)}
-                        className="text-muted-foreground transition-colors hover:text-foreground"
+                        className="text-muted-foreground transition-theme hover:text-foreground"
                         aria-label={p.visible ? t('plot3dHide') : t('plot3dShow')}
                       >
                         {p.visible ? (
@@ -652,7 +650,7 @@ export function Plot3DPanel() {
                       <button
                         type="button"
                         onClick={() => removePlot(p.id)}
-                        className="text-muted-foreground transition-colors hover:text-destructive"
+                        className="text-muted-foreground transition-theme hover:text-rose-400"
                         aria-label={t('plot3dRemoveAria')}
                       >
                         <X className="h-3 w-3" />
@@ -675,7 +673,9 @@ export function Plot3DPanel() {
           className="plot-canvas-wrapper relative min-h-[200px] flex-1"
           style={{
             background:
-              'radial-gradient(circle at 50% 45%, var(--card) 0%, var(--canvas) 100%)',
+              theme === 'dark'
+                ? 'radial-gradient(circle at 50% 50%, #34343a 0%, #2a2a2e 100%)'
+                : 'radial-gradient(circle at 50% 50%, #ffffff 0%, #f4f4f5 100%)',
           }}
         >
           {surfaces.length === 0 ? (
@@ -705,14 +705,14 @@ export function Plot3DPanel() {
             />
           )}
 
-          {/* Expand button (top-right) — 浮动表面 */}
+          {/* Expand button (top-right) */}
           {surfaces.length > 0 && (
             <button
               onClick={() => setExpandOpen(true)}
-              className="surface-floating motion-press absolute right-2 top-2 z-20 flex items-center gap-1.5 rounded-[10px] px-2.5 py-1.5 text-[11px] text-muted-foreground transition-colors hover:text-foreground"
+              className="absolute right-2 top-2 z-20 flex items-center gap-1.5 rounded-md border border-border/60 bg-background/80 px-2.5 py-1.5 text-xs text-primary backdrop-blur-sm transition-colors hover:bg-primary/10 hover:border-primary/40"
               aria-label={t('plot3dZoomInAria')}
             >
-              <Maximize2 className="h-3.5 w-3.5" strokeWidth={1.75} />
+              <Maximize2 className="h-3.5 w-3.5" />
               <span className="hidden sm:inline">{t('plot3dZoomIn')}</span>
             </button>
           )}
@@ -728,9 +728,9 @@ export function Plot3DPanel() {
 
           {/* Hint overlay (bottom-left) when surfaces exist */}
           {surfaces.length > 0 && (
-            <div className="surface-floating pointer-events-none absolute bottom-2 left-2 z-10 select-none rounded-[8px] px-2 py-1 text-[10px] text-muted-foreground">
+            <div className="pointer-events-none absolute bottom-2 left-2 z-10 select-none rounded-md border border-border/40 bg-background/70 px-2 py-1 text-[10px] text-foreground/70 backdrop-blur-sm">
               <span className="flex items-center gap-1">
-                <Settings2 className="h-2.5 w-2.5" strokeWidth={1.75} />
+                <Settings2 className="h-2.5 w-2.5" />
                 {t('plot3dControlsHint')}
               </span>
             </div>
@@ -745,40 +745,40 @@ export function Plot3DPanel() {
       {expandOpen && typeof document !== 'undefined' && createPortal(
         (
           <div
-            className="fixed inset-0 z-[200] flex flex-col bg-background"
+            className="fixed inset-0 z-[200] flex flex-col bg-background/95 backdrop-blur-md"
             role="dialog"
             aria-modal="true"
             aria-label={t('plot3dExpandAria')}
           >
-            <div className="flex h-8 items-center justify-between border-b border-border bg-card px-3">
-              <div className="flex min-w-0 items-center gap-3">
-                <h2 className="section-label truncate">{t('plot3dExpandTitle')}</h2>
-                <span className="truncate font-mono text-[10.5px] text-muted-foreground">
+            <div className="flex items-center justify-between border-b border-border/60 bg-background/80 px-4 py-2.5 backdrop-blur">
+              <div className="flex items-center gap-3">
+                <h2 className="text-sm font-semibold text-foreground">{t('plot3dExpandTitle')}</h2>
+                <span className="text-xs text-muted-foreground">
                   {tf('plot3dExpandSubtitle', { n: surfaces.length })}
                 </span>
               </div>
               <div className="flex items-center gap-1">
                 <button
                   onClick={handleResetCamera}
-                  className="motion-press grid place-items-center size-7 rounded-[6px] text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
+                  className="grid place-items-center size-8 rounded-md text-muted-foreground hover:bg-muted hover:text-foreground transition-colors"
                   aria-label={t('plot3dResetCameraAria')}
                 >
-                  <RotateCcw className="size-3.5" strokeWidth={1.75} />
+                  <RotateCcw className="size-4" />
                 </button>
                 <button
                   onClick={exportPNG}
-                  className="motion-press flex items-center gap-1.5 h-7 px-2 rounded-[6px] text-[11px] text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
+                  className="flex items-center gap-1.5 h-8 px-2.5 rounded-md text-xs text-muted-foreground hover:bg-muted hover:text-foreground transition-colors"
                 >
-                  <Box className="size-3.5" strokeWidth={1.75} />
+                  <Box className="size-3.5" />
                   <span className="hidden sm:inline">{t('plot3dExportPng')}</span>
                 </button>
-                <div className="mx-1 h-4 w-px bg-border" />
+                <div className="mx-1 h-5 w-px bg-border/60" />
                 <button
                   onClick={() => setExpandOpen(false)}
-                  className="motion-press grid place-items-center size-7 rounded-[6px] text-muted-foreground transition-colors hover:bg-destructive/10 hover:text-destructive"
+                  className="grid place-items-center size-8 rounded-md text-muted-foreground hover:bg-destructive/10 hover:text-destructive transition-colors"
                   aria-label={t('plot3dCloseAria')}
                 >
-                  <X className="size-3.5" strokeWidth={1.75} />
+                  <X className="size-4" />
                 </button>
               </div>
             </div>
@@ -786,7 +786,9 @@ export function Plot3DPanel() {
               className="relative flex-1 min-h-0"
               style={{
                 background:
-                  'radial-gradient(circle at 50% 45%, var(--card) 0%, var(--canvas) 100%)',
+                  theme === 'dark'
+                    ? 'radial-gradient(circle at 50% 50%, #34343a 0%, #2a2a2e 100%)'
+                    : 'radial-gradient(circle at 50% 50%, #ffffff 0%, #f4f4f5 100%)',
               }}
             >
               <Plot3DScene
@@ -861,7 +863,7 @@ function CompactNumberInput({
         const v = parseFloat(e.target.value);
         if (Number.isFinite(v)) onChange(v);
       }}
-      className="h-6 w-14 rounded-[4px] border-border bg-muted/50 px-1.5 font-mono text-[11px] tabular-nums"
+      className="h-6 w-14 rounded border-border/60 bg-background/40 px-1.5 font-mono text-[11px] tabular-nums"
     />
   );
 }
@@ -885,20 +887,20 @@ function SurfaceErrorState({ errors }: { errors: SurfaceError[] }) {
   const t = useT();
   return (
     <div className="absolute inset-0 flex flex-col items-center justify-center gap-3 p-6 text-center">
-      <div className="flex items-center gap-2 text-destructive">
-        <AlertTriangle className="h-5 w-5" strokeWidth={1.75} />
+      <div className="flex items-center gap-2 text-rose-500">
+        <AlertTriangle className="h-5 w-5" />
         <span className="text-sm font-medium">{t('plot3dSampleFailed')}</span>
       </div>
       <div className="flex w-full max-w-md flex-col gap-1.5">
         {errors.map((e) => (
           <div
             key={e.plotId}
-            className="rounded-[10px] border border-destructive/30 bg-card px-2.5 py-1.5 text-left shadow-[var(--shadow-card)]"
+            className="rounded-md border border-rose-500/40 bg-rose-500/10 px-2.5 py-1.5 text-left"
           >
-            <div className="truncate font-mono text-[11px] text-destructive">
+            <div className="truncate font-mono text-[11px] text-rose-600 dark:text-rose-400">
               {e.expression}
             </div>
-            <div className="mt-0.5 break-words text-[11px] text-muted-foreground">
+            <div className="mt-0.5 break-words text-[11px] text-foreground/70">
               {e.message}
             </div>
           </div>
@@ -919,17 +921,17 @@ function SurfaceErrorState({ errors }: { errors: SurfaceError[] }) {
 function SurfaceErrorOverlay({ errors }: { errors: SurfaceError[] }) {
   const t = useT();
   return (
-    <div className="absolute left-2 top-2 z-20 flex max-w-xs flex-col gap-1 rounded-[10px] border border-destructive/30 bg-popover p-1.5 text-left shadow-[var(--shadow-float)]">
-      <div className="flex items-center gap-1.5 text-[11px] font-medium text-destructive">
-        <AlertTriangle className="h-3 w-3" strokeWidth={1.75} />
+    <div className="absolute left-2 top-2 z-20 flex max-w-xs flex-col gap-1 rounded-md border border-rose-500/50 bg-background/90 p-1.5 text-left shadow-lg backdrop-blur-sm">
+      <div className="flex items-center gap-1.5 text-[11px] font-medium text-rose-500">
+        <AlertTriangle className="h-3 w-3" />
         <span>{tf('plot3dSurfacesFailed', { n: errors.length })}</span>
       </div>
       {errors.map((e) => (
         <div key={e.plotId} className="min-w-0">
-          <div className="truncate font-mono text-[10px] text-destructive">
+          <div className="truncate font-mono text-[10px] text-rose-600 dark:text-rose-400">
             {e.expression}
           </div>
-          <div className="break-words text-[10px] text-muted-foreground">
+          <div className="break-words text-[10px] text-foreground/70">
             {e.message}
           </div>
         </div>
@@ -1014,9 +1016,9 @@ function CubeFace({ position }: CubeFaceProps) {
       className="absolute inset-0 rounded-sm border"
       style={{
         transform: transform[position],
-        borderColor: 'var(--primary)',
-        backgroundColor: 'var(--primary-bg-soft)',
-        boxShadow: '0 0 12px var(--primary-shadow) inset',
+        borderColor: 'var(--primary, #2dd4bf80)',
+        backgroundColor: 'var(--primary-bg-soft, rgba(45, 212, 191, 0.05))',
+        boxShadow: '0 0 12px var(--primary-shadow, rgba(45, 212, 191, 0.15)) inset',
       }}
     />
   );

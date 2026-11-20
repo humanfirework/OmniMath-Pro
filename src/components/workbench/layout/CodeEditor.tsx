@@ -38,7 +38,6 @@ import {
   type EditorSelectionAction,
 } from '@/lib/editor/selectionActions';
 import { DEFAULT_CARTESIAN_RANGE } from '@/lib/engine/types';
-import { getVizPalette } from '@/lib/plots/vizPalette';
 import { useSettingsStore } from '@/lib/store/settingsStore';
 import { useWorkbenchStore } from '@/lib/store/workbench';
 import { useAIContextStore } from '@/lib/store/aiContextStore';
@@ -223,12 +222,12 @@ export function CodeEditor({
       fontSize: `${fontSize}px`,
       height: '100%',
       backgroundColor: 'transparent',
-      lineHeight: '1.65',
+      lineHeight: '1.5',
     },
     '&.cm-focused': { outline: 'none' },
     '.cm-scroller': {
       fontFamily: 'ui-monospace, "Geist Mono", "JetBrains Mono", monospace',
-      lineHeight: '1.65',
+      lineHeight: '1.5',
     },
     // 运行后行尾的结果胶囊：不参与测量（inline-block + 固定行高），
     // 过长时省略，悬停看完整结果。
@@ -236,12 +235,12 @@ export function CodeEditor({
       display: 'inline-block',
       marginLeft: '12px',
       padding: '0 6px',
-      borderRadius: '6px',
-      border: '1px solid color-mix(in srgb, var(--primary) 22%, transparent)',
-      background: 'color-mix(in srgb, var(--primary) 11%, transparent)',
+      borderRadius: '4px',
+      border: '1px solid color-mix(in srgb, var(--primary) 28%, transparent)',
+      background: 'color-mix(in srgb, var(--primary) 10%, transparent)',
       color: 'var(--primary)',
       fontSize: `${Math.max(9, Math.round(fontSize * 0.78))}px`,
-      lineHeight: '1.75',
+      lineHeight: '1.5',
       fontFamily: 'ui-monospace, "Geist Mono", "JetBrains Mono", monospace',
       maxWidth: 'min(40vw, 320px)',
       overflow: 'hidden',
@@ -257,7 +256,7 @@ export function CodeEditor({
       color: 'var(--destructive, #ef4444)',
     },
     '.cm-gutters': {
-      backgroundColor: 'var(--editor-gutter)',
+      backgroundColor: 'transparent',
       borderRight: '1px solid var(--border, rgba(255,255,255,0.1))',
       color: 'var(--muted-foreground, #888)',
       // Removed opacity: it washed out the active-line gutter highlight and
@@ -265,7 +264,7 @@ export function CodeEditor({
       // muted-foreground color already provides the desired de-emphasis.
       fontFamily: 'ui-monospace, "Geist Mono", "JetBrains Mono", monospace',
       fontSize: `${fontSize}px`,
-      lineHeight: '1.65',
+      lineHeight: '1.5',
       // Top/bottom padding MUST equal .cm-content's — otherwise the first
       // and last rows visibly drift between gutter and content.
       padding: `${GUTTER_PAD_Y} 0`,
@@ -311,44 +310,44 @@ export function CodeEditor({
     // the background will align as long as we do not add vertical padding or
     // border-radius that changes its visible extent.
     '.cm-activeLineGutter': {
-      backgroundColor: 'var(--editor-active-line)',
-      color: 'var(--foreground)',
-      fontWeight: '600',
+      backgroundColor: 'rgba(45, 212, 191, 0.26)',
+      color: 'var(--primary, #2dd4bf)',
+      fontWeight: '700',
       // Ensure the highlight fills the full cell, not just the content box,
       // so it never looks shorter than the active content line.
       boxSizing: 'border-box',
     },
-    // VSCode-style active line highlight: subtle neutral band on both
+    // VSCode-style active line highlight: subtle teal background on both
     // the line content and the gutter. Both use the same vertical extent
     // (the line/gutter element height) and no border-radius so the two
     // bands line up perfectly.
     '.cm-activeLine': {
-      backgroundColor: 'var(--editor-active-line)',
+      backgroundColor: 'rgba(45, 212, 191, 0.16)',
     },
     '.cm-foldPlaceholder': {
-      backgroundColor: 'var(--accent)',
-      border: '1px solid var(--border)',
+      backgroundColor: 'rgba(45, 212, 191, 0.1)',
+      border: '1px solid rgba(45, 212, 191, 0.2)',
       borderRadius: '3px',
       padding: '0 4px',
-      color: 'var(--muted-foreground)',
+      color: '#2dd4bf',
     },
     '.cm-content': {
-      caretColor: 'var(--primary)',
-      lineHeight: '1.65',
+      caretColor: 'var(--primary, #2dd4bf)',
+      lineHeight: '1.5',
       // Top/bottom MUST equal .cm-gutters' GUTTER_PAD_Y. Left/right can be
       // whatever we want.
       padding: `${GUTTER_PAD_Y} 16px ${GUTTER_PAD_Y} 12px`,
     },
     '.cm-line': {
-      lineHeight: '1.65',
+      lineHeight: '1.5',
       fontSize: `${fontSize}px`,
     },
-    '.cm-cursor': { borderLeftColor: 'var(--primary)' },
+    '.cm-cursor': { borderLeftColor: 'var(--primary, #2dd4bf)' },
     '.cm-placeholder': {
       color: 'var(--muted-foreground, #888)',
       opacity: 0.65,
     },
-    '.cm-selectionBackground, ::selection': { backgroundColor: 'var(--editor-selection)' },
+    '.cm-selectionBackground, ::selection': { backgroundColor: 'rgba(45, 212, 191, 0.2)' },
     '.cm-lintRange-error': { textDecoration: 'underline wavy #ef4444' },
     '.cm-tooltip': {
       backgroundColor: 'var(--popover, #18181b)',
@@ -626,7 +625,7 @@ export function CodeEditor({
           });
           return;
         }
-        const PLOT_COLORS = getVizPalette();
+        const PLOT_COLORS = ['#2dd4bf', '#fbbf24', '#fb7185', '#34d399', '#a78bfa', '#fb923c'];
         const store = useWorkbenchStore.getState();
         store.setPreviewVisible(true);
         expressions.forEach((expression, i) => {
@@ -680,9 +679,7 @@ export function CodeEditor({
           onMouseDown={(e) => e.preventDefault()}
           style={{ left: selectionBubble.left, top: selectionBubble.top }}
           className={cn(
-            // 注意：不要在这里叠加 translate/入场动画类 —— motion 的关键帧会覆盖
-            // `-translate-y-full`，让动作条压住选中的代码行。
-            'surface-floating fixed z-[80] flex items-center gap-0.5 p-0.5',
+            'fixed z-[80] flex items-center gap-0.5 rounded-lg border border-border/70 bg-popover/95 p-0.5 shadow-lg shadow-black/10 backdrop-blur',
             selectionBubble.placement === 'above' ? '-translate-y-full' : '',
           )}
         >
@@ -697,12 +694,12 @@ export function CodeEditor({
                   setSelectionBubble(null);
                   viewRef.current?.focus();
                 }}
-                className="flex h-6 items-center gap-1 rounded px-1.5 text-[10.5px] font-medium text-muted-foreground transition-colors hover:bg-primary/10 hover:text-primary"
+                className="flex h-6 items-center gap-1 rounded-md px-1.5 text-[10.5px] font-medium text-muted-foreground transition-colors hover:bg-primary/10 hover:text-primary"
               >
                 <Play className="size-3" fill="currentColor" />
                 运行
               </button>
-              <span className="mx-0.5 h-3 w-px bg-border" />
+              <span className="mx-0.5 h-3 w-px bg-border/60" />
             </>
           )}
           {SELECTION_ACTIONS.map((action) => {
@@ -714,7 +711,7 @@ export function CodeEditor({
                 title={action.title}
                 aria-label={action.title}
                 onClick={() => runSelectionAction(action.id)}
-                className="flex h-6 items-center gap-1 rounded px-1.5 text-[10.5px] font-medium text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
+                className="flex h-6 items-center gap-1 rounded-md px-1.5 text-[10.5px] font-medium text-muted-foreground transition-colors hover:bg-primary/10 hover:text-primary"
               >
                 <Icon className="size-3" />
                 {action.label}
@@ -823,10 +820,10 @@ function buildSignatureHelpDom(info: MathFnInfo, activeArg: number): { dom: HTML
     span.style.borderRadius = '4px';
     span.style.padding = '0 3px';
     if (i === activeArg) {
-      span.style.background = 'color-mix(in srgb, var(--primary) 26%, transparent)';
+      span.style.background = 'rgba(45, 212, 191, 0.28)';
       span.style.color = 'var(--syntax-number, #fbbf24)';
       span.style.fontWeight = '700';
-      span.style.boxShadow = 'inset 0 0 0 1px color-mix(in srgb, var(--primary) 38%, transparent)';
+      span.style.boxShadow = 'inset 0 0 0 1px rgba(45,212,191,.4)';
     } else {
       span.style.color = 'var(--syntax-variable, #94a3b8)';
     }
@@ -848,7 +845,7 @@ function buildSignatureHelpDom(info: MathFnInfo, activeArg: number): { dom: HTML
       row.style.alignItems = 'center';
       row.style.gap = '6px';
       row.style.margin = '2px 0';
-      if (i === activeArg) row.style.background = 'color-mix(in srgb, var(--primary) 10%, transparent)';
+      if (i === activeArg) row.style.background = 'rgba(45,212,191,0.12)';
       row.style.borderRadius = '4px';
       row.style.padding = '1px 4px';
       // 类别徽标
@@ -959,7 +956,7 @@ function buildInfoTooltip(info: MathFnInfo): { dom: HTMLElement } {
       chip.style.padding = '0 4px';
       chip.style.margin = '0 2px 2px 0';
       chip.style.borderRadius = '4px';
-      chip.style.background = 'color-mix(in srgb, var(--primary) 12%, transparent)';
+      chip.style.background = 'rgba(45, 212, 191, 0.15)';
       chip.style.color = 'var(--syntax-number, #fbbf24)';
       chip.style.fontFamily = 'ui-monospace, monospace';
       chip.textContent = a;
@@ -1062,7 +1059,7 @@ function buildInfoHtml(info: MathFnInfo): string {
         ? `<div style="margin:4px 0">
             <span style="color:var(--muted-foreground,#888)">参数：</span>
             ${info.args.map((a) =>
-              `<span style="display:inline-block;padding:0 4px;margin:0 2px 2px 0;border-radius:4px;background:color-mix(in srgb,var(--primary) 12%,transparent);color:var(--syntax-number,#fbbf24);font-family:ui-monospace,monospace">${a}</span>`
+              `<span style="display:inline-block;padding:0 4px;margin:0 2px 2px 0;border-radius:4px;background:rgba(45,212,191,.15);color:var(--syntax-number,#fbbf24);font-family:ui-monospace,monospace">${a}</span>`
             ).join('')}
            </div>`
         : '');

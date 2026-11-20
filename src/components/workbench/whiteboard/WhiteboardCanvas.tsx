@@ -996,20 +996,20 @@ export function WhiteboardCanvas() {
             aria-label="数学模式"
             title="数学模式：停笔 0.7 秒识别手写公式"
             className={cn(
-              'motion-press absolute bottom-24 right-3 z-30 grid size-9 place-items-center rounded-xl border shadow-[var(--shadow-float)] transition-colors',
+              'absolute bottom-24 right-3 z-30 grid size-10 place-items-center rounded-full border shadow-lg backdrop-blur transition-colors',
               mathMode
-                ? 'border-primary/40 bg-primary/15 text-primary'
-                : 'border-border bg-popover text-muted-foreground hover:text-foreground',
+                ? 'border-primary bg-primary text-primary-foreground'
+                : 'border-border/70 bg-background/95 text-muted-foreground hover:text-foreground',
             )}
           >
-            <Sigma className="size-4" strokeWidth={1.75} />
+            <Sigma className="size-4" />
           </button>
         )}
 
         {/* 识别范围框：让用户看到这次识别到底用了哪一段笔迹 */}
         {mathScopeBox && mathDraft && (
           <div
-            className="pointer-events-none absolute z-10 rounded-md border-2 border-primary/60"
+            className="pointer-events-none absolute z-10 rounded-md border-2 border-sky-500/70"
             style={{
               left: mathScopeBox.x0 * view.k + view.x - 6,
               top: mathScopeBox.y0 * view.k + view.y - 6,
@@ -1025,7 +1025,7 @@ export function WhiteboardCanvas() {
             ].map((c) => (
               <span
                 key={c}
-                className={cn('absolute size-2 rounded-full bg-primary shadow-sm', c)}
+                className={cn('absolute size-2 rounded-full bg-sky-500 shadow-sm', c)}
               />
             ))}
           </div>
@@ -1062,16 +1062,16 @@ export function WhiteboardCanvas() {
         </Suspense>
 
         {mathMode && !mathDraft && (
-          <div className="surface-floating motion-panel-in pointer-events-none absolute left-3 top-3 z-20 flex items-center gap-1.5 px-2.5 py-1 text-[10px] text-muted-foreground">
-            <Sigma className="size-3.5 text-muted-foreground" strokeWidth={1.75} />
-            <span className={cn(recognizing && 'text-primary')}>
+          <div className="pointer-events-none absolute left-3 top-3 z-20 flex items-center gap-1.5 rounded-full border border-border/60 bg-background/85 px-2.5 py-1 text-[10px] text-muted-foreground shadow-sm backdrop-blur">
+            <Sigma className="size-3 text-primary" />
+            <span className={cn(recognizing && 'animate-pulse text-primary')}>
               {recognizing ? '识别中…' : '数学模式 · 停笔 0.7 秒识别'}
             </span>
             <button
               type="button"
               onClick={openManualMath}
               onPointerDown={(e) => e.stopPropagation()}
-              className="pointer-events-auto rounded-md border border-border px-1.5 py-0.5 text-[9.5px] hover:bg-accent hover:text-foreground"
+              className="pointer-events-auto rounded-full border border-border/60 px-1.5 py-0.5 text-[9.5px] hover:bg-accent hover:text-foreground"
             >
               手动输入
             </button>
@@ -1079,9 +1079,9 @@ export function WhiteboardCanvas() {
         )}
 
         {latencyProbe && (
-          <div className="surface-floating motion-panel-in absolute right-3 top-3 z-20 w-48 px-2.5 py-2 text-[10px]">
+          <div className="absolute right-3 top-3 z-20 w-48 rounded-lg border border-border/60 bg-background/90 px-2.5 py-2 text-[10px] shadow-lg backdrop-blur">
             <div className="flex items-center gap-1.5 font-medium text-foreground/85">
-              <Timer className="size-3.5 text-muted-foreground" strokeWidth={1.75} />
+              <Timer className="size-3 text-primary" />
               笔迹延迟
               <span className="ml-auto text-[9px] font-normal text-muted-foreground">
                 {latencyStats.count} 次
@@ -1099,7 +1099,7 @@ export function WhiteboardCanvas() {
             <button
               type="button"
               onClick={resetLatency}
-              className="mt-1.5 rounded border border-border px-1.5 py-0.5 text-[9px] text-muted-foreground hover:bg-accent hover:text-foreground"
+              className="mt-1.5 rounded border border-border/60 px-1.5 py-0.5 text-[9px] text-muted-foreground hover:bg-accent hover:text-foreground"
             >
               重置
             </button>
@@ -1109,11 +1109,11 @@ export function WhiteboardCanvas() {
         {/* Selection actions: move is direct, scale/rotate/delete live here. */}
         {selectedIds.length > 0 && (
           <div
-            className="surface-floating motion-panel-in absolute bottom-16 left-3 z-20 flex items-center gap-0.5 px-1.5 py-1"
+            className="absolute bottom-16 left-3 z-20 flex items-center gap-0.5 rounded-full border border-border/60 bg-background/95 px-1.5 py-1 shadow-lg backdrop-blur"
             onPointerDown={(e) => e.stopPropagation()}
             onWheel={(e) => e.stopPropagation()}
           >
-            <span className="hidden px-1 text-[10px] text-muted-foreground sm:inline">
+            <span className="px-1 text-[10px] text-muted-foreground">
               已选 {selectedIds.length}
             </span>
             <button
@@ -1121,55 +1121,54 @@ export function WhiteboardCanvas() {
               title="缩小 10%"
               aria-label="缩小选区"
               onClick={() => handleScaleSelection(0.9)}
-              className="motion-press grid size-7 place-items-center rounded-full text-muted-foreground hover:bg-accent hover:text-foreground"
+              className="grid size-6 place-items-center rounded-full text-muted-foreground hover:bg-accent hover:text-foreground"
             >
-              <ZoomOut className="size-3.5" strokeWidth={1.75} />
+              <ZoomOut className="size-3.5" />
             </button>
             <button
               type="button"
               title="放大 10%"
               aria-label="放大选区"
               onClick={() => handleScaleSelection(1.1)}
-              className="motion-press grid size-7 place-items-center rounded-full text-muted-foreground hover:bg-accent hover:text-foreground"
+              className="grid size-6 place-items-center rounded-full text-muted-foreground hover:bg-accent hover:text-foreground"
             >
-              <ZoomIn className="size-3.5" strokeWidth={1.75} />
+              <ZoomIn className="size-3.5" />
             </button>
             <button
               type="button"
               title="逆时针旋转 15°"
               aria-label="逆时针旋转选区"
               onClick={() => handleRotateSelection(-15)}
-              className="motion-press grid size-7 place-items-center rounded-full text-muted-foreground hover:bg-accent hover:text-foreground"
+              className="grid size-6 place-items-center rounded-full text-muted-foreground hover:bg-accent hover:text-foreground"
             >
-              <RotateCcw className="size-3.5" strokeWidth={1.75} />
+              <RotateCcw className="size-3.5" />
             </button>
             <button
               type="button"
               title="顺时针旋转 15°"
               aria-label="顺时针旋转选区"
               onClick={() => handleRotateSelection(15)}
-              className="motion-press grid size-7 place-items-center rounded-full text-muted-foreground hover:bg-accent hover:text-foreground"
+              className="grid size-6 place-items-center rounded-full text-muted-foreground hover:bg-accent hover:text-foreground"
             >
-              <RotateCw className="size-3.5" strokeWidth={1.75} />
+              <RotateCw className="size-3.5" />
             </button>
-            <span className="mx-0.5 h-5 w-px bg-border" />
             <button
               type="button"
               title="识别选中的手写公式"
               aria-label="识别选中的手写公式"
               onClick={recognizeSelected}
-              className="motion-press grid size-7 place-items-center rounded-full text-primary hover:bg-primary/10"
+              className="mx-0.5 grid size-6 place-items-center rounded-full text-primary hover:bg-primary/10"
             >
-              <Sigma className="size-3.5" strokeWidth={1.75} />
+              <Sigma className="size-3.5" />
             </button>
             <button
               type="button"
               title="删除选中对象"
               aria-label="删除选中对象"
               onClick={handleDeleteSelected}
-              className="motion-press grid size-7 place-items-center rounded-full text-rose-500 hover:bg-rose-500/10"
+              className="grid size-6 place-items-center rounded-full text-rose-500 hover:bg-rose-500/10"
             >
-              <Trash2 className="size-3.5" strokeWidth={1.75} />
+              <Trash2 className="size-3.5" />
             </button>
           </div>
         )}
@@ -1227,14 +1226,17 @@ export function WhiteboardCanvas() {
             className="absolute inset-0 grid place-items-center pointer-events-none"
           >
             <div className="text-center px-6">
-              <div className="mx-auto mb-3 grid size-12 place-items-center rounded-xl border border-border bg-card">
-                <PencilRuler className="size-[18px] text-muted-foreground" strokeWidth={1.75} />
+              <div className="grid place-items-center size-14 mx-auto rounded-2xl bg-primary/8 border border-primary/20 mb-3">
+                <PencilRuler className="size-6 text-primary/70" />
               </div>
-              <p className="text-[12.5px] font-medium text-foreground/70 mb-1">
+              <p className="text-[13px] font-medium text-foreground/70 mb-1">
                 {t('abWhiteboard')}
               </p>
-              <p className="mx-auto max-w-xs text-[11.5px] text-muted-foreground">
+              <p className="text-[11.5px] text-muted-foreground max-w-xs">
                 先点左侧 Σ 开启数学模式，写公式后停 0.7 秒出识别浮卡
+              </p>
+              <p className="mt-1 text-[10.5px] text-muted-foreground/70 max-w-xs">
+                sin x、y=x² 都能识别 · 笔迹不会被自动改成几何图形
               </p>
             </div>
           </motion.div>
@@ -1243,7 +1245,7 @@ export function WhiteboardCanvas() {
 
       {/* Status bar — 手机端隐藏：底部已有笔工具栏 + 五标签导航，
           再叠一行状态会让小屏只剩很少的绘图高度。桌面 / 平板仍显示。 */}
-      <div className="shrink-0 hidden md:flex items-center justify-between gap-2 px-3 py-1 border-t border-border bg-transparent text-[11px] text-muted-foreground">
+      <div className="shrink-0 hidden md:flex items-center justify-between gap-2 px-3 py-1 border-t border-border/60 bg-card/30 text-[11px] text-muted-foreground">
         <span className="min-w-0 truncate">
           {strokes.length} 笔 ·{' '}
           {tool === 'pen'

@@ -170,7 +170,7 @@ const templateImageVectorizationQuickstart: PipelineTemplate = {
     { id: 'img-in-1', type: 'image-input', position: { x: 80, y: 220 }, config: {} },
     { id: 'fine-1', type: 'fine-outline', position: { x: 420, y: 220 }, config: { imageType: 'auto', preset: 'normal', eps: 1.1 } },
     { id: 'cf-1', type: 'curve-fit', position: { x: 760, y: 220 }, config: { maxError: 1.5, maxSegments: 8, smooth: 0.3, flipY: true, flipX: false, scale: 1 } },
-    { id: 'pc-1', type: 'plot-curves', position: { x: 1100, y: 220 }, config: { color: '#3B6FE0', width: 2, flipX: false, flipY: true } },
+    { id: 'pc-1', type: 'plot-curves', position: { x: 1100, y: 220 }, config: { color: '#a78bfa', width: 2, flipX: false, flipY: true } },
   ],
   edges: [
     edge('e1', 'img-in-1', 'image', 'fine-1', 'image'),

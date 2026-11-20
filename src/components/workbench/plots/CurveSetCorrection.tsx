@@ -19,7 +19,6 @@ import { useMemo, useState } from 'react';
 import { useWorkbenchStore } from '@/lib/store/workbench';
 import { refitCurveCandidate, type Polyline, type Point } from '@/lib/vision';
 import type { CurveSetData, CurveCorrectionCandidate, Pt2, BezierPathData } from '@/lib/plots/curveTypes';
-import { getVizColor } from '@/lib/plots/vizPalette';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Slider } from '@/components/ui/slider';
@@ -123,8 +122,6 @@ function exportJSON(curves: BezierPathData[]) {
 
 /** 导出为 SVG：把每条曲线渲染成 <path>，便于在矢量工具中继续编辑。 */
 function exportSVG(curves: BezierPathData[], width: number, height: number) {
-  // 一次导出读取一次调色板，与画布上的蓝紫配色保持一致。
-  const stroke = getVizColor(0);
   const paths = curves
     .map((path) => {
       const d = (Array.isArray(path.segments) ? path.segments : [])
@@ -145,7 +142,7 @@ function exportSVG(curves: BezierPathData[], width: number, height: number) {
           return '';
         })
         .join(' ');
-      return `<path d="${d}" fill="none" stroke="${stroke}" stroke-width="1.5" ${path.closed ? 'stroke-linejoin="round"' : ''}/>`;
+      return `<path d="${d}" fill="none" stroke="#1565c0" stroke-width="1.5" ${path.closed ? 'stroke-linejoin="round"' : ''}/>`;
     })
     .join('\n  ');
   const svg = `<?xml version="1.0" encoding="UTF-8"?>\n<svg xmlns="http://www.w3.org/2000/svg" width="${width}" height="${height}" viewBox="0 0 ${width} ${height}">\n  ${paths}\n</svg>`;
@@ -233,15 +230,15 @@ export function CurveSetCorrection({ curveSet }: CurveSetCorrectionProps) {
   };
 
   return (
-    <div className="surface-floating pointer-events-auto absolute bottom-3 left-3 z-30 w-[300px] max-w-[calc(100%-1.5rem)] overflow-hidden">
+    <div className="pointer-events-auto absolute bottom-3 left-3 z-30 w-[300px] max-w-[calc(100%-1.5rem)] overflow-hidden rounded-xl border border-border/70 bg-background/85 shadow-lg backdrop-blur-md">
       {/* 头部 */}
-      <div className="flex items-center justify-between gap-2 border-b border-border px-3 py-1.5">
+      <div className="flex items-center justify-between gap-2 border-b border-border/60 px-3 py-2">
         <button
           type="button"
           onClick={() => setOpen((v) => !v)}
-          className="flex items-center gap-1.5 text-[11.5px] font-medium text-foreground/90 transition-colors hover:text-primary"
+          className="flex items-center gap-1.5 text-xs font-medium text-foreground/90 transition-colors hover:text-primary"
         >
-          <SlidersHorizontal className="size-3.5 text-primary" strokeWidth={1.75} />
+          <SlidersHorizontal className="size-3.5 text-primary" />
           人工修正曲线
           <Badge variant="secondary" className="ml-1 px-1.5 py-0 text-[10px]">
             {curveCount}
@@ -252,17 +249,17 @@ export function CurveSetCorrection({ curveSet }: CurveSetCorrectionProps) {
             type="button"
             aria-label={open ? '收起' : '展开'}
             onClick={() => setOpen((v) => !v)}
-            className="motion-press grid size-6 place-items-center rounded-[5px] text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
+            className="grid size-6 place-items-center rounded-md text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
           >
-            {open ? <ChevronDown className="size-3.5" strokeWidth={1.75} /> : <ChevronUp className="size-3.5" strokeWidth={1.75} />}
+            {open ? <ChevronDown className="size-3.5" /> : <ChevronUp className="size-3.5" />}
           </button>
           <button
             type="button"
             aria-label="移除该曲线集"
             onClick={() => removeCurveSet(curveSet.id!)}
-            className="motion-press grid size-6 place-items-center rounded-[5px] text-muted-foreground transition-colors hover:bg-destructive/10 hover:text-destructive"
+            className="grid size-6 place-items-center rounded-md text-muted-foreground transition-colors hover:bg-destructive/10 hover:text-destructive"
           >
-            <X className="size-3.5" strokeWidth={1.75} />
+            <X className="size-3.5" />
           </button>
         </div>
       </div>
@@ -283,10 +280,10 @@ export function CurveSetCorrection({ curveSet }: CurveSetCorrectionProps) {
                       key={cand.id}
                       type="button"
                       onClick={() => switchCandidate(cand)}
-                      className={`motion-press inline-flex items-center gap-1 rounded-[5px] border px-2 py-1 text-[11px] transition-colors ${
+                      className={`inline-flex items-center gap-1 rounded-md border px-2 py-1 text-xs transition-colors ${
                         active
                           ? 'border-primary/50 bg-primary/10 text-primary'
-                          : 'border-border bg-card text-muted-foreground hover:border-primary/30 hover:text-foreground'
+                          : 'border-border bg-muted/30 text-muted-foreground hover:border-primary/30 hover:text-foreground'
                       }`}
                     >
                       {active && <Check className="size-3" />}
@@ -315,7 +312,7 @@ export function CurveSetCorrection({ curveSet }: CurveSetCorrectionProps) {
                   return (
                     <li
                       key={idx}
-                      className="flex items-center justify-between gap-2 rounded-[6px] border border-border bg-card px-2 py-1.5"
+                      className="flex items-center justify-between gap-2 rounded-md border border-border/60 bg-muted/20 px-2 py-1.5"
                     >
                       <span className="truncate font-mono text-[11px] text-foreground/80">
                         #{idx + 1} · {segCount} 段
@@ -339,7 +336,7 @@ export function CurveSetCorrection({ curveSet }: CurveSetCorrectionProps) {
 
           {/* 3) 调整参数重新拟合 */}
           <section
-            className={`space-y-2 rounded-[8px] border border-border p-2 ${
+            className={`space-y-2 rounded-lg border border-border/60 p-2 ${
               polylines.length === 0 ? 'pointer-events-none opacity-40' : ''
             }`}
           >

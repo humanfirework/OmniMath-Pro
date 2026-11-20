@@ -13,7 +13,7 @@
  */
 
 import { useEffect, useRef, useState } from 'react';
-import { motion, AnimatePresence } from 'framer-motion';
+import { motion, AnimatePresence, useAnimationControls } from 'framer-motion';
 import {
   Moon,
   Sun,
@@ -150,7 +150,7 @@ export function TitleBar() {
   const showInputViewSwitch = viewMode === 'workbench' && editorVisible;
 
   const menuTriggerClass =
-    'px-2 h-6 text-[11px] rounded text-muted-foreground hover:text-primary hover:bg-primary/10 transition-colors';
+    'px-2.5 h-7 text-[12.5px] rounded-md text-muted-foreground hover:text-foreground hover:bg-accent/70 transition-colors';
 
   /** 打开文件浏览器：回到工作台并展开文件侧栏。 */
   const openFileExplorer = () => {
@@ -228,64 +228,107 @@ export function TitleBar() {
   // 双击 logo 彩蛋状态：当前展示的数学趣语（null 表示未显示）。
   const [egg, setEgg] = useState<string | null>(null);
   const eggTimer = useRef<number | null>(null);
-  // 双击 logo 的彩蛋保留，但不再播放翻面/发光动画。
+  // 双击抖动/翻面动画反馈控制器（可重复触发，不会在首次挂载时播放）。
+  const logoAnim = useAnimationControls();
   const handleLogoDoubleClick = () => {
     const pick = EASTER_EGGS[Math.floor(Math.random() * EASTER_EGGS.length)];
     setEgg(pick);
     if (eggTimer.current) window.clearTimeout(eggTimer.current);
     eggTimer.current = window.setTimeout(() => setEgg(null), 4000);
+    // 播放整块翻面反馈：整个图标沿 Y 轴翻转一整圈（360°），
+    // 幅度大、明显，鼠标悬停也遮挡不住；最后回到正面不变形。
+    void logoAnim.start({
+      rotateY: [0, 180, 360],
+      rotate: [0, -10, 10, -6, 6, 0],
+      scale: [1, 0.88, 1.18, 1, 1],
+      transition: { duration: 0.9, ease: 'easeInOut' },
+    });
   };
 
   return (
     <header
       data-tauri-drag-region
       className={cn(
-        'relative h-9 shrink-0 flex items-center justify-between px-3 gap-4',
-        'bg-background border-b border-border',
+        'relative h-10 shrink-0 flex items-center justify-between px-3 gap-4',
+        'glass border-b border-border',
         'select-none',
       )}
     >
+      {/* subtle teal gradient overlay */}
+      <div
+        aria-hidden
+        className="absolute inset-0 pointer-events-none opacity-60"
+        style={{
+          background:
+            'linear-gradient(90deg, oklch(0.7 0.15 165 / 8%) 0%, transparent 35%, transparent 65%, oklch(0.7 0.15 165 / 5%) 100%)',
+        }}
+      />
+
       {/* ── Left: brand ───────────────────────────────────────────── */}
       <div className="relative flex items-center gap-2.5 min-w-0">
-        <button
-          type="button"
-          onDoubleClick={handleLogoDoubleClick}
-          title="OmniMath Pro"
-          className="grid size-6 shrink-0 place-items-center rounded-md border border-border bg-transparent text-muted-foreground transition-colors hover:bg-accent/60 hover:text-foreground"
+        {/* 整块翻面：包裹整个图标（含底色/边框），双击时整体翻转一圈 */}
+        <motion.div
+          animate={logoAnim}
+          style={{ transformStyle: 'preserve-3d' }}
+          className="relative"
         >
-          <Sigma className="size-3.5" strokeWidth={1.75} />
-        </button>
+          <motion.div
+            initial={{ rotate: -90, scale: 0.6, opacity: 0 }}
+            animate={{ rotate: 0, scale: 1, opacity: 1 }}
+            transition={{ type: 'spring', stiffness: 220, damping: 18, delay: 0.05 }}
+            onDoubleClick={handleLogoDoubleClick}
+            title="双击看看？"
+            className="relative flex items-center justify-center h-7 px-1.5 rounded-lg bg-primary/10 border border-primary/40 cursor-default"
+            style={{
+              boxShadow: '0 0 14px oklch(0.7 0.15 165 / 35%)',
+            }}
+          >
+            <img
+              src="/logo.png"
+              alt="OmniMath Pro"
+              className="h-5 w-auto object-contain pointer-events-none select-none"
+              style={{ filter: 'brightness(1.25) contrast(1.4) saturate(1.2)' }}
+            />
+          <span
+            aria-hidden
+            className="absolute inset-0 rounded-lg"
+            style={{ boxShadow: '0 0 0 1px oklch(0.7 0.15 165 / 60%)' }}
+          />
+          </motion.div>
+        </motion.div>
 
         {/* 双击 logo 彩蛋：随机数学趣语气泡 */}
         <AnimatePresence>
           {egg && (
             <motion.div
               key="egg"
-              initial={{ opacity: 0, y: -2 }}
-              animate={{ opacity: 1, y: 0 }}
-              exit={{ opacity: 0 }}
-              transition={{ duration: 0.12, ease: 'easeOut' }}
+              initial={{ opacity: 0, y: 6, scale: 0.95 }}
+              animate={{ opacity: 1, y: 0, scale: 1 }}
+              exit={{ opacity: 0, y: 4, scale: 0.97 }}
+              transition={{ duration: 0.2, ease: 'easeOut' }}
               onClick={() => setEgg(null)}
-              className="surface-floating absolute top-full left-0 mt-2 z-50 max-w-[260px] cursor-pointer px-3 py-2 text-[11.5px] leading-relaxed text-popover-foreground"
+              className="absolute top-full left-0 mt-2 z-50 max-w-[260px] rounded-xl border border-primary/30 bg-popover px-3 py-2 text-[12px] leading-relaxed text-popover-foreground shadow-xl cursor-pointer"
             >
               {egg}
             </motion.div>
           )}
         </AnimatePresence>
 
-        <div className="flex items-baseline gap-1.5 min-w-0">
-          <span className="text-[12px] font-medium tracking-tight text-foreground">
-            OmniMath
-          </span>
-          <span className="text-[9.5px] text-muted-foreground/80 hidden sm:inline">
-            v{pkg.version}
-          </span>
-          <span
-            className="hidden sm:inline-flex items-center rounded-[3px] border border-border bg-muted/40 px-1 py-[1px] text-[8.5px] font-medium tracking-wide text-muted-foreground"
-            title="Beta 版本：功能仍在迭代，欢迎反馈问题"
-          >
-            BETA
-          </span>
+        <div className="flex flex-col leading-none min-w-0">
+          <div className="flex items-baseline gap-1.5">
+            <span className="text-[15px] font-semibold tracking-tight text-gradient-teal">
+              OmniMath Pro
+            </span>
+            <span className="text-[10px] text-muted-foreground/80 hidden sm:inline">
+              v{pkg.version}
+            </span>
+            <span
+              className="hidden sm:inline-flex items-center rounded-full border border-amber-500/40 bg-amber-500/10 px-1.5 py-[1px] text-[9px] font-semibold tracking-wide text-amber-600 dark:text-amber-400"
+              title="Beta 版本：功能仍在迭代，欢迎反馈问题"
+            >
+              Beta
+            </span>
+          </div>
         </div>
       </div>
 
@@ -293,20 +336,20 @@ export function TitleBar() {
       <nav className="hidden md:flex items-center gap-0.5 relative">
         {/* 代码 / 函数输入器切换（上移到顶栏；仅在工作台 + 编辑器可见时显示） */}
         {showInputViewSwitch && (
-          <div className="flex items-center gap-0.5 p-0.5 rounded-md border border-border bg-muted/40 mr-1">
+          <div className="flex items-center gap-0.5 p-0.5 rounded-lg bg-muted/60 border border-border/60 mr-1">
             <button
               type="button"
               onClick={() => setInputView('code')}
               title="代码编辑器"
               aria-label="切换到代码编辑器"
               className={cn(
-                'flex items-center gap-1 h-5 px-2 text-[10.5px] rounded-[3px] transition-colors',
+                'flex items-center gap-1 h-6 px-2 text-[11px] rounded transition-all font-medium',
                 inputView === 'code'
-                  ? 'bg-primary/15 text-primary'
+                  ? 'bg-primary/15 text-primary shadow-sm'
                   : 'text-muted-foreground hover:text-foreground',
               )}
             >
-              <FileCode2 className="size-3.5" strokeWidth={1.75} />
+              <FileCode2 className="size-3.5" />
               代码
             </button>
             <button
@@ -315,13 +358,13 @@ export function TitleBar() {
               title="函数输入器：输入即绘图"
               aria-label="切换到函数输入器"
               className={cn(
-                'flex items-center gap-1 h-5 px-2 text-[10.5px] rounded-[3px] transition-colors',
+                'flex items-center gap-1 h-6 px-2 text-[11px] rounded transition-all font-medium',
                 inputView === 'demos'
-                  ? 'bg-primary/15 text-primary'
+                  ? 'bg-primary/15 text-primary shadow-sm'
                   : 'text-muted-foreground hover:text-foreground',
               )}
             >
-              <SquareFunction className="size-3.5" strokeWidth={1.75} />
+              <SquareFunction className="size-3.5" />
               函数
             </button>
           </div>
@@ -333,11 +376,11 @@ export function TitleBar() {
           </DropdownMenuTrigger>
           <DropdownMenuContent align="start" className="w-52">
             <DropdownMenuItem className="gap-2 text-[12px]" onClick={openFileExplorer}>
-              <FolderOpen className="size-3.5 text-muted-foreground" strokeWidth={1.75} />
+              <FolderOpen className="size-3.5 text-muted-foreground" />
               {t('menuOpenFiles')}
             </DropdownMenuItem>
             <DropdownMenuItem className="gap-2 text-[12px]" onClick={() => setSettingsOpen(true)}>
-              <Settings className="size-3.5 text-muted-foreground" strokeWidth={1.75} />
+              <Settings className="size-3.5 text-muted-foreground" />
               {t('settingsTitle')}
             </DropdownMenuItem>
             <DropdownMenuSeparator />
@@ -345,7 +388,7 @@ export function TitleBar() {
               className="gap-2 text-[12px]"
               onClick={() => window.open(GITHUB_URL, '_blank', 'noopener,noreferrer')}
             >
-              <Github className="size-3.5 text-muted-foreground" strokeWidth={1.75} />
+              <Github className="size-3.5 text-muted-foreground" />
               {t('menuGithub')}
             </DropdownMenuItem>
           </DropdownMenuContent>
@@ -358,7 +401,7 @@ export function TitleBar() {
           </DropdownMenuTrigger>
           <DropdownMenuContent align="start" className="w-56">
             <DropdownMenuItem className="gap-2 text-[12px]" onClick={runScript}>
-              <Play className="size-3.5 text-muted-foreground" strokeWidth={1.75} />
+              <Play className="size-3.5 text-muted-foreground" />
               {t('cpRunAll')}
               <span className="ml-auto text-[10px] text-muted-foreground/70">Ctrl+Enter</span>
             </DropdownMenuItem>
@@ -366,23 +409,23 @@ export function TitleBar() {
               className="gap-2 text-[12px]"
               onClick={() => window.dispatchEvent(new CustomEvent('omnimath:run-independent'))}
             >
-              <Maximize className="size-3.5 text-muted-foreground" strokeWidth={1.75} />
+              <Maximize className="size-3.5 text-muted-foreground" />
               {t('cpRunIndependent')}
             </DropdownMenuItem>
             <DropdownMenuItem
               className="gap-2 text-[12px]"
               onClick={() => setEditorContent('')}
             >
-              <Eraser className="size-3.5 text-muted-foreground" strokeWidth={1.75} />
+              <Eraser className="size-3.5 text-muted-foreground" />
               {t('cpClearEditor')}
             </DropdownMenuItem>
             <DropdownMenuItem
               className="gap-2 text-[12px]"
               onClick={() => setSymbolPaletteOpen(!symbolPaletteOpen)}
             >
-              <Sigma className="size-3.5 text-muted-foreground" strokeWidth={1.75} />
+              <Sigma className="size-3.5 text-muted-foreground" />
               {t('symbolPaletteToggle')}
-              {symbolPaletteOpen && <Check className="ml-auto size-3.5 text-primary" strokeWidth={1.75} />}
+              {symbolPaletteOpen && <Check className="ml-auto size-3.5 text-primary" />}
             </DropdownMenuItem>
           </DropdownMenuContent>
         </DropdownMenu>
@@ -394,10 +437,10 @@ export function TitleBar() {
           </DropdownMenuTrigger>
           <DropdownMenuContent align="start" className="w-56">
             <DropdownMenuItem className="gap-2 text-[12px]" onClick={handleToggleSidebar}>
-              <PanelLeft className="size-3.5 text-muted-foreground" strokeWidth={1.75} />
+              <PanelLeft className="size-3.5 text-muted-foreground" />
               {sidePanelCollapsed ? t('abShowSidebar') : t('abHideSidebar')}
               {!sidePanelCollapsed && viewMode !== 'home' && (
-                <Check className="ml-auto size-3.5 text-primary" strokeWidth={1.75} />
+                <Check className="ml-auto size-3.5 text-primary" />
               )}
             </DropdownMenuItem>
             <DropdownMenuItem
@@ -405,10 +448,10 @@ export function TitleBar() {
               disabled={viewMode === 'home'}
               onClick={() => setEditorVisible(!editorVisible)}
             >
-              <LayoutTemplate className="size-3.5 text-muted-foreground" strokeWidth={1.75} />
+              <LayoutTemplate className="size-3.5 text-muted-foreground" />
               {t('abToggleEditor')}
               {editorVisible && viewMode !== 'home' && (
-                <Check className="ml-auto size-3.5 text-primary" strokeWidth={1.75} />
+                <Check className="ml-auto size-3.5 text-primary" />
               )}
             </DropdownMenuItem>
             <DropdownMenuItem
@@ -416,18 +459,18 @@ export function TitleBar() {
               disabled={viewMode === 'home'}
               onClick={() => setPreviewVisible(!previewVisible)}
             >
-              <PanelRight className="size-3.5 text-muted-foreground" strokeWidth={1.75} />
+              <PanelRight className="size-3.5 text-muted-foreground" />
               {t('abTogglePreview')}
               {previewVisible && viewMode !== 'home' && (
-                <Check className="ml-auto size-3.5 text-primary" strokeWidth={1.75} />
+                <Check className="ml-auto size-3.5 text-primary" />
               )}
             </DropdownMenuItem>
             <DropdownMenuSeparator />
             <DropdownMenuItem className="gap-2 text-[12px]" onClick={toggleTheme}>
               {theme === 'dark' ? (
-                <Sun className="size-3.5 text-muted-foreground" strokeWidth={1.75} />
+                <Sun className="size-3.5 text-muted-foreground" />
               ) : (
-                <Moon className="size-3.5 text-muted-foreground" strokeWidth={1.75} />
+                <Moon className="size-3.5 text-muted-foreground" />
               )}
               {theme === 'dark' ? t('cpSwitchLight') : t('cpSwitchDark')}
             </DropdownMenuItem>
@@ -444,12 +487,12 @@ export function TitleBar() {
               className="gap-2 text-[12px]"
               onClick={() => setCommandPaletteOpen(true)}
             >
-              <CommandIcon className="size-3.5 text-muted-foreground" strokeWidth={1.75} />
+              <CommandIcon className="size-3.5 text-muted-foreground" />
               {t('menuCommandPalette')}
               <span className="ml-auto text-[10px] text-muted-foreground/70">Ctrl+K</span>
             </DropdownMenuItem>
             <DropdownMenuItem className="gap-2 text-[12px]" onClick={() => setSettingsOpen(true)}>
-              <Keyboard className="size-3.5 text-muted-foreground" strokeWidth={1.75} />
+              <Keyboard className="size-3.5 text-muted-foreground" />
               {t('menuShortcuts')}
             </DropdownMenuItem>
             <DropdownMenuSeparator />
@@ -457,7 +500,7 @@ export function TitleBar() {
               className="gap-2 text-[12px]"
               onClick={() => toast(`OmniMath Pro v${pkg.version}`)}
             >
-              <Info className="size-3.5 text-muted-foreground" strokeWidth={1.75} />
+              <Info className="size-3.5 text-muted-foreground" />
               {t('menuAbout')}
             </DropdownMenuItem>
           </DropdownMenuContent>
@@ -469,10 +512,10 @@ export function TitleBar() {
         {/* Language switcher */}
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
-            <Button variant="ghost" size="sm" className="h-6 px-2 gap-1 text-[11px] text-muted-foreground hover:text-primary">
-              <Languages className="size-3.5" strokeWidth={1.75} />
+            <Button variant="ghost" size="sm" className="h-7 px-2 gap-1 text-[12px]">
+              <Languages className="size-3.5 text-primary" />
               <span className="hidden sm:inline">{locale === 'zh-CN' ? '中' : 'EN'}</span>
-              <ChevronDown className="size-3.5 opacity-60" strokeWidth={1.75} />
+              <ChevronDown className="size-3 opacity-60" />
             </Button>
           </DropdownMenuTrigger>
           <DropdownMenuContent align="end" className="w-40">
@@ -480,17 +523,17 @@ export function TitleBar() {
               onClick={() => handleLocaleChange('zh-CN')}
               className={cn(locale === 'zh-CN' && 'bg-accent')}
             >
-              <span className="mr-2 font-mono text-[10px] text-muted-foreground">中</span> 中文
+              <span className="mr-2">🇨🇳</span> 中文
             </DropdownMenuItem>
             <DropdownMenuItem
               onClick={() => handleLocaleChange('en')}
               className={cn(locale === 'en' && 'bg-accent')}
             >
-              <span className="mr-2 font-mono text-[10px] text-muted-foreground">EN</span> English
+              <span className="mr-2">🇺🇸</span> English
             </DropdownMenuItem>
             <DropdownMenuSeparator />
             <DropdownMenuItem className="gap-2" onClick={() => setSettingsOpen(true)}>
-              <Settings className="size-3.5" strokeWidth={1.75} />
+              <Settings className="size-3.5" />
               {t('settingsTitle')}
             </DropdownMenuItem>
             <DropdownMenuItem onClick={() => setCommandPaletteOpen(true)}>
@@ -506,13 +549,33 @@ export function TitleBar() {
               type="button"
               onClick={toggleTheme}
               aria-label="Toggle theme"
-              className="grid place-items-center size-6 rounded-md border border-border text-muted-foreground hover:border-primary/40 hover:bg-primary/10 hover:text-primary transition-colors"
+              className="grid place-items-center size-7 rounded-md border border-border/60 bg-muted/40 hover:bg-accent transition-colors relative overflow-hidden"
             >
-              {theme === 'dark' ? (
-                <Moon className="size-3.5" strokeWidth={1.75} />
-              ) : (
-                <Sun className="size-3.5" strokeWidth={1.75} />
-              )}
+              <AnimatePresence mode="wait" initial={false}>
+                {theme === 'dark' ? (
+                  <motion.span
+                    key="moon"
+                    initial={{ y: 14, opacity: 0, rotate: -90 }}
+                    animate={{ y: 0, opacity: 1, rotate: 0 }}
+                    exit={{ y: -14, opacity: 0, rotate: 90 }}
+                    transition={{ duration: 0.22 }}
+                    className="grid place-items-center"
+                  >
+                    <Moon className="size-3.5 text-primary" />
+                  </motion.span>
+                ) : (
+                  <motion.span
+                    key="sun"
+                    initial={{ y: 14, opacity: 0, rotate: 90 }}
+                    animate={{ y: 0, opacity: 1, rotate: 0 }}
+                    exit={{ y: -14, opacity: 0, rotate: -90 }}
+                    transition={{ duration: 0.22 }}
+                    className="grid place-items-center"
+                  >
+                    <Sun className="size-3.5 text-amber-500" />
+                  </motion.span>
+                )}
+              </AnimatePresence>
             </button>
           </TooltipTrigger>
           <TooltipContent side="bottom">
@@ -528,22 +591,22 @@ export function TitleBar() {
             data-tauri-drag-region 元素自身的 mousedown 启动拖拽，
             <button> 上的点击会正常触发 onClick，不会被拖拽吞掉。 */}
         {isDesktop && (
-          <div className="flex items-center gap-0.5 ml-1 pl-1.5 border-l border-border">
+          <div className="flex items-center gap-0.5 ml-1 pl-1.5 border-l border-border/60">
             <button
               type="button"
               onClick={() => void getCurrentWindow().minimize()}
               aria-label="Minimize window"
-              className="grid place-items-center size-6 rounded text-muted-foreground hover:bg-accent/70 hover:text-foreground transition-colors"
+              className="grid place-items-center size-7 rounded-md text-muted-foreground hover:bg-accent hover:text-foreground transition-colors"
             >
-              <Minus className="size-3.5" strokeWidth={1.75} />
+              <Minus className="size-3.5" />
             </button>
             <button
               type="button"
               onClick={() => void getCurrentWindow().toggleMaximize()}
               aria-label="Maximize or restore window"
-              className="grid place-items-center size-6 rounded text-muted-foreground hover:bg-accent/70 hover:text-foreground transition-colors"
+              className="grid place-items-center size-7 rounded-md text-muted-foreground hover:bg-accent hover:text-foreground transition-colors"
             >
-              <Square className="size-3.5" strokeWidth={1.75} />
+              <Square className="size-3" />
             </button>
             <Tooltip>
               <TooltipTrigger asChild>
@@ -551,12 +614,12 @@ export function TitleBar() {
                   type="button"
                   onClick={handleToggleFullscreen}
                   aria-label={isFullscreen ? 'Exit fullscreen' : 'Enter fullscreen'}
-                  className="grid place-items-center size-6 rounded text-muted-foreground hover:bg-accent/70 hover:text-foreground transition-colors"
+                  className="grid place-items-center size-7 rounded-md text-muted-foreground hover:bg-accent hover:text-foreground transition-colors"
                 >
                   {isFullscreen ? (
-                    <Minimize2 className="size-3.5" strokeWidth={1.75} />
+                    <Minimize2 className="size-3.5" />
                   ) : (
-                    <Maximize className="size-3.5" strokeWidth={1.75} />
+                    <Maximize className="size-3.5" />
                   )}
                 </button>
               </TooltipTrigger>
@@ -568,9 +631,9 @@ export function TitleBar() {
               type="button"
               onClick={() => void getCurrentWindow().close()}
               aria-label="Close window"
-              className="grid place-items-center size-6 rounded text-muted-foreground hover:bg-destructive hover:text-destructive-foreground transition-colors"
+              className="grid place-items-center size-7 rounded-md text-muted-foreground hover:bg-red-500/90 hover:text-white transition-colors"
             >
-              <X className="size-3.5" strokeWidth={1.75} />
+              <X className="size-3.5" />
             </button>
           </div>
         )}

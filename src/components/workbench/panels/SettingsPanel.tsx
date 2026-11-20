@@ -62,10 +62,6 @@ import {
   HardDriveDownload,
   Upload,
   Cloud,
-  BookOpen,
-  Bug,
-  Star,
-  MessageCircle,
 } from 'lucide-react';
 import { useWorkbenchStore } from '@/lib/store/workbench';
 import { useLayoutStore, LAYOUT_KEY } from '@/lib/store/layoutStore';
@@ -116,11 +112,11 @@ type Category = 'appearance' | 'editor' | 'layout' | 'data' | 'backup' | 'export
 // 缺失时回退到 package.json 中的版本（0.1.6）。
 const APP_VERSION = process.env.NEXT_PUBLIC_APP_VERSION ?? '0.1.6';
 // 关于页相关链接（仓库地址取自 package.json: humanfirework/OmniMath-Pro）。
-const ABOUT_LINKS: { icon: typeof BookOpen; label: string; url: string }[] = [
-  { icon: BookOpen, label: '官方文档', url: 'https://github.com/humanfirework/OmniMath-Pro#readme' },
-  { icon: Bug, label: '反馈问题', url: 'https://github.com/humanfirework/OmniMath-Pro/issues' },
-  { icon: Star, label: 'GitHub', url: 'https://github.com/humanfirework/OmniMath-Pro' },
-  { icon: MessageCircle, label: '讨论社区', url: 'https://github.com/humanfirework/OmniMath-Pro/discussions' },
+const ABOUT_LINKS: { emoji: string; label: string; url: string }[] = [
+  { emoji: '📖', label: '官方文档', url: 'https://github.com/humanfirework/OmniMath-Pro#readme' },
+  { emoji: '🐛', label: '反馈问题', url: 'https://github.com/humanfirework/OmniMath-Pro/issues' },
+  { emoji: '⭐', label: 'GitHub', url: 'https://github.com/humanfirework/OmniMath-Pro' },
+  { emoji: '💬', label: '讨论社区', url: 'https://github.com/humanfirework/OmniMath-Pro/discussions' },
 ];
 
 export function SettingsPanel() {
@@ -487,17 +483,17 @@ export function SettingsPanel() {
 
   return (
     <Dialog open={open} onOpenChange={setOpen}>
-      <DialogContent className="sm:max-w-2xl min-h-[460px] max-h-[85vh] p-0 gap-0 overflow-hidden flex flex-col rounded-xl border-border bg-popover shadow-[var(--shadow-float)]">
+      <DialogContent className="sm:max-w-2xl min-h-[460px] max-h-[85vh] p-0 gap-0 overflow-hidden flex flex-col">
         <DialogHeader className="shrink-0 px-5 py-3 border-b border-border/60">
-          <DialogTitle className="flex items-center gap-2 text-[15px]">
-            <Palette className="size-4 text-primary" strokeWidth={1.75} />
+          <DialogTitle className="flex items-center gap-2 text-base">
+            <Palette className="size-4 text-primary" />
             {t('settingsTitle')}
           </DialogTitle>
         </DialogHeader>
 
         <div className="flex flex-1 min-h-0">
           {/* 左侧分类导航 */}
-          <div className="w-[220px] max-sm:w-[168px] shrink-0 border-r border-border/60 bg-muted/25 p-2 space-y-0.5">
+          <div className="w-44 shrink-0 border-r border-border/60 bg-muted/20 p-2 space-y-0.5">
             {categories.map((cat) => {
               const Icon = cat.icon;
               const isActive = category === cat.id;
@@ -507,13 +503,13 @@ export function SettingsPanel() {
                   type="button"
                   onClick={() => setCategory(cat.id)}
                   className={cn(
-                    'w-full flex items-center gap-2 rounded-md px-2.5 py-2 text-[12px] font-medium transition-colors duration-150',
+                    'w-full flex items-center gap-2 px-2.5 py-2 rounded-md text-[12px] font-medium transition-colors',
                     isActive
                       ? 'bg-primary/10 text-primary'
-                      : 'text-muted-foreground hover:text-foreground hover:bg-accent/50',
+                      : 'text-muted-foreground hover:text-foreground hover:bg-accent/40',
                   )}
                 >
-                  <Icon className="size-3.5 stroke-[1.75]" />
+                  <Icon className="size-3.5" />
                   {cat.labelKey ? t(cat.labelKey) : cat.label}
                 </button>
               );
@@ -525,21 +521,20 @@ export function SettingsPanel() {
                 onClick={handleReset}
                 className="w-full justify-start gap-2 text-[11px] text-muted-foreground hover:text-destructive"
               >
-                <RotateCcw className="size-3 stroke-[1.75]" />
+                <RotateCcw className="size-3" />
                 {t('settingsResetAll')}
               </Button>
             </div>
           </div>
 
           {/* 右侧设置内容 */}
-          <div className="flex-1 min-h-0 overflow-y-auto p-4">
-            <div className="surface-card rounded-xl p-4">
+          <div className="flex-1 min-h-0 overflow-y-auto p-5">
             {category === 'appearance' && (
               <motion.div
                 initial={{ opacity: 0, x: 8 }}
                 animate={{ opacity: 1, x: 0 }}
                 transition={{ duration: 0.15 }}
-                className="space-y-4"
+                className="space-y-5"
               >
                 <SettingRow label={t('settingsTheme')}>
                   <RadioGroup
@@ -623,7 +618,7 @@ export function SettingsPanel() {
                 initial={{ opacity: 0, x: 8 }}
                 animate={{ opacity: 1, x: 0 }}
                 transition={{ duration: 0.15 }}
-                className="space-y-4"
+                className="space-y-5"
               >
                 <SettingRow label={t('editorTitle') + ' ' + t('menuRun')}>
                   <Select value={inputMode} onValueChange={(v) => setInputMode(v as typeof inputMode)}>
@@ -687,7 +682,7 @@ export function SettingsPanel() {
                 initial={{ opacity: 0, x: 8 }}
                 animate={{ opacity: 1, x: 0 }}
                 transition={{ duration: 0.15 }}
-                className="space-y-4"
+                className="space-y-5"
               >
                 <SettingRow label={t('layoutSwitch')}>
                   <RadioGroup
@@ -732,7 +727,7 @@ export function SettingsPanel() {
                 initial={{ opacity: 0, x: 8 }}
                 animate={{ opacity: 1, x: 0 }}
                 transition={{ duration: 0.15 }}
-                className="space-y-4"
+                className="space-y-5"
               >
                 <SettingRow label="学段">
                   <div className="flex flex-wrap items-center gap-1 rounded-xl border border-border/60 bg-background/40 p-1">
@@ -762,9 +757,9 @@ export function SettingsPanel() {
                   </p>
                 </SettingRow>
 
-                <div className="rounded-lg border border-destructive/30 bg-destructive/5 p-4">
+                <div className="rounded-2xl border border-border/60 bg-background/40 p-4">
                   <div className="flex items-center gap-2 text-[12.5px] font-semibold text-foreground/90">
-                    <AlertTriangle className="size-4 text-destructive" strokeWidth={1.75} />
+                    <AlertTriangle className="size-4 text-rose-500" />
                     一键清空学习数据
                   </div>
                   <p className="mt-1 text-[11px] leading-relaxed text-muted-foreground">
@@ -775,9 +770,9 @@ export function SettingsPanel() {
                     variant="outline"
                     size="sm"
                     onClick={() => setEduClearConfirm(true)}
-                    className="mt-3 h-8 gap-1.5 border-destructive/40 text-[11.5px] text-destructive hover:bg-destructive/10 hover:text-destructive"
+                    className="mt-3 h-8 gap-1.5 text-[11.5px] text-rose-600 hover:text-rose-500 hover:border-rose-500/40"
                   >
-                    <Trash2 className="size-3.5 stroke-[1.75]" />
+                    <Trash2 className="size-3.5" />
                     清空学习数据
                   </Button>
                 </div>
@@ -1003,7 +998,7 @@ export function SettingsPanel() {
                 initial={{ opacity: 0, x: 8 }}
                 animate={{ opacity: 1, x: 0 }}
                 transition={{ duration: 0.15 }}
-                className="space-y-4"
+                className="space-y-5"
               >
                 <SettingRow label={t('settingsDefaultExportDpi')}>
                   <Select
@@ -1045,7 +1040,7 @@ export function SettingsPanel() {
                 initial={{ opacity: 0, x: 8 }}
                 animate={{ opacity: 1, x: 0 }}
                 transition={{ duration: 0.15 }}
-                className="space-y-4"
+                className="space-y-5"
               >
                 <SettingRow label={t('languageLabel')}>
                   <RadioGroup
@@ -1090,7 +1085,7 @@ export function SettingsPanel() {
                 initial={{ opacity: 0, x: 8 }}
                 animate={{ opacity: 1, x: 0 }}
                 transition={{ duration: 0.15 }}
-                className="space-y-4"
+                className="space-y-5"
               >
                 <AdvancedSettings />
               </motion.div>
@@ -1101,19 +1096,19 @@ export function SettingsPanel() {
                 initial={{ opacity: 0, x: 8 }}
                 animate={{ opacity: 1, x: 0 }}
                 transition={{ duration: 0.15 }}
-                className="space-y-4"
+                className="space-y-5"
               >
                 {/* Version info */}
-                <div className="rounded-lg border border-border bg-card p-4 text-center">
+                <div className="rounded-lg border border-border/60 bg-muted/20 p-4 text-center">
                   <div className="flex items-center justify-center gap-2 mb-2">
-                    <div className="size-9 rounded-md border border-border grid place-items-center">
-                      <span className="text-base font-semibold text-foreground">Σ</span>
+                    <div className="size-10 rounded-xl bg-primary/10 grid place-items-center">
+                      <span className="text-lg font-bold text-primary">Σ</span>
                     </div>
                   </div>
-                  <h3 className="text-[14px] font-medium">OmniMath Pro</h3>
-                  <p className="text-[11px] text-muted-foreground mt-1 flex items-center justify-center gap-1.5">
+                  <h3 className="text-base font-semibold">OmniMath Pro</h3>
+                  <p className="text-xs text-muted-foreground mt-1 flex items-center justify-center gap-1.5">
                     Version {APP_VERSION}
-                    <span className="inline-flex items-center rounded-[3px] border border-border bg-muted/50 px-1.5 py-[1px] text-[9px] font-medium tracking-wide text-muted-foreground">
+                    <span className="inline-flex items-center rounded-full border border-amber-500/40 bg-amber-500/10 px-1.5 py-[1px] text-[9px] font-semibold tracking-wide text-amber-600 dark:text-amber-400">
                       Beta
                     </span>
                   </p>
@@ -1164,20 +1159,16 @@ export function SettingsPanel() {
                 <div className="space-y-2">
                   <div className="text-[11px] uppercase tracking-wider text-muted-foreground">相关链接</div>
                   <div className="grid grid-cols-2 gap-2">
-                    {ABOUT_LINKS.map((link) => {
-                      const Icon = link.icon;
-                      return (
-                        <button
-                          key={link.label}
-                          type="button"
-                          onClick={() => window.open(link.url, '_blank', 'noopener,noreferrer')}
-                          className="inline-flex items-center gap-1.5 rounded-md border border-border bg-card px-3 py-2 text-xs text-left text-muted-foreground transition-colors duration-150 hover:border-primary/40 hover:text-foreground"
-                        >
-                          <Icon className="size-3.5 stroke-[1.75]" />
-                          {link.label}
-                        </button>
-                      );
-                    })}
+                    {ABOUT_LINKS.map((link) => (
+                      <button
+                        key={link.label}
+                        type="button"
+                        onClick={() => window.open(link.url, '_blank', 'noopener,noreferrer')}
+                        className="rounded-md border border-border/60 px-3 py-2 text-xs text-left hover:bg-accent/40 transition-colors"
+                      >
+                        {link.emoji} {link.label}
+                      </button>
+                    ))}
                   </div>
                 </div>
 
@@ -1186,7 +1177,6 @@ export function SettingsPanel() {
                 </div>
               </motion.div>
             )}
-            </div>
           </div>
         </div>
       </DialogContent>
@@ -1351,7 +1341,7 @@ function ShortcutsList({
                 className={cn(
                   'inline-flex items-center gap-0.5 rounded border px-1.5 py-0.5 font-mono text-[10px]',
                   isListening
-                    ? 'border-primary bg-primary/10 text-primary'
+                    ? 'border-primary bg-primary/10 text-primary animate-pulse'
                     : 'border-border/60 bg-muted/40 text-foreground/70',
                 )}
               >

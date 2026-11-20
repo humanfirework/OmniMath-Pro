@@ -391,9 +391,9 @@ export function BlockDiagramEditor() {
             <button
               type="button"
               onClick={() => setPendingFrom(null)}
-              className="h-7 px-3 rounded-md text-[11px] font-medium border border-amber-500/50 bg-amber-500/10 text-amber-600 dark:text-amber-300 pointer-events-auto"
+              className="h-7 px-3 rounded-md text-[11px] font-medium border border-amber-500/60 bg-amber-500/15 text-amber-600 dark:text-amber-300 animate-pulse pointer-events-auto"
             >
-              连线中 → 点击目标完成（点此取消）
+              🔗 连线中 → 点击目标完成（点此取消）
             </button>
           )}
         </div>
@@ -414,7 +414,7 @@ export function BlockDiagramEditor() {
             const selected = selectedEdge === e.id;
             const isFeedback = e.sign === -1;
             const isBackward = b.x < a.x - 1 || isFeedback;
-            const color = selected ? 'var(--viz-1)' : isFeedback ? '#fb923c' : '#94a3b8';
+            const color = selected ? '#f472b6' : isFeedback ? '#fb923c' : '#94a3b8';
             const midX = (a.x + b.x) / 2;
             const backPath = `M ${a.x} ${a.y} C ${a.x} ${a.y + 70}, ${b.x} ${b.y + 70}, ${b.x} ${b.y}`;
             return (
@@ -442,7 +442,7 @@ export function BlockDiagramEditor() {
                     x={midX}
                     y={a.y - 6}
                     textAnchor="middle" fontSize={13} fontWeight={700}
-                    fill={e.sign === -1 ? '#fb923c' : 'var(--viz-2)'}
+                    fill={e.sign === -1 ? '#fb923c' : '#4ade80'}
                     className="pointer-events-auto cursor-pointer"
                     onClick={(ev) => { ev.stopPropagation(); toggleEdgeSign(e.id); }}
                   >
@@ -462,7 +462,7 @@ export function BlockDiagramEditor() {
             if (n.kind === 'input' || n.kind === 'output') {
               return (
                 <g key={n.id} onPointerDown={(e) => handleNodePointerDown(e, n.id)} onClick={(e) => e.stopPropagation()} className="cursor-pointer">
-                  <circle cx={n.x} cy={n.y} r={12} fill={isInput ? 'var(--viz-2)' : 'var(--viz-3)'} opacity={isSel ? 1 : 0.85}
+                  <circle cx={n.x} cy={n.y} r={12} fill={isInput ? '#4ade80' : '#f472b6'} opacity={isSel ? 1 : 0.85}
                     stroke={isSel ? '#fff' : 'transparent'} strokeWidth={2} />
                   <text x={n.x} y={n.y + 3.5} textAnchor="middle" fontSize={9} fill="#000" fontWeight={700}>
                     {n.name}
@@ -480,7 +480,7 @@ export function BlockDiagramEditor() {
             if (n.kind === 'sum') {
               return (
                 <g key={n.id} onPointerDown={(e) => handleNodePointerDown(e, n.id)} onClick={(e) => e.stopPropagation()} className="cursor-pointer">
-                  <circle cx={n.x} cy={n.y} r={16} fill="rgba(148,163,184,0.12)" stroke={isSel ? 'var(--viz-1)' : '#94a3b8'} strokeWidth={1.5} />
+                  <circle cx={n.x} cy={n.y} r={16} fill="rgba(148,163,184,0.12)" stroke={isSel ? '#f472b6' : '#94a3b8'} strokeWidth={1.5} />
                   <line x1={n.x - 16} y1={n.y} x2={n.x + 16} y2={n.y} stroke="#94a3b8" strokeWidth={1} />
                   <line x1={n.x} y1={n.y - 16} x2={n.x} y2={n.y + 16} stroke="#94a3b8" strokeWidth={1} />
                 </g>
@@ -497,22 +497,22 @@ export function BlockDiagramEditor() {
               <g key={n.id} onPointerDown={(e) => handleNodePointerDown(e, n.id)} onClick={(e) => e.stopPropagation()} className="cursor-pointer">
                 <rect
                   x={n.x - w / 2} y={n.y - h / 2} width={w} height={h} rx={5}
-                  fill={isSel ? 'rgba(59,111,224,0.16)' : 'rgba(124,92,224,0.14)'}
-                  stroke={isSel ? 'var(--viz-1)' : 'var(--viz-3)'}
+                  fill={isSel ? 'rgba(244,114,182,0.16)' : 'rgba(167,139,250,0.14)'}
+                  stroke={isSel ? '#f472b6' : '#a78bfa'}
                   strokeWidth={isSel ? 2.5 : 1.8}
                 />
                 {fr ? (
                   <>
-                    <text x={n.x} y={n.y - 4} textAnchor="middle" fontSize={13} fontWeight={600} fontFamily="ui-monospace,monospace" fill={isSel ? 'var(--viz-1)' : 'var(--viz-5)'}>
+                    <text x={n.x} y={n.y - 4} textAnchor="middle" fontSize={13} fontWeight={600} fontFamily="ui-monospace,monospace" fill={isSel ? '#f472b6' : '#c4b5fd'}>
                       {truncate(fr.num, 12)}
                     </text>
-                    <line x1={n.x - w / 2 + 7} y1={n.y + 3} x2={n.x + w / 2 - 7} y2={n.y + 3} stroke={isSel ? 'var(--viz-1)' : 'var(--viz-5)'} strokeWidth={1.2} opacity={0.8} />
-                    <text x={n.x} y={n.y + 16} textAnchor="middle" fontSize={13} fontWeight={600} fontFamily="ui-monospace,monospace" fill={isSel ? 'var(--viz-1)' : 'var(--viz-5)'}>
+                    <line x1={n.x - w / 2 + 7} y1={n.y + 3} x2={n.x + w / 2 - 7} y2={n.y + 3} stroke={isSel ? '#f472b6' : '#c4b5fd'} strokeWidth={1.2} opacity={0.8} />
+                    <text x={n.x} y={n.y + 16} textAnchor="middle" fontSize={13} fontWeight={600} fontFamily="ui-monospace,monospace" fill={isSel ? '#f472b6' : '#c4b5fd'}>
                       {truncate(fr.den, 12)}
                     </text>
                   </>
                 ) : (
-                  <text x={n.x} y={n.y + 5} textAnchor="middle" fontSize={15} fontWeight={600} fontFamily="ui-monospace,monospace" fill={isSel ? 'var(--viz-1)' : 'var(--viz-5)'}>
+                  <text x={n.x} y={n.y + 5} textAnchor="middle" fontSize={15} fontWeight={600} fontFamily="ui-monospace,monospace" fill={isSel ? '#f472b6' : '#c4b5fd'}>
                     {truncate(n.tf ?? '1', 12)}
                   </text>
                 )}
@@ -522,7 +522,7 @@ export function BlockDiagramEditor() {
 
           {/* 连线起点高亮 */}
           {pendingFrom !== null && (
-            <circle cx={nodeById(pendingFrom)?.x ?? 0} cy={nodeById(pendingFrom)?.y ?? 0} r={4} fill="var(--viz-4)" />
+            <circle cx={nodeById(pendingFrom)?.x ?? 0} cy={nodeById(pendingFrom)?.y ?? 0} r={4} fill="#fbbf24" />
           )}
         </svg>
 

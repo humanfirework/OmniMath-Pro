@@ -33,10 +33,18 @@ import {
   type PlotSample,
 } from '@/lib/plots/plot2d';
 import type { PlotConfig } from '@/lib/store/workbench';
-import { getVizPalette, getVizTokens } from '@/lib/plots/vizPalette';
 import { useScopeVersion } from '@/lib/hooks/useScopeVersion';
 
 /* ----------------------------- Constants ----------------------------- */
+
+const PLOT_COLORS = [
+  '#2dd4bf', // teal
+  '#fbbf24', // amber
+  '#fb7185', // rose
+  '#34d399', // emerald
+  '#a78bfa', // violet
+  '#fb923c', // orange
+];
 
 const PADDING = { left: 40, right: 10, top: 22, bottom: 22 };
 
@@ -57,8 +65,6 @@ export interface FacetGridProps {
 /* =================================================================== */
 
 export function FacetGrid({ plots, xRange, facetYRanges, theme, curveSpecs }: FacetGridProps) {
-  // 一次 render 读取一次调色板（按主题缓存）。
-  const palette = useMemo(() => getVizPalette(), [theme]);
   // 2 columns; rows auto-flow. For 1-2 plots → 1 row; 3-4 → 2 rows; etc.
   return (
     <div
@@ -69,7 +75,7 @@ export function FacetGrid({ plots, xRange, facetYRanges, theme, curveSpecs }: Fa
         <FacetPlot
           key={plot.id}
           plot={plot}
-          color={plot.color || palette[idx % palette.length]}
+          color={plot.color || PLOT_COLORS[idx % PLOT_COLORS.length]}
           xRange={xRange}
           yRange={facetYRanges[idx] ?? [-6, 6]}
           theme={theme}
@@ -178,15 +184,15 @@ function FacetPlot({ plot, color, xRange, yRange, theme, spec }: FacetPlotProps)
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
     ctx.clearRect(0, 0, w, h);
 
-    // 图表 token 来自 --viz-*（按主题缓存，一次 draw 只读一次）。
-    const viz = getVizTokens();
-    const bg = viz.surface;
-    const gridMajor = viz.grid;
-    const gridMinor = viz.grid;
-    const tickLabelColor = viz.axis;
-    const tooltipBg = viz.tooltip;
-    const tooltipFg = viz.axisStrong;
-    const tooltipBorder = getCssVar('--border', 'rgba(0,0,0,0.10)');
+    const dark = theme === 'dark';
+    const bg = getCssVar('--background', dark ? '#2e2e32' : '#ffffff');
+    const fg = getCssVar('--foreground', dark ? '#f0f2f5' : '#1f1f1f');
+    const gridMajor = dark ? 'rgba(255,255,255,0.10)' : 'rgba(0,0,0,0.07)';
+    const gridMinor = dark ? 'rgba(255,255,255,0.05)' : 'rgba(0,0,0,0.035)';
+    const tickLabelColor = getCssVar('--muted-foreground', dark ? '#b0b5bf' : '#4a4a52');
+    const tooltipBg = getCssVar('--popover', dark ? '#18181b' : '#ffffff');
+    const tooltipFg = getCssVar('--popover-foreground', dark ? '#fafafa' : '#171717');
+    const tooltipBorder = getCssVar('--border', dark ? 'rgba(255,255,255,0.15)' : 'rgba(0,0,0,0.10)');
 
     // Background.
     ctx.fillStyle = bg;
@@ -197,9 +203,7 @@ function FacetPlot({ plot, color, xRange, yRange, theme, spec }: FacetPlotProps)
     const yNice = niceNumber(yRange, 5);
     ctx.lineWidth = 1;
 
-    // Minor grid — 同色再减淡。
-    ctx.save();
-    ctx.globalAlpha = 0.5;
+    // Minor grid.
     ctx.strokeStyle = gridMinor;
     ctx.beginPath();
     const minorX = xNice.tickStep / 2;
@@ -215,7 +219,6 @@ function FacetPlot({ plot, color, xRange, yRange, theme, spec }: FacetPlotProps)
       ctx.lineTo(w - PADDING.right, sy);
     }
     ctx.stroke();
-    ctx.restore();
 
     // Major grid.
     ctx.strokeStyle = gridMajor;
@@ -233,7 +236,7 @@ function FacetPlot({ plot, color, xRange, yRange, theme, spec }: FacetPlotProps)
     ctx.stroke();
 
     // Axes (x=0, y=0).
-    ctx.strokeStyle = viz.axisStrong;
+    ctx.strokeStyle = fg;
     ctx.lineWidth = 1.5;
     let [, axisYScreen] = dataToScreen(0, 0);
     if (axisYScreen < PADDING.top) axisYScreen = PADDING.top;
@@ -279,7 +282,7 @@ function FacetPlot({ plot, color, xRange, yRange, theme, spec }: FacetPlotProps)
       ctx.lineCap = 'round';
       ctx.save();
       ctx.shadowColor = color;
-      ctx.shadowBlur = 4;
+      ctx.shadowBlur = dark ? 6 : 4;
       ctx.beginPath();
       let penDown = false;
       for (const s of samples) {
@@ -439,10 +442,10 @@ function FacetPlot({ plot, color, xRange, yRange, theme, spec }: FacetPlotProps)
   return (
     <div
       ref={containerRef}
-      className="relative min-h-[140px] overflow-hidden rounded-[8px] border border-border bg-card"
+      className="relative min-h-[140px] overflow-hidden rounded-md border border-border/50 bg-background"
     >
       {/* Title bar — expression label + Y range badge */}
-      <div className="absolute left-1.5 top-1 z-10 flex items-center gap-1.5 rounded-[5px] border border-border/60 bg-card px-1.5 py-0.5">
+      <div className="absolute left-1.5 top-1 z-10 flex items-center gap-1.5 rounded bg-muted/50 px-1.5 py-0.5 backdrop-blur-sm">
         <span
           className="inline-block size-2 rounded-full"
           style={{ backgroundColor: color }}
@@ -451,7 +454,7 @@ function FacetPlot({ plot, color, xRange, yRange, theme, spec }: FacetPlotProps)
           {plot.expression}
         </span>
       </div>
-      <div className="absolute right-1.5 top-1 z-10 rounded-[5px] border border-border/60 bg-card px-1.5 py-0.5 font-mono text-[9px] text-muted-foreground">
+      <div className="absolute right-1.5 top-1 z-10 rounded bg-muted/50 px-1.5 py-0.5 font-mono text-[9px] text-muted-foreground backdrop-blur-sm">
         y ∈ [{formatNum(yRange[0])}, {formatNum(yRange[1])}]
       </div>
       <canvas

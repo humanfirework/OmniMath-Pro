@@ -105,7 +105,7 @@ export function Minimap({ nodes, view, canvasSize, onCenter }: MinimapProps) {
   return (
     <div
       ref={ref}
-      className="surface-floating absolute bottom-16 left-3 overflow-hidden"
+      className="absolute bottom-16 left-3 overflow-hidden rounded-md border border-border/60 bg-black/40 backdrop-blur-sm"
       style={{
         width: MAP_W,
         height: MAP_H,
@@ -131,11 +131,11 @@ export function Minimap({ nodes, view, canvasSize, onCenter }: MinimapProps) {
               width={w}
               height={h}
               rx={1.5}
-              className={n.error ? 'fill-destructive/75' : 'fill-primary/55'}
+              className={n.error ? 'fill-rose-400/80' : 'fill-sky-400/60'}
               stroke={
                 n.muted
-                  ? 'oklch(0.78 0.16 75 / 0.9)'
-                  : 'var(--border)'
+                  ? 'rgba(251,191,36,0.9)'
+                  : 'rgba(255,255,255,0.25)'
               }
               strokeWidth={0.5}
             />
@@ -147,8 +147,8 @@ export function Minimap({ nodes, view, canvasSize, onCenter }: MinimapProps) {
           y={vrect.y}
           width={vrect.w}
           height={vrect.h}
-          fill="color-mix(in oklab, var(--primary) 10%, transparent)"
-          stroke="var(--primary)"
+          fill="rgba(255,255,255,0.08)"
+          stroke="rgba(255,255,255,0.7)"
           strokeWidth={1}
           rx={1}
         />

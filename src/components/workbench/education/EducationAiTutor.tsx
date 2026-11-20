@@ -213,7 +213,7 @@ export function EducationAiTutor() {
         const friendly = friendlyError(res.error);
         setError(friendly);
         setMessages((m) =>
-          m.map((msg) => (msg.id === assistantId ? { ...msg, content: friendly } : msg)),
+          m.map((msg) => (msg.id === assistantId ? { ...msg, content: `⚠️ ${friendly}` } : msg)),
         );
         lastPendingRef.current = null;
       } else {
@@ -264,10 +264,10 @@ export function EducationAiTutor() {
   return (
     <div className="mx-auto flex h-full max-w-3xl flex-col">
       {/* 头部 */}
-      <div className="mb-3 flex items-center justify-between surface-card rounded-lg px-4 py-3">
+      <div className="mb-3 flex items-center justify-between rounded-2xl border border-border/60 bg-card/60 px-4 py-3 backdrop-blur-sm">
         <div className="flex items-center gap-2.5">
-          <div className="grid size-9 place-items-center rounded-md border border-border bg-muted/40">
-            <GraduationCap className="size-4 text-primary" strokeWidth={1.75} />
+          <div className="grid size-9 place-items-center rounded-xl bg-gradient-to-br from-indigo-500/20 to-teal-500/20">
+            <GraduationCap className="size-4 text-primary" />
           </div>
           <div>
             <div className="text-[13px] font-semibold text-foreground">AI 助教</div>
@@ -280,10 +280,10 @@ export function EducationAiTutor() {
           <button
             type="button"
             onClick={() => setShowConfig((v) => !v)}
-            className="grid size-8 place-items-center rounded-md text-muted-foreground hover:bg-accent/60 hover:text-foreground transition-colors"
+            className="grid size-8 place-items-center rounded-lg text-muted-foreground hover:bg-accent/60 hover:text-foreground transition-colors"
             title="AI 配置"
           >
-            <Settings className="size-4" strokeWidth={1.75} />
+            <Settings className="size-4" />
           </button>
           {messages.length > 0 && (
             <button
@@ -292,10 +292,10 @@ export function EducationAiTutor() {
                 setMessages([]);
                 setError(null);
               }}
-              className="grid size-8 place-items-center rounded-md text-muted-foreground hover:bg-accent/60 hover:text-foreground transition-colors"
+              className="grid size-8 place-items-center rounded-lg text-muted-foreground hover:bg-accent/60 hover:text-foreground transition-colors"
               title="清空对话"
             >
-              <Trash2 className="size-4" strokeWidth={1.75} />
+              <Trash2 className="size-4" />
             </button>
           )}
         </div>
@@ -311,10 +311,10 @@ export function EducationAiTutor() {
                 initial={{ opacity: 0, y: -6 }}
                 animate={{ opacity: 1, y: 0 }}
                 exit={{ opacity: 0 }}
-                className="surface-card rounded-lg p-4"
+                className="rounded-2xl border border-border/60 bg-card/70 p-4 backdrop-blur-sm"
               >
                 <div className="mb-2 flex items-center gap-2 text-primary">
-                  <KeyRound className="size-3.5" strokeWidth={1.75} />
+                  <KeyRound className="size-3.5" />
                   <span className="text-[12px] font-medium">AI 配置</span>
                 </div>
                 <p className="mb-3 text-[11px] text-muted-foreground">
@@ -335,7 +335,7 @@ export function EducationAiTutor() {
                     onClick={() => setShowKey((v) => !v)}
                     className="grid size-8 place-items-center rounded-lg border border-border/60 text-muted-foreground hover:text-foreground"
                   >
-                    {showKey ? <EyeOff className="size-3.5" strokeWidth={1.75} /> : <Eye className="size-3.5" strokeWidth={1.75} />}
+                    {showKey ? <EyeOff className="size-3.5" /> : <Eye className="size-3.5" />}
                   </button>
                 </div>
                 <div className="grid grid-cols-2 gap-2">
@@ -380,8 +380,8 @@ export function EducationAiTutor() {
           {/* 空状态 */}
           {messages.length === 0 && !showConfig && (
             <div className="flex flex-col items-center justify-center py-10 text-center">
-              <div className="mb-3 grid size-12 place-items-center rounded-lg border border-border bg-muted/40">
-                <Lightbulb className="size-6 text-primary" strokeWidth={1.75} />
+              <div className="mb-3 grid size-14 place-items-center rounded-2xl bg-gradient-to-br from-indigo-500/15 to-teal-500/15">
+                <Lightbulb className="size-6 text-primary" />
               </div>
               <p className="mb-1 text-[13.5px] font-semibold text-foreground/90">
                 学习路上有个贴心助教
@@ -395,9 +395,9 @@ export function EducationAiTutor() {
                     key={p}
                     type="button"
                     onClick={() => send(p)}
-                    className="rounded-lg border border-border bg-card px-3 py-2 text-left text-[12px] text-foreground/80 hover:border-primary/30 hover:bg-accent/40 transition-colors"
+                    className="rounded-xl border border-border/60 bg-card/50 px-3 py-2 text-left text-[12px] text-foreground/80 hover:border-primary/30 hover:bg-accent/40 transition-colors"
                   >
-                    {p}
+                    ✦ {p}
                   </button>
                 ))}
               </div>
@@ -415,22 +415,22 @@ export function EducationAiTutor() {
               >
                 <div
                   className={cn(
-                    'grid size-7 shrink-0 place-items-center rounded-md',
-                    m.role === 'user' ? 'bg-primary/15' : 'border border-border bg-muted/40',
+                    'grid size-7 shrink-0 place-items-center rounded-xl',
+                    m.role === 'user' ? 'bg-primary/15' : 'bg-gradient-to-br from-indigo-500/20 to-teal-500/20',
                   )}
                 >
                   {m.role === 'user' ? (
-                    <User className="size-3.5 text-primary" strokeWidth={1.75} />
+                    <User className="size-3.5 text-primary" />
                   ) : (
-                    <Bot className="size-3.5 text-primary" strokeWidth={1.75} />
+                    <Bot className="size-3.5 text-primary" />
                   )}
                 </div>
                 <div
                   className={cn(
-                    'max-w-[82%] rounded-lg border px-3.5 py-2.5 text-[12.5px] leading-relaxed',
+                    'max-w-[82%] rounded-2xl border px-3.5 py-2.5 text-[12.5px] leading-relaxed',
                     m.role === 'user'
                       ? 'border-primary/20 bg-primary/8 text-foreground'
-                      : 'border-border bg-card text-foreground/90',
+                      : 'border-border/60 bg-card/70 text-foreground/90 backdrop-blur-sm',
                   )}
                 >
                   {m.role === 'user' ? (
@@ -445,11 +445,11 @@ export function EducationAiTutor() {
 
           {loading && (
             <div className="flex items-center gap-2 text-muted-foreground">
-              <div className="grid size-7 place-items-center rounded-md border border-border bg-muted/40">
-                <Bot className="size-3.5 text-primary" strokeWidth={1.75} />
+              <div className="grid size-7 place-items-center rounded-xl bg-gradient-to-br from-indigo-500/20 to-teal-500/20">
+                <Bot className="size-3.5 text-primary" />
               </div>
-              <div className="flex items-center gap-2 rounded-lg border border-border bg-card px-3 py-2">
-                <Loader2 className="size-3.5 animate-spin text-primary" strokeWidth={1.75} />
+              <div className="flex items-center gap-2 rounded-2xl border border-border/60 bg-card/70 px-3 py-2">
+                <Loader2 className="size-3.5 animate-spin text-primary" />
                 <span className="text-[11.5px]">正在思考，别着急…</span>
               </div>
             </div>
@@ -462,7 +462,7 @@ export function EducationAiTutor() {
       </ScrollArea>
 
       {/* 输入区 */}
-      <div className="mt-3 surface-card rounded-lg p-2">
+      <div className="mt-3 rounded-2xl border border-border/60 bg-card/60 p-2 backdrop-blur-sm">
         <div className="flex items-end gap-2">
           <textarea
             value={input}
@@ -475,31 +475,31 @@ export function EducationAiTutor() {
             }}
             placeholder="问问助教，关于数学的任何困惑…"
             rows={2}
-            className="max-h-32 flex-1 resize-none rounded-lg bg-background/50 px-3 py-2 text-[12.5px] leading-relaxed outline-none placeholder:text-muted-foreground/60"
+            className="max-h-32 flex-1 resize-none rounded-xl bg-background/50 px-3 py-2 text-[12.5px] leading-relaxed outline-none placeholder:text-muted-foreground/60"
           />
           {loading ? (
             <button
               type="button"
               onClick={stopStreaming}
-              className="grid size-9 shrink-0 place-items-center rounded-lg bg-rose-500/15 text-rose-500 hover:bg-rose-500/25 transition-colors"
+              className="grid size-9 shrink-0 place-items-center rounded-xl bg-rose-500/15 text-rose-500 hover:bg-rose-500/25 transition-colors"
               title="停止"
             >
-              <Loader2 className="size-4 animate-spin" strokeWidth={1.75} />
+              <Loader2 className="size-4 animate-spin" />
             </button>
           ) : (
             <button
               type="button"
               onClick={() => void send(input)}
-              className="grid size-9 shrink-0 place-items-center rounded-lg bg-primary text-primary-foreground hover:bg-primary/90 transition-colors"
+              className="grid size-9 shrink-0 place-items-center rounded-xl bg-primary text-primary-foreground hover:bg-primary/90 transition-colors"
             >
-              <Send className="size-4" strokeWidth={1.75} />
+              <Send className="size-4" />
             </button>
           )}
         </div>
         <div className="mt-1 flex items-center justify-between px-1 text-[9.5px] text-muted-foreground/60">
           <span>Enter 发送 · Shift+Enter 换行</span>
           <span className="inline-flex items-center gap-1">
-            <KeyRound className="size-3" strokeWidth={1.75} />
+            <KeyRound className="size-3" />
             密钥仅存本地，学习记录不上传
           </span>
         </div>

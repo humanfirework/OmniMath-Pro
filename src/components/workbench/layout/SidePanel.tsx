@@ -13,14 +13,13 @@
  */
 
 import { lazy, Suspense, useCallback, useEffect, useState } from 'react';
-import { PanelLeftClose, Clock, Variable, BookOpen, Grid3x3, FunctionSquare, FileCode2, BarChart3, Trash2, Eraser, RefreshCw } from 'lucide-react';
+import { PanelLeftClose, Clock, Variable, BookOpen, Grid3x3, FunctionSquare, FileCode2, BarChart3 } from 'lucide-react';
 import {
   Tooltip,
   TooltipContent,
   TooltipTrigger,
 } from '@/components/ui/tooltip';
 import { useWorkbenchStore } from '@/lib/store/workbench';
-import { useFileSystemStore } from '@/lib/store/fileSystemStore';
 import { t, useLocale } from '@/lib/i18n';
 import { cn } from '@/lib/utils';
 import type { SidePanelTab } from '@/lib/store/workbench';
@@ -62,14 +61,11 @@ const PANEL_ICON: Record<SidePanelTab, typeof Clock> = {
   stats: BarChart3,
 };
 
-/** 懒加载面板切换时的骨架屏，避免白屏闪烁（仅透明度 pulse，无流光）。 */
+/** 懒加载面板切换时的轻量占位，避免白屏闪烁。 */
 function PanelLoading() {
   return (
-    <div className="motion-panel-in flex h-full w-full flex-col gap-2.5 p-3" aria-busy="true">
-      <div className="h-2.5 w-1/3 rounded-full bg-muted animate-pulse" />
-      <div className="h-2 w-full rounded-full bg-muted animate-pulse" />
-      <div className="h-2 w-4/5 rounded-full bg-muted animate-pulse" />
-      <div className="h-2 w-2/3 rounded-full bg-muted animate-pulse" />
+    <div className="flex h-full w-full items-center justify-center">
+      <div className="size-4 animate-spin rounded-full border-2 border-primary/20 border-t-primary" />
     </div>
   );
 }
@@ -87,8 +83,6 @@ export function SidePanel({ onClose }: { onClose?: () => void } = {}) {
   const activeSidePanel = useWorkbenchStore((s) => s.activeSidePanel);
   const setActiveSidePanel = useWorkbenchStore((s) => s.setActiveSidePanel);
   const toggleSidePanel = useWorkbenchStore((s) => s.toggleSidePanel);
-  const clearHistory = useWorkbenchStore((s) => s.clearHistory);
-  const clearVariables = useWorkbenchStore((s) => s.clearVariables);
 
   // 关键修复：面板状态持久化。
   // 之前这里用 switch 返回单个面板，切换 tab 时 React 会「卸载」旧面板并「挂载」新面板，
@@ -129,15 +123,15 @@ export function SidePanel({ onClose }: { onClose?: () => void } = {}) {
   }, []);
 
   return (
-    <div className="flex flex-col h-full bg-sidebar">
+    <div className="flex flex-col h-full bg-card/40">
       {/* Header — 手机端由下面的标签条 + 关闭按钮代替，省掉一整行 */}
-      <div className="hidden md:flex shrink-0 h-8 items-center justify-between px-2 border-b border-sidebar-border bg-transparent">
+      <div className="hidden md:flex shrink-0 h-9 items-center justify-between px-2 border-b border-border/60 bg-background/40">
         <div className="flex items-center gap-1.5 px-1 min-w-0">
           {(() => {
             const Icon = PANEL_ICON[activeSidePanel];
-            return <Icon className="size-3.5 text-muted-foreground shrink-0" strokeWidth={1.75} />;
+            return <Icon className="size-3.5 text-primary shrink-0" />;
           })()}
-          <span className="text-[10.5px] font-medium tracking-[0.08em] uppercase text-muted-foreground truncate">
+          <span className="text-[11.5px] font-semibold tracking-tight text-foreground/85 truncate">
             {t(PANEL_TITLE_KEY[activeSidePanel])}
           </span>
         </div>
@@ -156,66 +150,20 @@ export function SidePanel({ onClose }: { onClose?: () => void } = {}) {
                     aria-label={t(PANEL_TITLE_KEY[tab])}
                     aria-pressed={active}
                     className={cn(
-                      'grid place-items-center size-6 rounded transition-colors',
+                      'grid place-items-center size-6 rounded-md transition-colors',
                       active
                         ? 'bg-primary/12 text-primary'
-                        : 'text-muted-foreground hover:bg-accent/60 hover:text-foreground',
+                        : 'text-muted-foreground hover:bg-accent hover:text-foreground',
                     )}
                   >
-                    <Icon className="size-3.5" strokeWidth={1.75} />
+                    <Icon className="size-3.5" />
                   </button>
                 </TooltipTrigger>
                 <TooltipContent side="bottom">{t(PANEL_TITLE_KEY[tab])}</TooltipContent>
               </Tooltip>
             );
           })}
-          <span aria-hidden className="mx-0.5 h-3.5 w-px bg-sidebar-border" />
-          {/* 当前面板的上下文快捷操作：清空历史 / 清空变量 / 刷新文件列表 */}
-          {activeSidePanel === 'history' && (
-            <Tooltip>
-              <TooltipTrigger asChild>
-                <button
-                  type="button"
-                  onClick={clearHistory}
-                  aria-label="清空历史"
-                  className="grid place-items-center size-6 rounded text-muted-foreground transition-colors hover:bg-destructive/10 hover:text-destructive"
-                >
-                  <Trash2 className="size-3.5" strokeWidth={1.75} />
-                </button>
-              </TooltipTrigger>
-              <TooltipContent side="bottom">清空历史</TooltipContent>
-            </Tooltip>
-          )}
-          {activeSidePanel === 'variables' && (
-            <Tooltip>
-              <TooltipTrigger asChild>
-                <button
-                  type="button"
-                  onClick={clearVariables}
-                  aria-label="清空变量"
-                  className="grid place-items-center size-6 rounded text-muted-foreground transition-colors hover:bg-destructive/10 hover:text-destructive"
-                >
-                  <Eraser className="size-3.5" strokeWidth={1.75} />
-                </button>
-              </TooltipTrigger>
-              <TooltipContent side="bottom">清空变量</TooltipContent>
-            </Tooltip>
-          )}
-          {activeSidePanel === 'files' && (
-            <Tooltip>
-              <TooltipTrigger asChild>
-                <button
-                  type="button"
-                  onClick={() => void useFileSystemStore.getState().loadFromStorage()}
-                  aria-label="刷新文件列表"
-                  className="grid place-items-center size-6 rounded text-muted-foreground transition-colors hover:bg-accent/60 hover:text-foreground"
-                >
-                  <RefreshCw className="size-3.5" strokeWidth={1.75} />
-                </button>
-              </TooltipTrigger>
-              <TooltipContent side="bottom">刷新文件列表</TooltipContent>
-            </Tooltip>
-          )}
+          <span aria-hidden className="mx-0.5 h-3.5 w-px bg-border/60" />
           <Tooltip>
             <TooltipTrigger asChild>
               <button
@@ -223,11 +171,11 @@ export function SidePanel({ onClose }: { onClose?: () => void } = {}) {
                 onClick={onClose ?? toggleSidePanel}
                 aria-label={t('abHideSidebar')}
                 className={cn(
-                  'grid place-items-center size-6 rounded text-muted-foreground',
-                  'hover:bg-accent/60 hover:text-foreground transition-colors',
+                  'grid place-items-center size-6 rounded-md text-muted-foreground',
+                  'hover:bg-accent hover:text-foreground transition-colors',
                 )}
               >
-                <PanelLeftClose className="size-3.5" strokeWidth={1.75} />
+                <PanelLeftClose className="size-3.5" />
               </button>
             </TooltipTrigger>
             <TooltipContent side="bottom">{t('abHideSidebar')}</TooltipContent>
@@ -237,7 +185,7 @@ export function SidePanel({ onClose }: { onClose?: () => void } = {}) {
 
       {/* 手机端没有左侧活动栏：在面板内补一条可横向滑动的标签条，
           否则手机用户只能看到上一次停留的面板（历史/变量/公式都进不去）。 */}
-      <div className="md:hidden shrink-0 flex items-center gap-1 px-2 py-1.5 border-b border-sidebar-border bg-transparent">
+      <div className="md:hidden shrink-0 flex items-center gap-1 px-2 py-1.5 border-b border-border/60 bg-background/30">
         <div role="tablist" aria-label="侧边面板切换" className="flex min-w-0 flex-1 items-center gap-1 overflow-x-auto">
           {SIDE_PANEL_TABS.map((tab) => {
             const Icon = PANEL_ICON[tab];
@@ -250,13 +198,13 @@ export function SidePanel({ onClose }: { onClose?: () => void } = {}) {
                 aria-selected={active}
                 onClick={() => setActiveSidePanel(tab)}
                 className={cn(
-                  'inline-flex h-7 shrink-0 items-center gap-1 rounded px-2 text-[11px] font-medium transition-colors',
+                  'inline-flex h-7 shrink-0 items-center gap-1 rounded-md px-2 text-[11px] font-medium transition-colors',
                   active
                     ? 'bg-primary/12 text-primary'
                     : 'text-muted-foreground hover:bg-accent/60 hover:text-foreground',
                 )}
               >
-                <Icon className="size-3.5" strokeWidth={1.75} />
+                <Icon className="size-3.5" />
                 {t(PANEL_TITLE_KEY[tab])}
               </button>
             );
@@ -266,9 +214,9 @@ export function SidePanel({ onClose }: { onClose?: () => void } = {}) {
           type="button"
           onClick={onClose ?? toggleSidePanel}
           aria-label={t('abHideSidebar')}
-          className="grid size-7 shrink-0 place-items-center rounded text-muted-foreground transition-colors hover:bg-accent/60 hover:text-foreground"
+          className="grid size-7 shrink-0 place-items-center rounded-md text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
         >
-          <PanelLeftClose className="size-3.5" strokeWidth={1.75} />
+          <PanelLeftClose className="size-3.5" />
         </button>
       </div>
 

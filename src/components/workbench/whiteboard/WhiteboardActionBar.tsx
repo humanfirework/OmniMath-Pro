@@ -41,8 +41,8 @@ function ActionButton({
       onClick={onClick}
       disabled={disabled}
       className={cn(
-        'motion-press grid size-8 place-items-center rounded-full text-muted-foreground transition-colors',
-        'hover:bg-accent/60 hover:text-foreground disabled:pointer-events-none disabled:opacity-35',
+        'grid size-8 place-items-center rounded-lg text-muted-foreground transition-colors',
+        'hover:bg-accent/70 hover:text-foreground disabled:pointer-events-none disabled:opacity-35',
       )}
     >
       {children}
@@ -64,43 +64,41 @@ export function WhiteboardActionBar({
 }: WhiteboardActionBarProps) {
   return (
     <div className="pointer-events-none absolute bottom-3 left-1/2 z-30 -translate-x-1/2">
-      <div className="pointer-events-auto flex items-center gap-0.5 rounded-full border border-border bg-popover px-1.5 py-0.5 shadow-[var(--shadow-float)]">
+      <div className="pointer-events-auto flex items-center gap-0.5 rounded-2xl border border-border/70 bg-background/95 px-1.5 py-1 shadow-xl backdrop-blur">
         <ActionButton label="缩小" onClick={onZoomOut}>
-          <ZoomOut className="size-4" strokeWidth={1.75} />
+          <ZoomOut className="size-4" />
         </ActionButton>
         <button
           type="button"
           onClick={onResetZoom}
           title="重置为 100%"
-          className="h-8 min-w-[44px] rounded-full px-1 text-[11px] font-medium tabular-nums text-muted-foreground hover:bg-accent/60 hover:text-foreground sm:min-w-[52px]"
+          className="h-8 min-w-[52px] rounded-lg px-1 text-[11px] font-medium tabular-nums text-muted-foreground hover:bg-accent/70 hover:text-foreground"
         >
           {zoomPercent}%
         </button>
         <ActionButton label="放大" onClick={onZoomIn}>
-          <ZoomIn className="size-4" strokeWidth={1.75} />
+          <ZoomIn className="size-4" />
         </ActionButton>
 
-        <span className="mx-0.5 h-5 w-px bg-border" />
+        <span className="mx-0.5 h-5 w-px bg-border/70" />
 
         <ActionButton label="撤销" onClick={onUndo} disabled={!canUndo}>
-          <Undo2 className="size-4" strokeWidth={1.75} />
+          <Undo2 className="size-4" />
         </ActionButton>
         <ActionButton label="重做" onClick={onRedo} disabled={!canRedo}>
-          <Redo2 className="size-4" strokeWidth={1.75} />
+          <Redo2 className="size-4" />
         </ActionButton>
 
-        <span className="mx-0.5 h-5 w-px bg-border" />
+        <span className="mx-0.5 h-5 w-px bg-border/70" />
 
         <button
           type="button"
           onClick={onExport}
           disabled={exportDisabled}
-          aria-label="导出白板为 PNG"
-          title="导出白板为 PNG"
-          className="motion-press inline-flex h-8 items-center gap-1.5 rounded-full px-2.5 text-[11px] font-medium text-muted-foreground transition-colors hover:bg-accent/60 hover:text-foreground disabled:pointer-events-none disabled:opacity-35"
+          className="inline-flex h-8 items-center gap-1.5 rounded-lg px-2.5 text-[11px] font-medium text-primary transition-colors hover:bg-primary/10 disabled:pointer-events-none disabled:opacity-35"
         >
-          <Download className="size-4" strokeWidth={1.75} />
-          <span className="hidden sm:inline">导出</span>
+          <Download className="size-3.5" />
+          导出
         </button>
       </div>
     </div>

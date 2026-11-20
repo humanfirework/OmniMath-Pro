@@ -21,7 +21,7 @@
 
 import dynamic from 'next/dynamic';
 import { Fragment, memo, useCallback, useEffect, useRef } from 'react';
-import { motion, AnimatePresence, useReducedMotion } from 'framer-motion';
+import { motion, AnimatePresence } from 'framer-motion';
 import {
   FileText,
   BarChart3,
@@ -31,7 +31,6 @@ import {
   Sparkles,
   Copy,
   Check,
-  Play,
   ArrowRight,
   AlertCircle,
   PanelRight,
@@ -42,7 +41,6 @@ import {
   Minimize2,
   Download,
   FileCode,
-  Grid3x3,
 } from 'lucide-react';
 import {
   Tooltip,
@@ -72,26 +70,16 @@ import { resultToMarkdown, resultToLatex } from '@/lib/exportMarkdown';
 import { useState } from 'react';
 import type { PreviewTab, CalculationResult } from '@/lib/store/workbench';
 
-/** 懒加载面板的轻骨架：替代居中转圈，避免白屏与布局跳动。 */
-function PanelLoadingSkeleton({ label }: { label?: string }) {
-  return (
-    <div
-      className="h-full w-full bg-[var(--preview-canvas)] p-4"
-      aria-busy="true"
-      aria-label={label}
-    >
-      <div className="mb-3 h-3 w-28 rounded-full bg-muted-foreground/15 animate-pulse" />
-      <div className="h-[calc(100%-1.75rem)] rounded-lg border border-border/60 bg-card/60 animate-pulse" />
-    </div>
-  );
-}
-
 // Plot2DPanel 依赖 mathjs；只有切到「绘图」标签或真的运行绘图时才需要它。
 const Plot2DPanel = dynamic(
   () => import('@/components/workbench/plots/Plot2DPanel').then((m) => m.Plot2DPanel),
   {
     ssr: false,
-    loading: () => <PanelLoadingSkeleton />,
+    loading: () => (
+      <div className="h-full w-full grid place-items-center">
+        <div className="size-4 animate-spin rounded-full border-2 border-primary/20 border-t-primary" />
+      </div>
+    ),
   },
 );
 
@@ -100,7 +88,13 @@ const Plot3DPanel = dynamic(
   () => import('@/components/workbench/plots/Plot3DPanel').then((m) => m.Plot3DPanel),
   {
     ssr: false,
-    loading: () => <PanelLoadingSkeleton label={t('preview3DLoading')} />,
+    loading: () => (
+      <div className="h-full w-full grid place-items-center bg-background/40">
+        <div className="text-[12px] text-muted-foreground animate-pulse">
+          {t('preview3DLoading')}
+        </div>
+      </div>
+    ),
   },
 );
 
@@ -142,8 +136,6 @@ const TABS: TabDef[] = [
 
 export function PreviewPanel() {
   useLocale();
-  // 尊重系统「减少动态效果」：只保留透明度过渡，不做位移。
-  const reduceMotion = useReducedMotion();
   const activeTab = useWorkbenchStore((s) => s.activePreviewTab);
   const inputView = useWorkbenchStore((s) => s.inputView);
   // 函数输入器只关心图：隐藏公式/日志/流水线/AI，并强制渲染 2D 或 3D 绘图。
@@ -207,9 +199,9 @@ export function PreviewPanel() {
   }, [currentResult]);
 
   return (
-    <div className="flex flex-col h-full bg-background">
+    <div className="flex flex-col h-full bg-card/30">
       {/* Tab bar */}
-      <div ref={tabBarRef} className="shrink-0 h-8 flex items-center justify-between px-1.5 border-b border-border bg-transparent">
+      <div ref={tabBarRef} className="shrink-0 h-9 flex items-center justify-between px-1.5 border-b border-border/60 bg-background/40">
         <div className="flex items-center h-full overflow-x-auto scrollbar-none">
           {visibleTabs.map((tab, idx) => {
             const Icon = tab.icon;
@@ -222,7 +214,7 @@ export function PreviewPanel() {
                 {idx > 0 && tab.group !== visibleTabs[idx - 1].group && (
                   <div
                     aria-hidden
-                    className="w-px h-3.5 bg-border mx-0.5 shrink-0"
+                    className="w-px h-3.5 bg-border/50 mx-0.5 shrink-0"
                   />
                 )}
                 <button
@@ -231,19 +223,21 @@ export function PreviewPanel() {
                   title={compactTabs ? t(tab.labelKey) : undefined}
                   aria-label={compactTabs ? t(tab.labelKey) : undefined}
                   className={cn(
-                    'relative h-full flex items-center gap-1.5 text-[11px] font-medium transition-colors shrink-0',
+                    'relative h-full flex items-center gap-1.5 text-[11.5px] font-medium transition-colors shrink-0',
                     compactTabs ? 'px-2' : 'px-2.5',
                     isActive
                       ? 'text-primary'
                       : 'text-muted-foreground hover:text-foreground',
                   )}
                 >
-                  <Icon className="size-3.5" strokeWidth={1.75} />
+                  <Icon className="size-3.5" />
                   {!compactTabs && <span className="whitespace-nowrap">{t(tab.labelKey)}</span>}
                   {isActive && (
-                    <span
-                      aria-hidden
-                      className="absolute left-2 right-2 bottom-0 h-[2px] rounded-full bg-primary"
+                    <motion.span
+                      layoutId="preview-tab-indicator"
+                      className="absolute left-1.5 right-1.5 bottom-0 h-[2px] bg-primary rounded-t-full"
+                      style={{ boxShadow: '0 0 8px oklch(0.7 0.15 165 / 60%)' }}
+                      transition={{ type: 'spring', stiffness: 380, damping: 30 }}
                     />
                   )}
                 </button>
@@ -257,13 +251,13 @@ export function PreviewPanel() {
             <DropdownMenuTrigger asChild>
               <button
                 type="button"
-                className="grid place-items-center size-6 rounded text-muted-foreground hover:bg-accent/60 hover:text-foreground transition-colors"
+                className="grid place-items-center size-6 rounded-md text-muted-foreground hover:bg-accent hover:text-foreground transition-colors"
                 aria-label={t('layoutSwitch')}
               >
                 {previewPosition === 'right' ? (
-                  <Columns2 className="size-3.5" strokeWidth={1.75} />
+                  <Columns2 className="size-3.5" />
                 ) : (
-                  <Rows2 className="size-3.5" strokeWidth={1.75} />
+                  <Rows2 className="size-3.5" />
                 )}
               </button>
             </DropdownMenuTrigger>
@@ -325,13 +319,13 @@ export function PreviewPanel() {
                 <button
                   type="button"
                   onClick={handleCopy}
-                  className="grid place-items-center size-6 rounded text-muted-foreground hover:bg-accent/60 hover:text-foreground transition-colors"
+                  className="grid place-items-center size-6 rounded-md text-muted-foreground hover:bg-accent hover:text-foreground transition-colors"
                   aria-label={t('previewCopy')}
                 >
                   {copied ? (
-                    <Check className="size-3.5 text-primary" />
+                    <Check className="size-3.5 text-emerald-500" />
                   ) : (
-                    <Copy className="size-3.5" strokeWidth={1.75} />
+                    <Copy className="size-3.5" />
                   )}
                 </button>
               </TooltipTrigger>
@@ -362,10 +356,10 @@ export function PreviewPanel() {
           {effectiveTab !== 'plot3d' && (
             <motion.div
               key={effectiveTab}
-              initial={reduceMotion ? { opacity: 0 } : { opacity: 0, y: 4 }}
+              initial={{ opacity: 0, y: 4 }}
               animate={{ opacity: 1, y: 0 }}
-              exit={reduceMotion ? { opacity: 0 } : { opacity: 0, y: -4 }}
-              transition={{ duration: 0.18, ease: [0.2, 0.8, 0.2, 1] }}
+              exit={{ opacity: 0, y: -4 }}
+              transition={{ duration: 0.16 }}
               className="absolute inset-0"
             >
               {effectiveTab === 'formula' && (
@@ -390,64 +384,6 @@ export function PreviewPanel() {
 }
 
 /* ─── Formula view ────────────────────────────────────────────── */
-
-/** 空状态下的三个一键示例：点一下即填入脚本并运行。 */
-const EMPTY_EXAMPLES = [
-  { id: 'curve2d', label: '2D 曲线', snippet: 'plot(sin(x))', icon: BarChart3 },
-  { id: 'surface3d', label: '3D 曲面', snippet: 'plot3d(sin(x) * cos(y))', icon: Box },
-  { id: 'matrix', label: '矩阵运算', snippet: 'inv([1, 2; 3, 4])', icon: Grid3x3 },
-] as const;
-
-/**
- * 空状态迷你图表：极淡网格 + 一条蓝→紫正弦曲线。
- * 纯静态，颜色取自可视化 token，不参与动画。
- */
-function EmptyPreviewChart() {
-  return (
-    <svg
-      viewBox="0 0 180 110"
-      width={180}
-      height={110}
-      fill="none"
-      aria-hidden
-      className="block h-[110px] w-full"
-    >
-      <defs>
-        <linearGradient
-          id="preview-empty-curve"
-          x1="14"
-          y1="0"
-          x2="166"
-          y2="0"
-          gradientUnits="userSpaceOnUse"
-        >
-          <stop style={{ stopColor: 'var(--viz-1)' }} />
-          <stop offset="1" style={{ stopColor: 'var(--viz-3)' }} />
-        </linearGradient>
-      </defs>
-
-      {/* 极淡网格 */}
-      <g style={{ stroke: 'var(--viz-grid)' }} strokeWidth="1">
-        {[14, 52, 90, 128, 166].map((x) => (
-          <line key={`v${x}`} x1={x} y1="20" x2={x} y2="92" />
-        ))}
-        {[34, 56, 78].map((y) => (
-          <line key={`h${y}`} x1="14" y1={y} x2="166" y2={y} />
-        ))}
-      </g>
-
-      {/* 曲线：蓝 → 紫 */}
-      <path
-        d="M14 56 L23.5 40.4 L33 34 L42.5 40.4 L52 56 L61.5 71.6 L71 78 L80.5 71.6 L90 56 L99.5 40.4 L109 34 L118.5 40.4 L128 56 L137.5 71.6 L147 78 L156.5 71.6 L166 56"
-        stroke="url(#preview-empty-curve)"
-        strokeWidth="1.75"
-        strokeLinecap="round"
-        strokeLinejoin="round"
-      />
-    </svg>
-  );
-}
-
 const FormulaView = memo(function FormulaView({
   results,
   previewSize,
@@ -455,30 +391,21 @@ const FormulaView = memo(function FormulaView({
   results: ReturnType<typeof useWorkbenchStore.getState>['results'];
   previewSize: 'compact' | 'large';
 }) {
-  // 导出成功后的短暂反馈：按钮内显示「已导出」约 1.8s，不弹阻塞 Toast。
-  const [exportedId, setExportedId] = useState<string | null>(null);
-  const exportTimerRef = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
-  useEffect(() => {
-    return () => clearTimeout(exportTimerRef.current);
-  }, []);
-
   // 导出单个计算结果为 LaTeX / Markdown
   const handleExportResult = useCallback(
     async (result: CalculationResult, format: 'latex' | 'md') => {
       const stamp = `omnimath-result-${Date.now()}`;
-      const saved = format === 'latex'
-        ? await saveTextToFile(resultToLatex(result), {
-            defaultName: stamp,
-            extensions: ['tex'],
-          })
-        : await saveTextToFile(resultToMarkdown(result), {
-            defaultName: stamp,
-            extensions: ['md'],
-          });
-      if (!saved) return;
-      setExportedId(result.id);
-      clearTimeout(exportTimerRef.current);
-      exportTimerRef.current = setTimeout(() => setExportedId(null), 1800);
+      if (format === 'latex') {
+        await saveTextToFile(resultToLatex(result), {
+          defaultName: stamp,
+          extensions: ['tex'],
+        });
+      } else {
+        await saveTextToFile(resultToMarkdown(result), {
+          defaultName: stamp,
+          extensions: ['md'],
+        });
+      }
     },
     [],
   );
@@ -492,65 +419,18 @@ const FormulaView = memo(function FormulaView({
     useAIContextStore.getState().queuePrompt(prompt);
   }, []);
 
-  // 空状态示例：写入指定脚本，确保工作台可见，然后触发一次运行。
-  // 默认的「运行示例」与下方三个快捷 chip 共用这段逻辑。
-  const handleRunExample = useCallback((snippet: string = 'plot(sin(x))') => {
-    const store = useWorkbenchStore.getState();
-    store.setEditorContent(snippet);
-    store.setInputView('code');
-    store.setPreviewVisible(true);
-    store.setViewMode('workbench');
-    // 等编辑器内容与 run-all 监听器完成本轮更新后再运行（约一帧多一点）。
-    window.setTimeout(() => {
-      window.dispatchEvent(new CustomEvent('omnimath:run-all'));
-    }, 80);
-  }, []);
-
   if (results.length === 0) {
     return (
-      <div className="@container h-full overflow-y-auto bg-[var(--preview-canvas)]">
-        <div className="flex min-h-full flex-col items-center justify-center px-5 py-8 text-center">
-          <div className="w-full max-w-[340px]">
-            {/* 迷你图表卡：面板窄于 360px 时隐藏，避免挤压文字 */}
-            <div className="mx-auto mb-4 hidden w-[180px] overflow-hidden rounded-lg border border-border bg-card shadow-[var(--shadow-card)] @[360px]:block">
-              <EmptyPreviewChart />
-            </div>
-
-            <p className="text-[13px] font-medium text-foreground">
-              {t('previewEmpty')}
-            </p>
-            <p className="mx-auto mt-1 max-w-[32ch] text-[11.5px] leading-relaxed text-muted-foreground">
-              {t('previewEmptyHint')}
-            </p>
-
-            {/* 一键示例 chips */}
-            <div className="mt-4 flex flex-wrap justify-center gap-1.5">
-              {EMPTY_EXAMPLES.map((ex) => {
-                const Icon = ex.icon;
-                return (
-                  <button
-                    key={ex.id}
-                    type="button"
-                    onClick={() => handleRunExample(ex.snippet)}
-                    className="surface-card inline-flex h-7 items-center gap-1.5 rounded-md px-2.5 text-[11px] font-medium text-muted-foreground transition-colors duration-150 hover:border-primary/45! hover:text-primary"
-                  >
-                    <Icon className="size-3" strokeWidth={1.75} />
-                    {ex.label}
-                  </button>
-                );
-              })}
-            </div>
-
-            <button
-              type="button"
-              onClick={() => handleRunExample()}
-              className="motion-press mt-3 inline-flex h-8 items-center gap-1.5 rounded-md bg-primary px-3.5 text-[11.5px] font-medium text-primary-foreground transition-colors duration-150 hover:bg-primary/90"
-            >
-              <Play className="size-3" fill="currentColor" strokeWidth={1.75} />
-              运行示例
-            </button>
-          </div>
+      <div className="h-full flex flex-col items-center justify-center text-center px-8 py-12">
+        <div className="grid place-items-center size-14 rounded-2xl bg-primary/8 border border-primary/20 mb-3">
+          <Sparkles className="size-6 text-primary/70" />
         </div>
+        <p className="text-[13px] font-medium text-foreground/80 mb-1">
+          {t('previewEmpty')}
+        </p>
+        <p className="text-[11.5px] text-muted-foreground max-w-xs">
+          {t('previewEmptyHint')}
+        </p>
       </div>
     );
   }
@@ -564,26 +444,26 @@ const FormulaView = memo(function FormulaView({
   const newestId = results[0]?.id;
 
   return (
-    <ScrollArea className="h-full bg-[var(--preview-canvas)]">
+    <ScrollArea className="h-full">
       <div className="p-4 space-y-4">
         {ordered.map((result) => {
           const isCurrent = result.id === newestId;
           return (
-            <div key={result.id} className="space-y-2 motion-result-in">
+            <div key={result.id} className="space-y-2">
               {/* Input */}
-              <div className="surface-card rounded-lg p-3">
+              <div className="rounded-lg border border-border/60 bg-muted/30 p-3">
                 <div className="text-[10px] uppercase tracking-wider text-muted-foreground/80 mb-1.5 flex items-center gap-1.5">
-                  <span className="size-1.5 rounded-full bg-muted-foreground/50" />
+                  <span className="size-1.5 rounded-full bg-amber-500/80" />
                   {t('previewInput')}
                 </div>
-                <div className="font-mono text-[12.5px] text-foreground/85 break-all">
+                <div className="font-mono text-[12.5px] text-primary/90 break-all">
                   {result.input}
                 </div>
               </div>
 
               {/* Output */}
               {result.error ? (
-                <div className="rounded-lg border border-destructive/30 bg-destructive/5 p-3">
+                <div className="rounded-lg border border-destructive/40 bg-destructive/8 p-3">
                   <div className="flex items-center gap-1.5 text-[10px] uppercase tracking-wider text-destructive mb-1.5">
                     <AlertCircle className="size-3" />
                     {t('previewError')}
@@ -594,17 +474,17 @@ const FormulaView = memo(function FormulaView({
                 </div>
               ) : (
                 <div className={cn(
-                  'rounded-lg p-4 grid place-items-center text-center result-output',
+                  'rounded-lg border p-4 grid place-items-center text-center result-output',
                   isCurrent
-                    ? 'border border-border bg-[var(--paper)] text-[var(--paper-foreground)] shadow-[var(--shadow-card)] dark:border-primary/25 dark:bg-card dark:text-card-foreground'
-                    : 'surface-card',
+                    ? 'border-primary/30 bg-primary/5 glow-card-teal'
+                    : 'border-border/60 bg-card/40',
                   previewSize === 'large' ? 'min-h-[180px]' : 'min-h-[100px]',
                 )}>
                   <div className="w-full">
                     <div className="text-[10px] uppercase tracking-wider text-muted-foreground/80 mb-2 flex items-center justify-center gap-1.5">
                       <span className={cn(
                         'size-1.5 rounded-full',
-                        isCurrent ? 'bg-primary/70' : 'bg-muted-foreground/40',
+                        isCurrent ? 'bg-emerald-500/80' : 'bg-muted-foreground/60',
                       )} />
                       {t('previewResult')}
                     </div>
@@ -625,7 +505,7 @@ const FormulaView = memo(function FormulaView({
                     )}
                     {/* Type badge + export */}
                     <div className="mt-3 flex items-center justify-center gap-2 text-[10px] text-muted-foreground">
-                      <span className="inline-flex items-center px-1.5 py-0.5 rounded-[3px] border border-border bg-muted/40 font-mono uppercase tracking-wide">
+                      <span className="inline-flex items-center px-1.5 py-0.5 rounded border border-border/60 bg-muted/40 font-mono uppercase tracking-wide">
                         {result.type}
                       </span>
                       {result.isMatrix && result.matrix && (
@@ -637,25 +517,21 @@ const FormulaView = memo(function FormulaView({
                         <button
                           type="button"
                           onClick={() => handleAIExplain(result)}
-                          className="inline-flex items-center gap-1 rounded px-1.5 py-0.5 text-[10.5px] font-medium text-muted-foreground hover:bg-primary/10 hover:text-primary transition-colors"
+                          className="inline-flex items-center gap-1 rounded-md px-1.5 py-0.5 text-[10.5px] font-medium text-primary hover:bg-primary/10 transition-colors"
                           aria-label="AI 解释结果"
                         >
-                          <Sparkles className="size-3" strokeWidth={1.75} />
+                          <Sparkles className="size-3" />
                           AI 解释
                         </button>
                         <DropdownMenu>
                           <DropdownMenuTrigger asChild>
                             <button
                               type="button"
-                              className="inline-flex items-center gap-1 rounded px-1.5 py-0.5 text-[10.5px] font-medium text-muted-foreground hover:text-primary hover:bg-primary/10 transition-colors"
-                              aria-label={exportedId === result.id ? '已导出' : t('exportResult')}
+                              className="inline-flex items-center gap-1 rounded-md px-1.5 py-0.5 text-[10.5px] font-medium text-muted-foreground hover:text-foreground hover:bg-accent transition-colors"
+                              aria-label={t('exportResult')}
                             >
-                              {exportedId === result.id ? (
-                                <Check className="size-3 text-[var(--success)]" strokeWidth={1.75} />
-                              ) : (
-                                <Download className="size-3" strokeWidth={1.75} />
-                              )}
-                              {exportedId === result.id ? '已导出' : t('exportResult')}
+                              <Download className="size-3" />
+                              {t('exportResult')}
                             </button>
                           </DropdownMenuTrigger>
                           <DropdownMenuContent align="end" className="w-44">
@@ -667,14 +543,14 @@ const FormulaView = memo(function FormulaView({
                               onClick={() => handleExportResult(result, 'latex')}
                               className="gap-2 cursor-pointer"
                             >
-                              <FileText className="size-3.5 text-muted-foreground" strokeWidth={1.75} />
+                              <FileText className="size-3.5 text-primary" />
                               <span className="text-xs">{t('exportResultLatex')}</span>
                             </DropdownMenuItem>
                             <DropdownMenuItem
                               onClick={() => handleExportResult(result, 'md')}
                               className="gap-2 cursor-pointer"
                             >
-                              <FileCode className="size-3.5 text-muted-foreground" strokeWidth={1.75} />
+                              <FileCode className="size-3.5 text-primary" />
                               <span className="text-xs">{t('exportResultMarkdown')}</span>
                             </DropdownMenuItem>
                           </DropdownMenuContent>
@@ -708,55 +584,42 @@ const LogView = memo(function LogView({
       </div>
     );
   }
-  const newestId = results[0]?.id;
   return (
-    <ScrollArea className="h-full bg-[var(--preview-canvas)]">
+    <ScrollArea className="h-full">
       <div className="p-3 space-y-2">
         {/* reverse → show in the order the user wrote the lines (top = first) */}
-        {[...results].reverse().map((r, i) => {
-          const isNewest = r.id === newestId;
-          return (
-            <div
-              key={r.id}
-              onClick={() => onPick(r.input)}
-              className={cn(
-                'relative rounded-lg surface-card p-2.5 pl-3 cursor-pointer motion-result-in',
-                'transition-colors duration-[var(--motion-fast)]',
-                // surface-card 是 unlayered 工具类，hover 需要 ! 才能覆盖其底色/边框。
-                'hover:border-primary/40! hover:bg-primary/5!',
-              )}
-            >
-              {/* 最新一条：左侧细蓝条，不参与布局 */}
-              {isNewest && (
-                <span
-                  aria-hidden
-                  className="absolute left-0 top-1.5 bottom-1.5 w-[2px] rounded-full bg-primary/70"
-                />
-              )}
-              <div className="flex items-center gap-1.5 text-[11px] text-muted-foreground mb-1">
-                <span className="font-mono">[{i + 1}]</span>
-                <span className="text-[10px] uppercase tracking-wider">{r.type}</span>
-                <span className="ml-auto font-mono text-[10px]">
-                  {new Date(r.timestamp).toLocaleTimeString()}
-                </span>
-              </div>
-              <div className="flex items-center gap-2">
-                <code className="font-mono text-[12px] text-foreground/80 truncate flex-1">
-                  {r.input}
-                </code>
-                <ArrowRight className="size-3 text-muted-foreground shrink-0" strokeWidth={1.75} />
-                <code
-                  className={cn(
-                    'font-mono text-[12px] truncate flex-1',
-                    r.error ? 'text-destructive' : 'text-foreground/85',
-                  )}
-                >
-                  {r.error ?? r.output}
-                </code>
-              </div>
+        {[...results].reverse().map((r, i) => (
+          <motion.div
+            key={r.id}
+            initial={{ opacity: 0, y: -4 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.16, delay: Math.min(i * 0.015, 0.18) }}
+            onClick={() => onPick(r.input)}
+            className="rounded-md border border-border/60 bg-card/60 hover:border-primary/40 hover:bg-accent/30 p-2.5 cursor-pointer interactive-card"
+          >
+            <div className="flex items-center gap-1.5 text-[11px] text-muted-foreground mb-1">
+              <span className="font-mono">[{i + 1}]</span>
+              <span className="text-[10px] uppercase tracking-wider">{r.type}</span>
+              <span className="ml-auto font-mono text-[10px]">
+                {new Date(r.timestamp).toLocaleTimeString()}
+              </span>
             </div>
-          );
-        })}
+            <div className="flex items-center gap-2">
+              <code className="font-mono text-[12px] text-primary/90 truncate flex-1">
+                {r.input}
+              </code>
+              <ArrowRight className="size-3 text-muted-foreground shrink-0" />
+              <code
+                className={cn(
+                  'font-mono text-[12px] truncate flex-1',
+                  r.error ? 'text-destructive' : 'text-foreground/85',
+                )}
+              >
+                {r.error ?? r.output}
+              </code>
+            </div>
+          </motion.div>
+        ))}
       </div>
     </ScrollArea>
   );
@@ -766,11 +629,11 @@ const LogView = memo(function LogView({
 function PipelinePlaceholder() {
   const setViewMode = useWorkbenchStore((s) => s.setViewMode);
   return (
-    <div className="h-full flex flex-col items-center justify-center text-center px-8 py-12 bg-[var(--preview-canvas)]">
-      <div className="grid place-items-center size-10 rounded-md border border-border bg-card mb-3">
-        <Workflow className="size-4 text-muted-foreground" strokeWidth={1.75} />
+    <div className="h-full flex flex-col items-center justify-center text-center px-8 py-12">
+      <div className="grid place-items-center size-14 rounded-2xl bg-primary/8 border border-primary/20 mb-3">
+        <Workflow className="size-6 text-primary/70" />
       </div>
-      <p className="text-[12.5px] font-medium text-foreground/80 mb-1">
+      <p className="text-[13px] font-medium text-foreground/80 mb-1">
         {t('pipelineTitle')}
       </p>
       <p className="text-[11.5px] text-muted-foreground max-w-xs mb-4">
@@ -779,10 +642,10 @@ function PipelinePlaceholder() {
       <Button
         variant="outline"
         size="sm"
-        className="h-7 text-[11px] gap-1.5"
+        className="h-7 text-[11.5px] gap-1.5"
         onClick={() => setViewMode('pipeline')}
       >
-        <Workflow className="size-3.5" strokeWidth={1.75} />
+        <Workflow className="size-3.5" />
         {t('pipelineEnterView')}
       </Button>
     </div>

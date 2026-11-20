@@ -44,7 +44,7 @@ import { getDefault3DResolution } from './plotDefaults';
  *   - `indices`   — Uint32Array of triangle indices (only valid
  *                   triangles — cells with a non-finite corner are
  *                   skipped, so the mesh has gaps over asymptotes)
- *   - `color`     — hex color string (e.g. '#3B6FE0') used for solid mode
+ *   - `color`     — hex color string (e.g. '#2dd4bf') used for solid mode
  *   - `xRange`    — domain X bounds [xMin, xMax]
  *   - `yRange`    — domain Y bounds [yMin, yMax]
  *   - `expression`— the source expression (used as a React key)
@@ -153,7 +153,7 @@ export function sampleSurface(
   xRange: [number, number],
   yRange: [number, number],
   resolution = getDefault3DResolution(),
-  color = '#3B6FE0',
+  color = '#2dd4bf',
 ): Surface3DData {
   // Defensive: reject malformed ranges so we never produce NaN vertices
   // that would later blow up WebGL (GL_INVALID_OPERATION) in three.js.
@@ -318,7 +318,7 @@ export function trySampleSurface(
   xRange: [number, number],
   yRange: [number, number],
   resolution = getDefault3DResolution(),
-  color = '#3B6FE0',
+  color = '#2dd4bf',
 ): { data: Surface3DData | null; error: string | null } {
   try {
     const data = sampleSurface(expr, xRange, yRange, resolution, color);

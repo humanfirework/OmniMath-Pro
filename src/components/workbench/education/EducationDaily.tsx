@@ -12,7 +12,7 @@
 
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Lightbulb, Check, X, Sparkles, BookOpen, Flame, Send, RotateCcw, Grid3x3, FunctionSquare, BarChart3, GraduationCap, FileText, Zap, Backpack, FlaskConical, MessageSquare, CheckCircle2 } from 'lucide-react';
+import { Lightbulb, Check, X, Sparkles, BookOpen, Flame, Send, RotateCcw, Grid3x3, FunctionSquare, BarChart3, GraduationCap, FileText, Zap } from 'lucide-react';
 import {
   pickDailyQuestion,
   checkAnswer,
@@ -28,18 +28,11 @@ import { EducationPaper } from './EducationPaper';
 import { cn } from '@/lib/utils';
 
 const DIFFICULTY_LABEL: Record<number, { name: string; color: string }> = {
-  1: { name: '热身 · 1 星', color: 'text-foreground/80' },
-  2: { name: '探索 · 2 星', color: 'text-foreground/80' },
-  3: { name: '进阶 · 3 星', color: 'text-primary' },
-  4: { name: '挑战 · 4 星', color: 'text-primary' },
+  1: { name: '热身 · 1 星', color: 'text-emerald-600 dark:text-emerald-400' },
+  2: { name: '探索 · 2 星', color: 'text-amber-600 dark:text-amber-400' },
+  3: { name: '进阶 · 3 星', color: 'text-rose-600 dark:text-rose-400' },
+  4: { name: '挑战 · 4 星', color: 'text-indigo-600 dark:text-indigo-400' },
 };
-
-const STAGE_ICON = {
-  primary: Backpack,
-  middle: BookOpen,
-  high: GraduationCap,
-  university: FlaskConical,
-} as const;
 
 const TOOL_META: Record<string, { label: string; icon: typeof Grid3x3; view: 'linalg' | 'solver' | 'stats' }> = {
   linalg: { label: '用线性代数工具', icon: Grid3x3, view: 'linalg' },
@@ -158,11 +151,11 @@ export function EducationDaily() {
         <motion.div
           initial={{ opacity: 0, y: 10 }}
           animate={{ opacity: 1, y: 0 }}
-          className="overflow-hidden surface-card rounded-xl"
+          className="overflow-hidden rounded-3xl border border-border/60 bg-card/70 shadow-sm backdrop-blur-sm"
         >
-          <div className="border-b border-border px-6 py-6 text-center">
-            <div className="mx-auto mb-3 grid size-12 place-items-center rounded-lg border border-border bg-muted/40">
-              <GraduationCap className="size-6 text-primary" strokeWidth={1.75} />
+          <div className="bg-gradient-to-br from-emerald-500/15 via-sky-500/10 to-indigo-500/15 px-6 py-6 text-center">
+            <div className="mx-auto mb-3 grid size-14 place-items-center rounded-2xl bg-gradient-to-br from-emerald-500/20 to-sky-500/20">
+              <GraduationCap className="size-7 text-emerald-600 dark:text-emerald-400" />
             </div>
             <h2 className="text-[18px] font-semibold text-foreground">欢迎开始「学习陪伴」</h2>
             <p className="mx-auto mt-1.5 max-w-md text-[12.5px] leading-relaxed text-muted-foreground">
@@ -173,7 +166,7 @@ export function EducationDaily() {
 
           <div className="grid gap-2.5 p-5 sm:grid-cols-2">
             {STAGES.map((st) => {
-              const StageIcon = STAGE_ICON[st];
+              const Icon = { primary: '🎒', middle: '📚', high: '🎓', university: '🧪' }[st];
               const desc = {
                 primary: '口算、分数、图形基础，贴近生活',
                 middle: '函数入门、几何、简单方程、概率',
@@ -185,11 +178,9 @@ export function EducationDaily() {
                   key={st}
                   type="button"
                   onClick={() => completeOnboarding(st)}
-                  className="group flex flex-col items-start gap-1 rounded-xl border border-border bg-card p-4 text-left transition-colors hover:border-primary/40 hover:bg-primary/5"
+                  className="group flex flex-col items-start gap-1 rounded-2xl border border-border/60 bg-background/40 p-4 text-left transition-all hover:border-primary/40 hover:bg-primary/5"
                 >
-                  <span className="grid size-8 place-items-center rounded-md border border-border bg-muted/40 text-muted-foreground transition-colors group-hover:text-primary">
-                    <StageIcon className="size-4" strokeWidth={1.75} />
-                  </span>
+                  <span className="text-[22px]">{Icon}</span>
                   <span className="mt-1 text-[14px] font-semibold text-foreground">
                     {STAGE_LABEL[st]}
                   </span>
@@ -211,13 +202,13 @@ export function EducationDaily() {
       {/* 学段提示（紧凑，不再展示一整排按钮；如需更改请到设置） */}
       <div className="mb-3 flex flex-wrap items-center gap-x-3 gap-y-1 text-[11px] text-muted-foreground">
         <span className="inline-flex items-center gap-1">
-          <GraduationCap className="size-3" strokeWidth={1.75} />
+          <GraduationCap className="size-3" />
           当前学段：<span className="font-medium text-foreground/80">{STAGE_LABEL[stage]}</span>
         </span>
         <span className="text-muted-foreground/60">· 可在「设置」中更改</span>
 
         {/* 每日一题 ↔ 每日一卷 切换 */}
-        <span className="ml-auto inline-flex items-center gap-0.5 rounded-lg border border-border bg-card p-0.5">
+        <span className="ml-auto inline-flex items-center gap-0.5 rounded-lg border border-border/60 bg-card/60 p-0.5">
           <button
             type="button"
             onClick={() => setView('single')}
@@ -226,7 +217,7 @@ export function EducationDaily() {
               view === 'single' ? 'bg-primary/15 text-primary' : 'text-muted-foreground hover:text-foreground',
             )}
           >
-            <Zap className="size-3" strokeWidth={1.75} />
+            <Zap className="size-3" />
             每日一题
           </button>
           <button
@@ -237,7 +228,7 @@ export function EducationDaily() {
               view === 'paper' ? 'bg-primary/15 text-primary' : 'text-muted-foreground hover:text-foreground',
             )}
           >
-            <FileText className="size-3" strokeWidth={1.75} />
+            <FileText className="size-3" />
             每日一卷
           </button>
         </span>
@@ -249,14 +240,14 @@ export function EducationDaily() {
       <>
       {/* 顶部状态条 */}
       <div className="mb-4 flex flex-wrap items-center gap-2">
-        <span className="rounded-full border border-border bg-card px-3 py-1 text-[11px] text-muted-foreground">
+        <span className="rounded-full border border-border/60 bg-background/60 px-3 py-1 text-[11px] text-muted-foreground">
           {date}
         </span>
-        <span className={cn('rounded-full border border-border bg-card px-3 py-1 text-[11px] font-medium', diff.color)}>
+        <span className={cn('rounded-full border border-border/60 bg-background/60 px-3 py-1 text-[11px] font-medium', diff.color)}>
           {stars(question.level)} {diff.name}
         </span>
-        <span className="rounded-full border border-border bg-card px-3 py-1 text-[11px] text-muted-foreground">
-          <Flame className="mr-1 inline size-3 text-primary" strokeWidth={1.75} />
+        <span className="rounded-full border border-border/60 bg-background/60 px-3 py-1 text-[11px] text-muted-foreground">
+          <Flame className="mr-1 inline size-3 text-orange-500" />
           连续 {streak} 天
         </span>
         {alreadySolved && !practiceMode && (
@@ -275,10 +266,10 @@ export function EducationDaily() {
       <motion.div
         initial={{ opacity: 0, y: 8 }}
         animate={{ opacity: 1, y: 0 }}
-        className="surface-card rounded-xl p-6"
+        className="rounded-3xl border border-border/60 bg-card/70 p-6 backdrop-blur-sm shadow-sm"
       >
         <div className="mb-1 flex items-center gap-1.5 text-[11px] text-muted-foreground">
-          <BookOpen className="size-3" strokeWidth={1.75} />
+          <BookOpen className="size-3" />
           {question.topic}
         </div>
         <h3 className="text-[17px] font-semibold leading-relaxed text-foreground">
@@ -286,7 +277,7 @@ export function EducationDaily() {
         </h3>
         {showTip && (
           <p className="mt-2 flex items-start gap-1.5 text-[12.5px] italic text-muted-foreground">
-            <MessageSquare className="mt-0.5 size-3.5 shrink-0" strokeWidth={1.75} />
+            <span className="mt-0.5 shrink-0">💬</span>
             <span className="flex-1">
               <MathText text={question.encouragement} />
             </span>
@@ -297,7 +288,7 @@ export function EducationDaily() {
               aria-label="关闭提示"
               title="关闭提示"
             >
-              <X className="size-3" strokeWidth={1.75} />
+              <X className="size-3" />
             </button>
           </p>
         )}
@@ -317,10 +308,10 @@ export function EducationDaily() {
                     onClick={() => setChoice(i)}
                     disabled={locked}
                     className={cn(
-                      'flex items-center gap-2 rounded-lg border px-3 py-2.5 text-left text-[13px] transition-colors',
+                      'flex items-center gap-2 rounded-xl border px-3 py-2.5 text-left text-[13px] transition-all',
                       selected
                         ? 'border-primary/50 bg-primary/10 text-foreground'
-                        : 'border-border bg-card text-foreground/85 hover:border-primary/30 hover:bg-accent/40',
+                        : 'border-border/60 bg-background/40 text-foreground/85 hover:border-primary/30 hover:bg-accent/40',
                       isCorrectReveal && 'border-emerald-500/50 bg-emerald-500/10',
                       isWrongPick && 'border-rose-500/50 bg-rose-500/10',
                       alreadySolved && 'opacity-70',
@@ -330,8 +321,8 @@ export function EducationDaily() {
                       {String.fromCharCode(65 + i)}
                     </span>
                     <MathText text={opt} />
-                    {isCorrectReveal && <Check className="ml-auto size-4 text-emerald-500" strokeWidth={1.75} />}
-                    {isWrongPick && <X className="ml-auto size-4 text-rose-500" strokeWidth={1.75} />}
+                    {isCorrectReveal && <Check className="ml-auto size-4 text-emerald-500" />}
+                    {isWrongPick && <X className="ml-auto size-4 text-rose-500" />}
                   </button>
                 );
               })}
@@ -353,13 +344,13 @@ export function EducationDaily() {
                     : '输入你的答案（数字或分数，如 5/8）'
                 }
                 className={cn(
-                  'h-10 w-full rounded-lg border border-border bg-card px-3 text-[13.5px] outline-none focus:border-primary/40 focus:ring-1 focus:ring-primary/20 disabled:opacity-60 transition-colors',
+                  'h-10 w-full rounded-xl border border-border/60 bg-background/50 px-3 text-[13.5px] outline-none focus:border-primary/40 focus:ring-1 focus:ring-primary/20 disabled:opacity-60 transition-colors',
                   inputError && 'border-amber-400/70 focus:border-amber-400/70 focus:ring-amber-400/30',
                 )}
               />
               {inputError && (
                 <p className="mt-1.5 flex items-center gap-1 text-[11.5px] text-amber-600 dark:text-amber-400">
-                  <Lightbulb className="size-3" strokeWidth={1.75} />
+                  <Lightbulb className="size-3" />
                   {inputError}
                 </p>
               )}
@@ -373,9 +364,9 @@ export function EducationDaily() {
                 type="button"
                 onClick={handleCheck}
                 disabled={question.kind === 'choice' && choice === undefined}
-                className="inline-flex h-9 items-center gap-1.5 rounded-lg bg-primary px-4 text-[12.5px] font-medium text-primary-foreground hover:bg-primary/90 disabled:opacity-40 transition-colors"
+                className="inline-flex h-9 items-center gap-1.5 rounded-xl bg-primary px-4 text-[12.5px] font-medium text-primary-foreground hover:bg-primary/90 disabled:opacity-40 transition-colors"
               >
-                <Send className="size-3.5" strokeWidth={1.75} />
+                <Send className="size-3.5" />
                 {question.kind === 'choice' ? '提交选择' : '提交答案'}
               </button>
             )}
@@ -384,13 +375,13 @@ export function EducationDaily() {
                 type="button"
                 onClick={() => setShowHint((v) => !v)}
                 className={cn(
-                  'inline-flex h-9 items-center gap-1.5 rounded-lg border px-3.5 text-[12px] transition-colors',
+                  'inline-flex h-9 items-center gap-1.5 rounded-xl border px-3.5 text-[12px] transition-colors',
                   showHint
                     ? 'border-amber-400/50 bg-amber-500/10 text-amber-600 dark:text-amber-400'
-                    : 'border-border bg-card text-muted-foreground hover:text-foreground',
+                    : 'border-border/60 bg-background/40 text-muted-foreground hover:text-foreground',
                 )}
               >
-                <Lightbulb className="size-3.5" strokeWidth={1.75} />
+                <Lightbulb className="size-3.5" />
                 {showHint ? '收起提示' : '查看提示'}
               </button>
             )}
@@ -398,9 +389,9 @@ export function EducationDaily() {
               <button
                 type="button"
                 onClick={startPractice}
-                className="inline-flex h-9 items-center gap-1.5 rounded-lg border border-border bg-card px-3.5 text-[12px] text-muted-foreground hover:text-foreground transition-colors"
+                className="inline-flex h-9 items-center gap-1.5 rounded-xl border border-border/60 bg-background/40 px-3.5 text-[12px] text-muted-foreground hover:text-foreground transition-colors"
               >
-                <RotateCcw className="size-3.5" strokeWidth={1.75} />
+                <RotateCcw className="size-3.5" />
                 重新练习
               </button>
             )}
@@ -411,9 +402,9 @@ export function EducationDaily() {
                   setPracticeMode(false);
                   reset();
                 }}
-                className="inline-flex h-9 items-center gap-1.5 rounded-lg border border-border bg-card px-3.5 text-[12px] text-muted-foreground hover:text-foreground transition-colors"
+                className="inline-flex h-9 items-center gap-1.5 rounded-xl border border-border/60 bg-background/40 px-3.5 text-[12px] text-muted-foreground hover:text-foreground transition-colors"
               >
-                <Check className="size-3.5" strokeWidth={1.75} />
+                <Check className="size-3.5" />
                 回到完成状态
               </button>
             )}
@@ -445,7 +436,7 @@ export function EducationDaily() {
               animate={{ opacity: 1, y: 0 }}
               exit={{ opacity: 0 }}
               className={cn(
-                'mt-4 rounded-xl border p-4',
+                'mt-4 rounded-2xl border p-4',
                 verdict.correct
                   ? 'border-emerald-500/40 bg-emerald-500/8'
                   : 'border-rose-500/30 bg-rose-500/5',
@@ -458,7 +449,7 @@ export function EducationDaily() {
                     verdict.correct ? 'bg-emerald-500' : 'bg-rose-500',
                   )}
                 >
-                  {verdict.correct ? <Check className="size-3.5" strokeWidth={1.75} /> : <X className="size-3.5" strokeWidth={1.75} />}
+                  {verdict.correct ? <Check className="size-3.5" /> : <X className="size-3.5" />}
                 </span>
                 <div>
                   <p className={cn('text-[13.5px] font-medium', verdict.correct ? 'text-emerald-600 dark:text-emerald-400' : 'text-rose-600 dark:text-rose-400')}>
@@ -486,10 +477,10 @@ export function EducationDaily() {
               exit={{ opacity: 0 }}
               className="mt-4"
             >
-              <div className="rounded-xl border border-border bg-muted/30 p-4">
+              <div className="rounded-2xl border border-border/60 bg-background/40 p-4">
                 <div className="mb-2 flex items-center justify-between">
                   <span className="flex items-center gap-1.5 text-[12px] font-semibold text-foreground/90">
-                    <BookOpen className="size-3.5 text-primary" strokeWidth={1.75} />
+                    <BookOpen className="size-3.5 text-primary" />
                     逐步讲解
                   </span>
                   <button
@@ -506,7 +497,7 @@ export function EducationDaily() {
                     }}
                     className="inline-flex h-7 items-center gap-1 rounded-lg border border-primary/30 bg-primary/10 px-2.5 text-[11px] font-medium text-primary hover:bg-primary/15 transition-colors"
                   >
-                    <Sparkles className="size-3" strokeWidth={1.75} />
+                    <Sparkles className="size-3" />
                     AI 深入讲解
                   </button>
                 </div>
@@ -526,23 +517,21 @@ export function EducationDaily() {
         </AnimatePresence>
 
         {alreadySolved && !practiceMode && !revealSolution && (
-          <p className="mt-4 flex items-center justify-center gap-1.5 text-[12px] text-muted-foreground">
-            <CheckCircle2 className="size-3.5 text-emerald-600 dark:text-emerald-400" strokeWidth={1.75} />
-            今天的每日一题已完成，明天再来！也可以到「错题本 / 进度」继续回顾。
+          <p className="mt-4 text-center text-[12px] text-muted-foreground">
+            🎉 今天的每日一题已完成，明天再来！也可以到「错题本 / 进度」继续回顾。
           </p>
         )}
         {aiRequested && (
-          <p className="mt-2 flex items-center gap-1.5 text-[11px] text-muted-foreground">
-            <Sparkles className="size-3 text-primary" strokeWidth={1.75} />
-            已把题目交给 AI 助教，去「AI 助教」面板查看深入讲解。
+          <p className="mt-2 text-[11px] text-muted-foreground">
+            ✨ 已把题目交给 AI 助教，去「AI 助教」面板查看深入讲解。
           </p>
         )}
 
         {/* 联动工具：把这道题交给求解器 / 线性代数 / 统计等专业模块进一步探索 */}
         {question.tools && question.tools.length > 0 && (
-          <div className="mt-4 rounded-xl border border-primary/20 bg-primary/5 p-3">
-            <div className="mb-2 flex items-center gap-1.5 text-[11px] font-medium text-primary">
-              <Sparkles className="size-3" strokeWidth={1.75} />
+          <div className="mt-4 rounded-2xl border border-indigo-500/20 bg-indigo-500/5 p-3">
+            <div className="mb-2 flex items-center gap-1.5 text-[11px] font-medium text-indigo-600 dark:text-indigo-400">
+              <Sparkles className="size-3" />
               用专业工具深入探索
             </div>
             <div className="flex flex-wrap gap-2">
@@ -558,7 +547,7 @@ export function EducationDaily() {
                       recordToolUse();
                       setViewMode(meta.view);
                     }}
-                    className="inline-flex h-8 items-center gap-1.5 rounded-lg border border-primary/30 bg-primary/10 px-3 text-[11.5px] font-medium text-primary hover:bg-primary/15 transition-colors"
+                    className="inline-flex h-8 items-center gap-1.5 rounded-lg border border-indigo-400/30 bg-indigo-500/10 px-3 text-[11.5px] font-medium text-indigo-700 dark:text-indigo-300 hover:bg-indigo-500/20 transition-colors"
                   >
                     <ToolIcon className="size-3.5" />
                     {meta.label}

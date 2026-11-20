@@ -136,7 +136,7 @@ export function SolverStepsView({
                 <div
                   className={cn(
                     'mt-1.5',
-                    (/\\begin\{cases\}|\\begin\{bmatrix\}|\\begin\{aligned\}|\\begin\{array\}|\\begin\{pmatrix\}|\\begin\{vmatrix\}/.test(step.body)) && 'rounded-md border border-border bg-card p-2'
+                    (/\\begin\{cases\}|\\begin\{bmatrix\}|\\begin\{aligned\}|\\begin\{array\}|\\begin\{pmatrix\}|\\begin\{vmatrix\}/.test(step.body)) && 'formula-card-glow'
                   )}
                   style={(/'''|\\prime\\prime\\prime|\\prime\\prime[^\\]|\\dddot|\\ddddot/.test(step.body)) ? { minHeight: 80 } : undefined}
                 >

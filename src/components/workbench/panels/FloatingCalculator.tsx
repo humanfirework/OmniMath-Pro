@@ -108,9 +108,9 @@ function convertUnit(value: number, from: UnitDef, to: UnitDef): number {
 }
 
 const BUTTON_CLASS =
-  'h-10 rounded-[7px] text-base font-medium transition-colors duration-150 select-none flex items-center justify-center motion-press';
+  'h-11 rounded-xl text-base font-medium transition-all duration-100 active:scale-95 select-none flex items-center justify-center';
 
-const MODE_TABS: { mode: CalcMode; icon: React.ComponentType<{ className?: string; strokeWidth?: number }>; label: string }[] = [
+const MODE_TABS: { mode: CalcMode; icon: React.ComponentType<{ className?: string }>; label: string }[] = [
   { mode: 'basic', icon: Calculator, label: 'Basic' },
   { mode: 'scientific', icon: FlaskConical, label: 'Sci' },
   { mode: 'programmer', icon: Binary, label: 'Prog' },
@@ -1212,11 +1212,10 @@ export function FloatingCalculator() {
     disabled?: boolean;
   }) => {
     const variants = {
-      // 数字键：透明底，hover 才出现中性强调
-      default: 'bg-transparent hover:bg-accent text-foreground',
-      // 运算符：蓝色淡底 + 加粗，让 ÷ × − + 等符号清晰可辨
-      op: 'bg-primary/15 hover:bg-primary/25 text-primary font-bold',
-      fn: 'bg-muted hover:bg-accent text-muted-foreground',
+      default: 'bg-accent/50 hover:bg-accent text-foreground',
+      // 运算符：更实的底色 + 加粗，让 ÷ × − + 等符号清晰可辨
+      op: 'bg-primary/20 hover:bg-primary/30 text-primary font-bold',
+      fn: 'bg-muted hover:bg-muted/70 text-muted-foreground',
       eq: 'bg-primary hover:bg-primary/90 text-primary-foreground font-bold',
       clear: 'bg-destructive/10 hover:bg-destructive/20 text-destructive',
       ans: 'bg-primary/15 hover:bg-primary/25 text-primary font-semibold',
@@ -1290,17 +1289,26 @@ export function FloatingCalculator() {
             style={{
               position: 'fixed',
               transform: `translate3d(${position.x}px, ${position.y}px, 0)`,
-              // 面板使用 translate3d 定位；悬停时子元素的背景过渡不应触发
-              // 整块重排，因此把容器固定到独立合成层（will-change）。
-              // （不要在内部 motion.div 上加 will-change，二者会互相竞争。）
+              // ROOT CAUSE & FIX (2026-08): the panel body is `backdrop-blur-xl`
+              // (backdrop-filter). When a backdrop-filter element lives inside a
+              // transformed ancestor, the browser re-samples the backdrop on every
+              // hover repaint (child :hover bg transitions), which re-composites the
+              // blur layer and makes the whole panel visibly jitter/oscillate.
+              // Promoting THIS transformed container to its own stable compositing
+              // layer (via will-change) lets the backdrop blur sample once and stay
+              // put, killing the hover jitter. (Do NOT add will-change to the inner
+              // motion.div — that was the original bug, it fought this transform.)
               willChange: 'transform',
               zIndex: 76,
             }}
             className={cn(dragging ? 'cursor-grabbing' : '')}
             >
           {/* Entrance is a pure opacity fade — NO transform animation.
-              The panel is positioned via translate3d on the parent, so animating
-              y/scale here would create a second compositing layer and jitter. */}
+              The panel body is positioned via translate3d on the parent, and
+              the inner panel has backdrop-blur. Animating y/scale here (or
+              using will-change-transform) created a second compositing layer
+              that fought the parent's transform, causing the whole panel to
+              jitter/oscillate on every hover repaint. */}
           <motion.div
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
@@ -1311,36 +1319,36 @@ export function FloatingCalculator() {
             {/* Left history panel — docked to the side of the calculator,
                 always visible for every mode (MS Calculator style).
                 Each entry is a small sticky-note style card that can be
-                expanded/collapsed to reveal the full result. The width
-                transition matches the notepad for a consistent feel. */}
+                expanded/collapsed to reveal the full result. Slide-in/out uses
+                the same spring transition as the notepad for a fluid feel. */}
             <AnimatePresence initial={false}>
               {showHistory && (
                 <motion.div
                   initial={{ width: 0, opacity: 0 }}
                   animate={{ width: 232, opacity: 1 }}
                   exit={{ width: 0, opacity: 0 }}
-                  transition={{ duration: 0.18, ease: [0.2, 0.8, 0.2, 1] }}
+                  transition={{ type: 'spring', stiffness: 320, damping: 32 }}
                   className="overflow-hidden shrink-0"
                 >
-                  <div className="w-[228px] self-stretch h-full rounded-l-[11px] border border-r-0 border-border bg-card shadow-[var(--shadow-float)] flex flex-col">
+                  <div className="w-[228px] self-stretch h-full rounded-l-xl border border-r-0 border-border bg-card/95 backdrop-blur-xl shadow-2xl flex flex-col">
                     <div
                       onMouseDown={handleDragStart}
                       className={cn(
-                        'flex h-9 items-center gap-1.5 px-3 border-b border-border/60 bg-muted/25',
+                        'flex items-center gap-1.5 px-3 py-2 border-b border-border/60 bg-muted/30',
                         dragging ? 'cursor-grabbing' : 'cursor-grab'
                       )}
                     >
-                      <History className="size-3.5 text-primary shrink-0" strokeWidth={1.75} />
-                      <span className="text-[11.5px] font-medium text-foreground/80">
+                      <History className="size-3.5 text-primary shrink-0" />
+                      <span className="text-xs font-medium text-foreground/80">
                         {t('qcHistTitle')} ({history.length})
                       </span>
                       <button
                         type="button"
                         onClick={() => setShowHistory(false)}
-                        className="ml-auto grid size-5 place-items-center rounded-md hover:bg-accent text-muted-foreground hover:text-foreground transition-colors"
+                        className="ml-auto size-5 rounded-md hover:bg-accent text-muted-foreground hover:text-foreground flex items-center justify-center"
                         title="收起历史"
                       >
-                        <X className="size-3" strokeWidth={1.75} />
+                        <X className="size-3" />
                       </button>
                     </div>
                     <div className="flex-1 min-h-0 overflow-y-auto p-1.5 space-y-1">
@@ -1374,7 +1382,7 @@ export function FloatingCalculator() {
                                 >
                                   <motion.span
                                     animate={{ rotate: expanded ? 90 : 0 }}
-                                    transition={{ duration: 0.15 }}
+                                    transition={{ type: 'spring', stiffness: 400, damping: 30 }}
                                     className="shrink-0 text-muted-foreground"
                                   >
                                     <ChevronRight className="size-3.5" />
@@ -1393,7 +1401,7 @@ export function FloatingCalculator() {
                                       initial={{ height: 0, opacity: 0 }}
                                       animate={{ height: 'auto', opacity: 1 }}
                                       exit={{ height: 0, opacity: 0 }}
-                                      transition={{ duration: 0.18, ease: [0.2, 0.8, 0.2, 1] }}
+                                      transition={{ type: 'spring', stiffness: 400, damping: 34 }}
                                       className="overflow-hidden"
                                     >
                                       <div className="px-2 pb-2 pt-0.5">
@@ -1443,7 +1451,7 @@ export function FloatingCalculator() {
             </AnimatePresence>
             <div
               className={cn(
-                'rounded-[11px] border border-border bg-popover shadow-[var(--shadow-float)] overflow-hidden flex flex-col relative',
+                'rounded-xl border border-border bg-card/95 backdrop-blur-xl shadow-2xl overflow-hidden flex flex-col relative',
                 showHistory && 'rounded-l-none border-l-0'
               )}
               style={{ width: panelWidth }}
@@ -1452,93 +1460,91 @@ export function FloatingCalculator() {
             <div
               onMouseDown={handleDragStart}
               className={cn(
-                'flex h-9 shrink-0 items-center gap-2 px-3 border-b border-border/60 bg-muted/25 select-none',
+                'flex items-center gap-2 px-3 py-2 border-b border-border/60 bg-muted/30 select-none',
                 dragging ? 'cursor-grabbing' : 'cursor-grab'
               )}
             >
-              <Calculator className="size-4 text-primary shrink-0" strokeWidth={1.75} />
-              <span className="text-[11.5px] font-medium text-foreground/80 flex-1">{t('qcTitle')}</span>
+              <Calculator className="size-4 text-primary shrink-0" />
+              <span className="text-xs font-medium text-foreground/80 flex-1">{t('qcTitle')}</span>
               <button
                 type="button"
                 onClick={handleCopy}
-                className="grid size-6 place-items-center rounded-md hover:bg-accent text-muted-foreground hover:text-foreground transition-colors"
+                className="size-6 rounded-md hover:bg-accent text-muted-foreground hover:text-foreground flex items-center justify-center"
                 title={t('qcCopyResult')}
               >
-                {copied ? <Check className="size-3.5 text-primary" strokeWidth={1.75} /> : <Copy className="size-3.5" strokeWidth={1.75} />}
+                {copied ? <Check className="size-3.5 text-emerald-500" /> : <Copy className="size-3.5" />}
               </button>
               <button
                 type="button"
                 onClick={() => setShowHistory((v) => !v)}
                 className={cn(
-                  'grid size-6 place-items-center rounded-md transition-colors',
+                  'size-6 rounded-md flex items-center justify-center',
                   showHistory ? 'text-primary bg-primary/10' : 'text-muted-foreground hover:bg-accent hover:text-foreground'
                 )}
                 title={showHistory ? '收起历史' : '展开历史'}
               >
-                <History className="size-3.5" strokeWidth={1.75} />
+                <History className="size-3.5" />
               </button>
               <button
                 type="button"
                 onClick={toggleNotepad}
                 className={cn(
-                  'grid size-6 place-items-center rounded-md transition-colors',
+                  'size-6 rounded-md flex items-center justify-center',
                   showNotepad ? 'text-primary bg-primary/10' : 'text-muted-foreground hover:bg-accent hover:text-foreground'
                 )}
                 title={showNotepad ? t('qcHideNotepad') : t('qcShowNotepad')}
               >
-                <NotebookPen className="size-3.5" strokeWidth={1.75} />
+                <NotebookPen className="size-3.5" />
               </button>
               <button
                 type="button"
                 onClick={() => setPinned(!pinned)}
                 className={cn(
-                  'grid size-6 place-items-center rounded-md transition-colors',
+                  'size-6 rounded-md flex items-center justify-center',
                   pinned ? 'text-primary bg-primary/10' : 'text-muted-foreground hover:bg-accent hover:text-foreground'
                 )}
                 title={pinned ? t('qcUnpin') : t('qcPin')}
               >
-                {pinned ? <Pin className="size-3.5" strokeWidth={1.75} /> : <PinOff className="size-3.5" strokeWidth={1.75} />}
+                {pinned ? <Pin className="size-3.5" /> : <PinOff className="size-3.5" />}
               </button>
               <button
                 type="button"
                 onClick={toggleMaximize}
                 className={cn(
-                  'grid size-6 place-items-center rounded-md transition-colors',
+                  'size-6 rounded-md flex items-center justify-center',
                   isMaximized ? 'text-primary bg-primary/10' : 'text-muted-foreground hover:bg-accent hover:text-foreground'
                 )}
                 title={isMaximized ? '恢复默认大小' : '放大窗口'}
               >
-                {isMaximized ? <Minimize2 className="size-3.5" strokeWidth={1.75} /> : <Maximize2 className="size-3.5" strokeWidth={1.75} />}
+                {isMaximized ? <Minimize2 className="size-3.5" /> : <Maximize2 className="size-3.5" />}
               </button>
               {!pinned && (
                 <button
                   type="button"
                   onClick={() => setOpen(false)}
-                  className="grid size-6 place-items-center rounded-md hover:bg-accent text-muted-foreground hover:text-foreground transition-colors"
-                  aria-label="关闭计算器"
+                  className="size-6 rounded-md hover:bg-accent text-muted-foreground hover:text-foreground flex items-center justify-center"
                 >
-                  <X className="size-3.5" strokeWidth={1.75} />
+                  <X className="size-3.5" />
                 </button>
               )}
             </div>
 
             {/* Mode tabs */}
-            <div className="flex px-2.5 pt-2.5 gap-1">
+            <div className="flex px-3 pt-3 gap-2">
               {MODE_TABS.map(({ mode: m, icon: Icon }) => (
                 <button
                   key={m}
                   type="button"
                   onClick={() => setMode(m)}
-                  aria-pressed={mode === m}
                   className={cn(
-                    'flex-1 flex flex-col items-center gap-0.5 rounded-md py-1.5 text-[10px] font-medium transition-colors',
+                    'flex-1 text-[11px] py-2 rounded-lg font-medium transition-colors flex flex-col items-center gap-1',
                     mode === m
-                      ? 'bg-primary/12 text-primary'
-                      : 'text-muted-foreground hover:bg-accent/60'
+                      ? 'bg-primary/10 text-primary'
+                      : 'text-muted-foreground hover:bg-accent/50'
                   )}
                   title={modeLabel[m]}
                 >
-                  <Icon className="size-3.5" strokeWidth={1.75} />
+                  <Icon className="size-4" />
                   <span>{modeLabel[m]}</span>
                 </button>
               ))}
@@ -1813,7 +1819,7 @@ export function FloatingCalculator() {
                         className="size-5 rounded-md hover:bg-accent text-muted-foreground hover:text-foreground flex items-center justify-center"
                         title={t('qcCopyResult')}
                       >
-                        {matrixCopied ? <Check className="size-3 text-primary" strokeWidth={1.75} /> : <Copy className="size-3" strokeWidth={1.75} />}
+                        {matrixCopied ? <Check className="size-3 text-emerald-500" /> : <Copy className="size-3" />}
                       </button>
                     </div>
                     {matrixResult.kind === 'scalar' && (
@@ -1884,11 +1890,11 @@ export function FloatingCalculator() {
                         }
                         appendToNotepad(expression || display, display);
                       }}
-                      className="shrink-0 self-end mb-0.5 grid size-6 place-items-center rounded-md bg-muted/70 hover:bg-accent text-muted-foreground hover:text-foreground z-10 transition-colors"
+                      className="shrink-0 self-end mb-0.5 size-6 rounded-md bg-muted/70 hover:bg-accent text-muted-foreground hover:text-foreground flex items-center justify-center z-10"
                       title={t('qcSendToNotepad')}
                       aria-label={t('qcSendToNotepad')}
                     >
-                      <StickyNote size={14} strokeWidth={1.75} />
+                      <StickyNote size={14} />
                     </button>
                   </div>
                   <div
@@ -2081,12 +2087,12 @@ export function FloatingCalculator() {
                   initial={{ width: 0, opacity: 0 }}
                   animate={{ width: 208, opacity: 1 }}
                   exit={{ width: 0, opacity: 0 }}
-                  transition={{ duration: 0.18, ease: [0.2, 0.8, 0.2, 1] }}
+                  transition={{ type: 'spring', stiffness: 300, damping: 30 }}
                   className="overflow-hidden shrink-0"
                 >
-                  <div className="w-[200px] h-full ml-2 rounded-[11px] border border-border bg-card shadow-[var(--shadow-float)] p-2 flex flex-col gap-1.5">
+                  <div className="w-[200px] h-full ml-2 rounded-xl border border-border bg-card/95 backdrop-blur-xl shadow-2xl p-2 flex flex-col gap-1.5">
                     <div className="flex items-center gap-1 px-1 text-[10px] text-muted-foreground">
-                      <NotebookPen className="size-3" strokeWidth={1.75} />
+                      <NotebookPen className="size-3" />
                       <span>{t('qcNotepad')}</span>
                       <button
                         type="button"

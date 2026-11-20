@@ -50,12 +50,12 @@ export function StatisticsWorkbench() {
   const ActiveIcon = active.icon;
 
   return (
-    <div className="h-full w-full flex min-h-0 bg-background">
+    <div className="h-full w-full flex min-h-0 bg-background/40">
       {/* ─── 左侧统计模块导航 ─────────────────────────────────── */}
-      <aside className="w-64 shrink-0 flex flex-col border-r border-border bg-sidebar">
-        <div className="shrink-0 h-8 px-3 flex items-center gap-1.5 border-b border-border bg-transparent">
-          <BarChart3 className="size-3.5 text-muted-foreground" strokeWidth={1.75} />
-          <span className="text-[11px] font-medium tracking-tight">概率统计</span>
+      <aside className="w-64 shrink-0 flex flex-col border-r border-border/60 bg-card/30 backdrop-blur-sm">
+        <div className="shrink-0 h-10 px-3 flex items-center gap-1.5 border-b border-border/60 bg-background/40">
+          <BarChart3 className="size-3.5 text-primary" />
+          <span className="text-[12px] font-semibold tracking-tight">概率统计</span>
         </div>
         <ScrollArea className="flex-1 min-h-0">
           <ul className="p-2 space-y-1">
@@ -99,22 +99,22 @@ export function StatisticsWorkbench() {
       {/* ─── 右侧主区域（响应式：min-w-0 避免窗口缩放/全屏时溢出错位） ── */}
       <main className="flex-1 min-w-0 min-h-0 flex flex-col">
         {/* 标题条 */}
-        <div className="shrink-0 h-9 px-4 flex items-center gap-2 border-b border-border bg-transparent">
-          <ActiveIcon className="size-3.5 text-muted-foreground" strokeWidth={1.75} />
-          <span className="text-[12px] font-medium tracking-tight">{active.label}</span>
-          <span className="text-[10.5px] text-muted-foreground">{active.desc}</span>
+        <div className="shrink-0 h-11 px-4 flex items-center gap-2 border-b border-border/60 bg-background/30">
+          <ActiveIcon className="size-4 text-primary" />
+          <span className="text-[13px] font-semibold tracking-tight">{active.label}</span>
+          <span className="text-[11px] text-muted-foreground">{active.desc}</span>
           <div className="flex-1" />
           <button
             onClick={() => setPopupOpen((v) => !v)}
             className={cn(
-              'flex items-center gap-1.5 px-2 h-6 rounded border text-[10.5px] transition-colors',
+              'flex items-center gap-1.5 px-2.5 h-7 rounded-md border text-[11px] transition-colors',
               popupOpen
-                ? 'bg-accent text-foreground border-border'
-                : 'border-border text-muted-foreground hover:text-foreground hover:bg-accent',
+                ? 'bg-primary/15 text-primary border-primary/30'
+                : 'border-border/60 text-muted-foreground hover:text-foreground hover:bg-accent',
             )}
             title="在独立 Figure 窗口中打开（共享标题栏 / 工具栏 / 导出）"
           >
-            <PanelTopOpen className="size-3" strokeWidth={1.75} />
+            <PanelTopOpen className="size-3.5" />
             <span className="hidden sm:inline">{popupOpen ? '关闭 Figure' : '独立 Figure'}</span>
           </button>
         </div>

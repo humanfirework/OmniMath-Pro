@@ -41,7 +41,7 @@ import {
 } from '@/components/ui/dropdown-menu';
 import { useEducationStore } from '@/lib/store/educationStore';
 import { useWorkbenchStore } from '@/lib/store/workbench';
-import { STAGES, STAGE_LABEL } from '@/lib/education/content';
+import { STAGES, STAGE_LABEL, type QuestionStage } from '@/lib/education/content';
 import { EducationDaily } from './EducationDaily';
 import { EducationProgress } from './EducationProgress';
 import { EducationAchievements } from './EducationAchievements';
@@ -89,30 +89,39 @@ export function EducationModule() {
   const active = NAV_ITEMS.find((n) => n.id === nav) ?? NAV_ITEMS[0];
   const ActiveIcon = active.icon;
 
+  // 学段对应的一条渐变描边。
+  const stageAccent: Record<QuestionStage, string> = {
+    primary: 'from-emerald-500/20 to-sky-500/20',
+    middle: 'from-sky-500/20 to-indigo-500/20',
+    high: 'from-indigo-500/20 to-violet-500/20',
+    university: 'from-violet-500/20 to-fuchsia-500/20',
+  };
+
   return (
     <div className="flex h-full w-full min-h-0">
       {/* 左侧模块导航 */}
-      <aside className="w-60 shrink-0 flex flex-col border-r border-border bg-sidebar">
+      <aside className="w-60 shrink-0 flex flex-col border-r border-border/60 bg-card/30 backdrop-blur-sm">
         {/* 头部 */}
-        <div className="shrink-0 border-b border-border px-3 py-3">
+        <div className={cn('shrink-0 border-b border-border/60 bg-gradient-to-br px-4 py-3.5', stageAccent[stage])}>
           <div className="flex items-center gap-2.5">
-            <div className="relative grid size-8 shrink-0 place-items-center rounded-md border border-border text-muted-foreground">
-              <Sparkles className="size-3.5" strokeWidth={1.75} />
+            <div className="relative grid size-9 shrink-0 place-items-center rounded-xl bg-gradient-to-br from-emerald-500/25 to-sky-500/25">
+              <Sparkles className="size-4 text-emerald-600 dark:text-emerald-400" />
+              <span className="absolute -right-0.5 -top-0.5 size-2 rounded-full bg-emerald-400 ring-2 ring-background" />
             </div>
             <div className="min-w-0 flex-1">
-              <div className="truncate text-[12.5px] font-medium tracking-tight text-foreground">
+              <div className="truncate text-[14px] font-semibold tracking-tight text-foreground">
                 学习陪伴
               </div>
               <div className="text-[10px] text-muted-foreground">学段自适应 · 循序渐进</div>
             </div>
-            <span className="shrink-0 rounded-[3px] border border-border px-1.5 py-0.5 text-[9.5px] font-medium text-muted-foreground">
+            <span className="shrink-0 rounded-full border border-border/60 bg-background/50 px-2 py-0.5 text-[10px] font-medium text-foreground/80">
               {STAGE_LABEL[stage]}
             </span>
           </div>
         </div>
 
         <ScrollArea className="min-h-0 flex-1">
-          <ul className="space-y-0.5 p-2">
+          <ul className="space-y-1 p-2">
             {NAV_ITEMS.map((item) => {
               const Icon = item.icon;
               const isActive = item.id === nav;
@@ -122,28 +131,31 @@ export function EducationModule() {
                     type="button"
                     onClick={() => setNav(item.id)}
                     className={cn(
-                      'group relative w-full flex items-center gap-2.5 rounded-md px-2 py-1.5 text-left transition-colors',
+                      'group relative w-full flex items-center gap-2.5 rounded-xl px-2.5 py-2 text-left transition-all',
                       isActive
-                        ? 'bg-accent text-foreground'
-                        : 'text-muted-foreground hover:bg-accent/60 hover:text-foreground',
+                        ? 'bg-gradient-to-r from-primary/15 to-primary/5 text-primary shadow-sm'
+                        : 'text-foreground/75 hover:bg-accent/60 hover:text-foreground',
                     )}
                   >
                     <span
                       className={cn(
-                        'grid size-7 shrink-0 place-items-center rounded border transition-colors',
+                        'grid size-8 shrink-0 place-items-center rounded-lg border transition-colors',
                         isActive
-                          ? 'border-border bg-card text-foreground'
-                          : 'border-transparent text-muted-foreground group-hover:text-foreground',
+                          ? 'border-primary/40 bg-primary/20 text-primary'
+                          : 'border-border/60 bg-muted/40 text-muted-foreground group-hover:border-primary/30 group-hover:text-foreground',
                       )}
                     >
-                      <Icon className="size-3.5" strokeWidth={1.75} />
+                      <Icon className="size-4" />
                     </span>
                     <span className="min-w-0 flex-1">
-                      <span className="block text-[12px] font-medium">{item.label}</span>
+                      <span className="block text-[12.5px] font-medium">{item.label}</span>
                       <span className="block truncate text-[10px] text-muted-foreground">
                         {item.desc}
                       </span>
                     </span>
+                    {isActive && (
+                      <span className="absolute left-0 top-1/2 h-6 w-0.5 -translate-y-1/2 rounded-full bg-primary" />
+                    )}
                   </button>
                 </li>
               );
@@ -152,10 +164,10 @@ export function EducationModule() {
         </ScrollArea>
 
         {/* 底部：隐私说明 */}
-        <div className="shrink-0 border-t border-border p-3">
-          <div className="rounded-md border border-border bg-card p-2.5">
-            <div className="flex items-center gap-1.5 text-[10px] font-medium text-muted-foreground">
-              <ShieldCheck className="size-3" strokeWidth={1.75} />
+        <div className="shrink-0 border-t border-border/60 p-3">
+          <div className="rounded-xl border border-emerald-500/15 bg-emerald-500/5 p-2.5">
+            <div className="flex items-center gap-1.5 text-[10px] font-medium text-emerald-600 dark:text-emerald-400">
+              <ShieldCheck className="size-3" />
               数据只在本机
             </div>
             <p className="mt-1 text-[9.5px] leading-relaxed text-muted-foreground">
@@ -168,12 +180,12 @@ export function EducationModule() {
       </aside>
 
       {/* 右侧主区域 */}
-      <main className="flex min-w-0 min-h-0 flex-1 flex-col bg-background">
+      <main className="flex min-w-0 min-h-0 flex-1 flex-col bg-background/30">
         {/* 标题条 */}
-        <div className="shrink-0 flex h-9 items-center gap-2 border-b border-border px-4">
-          <ActiveIcon className="size-3.5 text-muted-foreground" strokeWidth={1.75} />
-          <span className="text-[12px] font-medium tracking-tight">{active.label}</span>
-          <span className="text-[10.5px] text-muted-foreground">{active.desc}</span>
+        <div className="shrink-0 flex h-11 items-center gap-2 border-b border-border/60 bg-background/30 px-5">
+          <ActiveIcon className="size-4 text-emerald-600 dark:text-emerald-400" />
+          <span className="text-[13px] font-semibold tracking-tight">{active.label}</span>
+          <span className="text-[11px] text-muted-foreground">{active.desc}</span>
 
           <div className="ml-auto">
             {/* 学习 ↔ 科研模式转换 */}
@@ -181,9 +193,9 @@ export function EducationModule() {
               <DropdownMenuTrigger asChild>
                 <button
                   type="button"
-                  className="inline-flex h-6 items-center gap-1.5 rounded border border-border px-2 text-[10.5px] font-medium text-muted-foreground hover:bg-accent hover:text-foreground transition-colors"
+                  className="inline-flex h-7 items-center gap-1.5 rounded-lg border border-emerald-500/30 bg-emerald-500/10 px-2.5 text-[11px] font-medium text-emerald-700 dark:text-emerald-300 hover:bg-emerald-500/20 transition-colors"
                 >
-                  <FlaskConical className="size-3" strokeWidth={1.75} />
+                  <FlaskConical className="size-3.5" />
                   切到科研模式
                 </button>
               </DropdownMenuTrigger>

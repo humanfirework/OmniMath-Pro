@@ -38,13 +38,13 @@ import { cn } from '@/lib/utils';
 import type { VariableEntry } from '@/lib/store/workbench';
 
 const TYPE_COLORS: Record<string, string> = {
-  number: 'text-primary bg-primary/10 border-primary/25',
-  matrix: 'text-primary bg-primary/10 border-primary/25',
-  complex: 'text-[var(--primary-2)] bg-primary/10 border-primary/25',
-  string: 'text-muted-foreground bg-muted/60 border-border',
-  boolean: 'text-muted-foreground bg-muted/60 border-border',
-  function: 'text-primary bg-primary/10 border-primary/25',
-  unit: 'text-muted-foreground bg-muted/60 border-border',
+  number: 'text-teal-500 bg-teal-500/10 border-teal-500/30',
+  matrix: 'text-amber-600 dark:text-amber-400 bg-amber-500/10 border-amber-500/30',
+  complex: 'text-violet-600 dark:text-violet-400 bg-violet-500/10 border-violet-500/30',
+  string: 'text-emerald-600 dark:text-emerald-400 bg-emerald-500/10 border-emerald-500/30',
+  boolean: 'text-rose-600 dark:text-rose-400 bg-rose-500/10 border-rose-500/30',
+  function: 'text-orange-600 dark:text-orange-400 bg-orange-500/10 border-orange-500/30',
+  unit: 'text-cyan-600 dark:text-cyan-400 bg-cyan-500/10 border-cyan-500/30',
 };
 
 function previewValue(v: unknown): string {
@@ -139,8 +139,8 @@ export function VariablesPanel() {
                 exit={{ opacity: 0 }}
                 className="flex flex-col items-center justify-center py-16 text-center px-6"
               >
-                <div className="mb-3 grid size-12 place-items-center rounded-lg border border-border bg-card">
-                  <VariableIcon className="size-5 text-muted-foreground/70" strokeWidth={1.75} />
+                <div className="grid place-items-center size-14 rounded-2xl bg-primary/8 border border-primary/20 mb-3">
+                  <VariableIcon className="size-6 text-primary/70" />
                 </div>
                 <p className="text-[12.5px] font-medium text-foreground/80 mb-1">
                   {t('varsNoVars')}
@@ -203,7 +203,7 @@ function VariableRow({
   const sliderStep = (sliderMax - sliderMin) / 200;
 
   return (
-    <div className="group/var-item interactive-card relative rounded-lg border border-border bg-card shadow-[var(--shadow-card)] p-2.5 transition-colors duration-150 hover:border-primary/40 hover:bg-accent/30">
+    <div className="group/var-item interactive-card relative rounded-md border border-border/60 bg-card/60 hover:border-primary/40 hover:bg-accent/30 p-2.5">
       {/* Header row */}
       <div className="flex items-center gap-2">
         {isMatrix && (

@@ -88,7 +88,7 @@ export function MathCardView({ card, view, onChange, onDelete }: MathCardViewPro
   return (
     <div
       className={cn(
-        'surface-floating absolute z-20 select-none',
+        'absolute z-20 select-none rounded-xl border border-border/70 bg-background/95 shadow-lg shadow-black/10 backdrop-blur',
         'max-w-[min(86vw,280px)]',
       )}
       style={{ left: 0, top: 0, transform: `translate3d(${sx}px, ${sy}px, 0)` }}
@@ -97,13 +97,13 @@ export function MathCardView({ card, view, onChange, onDelete }: MathCardViewPro
       onWheel={(e) => e.stopPropagation()}
     >
       <div
-        className="flex h-8 cursor-grab touch-none items-center gap-1.5 rounded-t-xl border-b border-border bg-muted/30 px-2.5 active:cursor-grabbing"
+        className="flex h-7 cursor-grab touch-none items-center gap-1.5 rounded-t-xl border-b border-border/50 bg-muted/40 px-2 active:cursor-grabbing"
         onPointerDown={handlePointerDown}
         onPointerMove={handlePointerMove}
         onPointerUp={handlePointerUp}
         onPointerCancel={handlePointerUp}
       >
-        <GripHorizontal className="size-3.5 text-muted-foreground/70" strokeWidth={1.75} />
+        <GripHorizontal className="size-3 text-muted-foreground/70" />
         <span className="text-[10px] font-medium text-muted-foreground">
           {card.kind === 'plot' ? '函数图像' : '计算结果'}
         </span>
@@ -114,7 +114,7 @@ export function MathCardView({ card, view, onChange, onDelete }: MathCardViewPro
           onClick={() => onDelete(card.id)}
           className="grid size-4 place-items-center rounded text-muted-foreground/70 hover:bg-accent hover:text-foreground"
         >
-          <X className="size-3.5" strokeWidth={1.75} />
+          <X className="size-3" />
         </button>
       </div>
 
@@ -295,15 +295,8 @@ function drawPlot(canvas: HTMLCanvasElement, samples: PlotSample[], range: [numb
   const sx = (x: number) => pad.l + ((x - xMin) / Math.max(1e-9, xMax - xMin)) * plotW;
   const sy = (y: number) => pad.t + (1 - (y - yMin) / Math.max(1e-9, yMax - yMin)) * plotH;
 
-  const css = getComputedStyle(canvas);
-  const viz1 = css.getPropertyValue('--viz-1').trim() || '#3B6FE0';
-  const viz2 = css.getPropertyValue('--viz-2').trim() || '#22A7C4';
-  const gridColor = css.getPropertyValue('--viz-grid').trim() || 'rgba(148, 163, 184, 0.18)';
-  const axisColor = css.getPropertyValue('--viz-axis').trim() || 'rgba(148, 163, 184, 0.55)';
-  const labelColor = css.getPropertyValue('--muted-foreground').trim() || 'rgba(148, 163, 184, 0.9)';
-
   // grid
-  ctx.strokeStyle = gridColor;
+  ctx.strokeStyle = 'rgba(148, 163, 184, 0.18)';
   ctx.lineWidth = 1;
   for (let i = 0; i <= 4; i++) {
     const x = pad.l + (plotW * i) / 4;
@@ -319,7 +312,7 @@ function drawPlot(canvas: HTMLCanvasElement, samples: PlotSample[], range: [numb
   }
 
   // axes
-  ctx.strokeStyle = axisColor;
+  ctx.strokeStyle = 'rgba(148, 163, 184, 0.55)';
   ctx.beginPath();
   if (0 >= xMin && 0 <= xMax) {
     const x0 = sx(0);
@@ -333,12 +326,9 @@ function drawPlot(canvas: HTMLCanvasElement, samples: PlotSample[], range: [numb
   }
   ctx.stroke();
 
-  // curve — aurora blue→cyan gradient
-  const curve = ctx.createLinearGradient(pad.l, 0, pad.l + plotW, 0);
-  curve.addColorStop(0, viz1);
-  curve.addColorStop(1, viz2);
+  // curve
   ctx.beginPath();
-  ctx.strokeStyle = curve;
+  ctx.strokeStyle = '#14b8a6';
   ctx.lineWidth = 2;
   ctx.lineJoin = 'round';
   ctx.lineCap = 'round';
@@ -364,7 +354,7 @@ function drawPlot(canvas: HTMLCanvasElement, samples: PlotSample[], range: [numb
   ctx.stroke();
 
   // labels
-  ctx.fillStyle = labelColor;
+  ctx.fillStyle = 'rgba(148, 163, 184, 0.9)';
   ctx.font = '9px ui-monospace, monospace';
   ctx.textBaseline = 'top';
   ctx.fillText(String(Math.round(xMin)), 1, pad.t + plotH + 2);

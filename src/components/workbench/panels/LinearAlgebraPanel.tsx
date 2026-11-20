@@ -768,7 +768,7 @@ function MatrixEditorTab({
         {/* Live KaTeX preview */}
         <div>
           <div className="text-[10.5px] text-muted-foreground mb-1">{t('linalgPreview')}</div>
-          <div className="surface-card rounded-md p-2.5 overflow-x-auto">
+          <div className="rounded-md border border-primary/30 bg-primary/5 p-2.5 glow-card-teal overflow-x-auto">
             <FormulaRenderer latex={name + ' = ' + matrixToLatex(matrix)} displayMode />
           </div>
         </div>
@@ -1252,7 +1252,7 @@ function OperationsTab({ matrices }: { matrices: MatrixEntry[] }) {
               initial={{ opacity: 0, y: 4 }}
               animate={{ opacity: 1, y: 0 }}
               exit={{ opacity: 0 }}
-              className="surface-card rounded-md p-2.5"
+              className="rounded-md border border-primary/30 bg-primary/5 p-2.5 glow-card-teal"
             >
               <div className="text-[10.5px] text-muted-foreground mb-1">{t('linalgResult')}</div>
               <div className="overflow-x-auto">
@@ -2191,7 +2191,7 @@ function LinearSystemTab({ defaultMatrix }: { defaultMatrix: Matrix | undefined 
                 )}
 
               {/* Solution LaTeX */}
-              <div className="surface-card rounded-md p-2.5 overflow-x-auto">
+              <div className="rounded-md border border-primary/30 bg-primary/5 p-2.5 glow-card-teal overflow-x-auto">
                 <div className="text-[10.5px] text-muted-foreground mb-1">
                   {solution.kind === 'infinite'
                     ? t('linalgGeneralSolution')
@@ -2745,7 +2745,7 @@ function VectorOpsTab() {
               initial={{ opacity: 0, y: 4 }}
               animate={{ opacity: 1, y: 0 }}
               exit={{ opacity: 0 }}
-              className="surface-card rounded-md p-2.5"
+              className="rounded-md border border-primary/30 bg-primary/5 p-2.5 glow-card-teal"
             >
               <div className="text-[10.5px] text-muted-foreground mb-1">{t('linalgResult')}</div>
               <div className="overflow-x-auto">
@@ -2824,7 +2824,7 @@ function VectorOpsTab() {
                 initial={{ opacity: 0, y: 4 }}
                 animate={{ opacity: 1, y: 0 }}
                 exit={{ opacity: 0 }}
-                className="mt-1.5 surface-card rounded-md p-2.5 space-y-1.5"
+                className="mt-1.5 rounded-md border border-primary/30 bg-primary/5 p-2.5 glow-card-teal space-y-1.5"
               >
                 <div className="text-[10.5px] text-muted-foreground">{t('linalgOrthogonalized')}</div>
                 {gsResult.vectors.map((v, i) => (

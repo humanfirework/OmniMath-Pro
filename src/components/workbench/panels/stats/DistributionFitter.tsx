@@ -26,7 +26,7 @@ export interface DistributionFitterProps {
 }
 
 /** 叠加曲线调色板（按排名取色，排名高者更醒目）。 */
-const PALETTE = ['#3B6FE0', '#22A7C4', '#7C5CE0', '#4CC3D9', '#8B7CF6', '#2E8BFF', '#22A7C4', '#7C5CE0'];
+const PALETTE = ['#38bdf8', '#f472b6', '#a3e635', '#fbbf24', '#c084fc', '#fb7185', '#34d399', '#60a5fa'];
 
 interface FitCurve {
   kind: string;

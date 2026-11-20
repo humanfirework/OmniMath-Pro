@@ -51,7 +51,6 @@ import type {
 } from '@/lib/plots/curveTypes';
 import { AlertTriangle, RotateCcw, Maximize, Play, Pause } from 'lucide-react';
 import type { PlotConfig } from '@/lib/store/workbench';
-import { getVizPalette, getVizTokens } from '@/lib/plots/vizPalette';
 import { useScopeVersion } from '@/lib/hooks/useScopeVersion';
 import { useAnimVersion } from '@/lib/hooks/useAnimVersion';
 import { useSettingsStore } from '@/lib/store/settingsStore';
@@ -112,6 +111,15 @@ export interface Plot2DCanvasProps {
 }
 
 /* --------------------------- Constants --------------------------- */
+
+const PLOT_COLORS = [
+  '#1565c0', // blue (GeoGebra/Desmos style)
+  '#c62828', // red
+  '#2e7d32', // green
+  '#ef6c00', // orange
+  '#6a1b9a', // purple
+  '#00838f', // cyan
+];
 
 /**
  * DPR 上限。高 DPI 屏（2x / 3x Retina）会被裁剪到该值，避免画布 backing store
@@ -244,58 +252,6 @@ function bezierFlatten(
     default:
       return [];
   }
-}
-
-/**
- * 按比例混合两个十六进制颜色。支持 #RGB / #RRGGBB；任一输入不合法时原样
- * 返回 `a`（保证无效颜色不会把曲线画成透明或黑色）。
- */
-function mixHexColor(a: string, b: string, t: number): string {
-  const parse = (hex: string): [number, number, number] | null => {
-    if (typeof hex !== 'string') return null;
-    const s = hex.trim().replace(/^#/, '');
-    if (/^[0-9a-fA-F]{3}$/.test(s)) {
-      return [
-        parseInt(s[0] + s[0], 16),
-        parseInt(s[1] + s[1], 16),
-        parseInt(s[2] + s[2], 16),
-      ];
-    }
-    if (/^[0-9a-fA-F]{6}$/.test(s)) {
-      return [
-        parseInt(s.slice(0, 2), 16),
-        parseInt(s.slice(2, 4), 16),
-        parseInt(s.slice(4, 6), 16),
-      ];
-    }
-    return null;
-  };
-  const ca = parse(a);
-  if (!ca) return a;
-  const cb = parse(b);
-  if (!cb) return a;
-  const k = Number.isFinite(t) ? Math.min(1, Math.max(0, t)) : 0;
-  const toHex = (n: number) => n.toString(16).padStart(2, '0');
-  return `#${toHex(Math.round(ca[0] + (cb[0] - ca[0]) * k))}${toHex(
-    Math.round(ca[1] + (cb[1] - ca[1]) * k),
-  )}${toHex(Math.round(ca[2] + (cb[2] - ca[2]) * k))}`;
-}
-
-/**
- * 曲线描边用的水平线性渐变：x=0~0.55 保持原色，向右侧（x=1）渐变到与原色
- * 混合 45% 的紫色，形成克制的「蓝 → 紫」过渡。`width` 为图表宽度（CSS px），
- * 渐变沿 x 轴铺满绘图区。
- */
-function makeCurveStroke(
-  ctx: CanvasRenderingContext2D,
-  color: string,
-  width: number,
-): string | CanvasGradient {
-  const grad = ctx.createLinearGradient(0, 0, width, 0);
-  grad.addColorStop(0, color);
-  grad.addColorStop(0.28, color);
-  grad.addColorStop(1, mixHexColor(color, '#9A7BFF', 0.65));
-  return grad;
 }
 
 function plotPolyline(
@@ -564,8 +520,6 @@ export function Plot2DCanvas({
     const sampleCount = lowQuality
       ? Math.max(135, Math.floor(baseCount / 3))
       : baseCount;
-    // 兜底配色只在 plot 没有颜色时用到；一次 render 读取一次（按主题缓存）。
-    const palette = getVizPalette();
     const __res = plots.map((p, idx) => {
       // A resolved curve spec (from the panel's curve editor) takes
       // precedence: polar / parametric curves sample over their own
@@ -589,7 +543,7 @@ export function Plot2DCanvas({
       }
       const extrema = findExtrema(samples);
       return {
-        config: { ...p, color: p.color || palette[idx % palette.length] },
+        config: { ...p, color: p.color || PLOT_COLORS[idx % PLOT_COLORS.length] },
         samples,
         extrema,
         visible: p.visible !== false,
@@ -707,24 +661,22 @@ export function Plot2DCanvas({
       // Note: the main canvas is cleared in the composite step below, after
       // the offscreen layers have been rasterized. (D4)
 
+      const dark = theme === 'dark';
       // Themed colors read from CSS variables (cached per theme) so the canvas
       // stays in sync with the app's design tokens instead of hard-coded hex.
       const themed = getThemedColors(theme);
-      // 图表 token 同样按主题缓存，drawNow 每帧调用也只是一次 map 查找。
-      const viz = getVizTokens();
-      const palette = viz.palette;
       const bg = themed.bg;
-      const axisColor = viz.axis;
-      const gridMajor = viz.grid;
-      // 小方格与大格同色，绘制时用 globalAlpha 再减淡（避免硬编码第二套 rgba）。
-      const gridMinor = viz.grid;
-      const tickLabelColor = viz.axis;
-      const axisLabelColor = viz.axisStrong;
-      const crosshairColor = palette[0];
+      const fg = themed.fg;
+      const axisColor = themed.mutedFg;
+      const gridMajor = dark ? 'rgba(255,255,255,0.10)' : 'rgba(0,0,0,0.10)';
+      const gridMinor = dark ? 'rgba(255,255,255,0.04)' : 'rgba(0,0,0,0.04)';
+      const tickLabelColor = themed.mutedFg;
+      const axisLabelColor = themed.fg;
+      const crosshairColor = dark ? '#64b5f6' : '#1976d2';
 
-      // Semantic marker / overlay colors，全部来自 viz token / 调色板。
-      const markerStroke = viz.surface;
-      const zeroFill = palette[0];
+      // Semantic marker / overlay colors for high contrast in both themes.
+      const markerStroke = dark ? '#212121' : '#ffffff';
+      const zeroFill = dark ? '#64b5f6' : '#1976d2';
       const tooltipBg = themed.popover;
       const tooltipFg = themed.popoverFg;
       const tooltipBorder = themed.border;
@@ -794,8 +746,6 @@ export function Plot2DCanvas({
         const minorX = xNice.tickStep / GRID_DIVISIONS;
         const minorY = yNice.tickStep / GRID_DIVISIONS;
         // 小方格：细 + 淡，作为「格子纸」背景。
-        ctx.save();
-        ctx.globalAlpha = 0.5;
         ctx.lineWidth = 0.5;
         ctx.strokeStyle = gridMinor;
         ctx.beginPath();
@@ -812,7 +762,6 @@ export function Plot2DCanvas({
           ctx.lineTo(w - PADDING.right, sy);
         }
         ctx.stroke();
-        ctx.restore();
 
         // 大方格：略粗 + 略深，作为「主网格」。
         ctx.lineWidth = 1;
@@ -918,19 +867,14 @@ export function Plot2DCanvas({
       const ctx = curveCtx;
       ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
       ctx.clearRect(0, 0, w, h);
-      // 曲线数量较少时才叠加柔光，避免大量曲线时描边次数翻倍影响帧率。
-      // 柔光用「同路径、更宽、低透明度」的底层描边实现，不使用 shadowBlur
-      //（高斯模糊在逐帧重绘下非常昂贵）。
-      const curveGlow = visiblePlots.length <= 12;
-      const gradientWidth = Math.max(1, w);
       for (const plot of visiblePlots) {
         const samples = plot.samples;
         if (samples.length < 2) continue;
-        const color = plot.config.color;
-        const lineWidth = plot.config.width ?? 2;
+        ctx.strokeStyle = plot.config.color;
+        ctx.lineWidth = plot.config.width ?? 2;
         ctx.lineJoin = 'round';
         ctx.lineCap = 'round';
-        // 路径只构建一次：柔光层与正常描边复用同一条 path。
+        // Clean math software style - no glow/shadow
         ctx.beginPath();
         let penDown = false;
         for (const s of samples) {
@@ -939,10 +883,6 @@ export function Plot2DCanvas({
             continue;
           }
           const [sx, sy] = dataToScreen(s.x, s.y);
-          if (!Number.isFinite(sx) || !Number.isFinite(sy)) {
-            penDown = false;
-            continue;
-          }
           if (!penDown) {
             ctx.moveTo(sx, sy);
             penDown = true;
@@ -950,17 +890,6 @@ export function Plot2DCanvas({
             ctx.lineTo(sx, sy);
           }
         }
-        if (curveGlow) {
-          ctx.save();
-          ctx.globalAlpha = 0.16;
-          ctx.strokeStyle = color;
-          ctx.lineWidth = lineWidth + 5;
-          ctx.stroke();
-          ctx.restore();
-        }
-        // 沿 x 轴的「原色 → 紫」渐变 + 圆角端点/连接处。
-        ctx.strokeStyle = makeCurveStroke(ctx, color, gradientWidth);
-        ctx.lineWidth = lineWidth;
         ctx.stroke();
       }
 
@@ -992,7 +921,7 @@ export function Plot2DCanvas({
         for (const cs of curveSets) {
           const csW = Math.max(1, cs.width);
           const csH = Math.max(1, cs.height);
-          const color = cs.color ?? palette[2];
+          const color = cs.color ?? '#a78bfa';
           const sw = cs.strokeWidth ?? 2;
           // 折线已在 flattenedCurveSets 中按 [curveSets, playhead] 缓存（含预算抽稀
           // 与 flipX/flipY），这里只做廉价的「像素→屏幕」线性映射，避免平移/缩放时
@@ -1018,17 +947,6 @@ export function Plot2DCanvas({
           ctx.save();
           ctx.lineJoin = 'round';
           ctx.lineCap = 'round';
-          // 分组不多时先为每组补一层柔光底描边（同 path、低透明度、更宽），
-          // 与曲线本身的描边共用路径，不额外增加 flatten / 采样开销。
-          if (batches.size <= 8) {
-            ctx.globalAlpha = 0.1;
-            for (const batch of batches.values()) {
-              ctx.strokeStyle = batch.color;
-              ctx.lineWidth = batch.sw + 5;
-              ctx.stroke(batch.path);
-            }
-            ctx.globalAlpha = 1;
-          }
           for (const batch of batches.values()) {
             ctx.strokeStyle = batch.color;
             ctx.lineWidth = batch.sw;
@@ -1053,11 +971,11 @@ export function Plot2DCanvas({
       // Derivative curve — dashed line, math style colors
       if (overlays.derivativeSamples.length > 0) {
         const derivColors: Record<number, string> = {
-          1: palette[1], // cyan
-          2: palette[2], // violet
-          3: palette[4], // light violet
+          1: dark ? '#ffb74d' : '#f57c00', // orange
+          2: dark ? '#ba68c8' : '#7b1fa2', // purple
+          3: dark ? '#4db6ac' : '#00796b', // teal
         };
-        const dColor = derivColors[overlays.derivativeOrder] || palette[1];
+        const dColor = derivColors[overlays.derivativeOrder] || (dark ? '#ffb74d' : '#f57c00');
         ctx.strokeStyle = dColor;
         ctx.lineWidth = 1.5;
         ctx.setLineDash([5, 3]);
@@ -1091,7 +1009,7 @@ export function Plot2DCanvas({
       // Tangent line — dashed gray
       if (overlays.tangent) {
         const t = overlays.tangent;
-        ctx.strokeStyle = viz.axis;
+        ctx.strokeStyle = dark ? 'rgba(255,255,255,0.4)' : 'rgba(0,0,0,0.35)';
         ctx.lineWidth = 1.5;
         ctx.setLineDash([4, 3]);
         ctx.beginPath();
@@ -1104,13 +1022,13 @@ export function Plot2DCanvas({
         ctx.stroke();
         ctx.setLineDash([]);
 
-        // Tangent point — small token dot
+        // Tangent point — small black/white dot
         const [tsx, tsy] = dataToScreen(t.at.x, t.at.y);
-        ctx.fillStyle = viz.axisStrong;
+        ctx.fillStyle = dark ? '#ffffff' : '#000000';
         ctx.beginPath();
         ctx.arc(tsx, tsy, 4, 0, Math.PI * 2);
         ctx.fill();
-        ctx.fillStyle = viz.axis;
+        ctx.fillStyle = dark ? '#e0e0e0' : '#424242';
         ctx.font = `bold 12px ${PLOT_FONT_FAMILY}`;
         ctx.textAlign = 'left';
         ctx.textBaseline = 'bottom';
@@ -1127,7 +1045,7 @@ export function Plot2DCanvas({
           if (sx < PADDING.left || sx > w - PADDING.right) return;
           if (sy < PADDING.top || sy > h - PADDING.bottom) return;
           // Marker dot.
-          ctx.fillStyle = palette[2];
+          ctx.fillStyle = dark ? '#ce93d8' : '#8e24aa';
           ctx.strokeStyle = markerStroke;
           ctx.lineWidth = 1.5;
           ctx.beginPath();
@@ -1145,10 +1063,10 @@ export function Plot2DCanvas({
           // Vertical center-line of the label, clamped inside the plot area.
           const lyRaw = above ? sy - 8 : sy + 8;
           const ly = Math.min(Math.max(lyRaw, PADDING.top + 6), h - PADDING.bottom - 6);
-          // Solid backdrop (no translucency / blur) for readability.
-          ctx.fillStyle = viz.tooltip;
+          // Translucent backdrop for readability.
+          ctx.fillStyle = dark ? 'rgba(26,26,26,0.72)' : 'rgba(255,255,255,0.78)';
           ctx.fillRect(lx - 2, ly - 7, tw + 4, 14);
-          ctx.fillStyle = viz.axisStrong;
+          ctx.fillStyle = dark ? '#e0e0e0' : '#424242';
           ctx.textAlign = 'left';
           ctx.textBaseline = 'middle';
           ctx.fillText(text, lx, ly);
@@ -1172,8 +1090,8 @@ export function Plot2DCanvas({
           ctx.fill();
           ctx.stroke();
         }
-        // Maxima — violet dots
-        const extremaColor = palette[2];
+        // Maxima — red dots
+        const extremaColor = dark ? '#ef5350' : '#d32f2f';
         for (const e of plot.extrema.maxima) {
           const [sx, sy] = dataToScreen(e.x, e.y);
           if (sx < PADDING.left || sx > w - PADDING.right) continue;
@@ -1186,18 +1104,18 @@ export function Plot2DCanvas({
           ctx.fill();
           ctx.stroke();
           // Label
-          ctx.fillStyle = viz.axisStrong;
+          ctx.fillStyle = dark ? '#e0e0e0' : '#424242';
           ctx.font = `bold 12px ${PLOT_FONT_FAMILY}`;
           ctx.textAlign = 'center';
           ctx.textBaseline = 'bottom';
           ctx.fillText(`max(${e.x.toFixed(3)}, ${e.y.toFixed(3)})`, sx, sy - 8);
         }
-        // Minima — cyan dots
+        // Minima — red dots
         for (const e of plot.extrema.minima) {
           const [sx, sy] = dataToScreen(e.x, e.y);
           if (sx < PADDING.left || sx > w - PADDING.right) continue;
           if (sy < PADDING.top || sy > h - PADDING.bottom) continue;
-          ctx.fillStyle = palette[1];
+          ctx.fillStyle = extremaColor;
           ctx.strokeStyle = markerStroke;
           ctx.lineWidth = 1.5;
           ctx.beginPath();
@@ -1205,7 +1123,7 @@ export function Plot2DCanvas({
           ctx.fill();
           ctx.stroke();
           // Label
-          ctx.fillStyle = viz.axisStrong;
+          ctx.fillStyle = dark ? '#e0e0e0' : '#424242';
           ctx.font = `bold 12px ${PLOT_FONT_FAMILY}`;
           ctx.textAlign = 'center';
           ctx.textBaseline = 'top';
@@ -1246,8 +1164,7 @@ export function Plot2DCanvas({
       let by = PADDING.top + 4;
       bx = Math.max(PADDING.left + 4, bx);
       by = Math.max(PADDING.top + 4, by);
-      // 图例使用实色 viz 表面，避免半透明叠在曲线上发灰。
-      ctx.fillStyle = viz.surface;
+      ctx.fillStyle = dark ? 'rgba(26,26,26,0.72)' : 'rgba(255,255,255,0.82)';
       ctx.strokeStyle = tooltipBorder;
       ctx.lineWidth = 1;
       drawRoundRect(ctx, bx, by, boxW, boxH, 6);
@@ -1947,7 +1864,7 @@ export function Plot2DCanvas({
                 key={ex.expr}
                 type="button"
                 onClick={() => onInsertExample?.(ex.expr)}
-                className="motion-press rounded-[6px] border border-border bg-card px-3 py-1.5 font-mono text-[11px] text-foreground/90 transition-colors hover:border-primary/40 hover:bg-primary/5 hover:text-primary"
+                className="interactive-card rounded-full border border-border bg-muted/40 px-3 py-1.5 font-mono text-xs text-foreground/90 transition-theme hover:border-primary/40 hover:bg-primary/10 hover:text-primary"
               >
                 {ex.label}
               </button>
@@ -1978,10 +1895,10 @@ export function Plot2DCanvas({
         onTouchMove={handleTouchMove}
         onTouchEnd={handleTouchEnd}
       />
-      {/* Task 8.B: Follow-mouse DOM Tooltip — 实色浮层，无模糊 */}
+      {/* Task 8.B: Follow-mouse DOM Tooltip */}
       {mousePos && tooltipLines.length > 0 && (
         <div
-          className="absolute z-50 pointer-events-none rounded-[8px] border border-border bg-popover px-2 py-1.5 text-[11px] shadow-[var(--shadow-float)]"
+          className="absolute z-50 pointer-events-none rounded-md border border-border bg-popover/95 px-2 py-1.5 text-xs shadow-lg backdrop-blur-sm"
           style={{ left: mousePos.x + 14, top: mousePos.y + 14, maxWidth: 320 }}
         >
           {tooltipLines.map((line, idx) => (
@@ -2002,7 +1919,7 @@ export function Plot2DCanvas({
         </div>
       )}
       {/* Mouse coordinate readout + range badge bottom-left */}
-      <div className="pointer-events-none absolute bottom-1.5 left-2 flex items-center gap-1.5 rounded-[5px] border border-border/60 bg-card px-1.5 py-0.5 font-mono text-[10px] text-muted-foreground">
+      <div className="pointer-events-none absolute bottom-1.5 left-2 flex items-center gap-1.5 rounded bg-muted-foreground/20 px-1.5 py-0.5 font-mono text-[10px] text-foreground/80 backdrop-blur-sm">
         <span>{mouseWorld ? `(${mouseWorld.wx.toFixed(3)}, ${mouseWorld.wy.toFixed(3)})` : '(x, y)'}</span>
         <span className="opacity-50">·</span>
         <span className="opacity-70">x ∈ [{xRange[0].toFixed(2)}, {xRange[1].toFixed(2)}] · y ∈ [{yRange[0].toFixed(2)}, {yRange[1].toFixed(2)}]</span>
@@ -2010,14 +1927,14 @@ export function Plot2DCanvas({
 
       {/* Task 9: Curve animation timeline — shown only when a curveSet carries frames */}
       {maxFrames > 0 && (
-        <div className="surface-floating pointer-events-auto absolute bottom-2 left-1/2 z-40 flex -translate-x-1/2 items-center gap-2 px-3 py-1.5">
+        <div className="pointer-events-auto absolute bottom-2 left-1/2 z-40 flex -translate-x-1/2 items-center gap-2 rounded-full border border-border bg-background/85 px-3 py-1.5 shadow-lg backdrop-blur-sm">
           <button
             type="button"
             aria-label={isPlaying ? '暂停' : '播放'}
             onClick={() => setIsPlaying((v) => !v)}
-            className="motion-press grid size-6 place-items-center rounded-[6px] bg-primary text-primary-foreground transition-colors hover:bg-primary/90"
+            className="grid size-6 place-items-center rounded-full bg-primary text-primary-foreground transition hover:opacity-90"
           >
-            {isPlaying ? <Pause className="size-3.5" strokeWidth={1.75} /> : <Play className="size-3.5" strokeWidth={1.75} />}
+            {isPlaying ? <Pause className="size-3.5" /> : <Play className="size-3.5" />}
           </button>
           <input
             type="range"
@@ -2037,11 +1954,11 @@ export function Plot2DCanvas({
         </div>
       )}
 
-      {/* Draw error overlay — 安静的实色卡片 */}
+      {/* Draw error overlay */}
       {drawError && (
-        <div className="absolute inset-0 z-20 flex flex-col items-center justify-center gap-3 bg-background p-6 text-center">
-          <div className="grid size-10 place-items-center rounded-md border border-border bg-card">
-            <AlertTriangle className="size-5 text-destructive" strokeWidth={1.75} />
+        <div className="absolute inset-0 z-20 flex flex-col items-center justify-center gap-3 bg-background/80 p-6 text-center backdrop-blur-sm">
+          <div className="grid size-12 place-items-center rounded-full bg-destructive/10">
+            <AlertTriangle className="size-6 text-destructive" />
           </div>
           <div className="space-y-1">
             <p className="text-sm font-medium text-foreground">绘图出错</p>
@@ -2054,7 +1971,7 @@ export function Plot2DCanvas({
                 setDrawError(null);
                 scheduleRedraw();
               }}
-              className="motion-press inline-flex items-center gap-1 rounded-[6px] bg-primary px-3 py-1.5 text-[11px] font-medium text-primary-foreground transition-colors hover:bg-primary/90"
+              className="inline-flex items-center gap-1 rounded-md bg-primary px-3 py-1.5 text-xs font-medium text-primary-foreground hover:bg-primary/90 transition-colors"
             >
               <RotateCcw className="size-3.5" />
               重绘
@@ -2065,7 +1982,7 @@ export function Plot2DCanvas({
                 setDrawError(null);
                 onResetView?.();
               }}
-              className="motion-press inline-flex items-center gap-1 rounded-[6px] border border-border bg-card px-3 py-1.5 text-[11px] font-medium text-foreground transition-colors hover:bg-accent"
+              className="inline-flex items-center gap-1 rounded-md border border-border bg-background px-3 py-1.5 text-xs font-medium text-foreground hover:bg-accent transition-colors"
             >
               <Maximize className="size-3.5" />
               重置视图

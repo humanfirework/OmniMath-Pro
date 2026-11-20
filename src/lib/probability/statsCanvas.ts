@@ -13,9 +13,9 @@ import type { HistBin, XYPoint, BoxStats, RegressionResult, GroupedHistogram } f
 const GRID = 'rgba(148,163,184,0.14)';
 const AXIS = 'rgba(148,163,184,0.55)';
 const INK = 'rgba(226,232,240,0.9)';
-const ACCENT = '#3B6FE0';
-const ACCENT2 = '#7C5CE0';
-const FILL = 'rgba(59,111,224,0.18)';
+const ACCENT = '#38bdf8';
+const ACCENT2 = '#f472b6';
+const FILL = 'rgba(56,189,248,0.18)';
 
 /** 画网格 + 坐标轴 + 刻度标签。 */
 export function drawAxisGrid(
@@ -210,7 +210,7 @@ export function renderScatter(
 }
 
 /** 各序列并排条形（分组直方图）使用的配色。 */
-export const GROUPED_PALETTE = ['#3B6FE0', '#22A7C4', '#7C5CE0', '#4CC3D9', '#8B7CF6', '#2E8BFF', '#22A7C4', '#7C5CE0'];
+export const GROUPED_PALETTE = ['#38bdf8', '#f472b6', '#34d399', '#fbbf24', '#a78bfa', '#fb923c', '#2dd4bf', '#818cf8'];
 
 /**
  * 分组直方图：多个序列在共享分箱轴上并排绘制条形。

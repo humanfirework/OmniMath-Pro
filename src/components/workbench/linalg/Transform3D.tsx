@@ -167,11 +167,11 @@ function TransformedCube({ matrix }: { matrix: number[] }) {
             ]), 3]}
           />
         </bufferGeometry>
-        <meshBasicMaterial color="#5B8CFF" transparent opacity={0.12} side={THREE.DoubleSide} />
+        <meshBasicMaterial color="#2dd4bf" transparent opacity={0.12} side={THREE.DoubleSide} />
       </mesh>
       {/* 边线 */}
       {edges.map(([p1, p2], i) => (
-        <Line key={i} points={[p1, p2]} color="#5B8CFF" lineWidth={1.5} />
+        <Line key={i} points={[p1, p2]} color="#2dd4bf" lineWidth={1.5} />
       ))}
     </group>
   );
@@ -198,7 +198,7 @@ function TransformedSphere({ matrix }: { matrix: number[] }) {
       <bufferGeometry>
         <bufferAttribute attach="attributes-position" args={[new Float32Array(positions), 3]} />
       </bufferGeometry>
-      <meshBasicMaterial color="#9A7BFF" wireframe transparent opacity={0.4} />
+      <meshBasicMaterial color="#fbbf24" wireframe transparent opacity={0.4} />
     </mesh>
   );
 }
@@ -243,9 +243,9 @@ function SceneContent({ matrix, showOriginal }: { matrix: number[]; showOriginal
       <TransformedSphere matrix={matrix} />
 
       {/* 基向量 */}
-      <BasisArrow dir={ihat} color="#5B8CFF" label="î" />
-      <BasisArrow dir={jhat} color="#4FD1E8" label="ĵ" />
-      <BasisArrow dir={khat} color="#9A7BFF" label="k̂" />
+      <BasisArrow dir={ihat} color="#ef4444" label="î" />
+      <BasisArrow dir={jhat} color="#22c55e" label="ĵ" />
+      <BasisArrow dir={khat} color="#3b82f6" label="k̂" />
 
       <OrbitControls enablePan enableZoom enableRotate />
     </>
@@ -555,11 +555,11 @@ export function Transform3D({ matrix, onMatrixChange }: Transform3DProps) {
 
           <div className="mt-1 text-[10.5px] text-muted-foreground/70 leading-relaxed">
             <div className="font-medium text-muted-foreground mb-0.5">提示</div>
-            蓝箭头 = î（原 e₁）<br />
-            青箭头 = ĵ（原 e₂）<br />
-            紫箭头 = k̂（原 e₃）<br />
-            半透明蓝 = 单位立方体<br />
-            紫色线框 = 单位球面<br />
+            红箭头 = î（原 e₁）<br />
+            绿箭头 = ĵ（原 e₂）<br />
+            蓝箭头 = k̂（原 e₃）<br />
+            青色 = 单位立方体<br />
+            橙色 = 单位球面<br />
             拖拽旋转视角
           </div>
         </div>

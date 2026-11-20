@@ -340,10 +340,10 @@ export function EducationRiddles({ onAskAI }: { onAskAI?: (prompt: string) => vo
   return (
     <div className="mx-auto max-w-4xl">
       {/* 头部简介 */}
-      <div className="relative overflow-hidden surface-card rounded-xl p-5">
+      <div className="relative overflow-hidden rounded-2xl border border-emerald-500/20 bg-gradient-to-br from-emerald-500/10 via-teal-500/5 to-sky-500/10 p-5">
         <div className="flex items-start gap-3">
-          <div className="grid size-10 shrink-0 place-items-center rounded-md border border-border bg-muted/40">
-            <Puzzle className="size-5 text-primary" strokeWidth={1.75} />
+          <div className="grid size-10 shrink-0 place-items-center rounded-xl border border-emerald-500/30 bg-emerald-500/15">
+            <Puzzle className="size-5 text-emerald-600 dark:text-emerald-400" />
           </div>
           <div className="min-w-0">
             <h3 className="text-[15px] font-semibold tracking-tight text-foreground">
@@ -352,7 +352,7 @@ export function EducationRiddles({ onAskAI }: { onAskAI?: (prompt: string) => vo
             <p className="mt-1.5 text-[12.5px] leading-relaxed text-muted-foreground">
               下面这些世界级难题，有些悬置了上百年。点击任意一题可进入详情，查看它的来龙去脉与权威资料。
               2026 年，中国的王虹、邓煜同届斩获菲尔兹奖——他们正是攻克了挂谷猜想、希尔伯特第六问题这样的世界难题。也许，
-              <span className="font-semibold text-primary">
+              <span className="font-semibold text-emerald-600 dark:text-emerald-400">
                 下一个解开其中某一题的人，就是你。
               </span>
             </p>
@@ -387,7 +387,7 @@ export function EducationRiddles({ onAskAI }: { onAskAI?: (prompt: string) => vo
             initial={{ opacity: 0, y: 8 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ delay: i * 0.03, duration: 0.25 }}
-            className="group relative flex flex-col surface-card rounded-xl p-4 text-left transition-colors hover:border-primary/40"
+            className="group relative flex flex-col rounded-2xl border border-border bg-card/50 p-4 text-left transition-all hover:border-primary/40 hover:bg-card hover:shadow-lg hover:shadow-primary/5"
           >
             <div className="flex items-start justify-between gap-2">
               <div className="min-w-0">
@@ -415,7 +415,7 @@ export function EducationRiddles({ onAskAI }: { onAskAI?: (prompt: string) => vo
 
             <div className="mt-3 flex items-center justify-between border-t border-border/60 pt-2.5">
               <span className="inline-flex items-center gap-1 text-[10.5px] font-medium text-primary opacity-80 transition-opacity group-hover:opacity-100">
-                <BookOpen className="size-3" strokeWidth={1.75} />
+                <BookOpen className="size-3" />
                 查看详情
               </span>
               <span className="text-[10px] text-muted-foreground/60 transition-transform group-hover:translate-x-0.5">
@@ -428,7 +428,7 @@ export function EducationRiddles({ onAskAI }: { onAskAI?: (prompt: string) => vo
 
       {/* 底部激励 */}
       <div className="mt-5 flex items-center gap-2 rounded-xl border border-dashed border-primary/25 bg-primary/5 px-4 py-3 text-[12px] text-muted-foreground">
-        <Sparkles className="size-3.5 shrink-0 text-primary" strokeWidth={1.75} />
+        <Sparkles className="size-3.5 shrink-0 text-primary" />
         <span>
           数学里还有很多「百万美元级」的开放难题。保持好奇、持续学习，这些难题的前沿就有你的一席之地。
         </span>
@@ -485,7 +485,7 @@ export function EducationRiddles({ onAskAI }: { onAskAI?: (prompt: string) => vo
                   {/* 权威论文与资料 */}
                   <section className="rounded-xl border border-primary/20 bg-primary/5 p-3.5">
                     <h4 className="flex items-center gap-1.5 text-[12px] font-semibold text-foreground">
-                      <BookOpen className="size-3.5 text-primary" strokeWidth={1.75} />
+                      <BookOpen className="size-3.5 text-primary" />
                       权威论文与资料
                     </h4>
                     <div className="mt-2 flex flex-wrap gap-2">
@@ -498,7 +498,7 @@ export function EducationRiddles({ onAskAI }: { onAskAI?: (prompt: string) => vo
                           className="inline-flex items-center gap-1 rounded-md border border-border bg-background/70 px-2 py-1 text-[10.5px] font-medium text-primary transition-colors hover:bg-primary/10 hover:underline"
                         >
                           {l.label}
-                          <ExternalLink className="size-2.5 opacity-60" strokeWidth={1.75} />
+                          <ExternalLink className="size-2.5 opacity-60" />
                         </a>
                       ))}
                     </div>
@@ -524,7 +524,7 @@ export function EducationRiddles({ onAskAI }: { onAskAI?: (prompt: string) => vo
                   }}
                   className="inline-flex h-8 flex-1 items-center justify-center gap-1.5 rounded-lg border border-primary/30 bg-primary/10 px-3 text-[12px] font-medium text-primary transition-colors hover:bg-primary/15"
                 >
-                  <GraduationCap className="size-3.5" strokeWidth={1.75} />
+                  <GraduationCap className="size-3.5" />
                   让 AI 助教深入讲解
                 </button>
                 <button
@@ -532,7 +532,7 @@ export function EducationRiddles({ onAskAI }: { onAskAI?: (prompt: string) => vo
                   onClick={() => setSelected(null)}
                   className="inline-flex h-8 items-center gap-1 rounded-lg border border-border bg-muted/40 px-3 text-[12px] font-medium text-muted-foreground transition-colors hover:bg-muted"
                 >
-                  <X className="size-3.5" strokeWidth={1.75} />
+                  <X className="size-3.5" />
                   关闭
                 </button>
               </div>

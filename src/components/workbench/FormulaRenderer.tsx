@@ -346,12 +346,12 @@ export function FormulaRenderer({
             >
               {isCollapsed ? (
                 <>
-                  <ChevronDown className="size-3" strokeWidth={1.75} />
+                  <ChevronDown className="size-3" />
                   {t('commonExpand')}
                 </>
               ) : (
                 <>
-                  <ChevronUp className="size-3" strokeWidth={1.75} />
+                  <ChevronUp className="size-3" />
                   {t('commonCollapse')}
                 </>
               )}
@@ -365,7 +365,7 @@ export function FormulaRenderer({
               className="grid place-items-center size-6 text-muted-foreground hover:text-foreground hover:bg-accent disabled:opacity-40 transition-colors"
               aria-label={t('previewZoomOut')}
             >
-              <ZoomOut className="size-3" strokeWidth={1.75} />
+              <ZoomOut className="size-3" />
             </button>
             <button
               type="button"
@@ -382,7 +382,7 @@ export function FormulaRenderer({
               className="grid place-items-center size-6 text-muted-foreground hover:text-foreground hover:bg-accent disabled:opacity-40 transition-colors"
               aria-label={t('previewZoomIn')}
             >
-              <ZoomIn className="size-3" strokeWidth={1.75} />
+              <ZoomIn className="size-3" />
             </button>
           </div>
           {showCopy && (
@@ -393,9 +393,9 @@ export function FormulaRenderer({
               aria-label={copied ? t('commonCopied') : t('commonCopy')}
             >
               {copied ? (
-                <Check className="size-3 text-emerald-500" strokeWidth={1.75} />
+                <Check className="size-3 text-emerald-500" />
               ) : (
-                <Copy className="size-3" strokeWidth={1.75} />
+                <Copy className="size-3" />
               )}
               {copied ? t('commonCopied') : t('commonCopy')}
             </button>
@@ -409,7 +409,7 @@ export function FormulaRenderer({
                   className="inline-flex items-center gap-1 rounded-md px-2 py-1 text-[10.5px] font-medium text-muted-foreground hover:text-foreground hover:bg-accent transition-colors disabled:opacity-40"
                   aria-label={t('formulaExport')}
                 >
-                  <Download className="size-3" strokeWidth={1.75} />
+                  <Download className="size-3" />
                   {t('formulaExport')}
                 </button>
               </DropdownMenuTrigger>
@@ -422,21 +422,21 @@ export function FormulaRenderer({
                   onClick={() => handleExport('png')}
                   className="gap-2 cursor-pointer"
                 >
-                  <FileImage className="size-3.5 text-primary" strokeWidth={1.75} />
+                  <FileImage className="size-3.5 text-primary" />
                   <span className="text-xs">{t('formulaExportPNG')}</span>
                 </DropdownMenuItem>
                 <DropdownMenuItem
                   onClick={() => handleExport('svg')}
                   className="gap-2 cursor-pointer"
                 >
-                  <FileCode className="size-3.5 text-primary" strokeWidth={1.75} />
+                  <FileCode className="size-3.5 text-primary" />
                   <span className="text-xs">{t('formulaExportSVG')}</span>
                 </DropdownMenuItem>
                 <DropdownMenuItem
                   onClick={() => handleExport('latex')}
                   className="gap-2 cursor-pointer"
                 >
-                  <FileText className="size-3.5 text-primary" strokeWidth={1.75} />
+                  <FileText className="size-3.5 text-primary" />
                   <span className="text-xs">{t('formulaExportLatex')}</span>
                 </DropdownMenuItem>
               </DropdownMenuContent>
@@ -457,13 +457,7 @@ export function FormulaRenderer({
         )}
         style={
           isCollapsed && canCollapse && maxHeight !== undefined
-            ? {
-                maxHeight: `${maxHeight}px`,
-                // 用 mask 淡出底部内容，而不是叠一层 from-background 的假渐隐：
-                // 这样在「纸面」卡片与深色卡片上都能正确淡出，不依赖背景色。
-                maskImage: 'linear-gradient(to top, transparent, black 40px)',
-                WebkitMaskImage: 'linear-gradient(to top, transparent, black 40px)',
-              }
+            ? { maxHeight: `${maxHeight}px` }
             : undefined
         }
       >
@@ -494,6 +488,10 @@ export function FormulaRenderer({
           }}
         />
       </div>
+
+      {isCollapsed && canCollapse && (
+        <div className="absolute bottom-0 left-0 right-0 h-10 bg-gradient-to-t from-background to-transparent pointer-events-none" />
+      )}
     </div>
   );
 }

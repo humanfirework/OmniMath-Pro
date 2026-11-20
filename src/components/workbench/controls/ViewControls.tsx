@@ -53,11 +53,11 @@ function CtrlButton({ icon: Icon, label, onClick, compact }: CtrlButtonProps) {
           onClick={onClick}
           aria-label={label}
           className={cn(
-            'grid place-items-center rounded-md border border-border bg-popover text-muted-foreground transition-theme hover:text-primary hover:border-primary/40 hover:bg-accent/60',
-            compact ? 'size-8' : 'size-9',
+            'grid place-items-center rounded-md border border-border/60 bg-background/80 text-muted-foreground backdrop-blur-sm transition-theme hover:text-foreground hover:border-primary/40 hover:bg-accent/40',
+            compact ? 'size-6' : 'size-7',
           )}
         >
-          <Icon className={compact ? 'size-3.5' : 'size-4'} strokeWidth={1.75} />
+          <Icon className={compact ? 'size-3' : 'size-3.5'} strokeWidth={2} />
         </button>
       </TooltipTrigger>
       <TooltipContent side="left">{label}</TooltipContent>
