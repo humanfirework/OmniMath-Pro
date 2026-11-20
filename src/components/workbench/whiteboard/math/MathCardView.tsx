@@ -88,7 +88,7 @@ export function MathCardView({ card, view, onChange, onDelete }: MathCardViewPro
   return (
     <div
       className={cn(
-        'absolute z-20 select-none rounded-xl border border-border/70 bg-background/95 shadow-lg shadow-black/10 backdrop-blur',
+        'absolute z-20 select-none rounded-lg border border-border bg-popover shadow-lg',
         'max-w-[min(86vw,280px)]',
       )}
       style={{ left: 0, top: 0, transform: `translate3d(${sx}px, ${sy}px, 0)` }}
@@ -97,7 +97,7 @@ export function MathCardView({ card, view, onChange, onDelete }: MathCardViewPro
       onWheel={(e) => e.stopPropagation()}
     >
       <div
-        className="flex h-7 cursor-grab touch-none items-center gap-1.5 rounded-t-xl border-b border-border/50 bg-muted/40 px-2 active:cursor-grabbing"
+        className="flex h-7 cursor-grab touch-none items-center gap-1.5 rounded-t-lg border-b border-border bg-muted/40 px-2 active:cursor-grabbing"
         onPointerDown={handlePointerDown}
         onPointerMove={handlePointerMove}
         onPointerUp={handlePointerUp}
@@ -114,7 +114,7 @@ export function MathCardView({ card, view, onChange, onDelete }: MathCardViewPro
           onClick={() => onDelete(card.id)}
           className="grid size-4 place-items-center rounded text-muted-foreground/70 hover:bg-accent hover:text-foreground"
         >
-          <X className="size-3" />
+          <X className="size-3" strokeWidth={1.75} />
         </button>
       </div>
 

@@ -98,10 +98,10 @@ function DockButton({
       title={label}
       onClick={onClick}
       className={cn(
-        'grid size-10 place-items-center rounded-xl transition-colors',
+        'grid size-9 place-items-center rounded-md transition-colors',
         active
-          ? 'bg-primary/15 text-primary'
-          : 'text-muted-foreground hover:bg-accent/70 hover:text-foreground',
+          ? 'bg-accent text-foreground'
+          : 'text-muted-foreground hover:bg-accent/60 hover:text-foreground',
       )}
     >
       {children}
@@ -121,7 +121,7 @@ export function WhiteboardToolDock(props: WhiteboardToolDockProps) {
 
   return (
     <div className="pointer-events-none absolute left-3 top-1/2 z-30 -translate-y-1/2">
-      <div className="pointer-events-auto flex flex-col items-center gap-0.5 rounded-2xl border border-border/70 bg-background/95 p-1.5 shadow-xl backdrop-blur">
+      <div className="pointer-events-auto flex flex-col items-center gap-0.5 rounded-lg border border-border bg-popover p-1 shadow-lg">
         <DockButton label="选择" active={props.tool === 'select'} onClick={() => applyTool('select')}>
           <MousePointer2 className="size-4" />
         </DockButton>
@@ -182,7 +182,7 @@ export function WhiteboardToolDock(props: WhiteboardToolDockProps) {
       </div>
 
       {panel && (
-        <div className="pointer-events-auto absolute left-full top-1/2 ml-2 max-h-[min(78vh,560px)] w-[270px] -translate-y-1/2 overflow-y-auto rounded-2xl border border-border/70 bg-background p-3 shadow-2xl">
+        <div className="pointer-events-auto absolute left-full top-1/2 ml-2 max-h-[min(78vh,560px)] w-[270px] -translate-y-1/2 overflow-y-auto rounded-lg border border-border bg-popover p-3 shadow-xl">
           <div className="flex items-center justify-between">
             <span className="text-[10px] font-medium uppercase tracking-[0.14em] text-muted-foreground">
               {panel === 'pen'
@@ -199,9 +199,9 @@ export function WhiteboardToolDock(props: WhiteboardToolDockProps) {
               type="button"
               aria-label="关闭设置"
               onClick={() => setPanel(null)}
-              className="grid size-6 place-items-center rounded-lg text-muted-foreground hover:bg-accent/60 hover:text-foreground"
+              className="grid size-6 place-items-center rounded text-muted-foreground hover:bg-accent/60 hover:text-foreground"
             >
-              <X className="size-3.5" />
+              <X className="size-3.5" strokeWidth={1.75} />
             </button>
           </div>
 

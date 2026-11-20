@@ -105,7 +105,7 @@ export function Minimap({ nodes, view, canvasSize, onCenter }: MinimapProps) {
   return (
     <div
       ref={ref}
-      className="absolute bottom-16 left-3 overflow-hidden rounded-md border border-border/60 bg-black/40 backdrop-blur-sm"
+      className="absolute bottom-16 left-3 overflow-hidden rounded-md border border-border bg-popover"
       style={{
         width: MAP_W,
         height: MAP_H,

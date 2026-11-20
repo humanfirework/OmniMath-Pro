@@ -1898,7 +1898,7 @@ export function Plot2DCanvas({
       {/* Task 8.B: Follow-mouse DOM Tooltip */}
       {mousePos && tooltipLines.length > 0 && (
         <div
-          className="absolute z-50 pointer-events-none rounded-md border border-border bg-popover/95 px-2 py-1.5 text-xs shadow-lg backdrop-blur-sm"
+          className="absolute z-50 pointer-events-none rounded-md border border-border bg-popover px-2 py-1.5 text-xs shadow-lg"
           style={{ left: mousePos.x + 14, top: mousePos.y + 14, maxWidth: 320 }}
         >
           {tooltipLines.map((line, idx) => (
@@ -1919,7 +1919,7 @@ export function Plot2DCanvas({
         </div>
       )}
       {/* Mouse coordinate readout + range badge bottom-left */}
-      <div className="pointer-events-none absolute bottom-1.5 left-2 flex items-center gap-1.5 rounded bg-muted-foreground/20 px-1.5 py-0.5 font-mono text-[10px] text-foreground/80 backdrop-blur-sm">
+      <div className="pointer-events-none absolute bottom-1.5 left-2 flex items-center gap-1.5 rounded bg-muted/60 px-1.5 py-0.5 font-mono text-[10px] text-muted-foreground">
         <span>{mouseWorld ? `(${mouseWorld.wx.toFixed(3)}, ${mouseWorld.wy.toFixed(3)})` : '(x, y)'}</span>
         <span className="opacity-50">·</span>
         <span className="opacity-70">x ∈ [{xRange[0].toFixed(2)}, {xRange[1].toFixed(2)}] · y ∈ [{yRange[0].toFixed(2)}, {yRange[1].toFixed(2)}]</span>
@@ -1927,14 +1927,14 @@ export function Plot2DCanvas({
 
       {/* Task 9: Curve animation timeline — shown only when a curveSet carries frames */}
       {maxFrames > 0 && (
-        <div className="pointer-events-auto absolute bottom-2 left-1/2 z-40 flex -translate-x-1/2 items-center gap-2 rounded-full border border-border bg-background/85 px-3 py-1.5 shadow-lg backdrop-blur-sm">
+        <div className="pointer-events-auto absolute bottom-2 left-1/2 z-40 flex -translate-x-1/2 items-center gap-2 rounded-md border border-border bg-popover px-3 py-1.5 shadow-lg">
           <button
             type="button"
             aria-label={isPlaying ? '暂停' : '播放'}
             onClick={() => setIsPlaying((v) => !v)}
             className="grid size-6 place-items-center rounded-full bg-primary text-primary-foreground transition hover:opacity-90"
           >
-            {isPlaying ? <Pause className="size-3.5" /> : <Play className="size-3.5" />}
+            {isPlaying ? <Pause className="size-3.5" strokeWidth={1.75} /> : <Play className="size-3.5" strokeWidth={1.75} />}
           </button>
           <input
             type="range"
@@ -1956,9 +1956,9 @@ export function Plot2DCanvas({
 
       {/* Draw error overlay */}
       {drawError && (
-        <div className="absolute inset-0 z-20 flex flex-col items-center justify-center gap-3 bg-background/80 p-6 text-center backdrop-blur-sm">
-          <div className="grid size-12 place-items-center rounded-full bg-destructive/10">
-            <AlertTriangle className="size-6 text-destructive" />
+        <div className="absolute inset-0 z-20 flex flex-col items-center justify-center gap-3 bg-background/90 p-6 text-center">
+          <div className="grid size-10 place-items-center rounded-md border border-border bg-card">
+            <AlertTriangle className="size-5 text-destructive" strokeWidth={1.75} />
           </div>
           <div className="space-y-1">
             <p className="text-sm font-medium text-foreground">绘图出错</p>

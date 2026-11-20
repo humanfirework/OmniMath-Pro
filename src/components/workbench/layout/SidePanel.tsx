@@ -65,7 +65,7 @@ const PANEL_ICON: Record<SidePanelTab, typeof Clock> = {
 function PanelLoading() {
   return (
     <div className="flex h-full w-full items-center justify-center">
-      <div className="size-4 animate-spin rounded-full border-2 border-primary/20 border-t-primary" />
+      <div className="size-3.5 animate-spin rounded-full border-[1.5px] border-border border-t-muted-foreground" />
     </div>
   );
 }
@@ -123,15 +123,15 @@ export function SidePanel({ onClose }: { onClose?: () => void } = {}) {
   }, []);
 
   return (
-    <div className="flex flex-col h-full bg-card/40">
+    <div className="flex flex-col h-full bg-sidebar">
       {/* Header — 手机端由下面的标签条 + 关闭按钮代替，省掉一整行 */}
-      <div className="hidden md:flex shrink-0 h-9 items-center justify-between px-2 border-b border-border/60 bg-background/40">
+      <div className="hidden md:flex shrink-0 h-8 items-center justify-between px-2 border-b border-sidebar-border bg-transparent">
         <div className="flex items-center gap-1.5 px-1 min-w-0">
           {(() => {
             const Icon = PANEL_ICON[activeSidePanel];
-            return <Icon className="size-3.5 text-primary shrink-0" />;
+            return <Icon className="size-3.5 text-muted-foreground shrink-0" strokeWidth={1.75} />;
           })()}
-          <span className="text-[11.5px] font-semibold tracking-tight text-foreground/85 truncate">
+          <span className="text-[10.5px] font-medium tracking-[0.08em] uppercase text-muted-foreground truncate">
             {t(PANEL_TITLE_KEY[activeSidePanel])}
           </span>
         </div>
@@ -150,20 +150,20 @@ export function SidePanel({ onClose }: { onClose?: () => void } = {}) {
                     aria-label={t(PANEL_TITLE_KEY[tab])}
                     aria-pressed={active}
                     className={cn(
-                      'grid place-items-center size-6 rounded-md transition-colors',
+                      'grid place-items-center size-6 rounded transition-colors',
                       active
-                        ? 'bg-primary/12 text-primary'
-                        : 'text-muted-foreground hover:bg-accent hover:text-foreground',
+                        ? 'bg-accent text-foreground'
+                        : 'text-muted-foreground hover:bg-accent/60 hover:text-foreground',
                     )}
                   >
-                    <Icon className="size-3.5" />
+                    <Icon className="size-3.5" strokeWidth={1.75} />
                   </button>
                 </TooltipTrigger>
                 <TooltipContent side="bottom">{t(PANEL_TITLE_KEY[tab])}</TooltipContent>
               </Tooltip>
             );
           })}
-          <span aria-hidden className="mx-0.5 h-3.5 w-px bg-border/60" />
+          <span aria-hidden className="mx-0.5 h-3.5 w-px bg-sidebar-border" />
           <Tooltip>
             <TooltipTrigger asChild>
               <button
@@ -171,11 +171,11 @@ export function SidePanel({ onClose }: { onClose?: () => void } = {}) {
                 onClick={onClose ?? toggleSidePanel}
                 aria-label={t('abHideSidebar')}
                 className={cn(
-                  'grid place-items-center size-6 rounded-md text-muted-foreground',
-                  'hover:bg-accent hover:text-foreground transition-colors',
+                  'grid place-items-center size-6 rounded text-muted-foreground',
+                  'hover:bg-accent/60 hover:text-foreground transition-colors',
                 )}
               >
-                <PanelLeftClose className="size-3.5" />
+                <PanelLeftClose className="size-3.5" strokeWidth={1.75} />
               </button>
             </TooltipTrigger>
             <TooltipContent side="bottom">{t('abHideSidebar')}</TooltipContent>
@@ -185,7 +185,7 @@ export function SidePanel({ onClose }: { onClose?: () => void } = {}) {
 
       {/* 手机端没有左侧活动栏：在面板内补一条可横向滑动的标签条，
           否则手机用户只能看到上一次停留的面板（历史/变量/公式都进不去）。 */}
-      <div className="md:hidden shrink-0 flex items-center gap-1 px-2 py-1.5 border-b border-border/60 bg-background/30">
+      <div className="md:hidden shrink-0 flex items-center gap-1 px-2 py-1.5 border-b border-sidebar-border bg-transparent">
         <div role="tablist" aria-label="侧边面板切换" className="flex min-w-0 flex-1 items-center gap-1 overflow-x-auto">
           {SIDE_PANEL_TABS.map((tab) => {
             const Icon = PANEL_ICON[tab];
@@ -198,13 +198,13 @@ export function SidePanel({ onClose }: { onClose?: () => void } = {}) {
                 aria-selected={active}
                 onClick={() => setActiveSidePanel(tab)}
                 className={cn(
-                  'inline-flex h-7 shrink-0 items-center gap-1 rounded-md px-2 text-[11px] font-medium transition-colors',
+                  'inline-flex h-7 shrink-0 items-center gap-1 rounded px-2 text-[11px] font-medium transition-colors',
                   active
-                    ? 'bg-primary/12 text-primary'
+                    ? 'bg-accent text-foreground'
                     : 'text-muted-foreground hover:bg-accent/60 hover:text-foreground',
                 )}
               >
-                <Icon className="size-3.5" />
+                <Icon className="size-3.5" strokeWidth={1.75} />
                 {t(PANEL_TITLE_KEY[tab])}
               </button>
             );
@@ -214,9 +214,9 @@ export function SidePanel({ onClose }: { onClose?: () => void } = {}) {
           type="button"
           onClick={onClose ?? toggleSidePanel}
           aria-label={t('abHideSidebar')}
-          className="grid size-7 shrink-0 place-items-center rounded-md text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
+          className="grid size-7 shrink-0 place-items-center rounded text-muted-foreground transition-colors hover:bg-accent/60 hover:text-foreground"
         >
-          <PanelLeftClose className="size-3.5" />
+          <PanelLeftClose className="size-3.5" strokeWidth={1.75} />
         </button>
       </div>
 

@@ -467,13 +467,13 @@ export function LinearAlgebraWorkbench() {
   }, [selectedName, matrices, handleUpdateMatrix]);
 
   return (
-    <div className="h-full w-full flex min-h-0 bg-background/40">
+    <div className="h-full w-full flex min-h-0 bg-background">
       {/* ─── 左侧矩阵列表 ─────────────────────────────────────── */}
-      <aside className="w-64 shrink-0 flex flex-col border-r border-border/60 bg-card/30 backdrop-blur-sm">
-        <div className="shrink-0 h-10 px-3 flex items-center justify-between border-b border-border/60 bg-background/40">
+      <aside className="w-64 shrink-0 flex flex-col border-r border-border bg-sidebar">
+        <div className="shrink-0 h-8 px-3 flex items-center justify-between border-b border-border bg-transparent">
           <div className="flex items-center gap-1.5">
-            <Grid3x3 className="size-3.5 text-primary" />
-            <span className="text-[12px] font-semibold tracking-tight">{t('linalgMatrixLib')}</span>
+            <Grid3x3 className="size-3.5 text-muted-foreground" strokeWidth={1.75} />
+            <span className="text-[11px] font-medium tracking-tight">{t('linalgMatrixLib')}</span>
             <Badge variant="outline" className="h-4 px-1.5 text-[9.5px]">
               {matrices.length}
             </Badge>

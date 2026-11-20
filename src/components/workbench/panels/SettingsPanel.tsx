@@ -62,6 +62,10 @@ import {
   HardDriveDownload,
   Upload,
   Cloud,
+  BookOpen,
+  Bug,
+  Star,
+  MessageCircle,
 } from 'lucide-react';
 import { useWorkbenchStore } from '@/lib/store/workbench';
 import { useLayoutStore, LAYOUT_KEY } from '@/lib/store/layoutStore';
@@ -112,11 +116,11 @@ type Category = 'appearance' | 'editor' | 'layout' | 'data' | 'backup' | 'export
 // 缺失时回退到 package.json 中的版本（0.1.6）。
 const APP_VERSION = process.env.NEXT_PUBLIC_APP_VERSION ?? '0.1.6';
 // 关于页相关链接（仓库地址取自 package.json: humanfirework/OmniMath-Pro）。
-const ABOUT_LINKS: { emoji: string; label: string; url: string }[] = [
-  { emoji: '📖', label: '官方文档', url: 'https://github.com/humanfirework/OmniMath-Pro#readme' },
-  { emoji: '🐛', label: '反馈问题', url: 'https://github.com/humanfirework/OmniMath-Pro/issues' },
-  { emoji: '⭐', label: 'GitHub', url: 'https://github.com/humanfirework/OmniMath-Pro' },
-  { emoji: '💬', label: '讨论社区', url: 'https://github.com/humanfirework/OmniMath-Pro/discussions' },
+const ABOUT_LINKS: { icon: typeof BookOpen; label: string; url: string }[] = [
+  { icon: BookOpen, label: '官方文档', url: 'https://github.com/humanfirework/OmniMath-Pro#readme' },
+  { icon: Bug, label: '反馈问题', url: 'https://github.com/humanfirework/OmniMath-Pro/issues' },
+  { icon: Star, label: 'GitHub', url: 'https://github.com/humanfirework/OmniMath-Pro' },
+  { icon: MessageCircle, label: '讨论社区', url: 'https://github.com/humanfirework/OmniMath-Pro/discussions' },
 ];
 
 export function SettingsPanel() {
@@ -1099,16 +1103,16 @@ export function SettingsPanel() {
                 className="space-y-5"
               >
                 {/* Version info */}
-                <div className="rounded-lg border border-border/60 bg-muted/20 p-4 text-center">
+                <div className="rounded-lg border border-border bg-card p-4 text-center">
                   <div className="flex items-center justify-center gap-2 mb-2">
-                    <div className="size-10 rounded-xl bg-primary/10 grid place-items-center">
-                      <span className="text-lg font-bold text-primary">Σ</span>
+                    <div className="size-9 rounded-md border border-border grid place-items-center">
+                      <span className="text-base font-semibold text-foreground">Σ</span>
                     </div>
                   </div>
-                  <h3 className="text-base font-semibold">OmniMath Pro</h3>
-                  <p className="text-xs text-muted-foreground mt-1 flex items-center justify-center gap-1.5">
+                  <h3 className="text-[14px] font-medium">OmniMath Pro</h3>
+                  <p className="text-[11px] text-muted-foreground mt-1 flex items-center justify-center gap-1.5">
                     Version {APP_VERSION}
-                    <span className="inline-flex items-center rounded-full border border-amber-500/40 bg-amber-500/10 px-1.5 py-[1px] text-[9px] font-semibold tracking-wide text-amber-600 dark:text-amber-400">
+                    <span className="inline-flex items-center rounded-[3px] border border-border bg-muted/50 px-1.5 py-[1px] text-[9px] font-medium tracking-wide text-muted-foreground">
                       Beta
                     </span>
                   </p>
@@ -1159,16 +1163,20 @@ export function SettingsPanel() {
                 <div className="space-y-2">
                   <div className="text-[11px] uppercase tracking-wider text-muted-foreground">相关链接</div>
                   <div className="grid grid-cols-2 gap-2">
-                    {ABOUT_LINKS.map((link) => (
-                      <button
-                        key={link.label}
-                        type="button"
-                        onClick={() => window.open(link.url, '_blank', 'noopener,noreferrer')}
-                        className="rounded-md border border-border/60 px-3 py-2 text-xs text-left hover:bg-accent/40 transition-colors"
-                      >
-                        {link.emoji} {link.label}
-                      </button>
-                    ))}
+                    {ABOUT_LINKS.map((link) => {
+                      const Icon = link.icon;
+                      return (
+                        <button
+                          key={link.label}
+                          type="button"
+                          onClick={() => window.open(link.url, '_blank', 'noopener,noreferrer')}
+                          className="inline-flex items-center gap-1.5 rounded-md border border-border px-3 py-2 text-xs text-left text-muted-foreground hover:bg-accent/40 hover:text-foreground transition-colors"
+                        >
+                          <Icon className="size-3.5" strokeWidth={1.75} />
+                          {link.label}
+                        </button>
+                      );
+                    })}
                   </div>
                 </div>
 

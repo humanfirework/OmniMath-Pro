@@ -174,7 +174,7 @@ export function MathNotePanel({
         'absolute z-30 w-[min(94vw,430px)]',
         anchored ? '' : 'left-1/2 -translate-x-1/2',
         !anchored && (raised ? 'bottom-[76px]' : 'bottom-3'),
-        'rounded-2xl border border-border/70 bg-background/95 shadow-2xl shadow-black/20 backdrop-blur',
+        'rounded-lg border border-border bg-popover shadow-xl',
       )}
       style={anchored ? { left: pos.left, top: pos.top } : undefined}
       onPointerDown={(e) => e.stopPropagation()}
@@ -183,15 +183,15 @@ export function MathNotePanel({
       aria-label="手写识别结果"
     >
       {/* 标题栏 */}
-      <div className="flex h-8 items-center gap-1.5 border-b border-border/50 bg-muted/40 px-2.5">
-        <Sigma className="size-3.5 text-primary" />
-        <span className="text-[11px] font-semibold">识别结果</span>
+      <div className="flex h-8 items-center gap-1.5 border-b border-border bg-muted/40 px-2.5">
+        <Sigma className="size-3.5 text-muted-foreground" strokeWidth={1.75} />
+        <span className="text-[11px] font-medium">识别结果</span>
         <span
           className={cn(
-            'rounded px-1 py-0.5 text-[9px] font-mono',
+            'rounded-[3px] border px-1 py-0.5 text-[9px] font-mono',
             confidence >= 65
-              ? 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400'
-              : 'bg-amber-500/10 text-amber-600 dark:text-amber-400',
+              ? 'border-border bg-muted/50 text-muted-foreground'
+              : 'border-amber-500/30 bg-amber-500/10 text-amber-600 dark:text-amber-400',
           )}
           title="本地识别置信度"
         >
@@ -204,7 +204,7 @@ export function MathNotePanel({
           aria-label="关闭"
           className="grid size-5 place-items-center rounded text-muted-foreground hover:bg-accent hover:text-foreground"
         >
-          <X className="size-3" />
+          <X className="size-3" strokeWidth={1.75} />
         </button>
       </div>
 
@@ -214,7 +214,7 @@ export function MathNotePanel({
           {draft.sourcePoints && draft.sourcePoints.length > 0 && (
             <InkPreview
               strokes={draft.sourcePoints}
-              className="h-[64px] w-[118px] shrink-0 rounded-lg border border-border/60 bg-background"
+              className="h-[64px] w-[118px] shrink-0 rounded border border-border bg-background"
             />
           )}
           <div className="flex min-w-0 flex-1 flex-col gap-1.5">
@@ -230,7 +230,7 @@ export function MathNotePanel({
               }}
               spellCheck={false}
               aria-label="识别结果（可编辑）"
-              className="h-8 w-full min-w-0 rounded-lg border border-border/70 bg-background px-2 font-mono text-[12.5px] outline-none transition-colors focus:border-primary/70"
+              className="h-8 w-full min-w-0 rounded border border-border bg-background px-2 font-mono text-[12.5px] outline-none transition-colors focus:border-ring"
               placeholder="没认出来？直接输入表达式…"
             />
             <div className="flex items-center gap-1.5">
@@ -238,7 +238,7 @@ export function MathNotePanel({
                 type="button"
                 onClick={() => onInsert(draft.text)}
                 disabled={!evaluation.ok}
-                className="inline-flex h-7 flex-1 items-center justify-center gap-1 rounded-lg bg-primary px-2.5 text-[11px] font-medium text-primary-foreground transition-opacity hover:opacity-90 disabled:opacity-40"
+                className="inline-flex h-7 flex-1 items-center justify-center gap-1 rounded bg-primary px-2.5 text-[11px] font-medium text-primary-foreground transition-opacity hover:opacity-90 disabled:opacity-40"
               >
                 <Check className="size-3" />
                 识别为公式
@@ -246,7 +246,7 @@ export function MathNotePanel({
               <button
                 type="button"
                 onClick={() => setExpanded((v) => !v)}
-                className="inline-flex h-7 items-center gap-0.5 rounded-lg border border-border/70 px-2 text-[10.5px] text-muted-foreground hover:bg-accent hover:text-foreground"
+                className="inline-flex h-7 items-center gap-0.5 rounded border border-border px-2 text-[10.5px] text-muted-foreground hover:bg-accent hover:text-foreground"
                 aria-expanded={expanded}
               >
                 {expanded ? '收起' : '展开'}
@@ -257,7 +257,7 @@ export function MathNotePanel({
                 onClick={onRetry}
                 aria-label="重试识别"
                 title="重试识别"
-                className="grid h-7 w-7 shrink-0 place-items-center rounded-lg border border-border/70 text-muted-foreground hover:bg-accent hover:text-foreground"
+                className="grid h-7 w-7 shrink-0 place-items-center rounded border border-border text-muted-foreground hover:bg-accent hover:text-foreground"
               >
                 <RefreshCw className="size-3" />
               </button>
@@ -266,8 +266,8 @@ export function MathNotePanel({
         </div>
 
         {!evaluation.ok && (
-          <div className="rounded-lg border border-rose-500/20 bg-rose-500/5 px-2 py-1.5">
-            <p className="text-[10px] text-rose-500">
+          <div className="rounded border border-destructive/25 bg-destructive/5 px-2 py-1.5">
+            <p className="text-[10px] text-destructive">
               {evaluation.error ?? draft.error ?? '识别失败'} · 可以直接修改表达式
             </p>
             <div className="mt-1 flex flex-wrap gap-1">
@@ -276,7 +276,7 @@ export function MathNotePanel({
                   key={s}
                   type="button"
                   onClick={() => insertSymbol(s)}
-                  className="rounded border border-border/60 bg-background/70 px-1.5 py-0.5 font-mono text-[10px] text-foreground/80 hover:border-primary/40 hover:text-primary"
+                  className="rounded border border-border bg-background px-1.5 py-0.5 font-mono text-[10px] text-foreground/80 hover:bg-accent hover:text-foreground"
                 >
                   {s}
                 </button>
@@ -284,7 +284,7 @@ export function MathNotePanel({
               <button
                 type="button"
                 onClick={() => inputRef.current?.focus()}
-                className="rounded px-1.5 py-0.5 text-[10px] text-primary hover:bg-primary/10"
+                className="rounded px-1.5 py-0.5 text-[10px] text-muted-foreground hover:bg-accent hover:text-foreground"
               >
                 直接输入
               </button>
@@ -296,13 +296,13 @@ export function MathNotePanel({
         {expanded && (
           <>
             {unsure.length > 0 && onCorrectGlyph && (
-              <div className="flex flex-wrap items-center gap-1.5 rounded-lg border border-amber-500/25 bg-amber-500/5 px-2 py-1">
+              <div className="flex flex-wrap items-center gap-1.5 rounded border border-amber-500/25 bg-amber-500/5 px-2 py-1">
                 <span className="text-[9.5px] font-medium text-amber-600 dark:text-amber-400">
                   不太确定
                 </span>
                 {unsure.map((u) => (
                   <span key={u.index} className="inline-flex items-center gap-0.5 text-[10.5px]">
-                    <span className="rounded bg-background/70 px-1 font-mono text-foreground/80">
+                    <span className="rounded bg-background px-1 font-mono text-foreground/80">
                       {u.char}
                     </span>
                     <span className="text-muted-foreground">→</span>
@@ -312,7 +312,7 @@ export function MathNotePanel({
                         type="button"
                         onClick={() => onCorrectGlyph(u.index, alt)}
                         title={`改为 ${alt}（并记住这次写法）`}
-                        className="rounded px-1 font-mono text-primary transition-colors hover:bg-primary/10"
+                        className="rounded px-1 font-mono text-foreground/80 transition-colors hover:bg-accent hover:text-foreground"
                       >
                         {alt}
                       </button>
@@ -322,7 +322,7 @@ export function MathNotePanel({
               </div>
             )}
 
-            <div className="min-h-[52px] rounded-lg border border-border/50 bg-muted/20 px-2 py-1.5">
+            <div className="min-h-[52px] rounded border border-border bg-muted/20 px-2 py-1.5">
               {evaluation.ok && evaluation.kind === 'number' ? (
                 <div className="flex items-center gap-2">
                   <FormulaRenderer latex={evaluation.latex} className="min-w-0 shrink truncate text-[11px]" />
@@ -349,14 +349,14 @@ export function MathNotePanel({
                   </div>
                 </div>
               ) : (
-                <p className="py-1 text-[11px] text-rose-500">
+                <p className="py-1 text-[11px] text-destructive">
                   {evaluation.error ?? draft.error ?? '识别失败'}
                 </p>
               )}
             </div>
 
             {explain && (
-              <div className="max-h-28 overflow-auto whitespace-pre-wrap rounded-md border border-primary/20 bg-primary/5 px-2 py-1.5 text-[11px] leading-relaxed text-foreground/85">
+              <div className="max-h-28 overflow-auto whitespace-pre-wrap rounded border border-border bg-card px-2 py-1.5 text-[11px] leading-relaxed text-foreground/85">
                 {explain}
               </div>
             )}
@@ -369,7 +369,7 @@ export function MathNotePanel({
                 type="button"
                 onClick={() => void handleExplain()}
                 disabled={explaining}
-                className="inline-flex items-center gap-1 rounded-md border border-primary/30 px-2 py-1 text-[10.5px] text-primary hover:bg-primary/10 disabled:opacity-50"
+                className="inline-flex items-center gap-1 rounded border border-border px-2 py-1 text-[10.5px] text-muted-foreground hover:bg-accent hover:text-foreground disabled:opacity-50"
                 title="只把当前表达式发送给已配置的 AI"
               >
                 <Sparkles className={cn('size-3', explaining && 'animate-pulse')} />

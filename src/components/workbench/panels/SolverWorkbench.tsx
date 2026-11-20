@@ -1298,12 +1298,12 @@ export function SolverWorkbench() {
   const active = NAV_ITEMS.find((n) => n.id === kind) ?? NAV_ITEMS[0];
 
   return (
-    <div className="h-full w-full flex min-h-0 bg-background/40">
+    <div className="h-full w-full flex min-h-0 bg-background">
       {/* ─── 左侧求解类型导航 ─────────────────────────────────── */}
-      <aside className="w-64 shrink-0 flex flex-col border-r border-border/60 bg-card/30 backdrop-blur-sm">
-        <div className="shrink-0 h-10 px-3 flex items-center gap-1.5 border-b border-border/60 bg-background/40">
-          <FunctionSquare className="size-3.5 text-primary" />
-          <span className="text-[12px] font-semibold tracking-tight">{t('solverWorkbenchTitle')}</span>
+      <aside className="w-64 shrink-0 flex flex-col border-r border-border bg-sidebar">
+        <div className="shrink-0 h-8 px-3 flex items-center gap-1.5 border-b border-border bg-transparent">
+          <FunctionSquare className="size-3.5 text-muted-foreground" strokeWidth={1.75} />
+          <span className="text-[11px] font-medium tracking-tight">{t('solverWorkbenchTitle')}</span>
         </div>
         <ScrollArea className="flex-1 min-h-0">
           <ul className="p-2 space-y-1">
@@ -1350,10 +1350,10 @@ export function SolverWorkbench() {
       {/* ─── 右侧主区域（响应式：min-w-0 避免窗口缩放/全屏时溢出错位） ── */}
       <main className="flex-1 min-w-0 min-h-0 flex flex-col">
         {/* 标题条 */}
-        <div className="shrink-0 h-11 px-4 flex items-center gap-2 border-b border-border/60 bg-background/30">
-          <active.icon className="size-4 text-primary" />
-          <span className="text-[13px] font-semibold tracking-tight">{t(active.labelKey)}</span>
-          <span className="text-[11px] text-muted-foreground">{t(active.descKey)}</span>
+        <div className="shrink-0 h-9 px-4 flex items-center gap-2 border-b border-border bg-transparent">
+          <active.icon className="size-3.5 text-muted-foreground" strokeWidth={1.75} />
+          <span className="text-[12px] font-medium tracking-tight">{t(active.labelKey)}</span>
+          <span className="text-[10.5px] text-muted-foreground">{t(active.descKey)}</span>
         </div>
 
         <ScrollArea className="flex-1 min-h-0">

@@ -327,7 +327,7 @@ function loadInitial(): Partial<WorkbenchState> {
       previewVisible: typeof data.previewVisible === 'boolean' ? data.previewVisible : true,
       editorVisible: typeof data.editorVisible === 'boolean' ? data.editorVisible : true,
       activePreviewTab: VALID_PREVIEW_TABS.includes(data.activePreviewTab) ? data.activePreviewTab : 'formula',
-      viewMode: VALID_VIEW_MODES.includes(data.viewMode) ? data.viewMode : 'home',
+      viewMode: VALID_VIEW_MODES.includes(data.viewMode) ? data.viewMode : 'workbench',
       activityBarPosition: VALID_AB_POSITIONS.includes(data.activityBarPosition) ? data.activityBarPosition : 'left',
       activityBarLocked: typeof data.activityBarLocked === 'boolean' ? data.activityBarLocked : false,
       activityBarAutoHide: typeof data.activityBarAutoHide === 'boolean' ? data.activityBarAutoHide : false,
@@ -380,8 +380,8 @@ function reviveStoredValue(
 export const useWorkbenchStore = create<WorkbenchState>((set, get) => ({
   editorContent: '',
   inputMode: 'simple',
-  // 新用户默认进入函数输入器；已保存过 'code' 的老用户仍保留自己的选择。
-  inputView: 'demos',
+  // 新用户默认直接进入代码编辑器工作台；函数输入器仍是顶部可切换的入口。
+  inputView: 'code',
   demosExpr: '',
   demosExtraVars: [],
   demosPlotIds: [],
@@ -398,11 +398,11 @@ export const useWorkbenchStore = create<WorkbenchState>((set, get) => ({
   theme: 'dark',
   locale: 'zh-CN',
   activeSidePanel: 'files',
-  sidePanelCollapsed: true,
+  sidePanelCollapsed: false,
   previewVisible: true,
   activePreviewTab: 'formula',
-  // 新用户先看到 Studio 首页（今天想做什么），而不是直接掉进代码编辑器。
-  viewMode: 'home',
+  // 默认直接进入代码编辑器工作台；首页仍保留在活动栏中。
+  viewMode: 'workbench',
   pendingPipelineTemplate: null,
   commandPaletteOpen: false,
   globalCalcOpen: false,
@@ -628,6 +628,22 @@ export const useWorkbenchStore = create<WorkbenchState>((set, get) => ({
     }
     if (Object.keys(initial).length > 0) {
       set(initial);
+      // 一次性 UI 改版迁移：旧用户如果停在首页或函数输入器，升级后先回到
+      // 代码编辑器工作台。迁移只发生一次，之后完全尊重用户自己的选择。
+      let needsRefresh = false;
+      try {
+        const UI_REFRESH_KEY = 'omnimath-ui-refresh-2026-11';
+        if (typeof localStorage !== 'undefined' && !localStorage.getItem(UI_REFRESH_KEY)) {
+          needsRefresh = true;
+          localStorage.setItem(UI_REFRESH_KEY, '1');
+        }
+      } catch {
+        // 隐私模式/存储被禁用时忽略，本会话仍按新默认值启动。
+      }
+      if (needsRefresh) {
+        set({ viewMode: 'workbench', inputView: 'code' });
+        get().saveToStorage();
+      }
       // 主动同步主题类 — light 时移除 dark 类，避免 layout.tsx 硬编码的 dark
       // 类残留造成 light 用户首次加载看到 dark 闪烁。
       if (typeof document !== 'undefined') {

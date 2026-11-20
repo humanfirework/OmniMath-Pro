@@ -108,7 +108,7 @@ function convertUnit(value: number, from: UnitDef, to: UnitDef): number {
 }
 
 const BUTTON_CLASS =
-  'h-11 rounded-xl text-base font-medium transition-all duration-100 active:scale-95 select-none flex items-center justify-center';
+  'h-11 rounded-lg text-base font-medium transition-colors duration-100 select-none flex items-center justify-center';
 
 const MODE_TABS: { mode: CalcMode; icon: React.ComponentType<{ className?: string }>; label: string }[] = [
   { mode: 'basic', icon: Calculator, label: 'Basic' },
@@ -1330,7 +1330,7 @@ export function FloatingCalculator() {
                   transition={{ type: 'spring', stiffness: 320, damping: 32 }}
                   className="overflow-hidden shrink-0"
                 >
-                  <div className="w-[228px] self-stretch h-full rounded-l-xl border border-r-0 border-border bg-card/95 backdrop-blur-xl shadow-2xl flex flex-col">
+                  <div className="w-[228px] self-stretch h-full rounded-l-lg border border-r-0 border-border bg-card shadow-xl flex flex-col">
                     <div
                       onMouseDown={handleDragStart}
                       className={cn(
@@ -1451,7 +1451,7 @@ export function FloatingCalculator() {
             </AnimatePresence>
             <div
               className={cn(
-                'rounded-xl border border-border bg-card/95 backdrop-blur-xl shadow-2xl overflow-hidden flex flex-col relative',
+                'rounded-lg border border-border bg-card shadow-xl overflow-hidden flex flex-col relative',
                 showHistory && 'rounded-l-none border-l-0'
               )}
               style={{ width: panelWidth }}
@@ -2090,7 +2090,7 @@ export function FloatingCalculator() {
                   transition={{ type: 'spring', stiffness: 300, damping: 30 }}
                   className="overflow-hidden shrink-0"
                 >
-                  <div className="w-[200px] h-full ml-2 rounded-xl border border-border bg-card/95 backdrop-blur-xl shadow-2xl p-2 flex flex-col gap-1.5">
+                  <div className="w-[200px] h-full ml-2 rounded-lg border border-border bg-card shadow-xl p-2 flex flex-col gap-1.5">
                     <div className="flex items-center gap-1 px-1 text-[10px] text-muted-foreground">
                       <NotebookPen className="size-3" />
                       <span>{t('qcNotepad')}</span>

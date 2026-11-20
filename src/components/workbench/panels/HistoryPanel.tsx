@@ -111,24 +111,20 @@ function HistoryCard({ result, onLoad, onDelete }: HistoryCardProps) {
   return (
     <motion.div
       layout={false}
-      initial={{ opacity: 0, y: -8, scale: 0.98 }}
-      animate={{ opacity: 1, y: 0, scale: 1 }}
-      exit={{ opacity: 0, x: 24, scale: 0.96 }}
-      transition={{ duration: 0.18, ease: 'easeOut' }}
+      initial={{ opacity: 0 }}
+      animate={{ opacity: 1 }}
+      exit={{ opacity: 0 }}
+      transition={{ duration: 0.12, ease: 'easeOut' }}
       className={cn(
-        'group relative rounded-lg border px-2.5 py-2 shadow-sm transition-shadow',
-        'bg-card/80 hover:shadow-md hover:bg-card',
-        isError
-          ? 'border-destructive/30'
-          : isPlot
-            ? 'border-primary/30'
-            : 'border-border/70',
-        'before:absolute before:left-0 before:top-1.5 before:bottom-1.5 before:w-[3px] before:rounded-full',
+        'group relative rounded-md border px-2.5 py-2 transition-colors',
+        'bg-card hover:bg-accent/30',
+        isError ? 'border-destructive/30' : 'border-border',
+        'before:absolute before:left-0 before:top-1.5 before:bottom-1.5 before:w-[2px] before:rounded-full',
         isError
           ? 'before:bg-destructive/60'
           : isPlot
             ? 'before:bg-primary/60'
-            : 'before:bg-emerald-500/60'
+            : 'before:bg-transparent'
       )}
     >
       {/* Collapsed header — always visible */}

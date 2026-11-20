@@ -54,23 +54,21 @@ export function PracticeGuide() {
       {practice && (
         <motion.div
           key="practice-guide"
-          initial={{ opacity: 0, y: 24, scale: 0.96 }}
-          animate={{ opacity: 1, y: 0, scale: 1 }}
-          exit={{ opacity: 0, y: 24, scale: 0.96 }}
-          transition={{ type: 'spring', stiffness: 280, damping: 26 }}
+          initial={{ opacity: 0, y: 12 }}
+          animate={{ opacity: 1, y: 0 }}
+          exit={{ opacity: 0, y: 12 }}
+          transition={{ duration: 0.18 }}
           className="fixed bottom-5 right-5 z-[90] w-[340px] max-w-[calc(100vw-2.5rem)]"
         >
-          <div className="relative overflow-hidden rounded-2xl border border-primary/25 bg-card/90 p-4 shadow-2xl shadow-black/30 backdrop-blur-xl">
-            {/* 顶部光斑 */}
-            <div className="pointer-events-none absolute -top-10 -right-10 size-32 rounded-full bg-primary/15 blur-3xl" />
+          <div className="relative overflow-hidden rounded-lg border border-border bg-popover p-4 shadow-xl">
 
             {/* 标题 + 关闭 */}
             <div className="flex items-start justify-between gap-2">
               <div className="flex items-center gap-2">
-                <span className="grid size-7 place-items-center rounded-lg bg-primary/15 text-primary">
-                  <Sparkles className="size-4" />
+                <span className="grid size-7 place-items-center rounded-md border border-border text-muted-foreground">
+                  <Sparkles className="size-3.5" strokeWidth={1.75} />
                 </span>
-                <span className="text-[13px] font-semibold text-foreground">
+                <span className="text-[12px] font-medium text-foreground">
                   {done ? '完成啦！' : '动手练习'}
                 </span>
               </div>
@@ -78,9 +76,9 @@ export function PracticeGuide() {
                 type="button"
                 onClick={finish}
                 aria-label="关闭教学"
-                className="grid size-6 place-items-center rounded-md text-muted-foreground hover:bg-accent hover:text-foreground transition-colors"
+                className="grid size-6 place-items-center rounded text-muted-foreground hover:bg-accent hover:text-foreground transition-colors"
               >
-                <X className="size-3.5" />
+                <X className="size-3.5" strokeWidth={1.75} />
               </button>
             </div>
 
@@ -103,10 +101,10 @@ export function PracticeGuide() {
                   <button
                     type="button"
                     onClick={finish}
-                    className="flex items-center gap-1.5 rounded-lg bg-gradient-to-r from-primary to-primary/85 px-4 py-2 text-[12px] font-medium text-primary-foreground shadow-lg shadow-primary/25 transition-transform hover:scale-[1.03]"
+                    className="flex items-center gap-1.5 rounded bg-primary px-4 py-2 text-[11.5px] font-medium text-primary-foreground transition-colors hover:bg-primary/90"
                   >
                     开始使用
-                    <ArrowRight className="size-3.5" />
+                    <ArrowRight className="size-3.5" strokeWidth={1.75} />
                   </button>
                 </motion.div>
               ) : (

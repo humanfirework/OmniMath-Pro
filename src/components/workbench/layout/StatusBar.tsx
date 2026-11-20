@@ -76,16 +76,10 @@ export function StatusBar() {
     <footer
       className={cn(
         'relative shrink-0 h-6 flex items-center justify-between gap-2 px-2',
-        'glass border-t border-border text-[10.5px] font-mono',
+        'bg-background border-t border-border text-[10.5px] font-mono',
         'select-none',
       )}
     >
-      <div
-        aria-hidden
-        className="absolute left-0 top-0 bottom-0 w-0.5 bg-primary"
-        style={{ boxShadow: '0 0 6px oklch(0.7 0.15 165 / 60%)' }}
-      />
-
       {/* Left: command palette + ready */}
       <div className="flex items-center gap-2 pl-1.5">
         <button
@@ -97,8 +91,8 @@ export function StatusBar() {
           <span className="hidden md:inline">{t('menuCommandPalette')}</span>
         </button>
         <span className="text-border hidden sm:inline">|</span>
-        <span className="flex items-center gap-1 text-emerald-500">
-          <span className="size-1.5 rounded-full bg-emerald-500" />
+        <span className="flex items-center gap-1 text-muted-foreground">
+          <span className="size-1.5 rounded-full bg-primary/70" />
           <span className="hidden sm:inline">{t('statusReady')}</span>
         </span>
       </div>
@@ -109,7 +103,7 @@ export function StatusBar() {
           <span>{lineCount} {t('editorLines')}</span>
           <span className="text-border/60">·</span>
           <span className="flex items-center gap-1">
-            <Sigma className="size-2.5 text-primary" />
+            <Sigma className="size-2.5 text-muted-foreground" strokeWidth={1.75} />
             {inputMode}
           </span>
         </div>
@@ -145,7 +139,7 @@ export function StatusBar() {
         </span>
 
         <span className="flex items-center gap-1.5 px-1.5 text-muted-foreground">
-          {theme === 'dark' ? <Moon className="size-2.5" /> : <Sun className="size-2.5 text-amber-500" />}
+          {theme === 'dark' ? <Moon className="size-2.5" strokeWidth={1.75} /> : <Sun className="size-2.5" strokeWidth={1.75} />}
           <span className="hidden sm:flex items-center gap-1">
             <Languages className="size-2.5" />
             {locale === 'zh-CN' ? '中' : 'EN'}
@@ -180,7 +174,7 @@ export function StatusBar() {
             </div>
 
             {conflicts.length === 0 ? (
-              <div className="flex items-center gap-2 px-3 py-4 text-xs text-emerald-500">
+              <div className="flex items-center gap-2 px-3 py-4 text-xs text-muted-foreground">
                 <CheckCircle2 className="size-3.5" />
                 {t('statusNoConflicts')}
               </div>

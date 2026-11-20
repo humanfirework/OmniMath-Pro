@@ -3686,6 +3686,14 @@ svg *::after {
   --radius-md: calc(var(--radius) - 2px);
   --radius-lg: var(--radius);
   --radius-xl: calc(var(--radius) + 4px);
+  /* 收敛超大圆角：参考编辑器界面以 4–10px 为主，卡片不再像气泡 */
+  --radius-2xl: 0.625rem;
+  --radius-3xl: 0.75rem;
+
+  /* 收敛阴影：更低、更紧、更中性，去掉“浮夸卡片”的悬浮感 */
+  --shadow-lg: 0 4px 14px -6px oklch(0 0 0 / 14%);
+  --shadow-xl: 0 8px 22px -10px oklch(0 0 0 / 18%);
+  --shadow-2xl: 0 12px 30px -14px oklch(0 0 0 / 22%);
 }
 
 /* ------------------------------------------------------------
@@ -4283,24 +4291,24 @@ svg *::after {
    body/main 等没有 .dark 类的中间祖先，导致深色模式下暖色规则也被应用。
    ------------------------------------------------------------ */
 html:not(.dark) .ai-panel {
-  background: oklch(0.96 0.012 75);
+  background: var(--background);
 }
 html:not(.dark) .ai-panel .border-border\/60 {
-  border-color: oklch(0.88 0.015 70) !important;
+  border-color: var(--border) !important;
 }
 /* 暖色表面：覆盖 bg-muted/20、/30、/50 在白天模式下的冷灰底 */
 html:not(.dark) .ai-panel .bg-muted\/20 {
-  background-color: oklch(0.93 0.014 70) !important;
+  background-color: color-mix(in oklab, var(--muted) 45%, transparent) !important;
 }
 html:not(.dark) .ai-panel .bg-muted\/30 {
-  background-color: oklch(0.91 0.016 70) !important;
+  background-color: color-mix(in oklab, var(--muted) 60%, transparent) !important;
 }
 html:not(.dark) .ai-panel .bg-muted\/50 {
-  background-color: oklch(0.94 0.012 75) !important;
+  background-color: color-mix(in oklab, var(--muted) 75%, transparent) !important;
 }
-/* 输入框聚焦边框沿用暖色调 */
+/* 输入框聚焦边框沿用中性强调色 */
 html:not(.dark) .ai-panel .focus-within\:border-primary\/40:focus-within {
-  border-color: oklch(0.7 0.1 75) !important;
+  border-color: var(--ring) !important;
 }
 
 /* ------------------------------------------------------------
@@ -5043,39 +5051,360 @@ html[data-font-preset="system"] {
 /* AI 面板 — 玻璃质感深色配色（统一使用全局 --primary 色系） */
 .dark .ai-panel {
   background: var(--background);
-  --ai-user-bg: color-mix(in oklab, var(--primary) 22%, transparent);
+  --ai-user-bg: color-mix(in oklab, var(--primary) 14%, transparent);
   --ai-user-fg: var(--foreground);
-  --ai-user-border: color-mix(in oklab, var(--primary) 42%, transparent);
+  --ai-user-border: color-mix(in oklab, var(--primary) 28%, transparent);
   --ai-assistant-bg: color-mix(in oklab, var(--muted) 70%, transparent);
   --ai-assistant-fg: var(--foreground);
   --ai-assistant-border: var(--border);
-  --ai-card-bg: color-mix(in oklab, var(--primary) 10%, transparent);
-  --ai-card-border: color-mix(in oklab, var(--primary) 25%, transparent);
+  --ai-card-bg: color-mix(in oklab, var(--muted) 45%, transparent);
+  --ai-card-border: var(--border);
   --ai-input-bg: color-mix(in oklab, var(--muted) 80%, transparent);
   --ai-input-border: var(--border);
-  --ai-tool-bg: color-mix(in oklab, var(--primary) 10%, transparent);
-  --ai-tool-border: color-mix(in oklab, var(--primary) 22%, transparent);
+  --ai-tool-bg: color-mix(in oklab, var(--muted) 45%, transparent);
+  --ai-tool-border: var(--border);
   --ai-quick-bg: color-mix(in oklab, var(--muted) 55%, transparent);
   --ai-quick-border: var(--border);
-  --ai-quick-hover-bg: color-mix(in oklab, var(--primary) 14%, transparent);
-  --ai-quick-hover-border: color-mix(in oklab, var(--primary) 38%, transparent);
+  --ai-quick-hover-bg: var(--accent);
+  --ai-quick-hover-border: var(--border);
 }
 /* 亮色模式（默认）— CSS 变量必须定义在 :root/.ai-panel 上，供未进入 html:not(.dark) 分支时回退 */
 .ai-panel {
-  --ai-user-bg: color-mix(in oklab, var(--primary) 18%, transparent);
+  --ai-user-bg: color-mix(in oklab, var(--primary) 12%, transparent);
   --ai-user-fg: var(--foreground);
-  --ai-user-border: color-mix(in oklab, var(--primary) 35%, transparent);
-  --ai-assistant-bg: color-mix(in oklab, var(--muted) 75%, transparent);
+  --ai-user-border: color-mix(in oklab, var(--primary) 26%, transparent);
+  --ai-assistant-bg: color-mix(in oklab, var(--muted) 60%, transparent);
   --ai-assistant-fg: var(--foreground);
   --ai-assistant-border: var(--border);
-  --ai-card-bg: color-mix(in oklab, var(--primary) 8%, transparent);
-  --ai-card-border: color-mix(in oklab, var(--primary) 22%, transparent);
-  --ai-input-bg: color-mix(in oklab, var(--card) 85%, transparent);
+  --ai-card-bg: color-mix(in oklab, var(--muted) 40%, transparent);
+  --ai-card-border: var(--border);
+  --ai-input-bg: var(--card);
   --ai-input-border: var(--border);
-  --ai-tool-bg: color-mix(in oklab, var(--primary) 8%, transparent);
-  --ai-tool-border: color-mix(in oklab, var(--primary) 20%, transparent);
+  --ai-tool-bg: color-mix(in oklab, var(--muted) 40%, transparent);
+  --ai-tool-border: var(--border);
   --ai-quick-bg: color-mix(in oklab, var(--muted) 45%, transparent);
   --ai-quick-border: var(--border);
-  --ai-quick-hover-bg: color-mix(in oklab, var(--primary) 16%, transparent);
-  --ai-quick-hover-border: color-mix(in oklab, var(--primary) 42%, transparent);
+  --ai-quick-hover-bg: var(--accent);
+  --ai-quick-hover-border: var(--border);
 }
+
+/* ==================================================================
+   QUIET EDITOR REFRESH — 2026-11
+   参考专业排版编辑器：暖中性表面、极细边框、低饱和青绿强调、
+   静态表面替代玻璃/发光，统一双主题与动效。
+   ================================================================== */
+
+:root {
+  --radius: 0.5rem;
+
+  --motion-fast: 100ms;
+  --motion-normal: 140ms;
+  --motion-slow: 200ms;
+  --motion-ease: cubic-bezier(0.2, 0, 0, 1);
+  --motion-spring: cubic-bezier(0.2, 0, 0, 1);
+
+  --background: oklch(0.965 0.006 80);
+  --foreground: oklch(0.26 0.006 80);
+  --canvas: oklch(0.945 0.006 80);
+  --card: oklch(0.992 0.003 80);
+  --card-foreground: oklch(0.26 0.006 80);
+  --popover: oklch(0.995 0.002 80);
+  --popover-foreground: oklch(0.26 0.006 80);
+
+  --primary: oklch(0.52 0.06 172);
+  --primary-foreground: oklch(0.99 0.002 80);
+  --primary-bg-soft: oklch(0.52 0.06 172 / 7%);
+  --primary-shadow: oklch(0.52 0.06 172 / 10%);
+
+  --secondary: oklch(0.94 0.005 80);
+  --secondary-foreground: oklch(0.3 0.006 80);
+  --muted: oklch(0.935 0.005 80);
+  --muted-foreground: oklch(0.5 0.008 80);
+  --accent: oklch(0.925 0.008 170);
+  --accent-foreground: oklch(0.28 0.006 80);
+
+  --destructive: oklch(0.58 0.17 25);
+  --destructive-foreground: oklch(0.99 0 0);
+  --success: oklch(0.56 0.1 155);
+  --success-foreground: oklch(0.99 0 0);
+
+  --border: oklch(0.885 0.006 80);
+  --input: oklch(0.86 0.006 80);
+  --ring: oklch(0.52 0.06 172);
+
+  --chart-1: oklch(0.52 0.08 172);
+  --chart-2: oklch(0.66 0.09 75);
+  --chart-3: oklch(0.58 0.12 20);
+  --chart-4: oklch(0.52 0.08 300);
+  --chart-5: oklch(0.55 0.07 230);
+
+  --sidebar: oklch(0.955 0.005 80);
+  --sidebar-foreground: oklch(0.28 0.006 80);
+  --sidebar-primary: oklch(0.52 0.06 172);
+  --sidebar-primary-foreground: oklch(0.99 0 0);
+  --sidebar-accent: oklch(0.915 0.008 170);
+  --sidebar-accent-foreground: oklch(0.28 0.006 80);
+  --sidebar-border: oklch(0.885 0.006 80);
+  --sidebar-ring: oklch(0.52 0.06 172);
+
+  --teal: oklch(0.52 0.06 172);
+  --teal-foreground: oklch(0.99 0 0);
+  --amber: oklch(0.66 0.09 75);
+  --rose: oklch(0.58 0.12 20);
+  --node-bg: oklch(0.992 0.003 80);
+  --node-border: oklch(0.87 0.006 80);
+  --connector: oklch(0.52 0.06 172);
+
+  --editor-bg: oklch(0.975 0.004 80);
+  --editor-gutter: oklch(0.955 0.005 80);
+  --editor-active-line: oklch(0.55 0.006 80 / 6%);
+  --editor-selection: oklch(0.52 0.06 172 / 16%);
+  --preview-canvas: oklch(0.94 0.006 80);
+  --paper: oklch(0.995 0.003 80);
+  --paper-foreground: oklch(0.22 0.006 80);
+
+  --syntax-comment: #6f7a6b;
+  --syntax-keyword: #7d618b;
+  --syntax-function: #80652f;
+  --syntax-variable: #3f4a55;
+  --syntax-number: #4f6b4c;
+  --syntax-string: #8a5a48;
+  --syntax-operator: #4a4741;
+  --syntax-punctuation: #7a756d;
+  --syntax-constant: #3f7f75;
+  --syntax-bool: #3e5f86;
+  --syntax-type: #3f7f75;
+  --syntax-property: #3f4a55;
+  --syntax-bracket: #7a5f2a;
+}
+
+.dark {
+  --radius: 0.5rem;
+
+  --background: oklch(0.185 0.005 80);
+  --foreground: oklch(0.9 0.006 80);
+  --canvas: oklch(0.16 0.005 80);
+  --card: oklch(0.215 0.005 80);
+  --card-foreground: oklch(0.9 0.006 80);
+  --popover: oklch(0.24 0.005 80);
+  --popover-foreground: oklch(0.9 0.006 80);
+
+  --primary: oklch(0.72 0.055 172);
+  --primary-foreground: oklch(0.16 0.004 80);
+  --primary-bg-soft: oklch(0.72 0.055 172 / 6%);
+  --primary-shadow: oklch(0.72 0.055 172 / 10%);
+
+  --secondary: oklch(0.25 0.005 80);
+  --secondary-foreground: oklch(0.9 0.006 80);
+  --muted: oklch(0.255 0.005 80);
+  --muted-foreground: oklch(0.66 0.006 80);
+  --accent: oklch(0.285 0.006 80);
+  --accent-foreground: oklch(0.9 0.006 80);
+
+  --destructive: oklch(0.67 0.16 25);
+  --destructive-foreground: oklch(0.99 0 0);
+  --success: oklch(0.7 0.09 155);
+  --success-foreground: oklch(0.16 0.004 80);
+
+  --border: oklch(1 0 0 / 8%);
+  --input: oklch(1 0 0 / 10%);
+  --ring: oklch(0.72 0.055 172);
+
+  --chart-1: oklch(0.72 0.07 172);
+  --chart-2: oklch(0.78 0.08 75);
+  --chart-3: oklch(0.68 0.12 20);
+  --chart-4: oklch(0.7 0.08 300);
+  --chart-5: oklch(0.7 0.06 230);
+
+  --sidebar: oklch(0.175 0.005 80);
+  --sidebar-foreground: oklch(0.87 0.006 80);
+  --sidebar-primary: oklch(0.72 0.055 172);
+  --sidebar-primary-foreground: oklch(0.16 0.004 80);
+  --sidebar-accent: oklch(0.255 0.006 80);
+  --sidebar-accent-foreground: oklch(0.9 0.006 80);
+  --sidebar-border: oklch(1 0 0 / 7%);
+  --sidebar-ring: oklch(0.72 0.055 172);
+
+  --teal: oklch(0.72 0.055 172);
+  --teal-foreground: oklch(0.16 0.004 80);
+  --amber: oklch(0.78 0.08 75);
+  --rose: oklch(0.68 0.12 20);
+  --node-bg: oklch(0.215 0.005 80);
+  --node-border: oklch(1 0 0 / 12%);
+  --connector: oklch(0.72 0.055 172);
+
+  --editor-bg: oklch(0.19 0.005 80);
+  --editor-gutter: oklch(0.17 0.005 80);
+  --editor-active-line: oklch(1 0 0 / 4%);
+  --editor-selection: oklch(0.72 0.055 172 / 18%);
+  --preview-canvas: oklch(0.225 0.005 80);
+  --paper: oklch(0.975 0.004 80);
+  --paper-foreground: oklch(0.2 0.006 80);
+
+  --syntax-comment: #7f8a7f;
+  --syntax-keyword: #b9a3c4;
+  --syntax-function: #c9b77e;
+  --syntax-variable: #cfc9bf;
+  --syntax-number: #a9c3a2;
+  --syntax-string: #c9a58e;
+  --syntax-operator: #b5aea3;
+  --syntax-punctuation: #8b857b;
+  --syntax-constant: #8fbfb6;
+  --syntax-bool: #9fb8cf;
+  --syntax-type: #8fbfb6;
+  --syntax-property: #b9c7c9;
+  --syntax-bracket: #c9b77e;
+}
+
+/* 静态表面替代玻璃：去掉 backdrop-filter（最明显的 GPU 开销之一） */
+.glass,
+.glass-strong {
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
+  background: var(--background);
+  border-color: var(--border);
+}
+.dark .glass,
+.dark .glass-strong {
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
+  background: var(--background);
+  border-color: var(--border);
+}
+
+/* 旧版“高级感”工具类全部降噪 */
+.text-gradient,
+.text-gradient-teal,
+.text-gradient-amber,
+.text-gradient-rose {
+  background: none;
+  background-image: none;
+  -webkit-background-clip: initial;
+  background-clip: initial;
+  color: inherit;
+  -webkit-text-fill-color: currentColor;
+}
+.glow-card-teal,
+.dark .glow-card-teal {
+  box-shadow: none;
+  border-color: var(--border) !important;
+  background: var(--card) !important;
+}
+.formula-card-glow {
+  border: 1px solid var(--border);
+  background: var(--card);
+}
+.formula-card-glow::after {
+  display: none;
+}
+.gradient-border-teal {
+  background: var(--card);
+}
+.gradient-border-teal::before {
+  display: none;
+}
+.animate-glow-pulse {
+  animation: none;
+}
+.activity-indicator {
+  box-shadow: none;
+}
+
+/* 网格背景保留，但不再无限平移 */
+.grid-bg,
+.dark .grid-bg,
+.grid-bg-dots {
+  animation: none;
+}
+
+/* 选中态、命令面板、滚动条统一到低饱和中性 */
+[cmdk-item][data-selected='true'],
+.dark [cmdk-item][data-selected='true'] {
+  background: var(--accent);
+}
+
+::selection {
+  background: var(--editor-selection);
+  color: inherit;
+}
+.dark ::selection {
+  background: var(--editor-selection);
+  color: inherit;
+}
+
+* {
+  scrollbar-width: thin;
+  scrollbar-color: color-mix(in oklab, var(--foreground) 18%, transparent) transparent;
+}
+::-webkit-scrollbar {
+  width: 9px;
+  height: 9px;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+::-webkit-scrollbar-thumb {
+  background: color-mix(in oklab, var(--foreground) 16%, transparent);
+  border: 2px solid transparent;
+  border-radius: 999px;
+  background-clip: padding-box;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: color-mix(in oklab, var(--foreground) 26%, transparent);
+  background-clip: padding-box;
+}
+
+/* 旧版硬编码深色文字覆盖改为 token，避免和新主题打架 */
+.dark .text-foreground,
+.dark .text-foreground\/80,
+.dark .text-foreground\/85,
+.dark .text-foreground\/90,
+.dark .text-contrast-safe {
+  color: var(--foreground);
+}
+.dark .text-muted-foreground,
+.dark .text-muted-foreground\/70,
+.dark .text-muted-foreground\/80,
+.dark .text-muted-foreground\/50,
+.dark .text-muted-foreground\/60 {
+  color: var(--muted-foreground);
+}
+.dark code,
+.dark pre {
+  color: var(--foreground);
+}
+
+/* 共用排版工具 */
+.section-label {
+  font-size: 9.5px;
+  line-height: 1.2;
+  font-weight: 500;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--muted-foreground);
+}
+.chrome-icon {
+  width: 14px;
+  height: 14px;
+  stroke-width: 1.75;
+}
+
+/* 活动栏图标统一细线宽，避免 Lucide 默认 2px 显得“粗壮” */
+.activity-bar svg {
+  stroke-width: 1.75;
+}
+
+/* 遗留毛玻璃全部降级为实色：backdrop-filter 是移动端与低端 GPU 上
+   最昂贵的合成操作之一，工具浮层改成实色后既安静也更流畅。 */
+.backdrop-blur,
+.backdrop-blur-xs,
+.backdrop-blur-sm,
+.backdrop-blur-md,
+.backdrop-blur-lg,
+.backdrop-blur-xl,
+.backdrop-blur-2xl,
+.backdrop-blur-3xl {
+  -webkit-backdrop-filter: none;
+  backdrop-filter: none;
+}
+

@@ -709,10 +709,10 @@ export function Plot3DPanel() {
           {surfaces.length > 0 && (
             <button
               onClick={() => setExpandOpen(true)}
-              className="absolute right-2 top-2 z-20 flex items-center gap-1.5 rounded-md border border-border/60 bg-background/80 px-2.5 py-1.5 text-xs text-primary backdrop-blur-sm transition-colors hover:bg-primary/10 hover:border-primary/40"
+              className="absolute right-2 top-2 z-20 flex items-center gap-1.5 rounded-md border border-border bg-popover px-2.5 py-1.5 text-[11px] text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
               aria-label={t('plot3dZoomInAria')}
             >
-              <Maximize2 className="h-3.5 w-3.5" />
+              <Maximize2 className="h-3.5 w-3.5" strokeWidth={1.75} />
               <span className="hidden sm:inline">{t('plot3dZoomIn')}</span>
             </button>
           )}
@@ -728,9 +728,9 @@ export function Plot3DPanel() {
 
           {/* Hint overlay (bottom-left) when surfaces exist */}
           {surfaces.length > 0 && (
-            <div className="pointer-events-none absolute bottom-2 left-2 z-10 select-none rounded-md border border-border/40 bg-background/70 px-2 py-1 text-[10px] text-foreground/70 backdrop-blur-sm">
+            <div className="pointer-events-none absolute bottom-2 left-2 z-10 select-none rounded border border-border bg-popover px-2 py-1 text-[10px] text-muted-foreground">
               <span className="flex items-center gap-1">
-                <Settings2 className="h-2.5 w-2.5" />
+                <Settings2 className="h-2.5 w-2.5" strokeWidth={1.75} />
                 {t('plot3dControlsHint')}
               </span>
             </div>
@@ -745,14 +745,14 @@ export function Plot3DPanel() {
       {expandOpen && typeof document !== 'undefined' && createPortal(
         (
           <div
-            className="fixed inset-0 z-[200] flex flex-col bg-background/95 backdrop-blur-md"
+            className="fixed inset-0 z-[200] flex flex-col bg-background"
             role="dialog"
             aria-modal="true"
             aria-label={t('plot3dExpandAria')}
           >
-            <div className="flex items-center justify-between border-b border-border/60 bg-background/80 px-4 py-2.5 backdrop-blur">
+            <div className="flex items-center justify-between border-b border-border bg-background px-4 py-2">
               <div className="flex items-center gap-3">
-                <h2 className="text-sm font-semibold text-foreground">{t('plot3dExpandTitle')}</h2>
+                <h2 className="text-[12.5px] font-medium text-foreground">{t('plot3dExpandTitle')}</h2>
                 <span className="text-xs text-muted-foreground">
                   {tf('plot3dExpandSubtitle', { n: surfaces.length })}
                 </span>
@@ -921,7 +921,7 @@ function SurfaceErrorState({ errors }: { errors: SurfaceError[] }) {
 function SurfaceErrorOverlay({ errors }: { errors: SurfaceError[] }) {
   const t = useT();
   return (
-    <div className="absolute left-2 top-2 z-20 flex max-w-xs flex-col gap-1 rounded-md border border-rose-500/50 bg-background/90 p-1.5 text-left shadow-lg backdrop-blur-sm">
+    <div className="absolute left-2 top-2 z-20 flex max-w-xs flex-col gap-1 rounded-md border border-destructive/40 bg-popover p-1.5 text-left shadow-lg">
       <div className="flex items-center gap-1.5 text-[11px] font-medium text-rose-500">
         <AlertTriangle className="h-3 w-3" />
         <span>{tf('plot3dSurfacesFailed', { n: errors.length })}</span>

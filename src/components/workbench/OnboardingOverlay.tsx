@@ -405,33 +405,25 @@ export function OnboardingOverlay() {
                       key={ex.id}
                       type="button"
                       onClick={() => handleExample(ex.id)}
-                      initial={{ opacity: 0, y: 16 }}
+                      initial={{ opacity: 0, y: 12 }}
                       animate={{ opacity: 1, y: 0 }}
-                      transition={{ delay: 0.1 + i * 0.07, type: 'spring', stiffness: 300, damping: 24 }}
-                      whileHover={{ y: -3, scale: 1.015 }}
-                      whileTap={{ scale: 0.98 }}
-                      className="group relative flex items-start gap-3 rounded-2xl border border-border/70 bg-card/80 p-4 text-left shadow-sm transition-colors hover:border-primary/40 hover:bg-card"
+                      transition={{ delay: 0.08 + i * 0.05, duration: 0.18 }}
+                      className="group relative flex items-start gap-3 rounded-lg border border-border bg-card p-4 text-left transition-colors hover:bg-accent/40"
                     >
-                      <div
-                        className="grid size-10 shrink-0 place-items-center rounded-xl"
-                        style={{ backgroundColor: `color-mix(in oklab, ${ex.accent} 14%, transparent)`, color: ex.accent }}
-                      >
-                        <Icon className="size-5" />
+                      <div className="grid size-9 shrink-0 place-items-center rounded-md border border-border text-muted-foreground">
+                        <Icon className="size-4" strokeWidth={1.75} />
                       </div>
                       <div className="min-w-0 flex-1">
                         <div className="flex items-center gap-2">
-                          <span className="text-[13px] font-semibold text-foreground">{ex.title}</span>
-                          <span
-                            className="rounded px-1.5 py-px text-[9.5px] font-medium"
-                            style={{ backgroundColor: `color-mix(in oklab, ${ex.accent} 12%, transparent)`, color: ex.accent }}
-                          >
+                          <span className="text-[12.5px] font-medium text-foreground">{ex.title}</span>
+                          <span className="rounded-[3px] border border-border px-1.5 py-px text-[9px] text-muted-foreground">
                             {ex.tag}
                           </span>
                         </div>
-                        <p className="mt-1 text-[11.5px] leading-relaxed text-muted-foreground">{ex.desc}</p>
-                        <span className="mt-2 inline-flex items-center gap-1 text-[11px] font-medium text-primary opacity-0 transition-opacity group-hover:opacity-100">
+                        <p className="mt-1 text-[11px] leading-relaxed text-muted-foreground">{ex.desc}</p>
+                        <span className="mt-2 inline-flex items-center gap-1 text-[10.5px] text-muted-foreground opacity-0 transition-opacity group-hover:opacity-100">
                           打开示例
-                          <ArrowRight className="size-3" />
+                          <ArrowRight className="size-3" strokeWidth={1.75} />
                         </span>
                       </div>
                     </motion.button>
@@ -451,35 +443,31 @@ export function OnboardingOverlay() {
                 <button
                   type="button"
                   onClick={() => setStep((s) => s - 1)}
-                  className="inline-flex items-center gap-1.5 rounded-xl border border-border bg-background/60 px-5 py-2.5 text-[13px] font-medium text-muted-foreground transition-colors hover:text-foreground"
+                  className="inline-flex items-center gap-1.5 rounded border border-border px-5 py-2 text-[12px] font-medium text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
                 >
-                  <ArrowLeft className="size-4" />
+                  <ArrowLeft className="size-4" strokeWidth={1.75} />
                   上一步
                 </button>
               )}
 
               {step < lastStep ? (
-                <motion.button
+                <button
                   type="button"
                   onClick={onPrimary}
-                  whileHover={{ scale: 1.03 }}
-                  whileTap={{ scale: 0.97 }}
-                  className="inline-flex items-center gap-2 rounded-xl bg-gradient-to-r from-primary to-primary/85 px-6 py-2.5 text-[13px] font-medium text-primary-foreground shadow-lg shadow-primary/25"
+                  className="inline-flex items-center gap-2 rounded bg-primary px-6 py-2 text-[12px] font-medium text-primary-foreground transition-colors hover:bg-primary/90"
                 >
                   下一步
-                  <ArrowRight className="size-4" />
-                </motion.button>
+                  <ArrowRight className="size-4" strokeWidth={1.75} />
+                </button>
               ) : (
-                <motion.button
+                <button
                   type="button"
                   onClick={onPrimary}
-                  whileHover={{ scale: 1.03 }}
-                  whileTap={{ scale: 0.97 }}
-                  className="inline-flex items-center gap-2 rounded-xl bg-gradient-to-r from-primary to-primary/85 px-6 py-2.5 text-[13px] font-medium text-primary-foreground shadow-lg shadow-primary/25"
+                  className="inline-flex items-center gap-2 rounded bg-primary px-6 py-2 text-[12px] font-medium text-primary-foreground transition-colors hover:bg-primary/90"
                 >
-                  <Play className="size-4" fill="currentColor" />
+                  <Play className="size-4" fill="currentColor" strokeWidth={1.75} />
                   开始练习
-                </motion.button>
+                </button>
               )}
 
               <button

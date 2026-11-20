@@ -25,7 +25,6 @@ import { useEffect, useMemo } from 'react';
 import { useWorkbenchStore } from '@/lib/store/workbench';
 import { useFileSystemStore } from '@/lib/store/fileSystemStore';
 import { useLocale } from '@/lib/i18n';
-import { cn } from '@/lib/utils';
 
 type StudioAction =
   | 'codePlot'
@@ -114,17 +113,6 @@ const ICONS: Record<StudioAction, typeof Code2> = {
   stats: BarChart3,
   solver: FunctionSquare,
   control: CircleGauge,
-};
-
-const TONES: Record<StudioAction, string> = {
-  codePlot: 'bg-sky-500/10 text-sky-500',
-  functionPlot: 'bg-emerald-500/10 text-emerald-500',
-  whiteboard: 'bg-violet-500/10 text-violet-500',
-  pipeline: 'bg-amber-500/10 text-amber-500',
-  linalg: 'bg-cyan-500/10 text-cyan-500',
-  stats: 'bg-rose-500/10 text-rose-500',
-  solver: 'bg-indigo-500/10 text-indigo-500',
-  control: 'bg-teal-500/10 text-teal-500',
 };
 
 /** 短相对时间，例如「刚刚」「12 分钟前」「3 天前」。 */
@@ -254,22 +242,22 @@ export function StudioHome() {
         key={action}
         type="button"
         onClick={() => open(action)}
-        className="group relative flex min-h-[112px] flex-col items-start gap-3 rounded-2xl border border-border/60 bg-card/40 p-4 text-left transition-all hover:-translate-y-0.5 hover:border-primary/40 hover:bg-card/70 hover:shadow-lg hover:shadow-black/5 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40"
+        className="group relative flex min-h-[104px] flex-col items-start gap-3 rounded-lg border border-border bg-card p-4 text-left transition-colors hover:bg-accent/40 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
       >
         <div className="flex w-full items-start justify-between gap-2">
-          <span className={cn('grid size-9 place-items-center rounded-xl', TONES[action])}>
-            <Icon className="size-[18px]" />
+          <span className="grid size-8 place-items-center rounded-md border border-border text-muted-foreground">
+            <Icon className="size-4" strokeWidth={1.75} />
           </span>
-          <span className="rounded-full border border-border/60 px-2 py-0.5 text-[9px] text-muted-foreground">
+          <span className="rounded-[3px] border border-border px-1.5 py-0.5 font-mono text-[9px] uppercase tracking-wide text-muted-foreground">
             {card.tag}
           </span>
         </div>
         <div className="min-w-0">
-          <div className="flex items-center gap-1 text-sm font-medium text-foreground">
+          <div className="flex items-center gap-1 text-[13px] font-medium text-foreground">
             {card.title}
-            <ArrowRight className="size-3.5 -translate-x-1 text-muted-foreground opacity-0 transition-all group-hover:translate-x-0 group-hover:opacity-100" />
+            <ArrowRight className="size-3 -translate-x-0.5 text-muted-foreground opacity-0 transition-opacity group-hover:translate-x-0 group-hover:opacity-100" strokeWidth={1.75} />
           </div>
-          <p className="mt-1 text-xs leading-relaxed text-muted-foreground">{card.desc}</p>
+          <p className="mt-1 text-[11.5px] leading-relaxed text-muted-foreground">{card.desc}</p>
         </div>
       </button>
     );
@@ -279,20 +267,20 @@ export function StudioHome() {
     <div className="h-full w-full overflow-auto bg-background">
       {/* 手机端底部有悬浮计算器 FAB：多留一段底部空白，
           滚到底时最后一张卡片不会被 FAB 长期压住。 */}
-      <div className="mx-auto flex max-w-6xl flex-col gap-8 px-5 pt-8 pb-28 sm:px-8 md:pb-8">
+      <div className="mx-auto flex max-w-6xl flex-col gap-8 px-5 pt-10 pb-28 sm:px-8 md:pb-10">
         <header className="flex flex-wrap items-start justify-between gap-4">
           <div className="flex items-start gap-3">
-            <div className="grid size-11 place-items-center rounded-2xl bg-primary/10 text-foreground">
-              <House className="size-5" />
+            <div className="grid size-9 place-items-center rounded-md border border-border text-muted-foreground">
+              <House className="size-4" strokeWidth={1.75} />
             </div>
             <div>
               <div className="text-[10px] font-medium uppercase tracking-[0.18em] text-muted-foreground">
                 {copy.eyebrow}
               </div>
-              <h1 className="mt-1 text-2xl font-semibold tracking-tight text-foreground sm:text-3xl">
+              <h1 className="mt-1.5 text-xl font-semibold tracking-tight text-foreground sm:text-2xl">
                 {copy.title}
               </h1>
-              <p className="mt-1 max-w-2xl text-sm leading-relaxed text-muted-foreground">
+              <p className="mt-1.5 max-w-2xl text-[12.5px] leading-relaxed text-muted-foreground">
                 {copy.subtitle}
               </p>
             </div>
@@ -301,9 +289,9 @@ export function StudioHome() {
             <button
               type="button"
               onClick={() => setCommandPaletteOpen(true)}
-              className="inline-flex h-8 items-center gap-1.5 rounded-lg border border-border/60 bg-background px-3 text-xs text-muted-foreground transition-colors hover:bg-accent/60 hover:text-foreground"
+              className="inline-flex h-8 items-center gap-1.5 rounded border border-border bg-transparent px-3 text-[11.5px] text-muted-foreground transition-colors hover:bg-accent/60 hover:text-foreground"
             >
-              <Command className="size-3.5" />
+              <Command className="size-3.5" strokeWidth={1.75} />
               {copy.command}
             </button>
             {/* 手机端由底部标签负责切到编辑器/画布，「返回工作台」在移动端
@@ -311,30 +299,27 @@ export function StudioHome() {
             <button
               type="button"
               onClick={() => setViewMode('workbench')}
-              className="hidden md:inline-flex h-8 items-center gap-1.5 rounded-lg bg-primary px-3 text-xs font-medium text-white transition-colors hover:bg-primary/90"
+              className="hidden md:inline-flex h-8 items-center gap-1.5 rounded bg-primary px-3 text-[11.5px] font-medium text-primary-foreground transition-colors hover:bg-primary/90"
             >
               {copy.back}
             </button>
           </div>
         </header>
 
-        <section className="relative overflow-hidden rounded-3xl border border-primary/20 bg-gradient-to-br from-primary/12 via-primary/5 to-transparent px-5 py-5 sm:px-6">
-          <div className="pointer-events-none absolute -right-8 -top-10 size-40 rounded-full bg-primary/15 blur-3xl" />
-          <div className="relative flex flex-wrap items-center gap-3">
-            <Sparkles className="size-4 text-muted-foreground" />
-            <p className="text-sm text-foreground/80">{copy.hint}</p>
-          </div>
+        <section className="flex flex-wrap items-center gap-2.5 rounded-lg border border-border bg-card px-4 py-3">
+          <Sparkles className="size-3.5 text-muted-foreground" strokeWidth={1.75} />
+          <p className="text-[12.5px] text-muted-foreground">{copy.hint}</p>
         </section>
 
         <section className="space-y-3">
-          <h2 className="text-xs font-semibold uppercase tracking-[0.16em] text-muted-foreground">
+          <h2 className="text-[10.5px] font-medium uppercase tracking-[0.16em] text-muted-foreground">
             {copy.teaching}
           </h2>
           <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">{TEACHING.map(renderCard)}</div>
         </section>
 
         <section className="space-y-3">
-          <h2 className="text-xs font-semibold uppercase tracking-[0.16em] text-muted-foreground">
+          <h2 className="text-[10.5px] font-medium uppercase tracking-[0.16em] text-muted-foreground">
             {copy.basics}
           </h2>
           <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">{BASICS.map(renderCard)}</div>
@@ -342,7 +327,7 @@ export function StudioHome() {
 
         {recentItems.length > 0 && (
           <section className="space-y-3">
-            <h2 className="text-xs font-semibold uppercase tracking-[0.16em] text-muted-foreground">
+            <h2 className="text-[10.5px] font-medium uppercase tracking-[0.16em] text-muted-foreground">
               {copy.recent}
             </h2>
             <div className="grid gap-2 sm:grid-cols-2 xl:grid-cols-4">
@@ -353,17 +338,10 @@ export function StudioHome() {
                     key={`${item.kind}-${item.id}`}
                     type="button"
                     onClick={() => openRecent(item)}
-                    className="group flex min-w-0 items-center gap-2.5 rounded-xl border border-border/60 bg-card/30 px-3 py-2.5 text-left transition-colors hover:border-primary/40 hover:bg-card/60"
+                    className="group flex min-w-0 items-center gap-2.5 rounded-md border border-border bg-transparent px-3 py-2.5 text-left transition-colors hover:bg-accent/40"
                   >
-                    <span
-                      className={cn(
-                        'grid size-8 shrink-0 place-items-center rounded-lg',
-                        item.kind === 'file'
-                          ? 'bg-sky-500/10 text-sky-500'
-                          : 'bg-emerald-500/10 text-emerald-500',
-                      )}
-                    >
-                      <Icon className="size-4" />
+                    <span className="grid size-7 shrink-0 place-items-center rounded border border-border text-muted-foreground">
+                      <Icon className="size-3.5" strokeWidth={1.75} />
                     </span>
                     <span className="min-w-0 flex-1">
                       <span className="block truncate text-xs font-medium text-foreground">{item.title}</span>

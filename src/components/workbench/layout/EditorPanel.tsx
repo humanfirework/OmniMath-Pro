@@ -33,7 +33,6 @@ import {
   useRef,
   useState,
 } from 'react';
-import { motion, AnimatePresence } from 'framer-motion';
 import {
   Play,
   Eraser,
@@ -93,7 +92,7 @@ const FunctionInputPanel = lazy(() =>
 function FunctionInputLoading() {
   return (
     <div className="h-full w-full grid place-items-center">
-      <div className="size-4 animate-spin rounded-full border-2 border-primary/20 border-t-primary" />
+      <div className="size-3.5 animate-spin rounded-full border-[1.5px] border-border border-t-muted-foreground" />
     </div>
   );
 }
@@ -548,7 +547,7 @@ export function EditorPanel() {
   // 函数输入器是独立界面，不再套编辑器的工具栏与代码专属 UI。
   if (inputView === 'demos') {
     return (
-      <div className="h-full min-h-0 overflow-hidden bg-background/40">
+      <div className="h-full min-h-0 overflow-hidden bg-background">
         <Suspense fallback={<FunctionInputLoading />}>
           <FunctionInputPanel />
         </Suspense>
@@ -557,25 +556,25 @@ export function EditorPanel() {
   }
 
   return (
-    <div className="flex flex-col h-full bg-background/60">
+    <div className="flex flex-col h-full bg-background">
       {/* Toolbar —— @container：面板被拖窄或平板竖屏时按容器宽度收缩，
           避免模式切换、统计、操作按钮互相重叠。 */}
-      <div className="@container shrink-0 h-9 flex items-center justify-between px-2.5 gap-2 border-b border-border/60 bg-background/40">
+      <div className="@container shrink-0 h-8 flex items-center justify-between px-2 gap-2 border-b border-border bg-transparent">
         {/* Left: label + mode switch */}
         <div className="flex items-center gap-2 min-w-0">
           {/* 代码 / 函数输入器切换已上移到顶栏 TitleBar，此处不再重复，避免工具栏拥挤 */}
           <div className="flex items-center gap-1.5 shrink-0">
-            <FileCode2 className="size-3.5 text-primary" />
-            <span className="text-[11.5px] font-semibold tracking-tight hidden @[360px]:inline">
+            <FileCode2 className="size-3.5 text-muted-foreground" strokeWidth={1.75} />
+            <span className="text-[10.5px] font-medium tracking-[0.08em] uppercase text-muted-foreground hidden @[360px]:inline">
               {t('editorTitle')}
             </span>
             {/* 手机端顶栏没有输入界面切换，这里提供一个入口。 */}
             <button
               type="button"
               onClick={() => setInputView('demos')}
-              className="md:hidden inline-flex h-6 items-center gap-1 rounded-md border border-border/60 px-1.5 text-[10.5px] text-muted-foreground hover:bg-accent/60 hover:text-foreground"
+              className="md:hidden inline-flex h-6 items-center gap-1 rounded border border-border px-1.5 text-[10.5px] text-muted-foreground hover:bg-accent/60 hover:text-foreground"
             >
-              <FunctionSquare className="size-3" />
+              <FunctionSquare className="size-3" strokeWidth={1.75} />
               函数
             </button>
           </div>
@@ -584,7 +583,7 @@ export function EditorPanel() {
               窄容器用下拉框替代三段按钮，避免挤压。 */}
           {inputView === 'code' && (
             <>
-              <div className="hidden @[430px]:flex items-center gap-0.5 p-0.5 rounded-md bg-muted/60 border border-border/60">
+              <div className="hidden @[430px]:flex items-center gap-0.5 p-0.5 rounded border border-border">
                 {MODES.map((m) => (
                   <Tooltip key={m.id}>
                     <TooltipTrigger asChild>
@@ -592,9 +591,9 @@ export function EditorPanel() {
                         type="button"
                         onClick={() => setInputMode(m.id)}
                         className={cn(
-                          'h-5 px-2 text-[10.5px] rounded transition-all font-medium',
+                          'h-5 px-2 text-[10.5px] rounded-[3px] transition-colors font-medium',
                           inputMode === m.id
-                            ? 'bg-primary/15 text-primary shadow-sm'
+                            ? 'bg-accent text-foreground'
                             : 'text-muted-foreground hover:text-foreground',
                         )}
                       >
@@ -612,7 +611,7 @@ export function EditorPanel() {
                 onValueChange={(v) => setInputMode(v as InputMode)}
               >
                 <SelectTrigger
-                  className="flex @[430px]:hidden h-6 w-[82px] px-2 text-[10.5px] rounded-md bg-muted/60 border-border/60"
+                  className="flex @[430px]:hidden h-6 w-[82px] px-2 text-[10.5px] rounded border-border"
                   aria-label={t('editorTitle')}
                 >
                   <SelectValue />
@@ -648,13 +647,13 @@ export function EditorPanel() {
                 onClick={() => setSymbolPaletteOpen(!symbolPaletteOpen)}
                 aria-label={t('symbolPaletteToggle')}
                 className={cn(
-                  'grid place-items-center size-7 rounded-md transition-colors',
+                  'grid place-items-center size-6 rounded transition-colors',
                   symbolPaletteOpen
-                    ? 'bg-primary/15 text-primary'
-                    : 'text-muted-foreground hover:bg-accent hover:text-foreground',
+                    ? 'bg-accent text-foreground'
+                    : 'text-muted-foreground hover:bg-accent/60 hover:text-foreground',
                 )}
               >
-                <Sigma className="size-3.5" />
+                <Sigma className="size-3.5" strokeWidth={1.75} />
               </button>
             </TooltipTrigger>
             <TooltipContent side="bottom">{t('symbolPaletteToggle')}</TooltipContent>
@@ -667,68 +666,45 @@ export function EditorPanel() {
                 type="button"
                 aria-label={t('editorMore')}
                 title={t('editorMore')}
-                className="grid place-items-center size-7 rounded-md text-muted-foreground hover:bg-accent hover:text-foreground transition-colors"
+                className="grid place-items-center size-6 rounded text-muted-foreground hover:bg-accent/60 hover:text-foreground transition-colors"
               >
-                <MoreHorizontal className="size-3.5" />
+                <MoreHorizontal className="size-3.5" strokeWidth={1.75} />
               </button>
             </DropdownMenuTrigger>
             <DropdownMenuContent align="end" className="w-40">
               <DropdownMenuItem onClick={handleReset} className="gap-2 text-[11.5px]">
-                <Eraser className="size-3.5" />
+                <Eraser className="size-3.5" strokeWidth={1.75} />
                 <span>{t('editorReset')}</span>
               </DropdownMenuItem>
               <DropdownMenuItem
                 onClick={handleClear}
-                className="gap-2 text-[11.5px] text-rose-500 focus:text-rose-500"
+                className="gap-2 text-[11.5px] text-destructive focus:text-destructive"
               >
-                <Trash2 className="size-3.5" />
+                <Trash2 className="size-3.5" strokeWidth={1.75} />
                 <span>{t('editorClear')}</span>
               </DropdownMenuItem>
             </DropdownMenuContent>
           </DropdownMenu>
           <Tooltip>
             <TooltipTrigger asChild>
-              <motion.button
+              <button
                 type="button"
                 onClick={() => runScript()}
                 disabled={isRunning}
-                whileTap={{ scale: 0.95 }}
-                whileHover={{ scale: 1.02 }}
                 className={cn(
-                  'relative flex items-center gap-1.5 h-7 px-3 ml-1 rounded-md text-[11.5px] font-medium',
-                  'text-primary-foreground transition-all',
-                  'bg-gradient-to-r from-primary to-primary/80',
+                  'relative flex items-center gap-1.5 h-6 px-2.5 ml-1 rounded text-[11px] font-medium',
+                  'bg-primary text-primary-foreground transition-colors hover:bg-primary/90',
+                  'disabled:opacity-70 disabled:pointer-events-none',
                 )}
-                style={{
-                  boxShadow: isRunning
-                    ? '0 0 0 2px oklch(0.7 0.15 165 / 30%), 0 0 16px oklch(0.7 0.15 165 / 40%)'
-                    : '0 0 0 1px oklch(0.7 0.15 165 / 25%), 0 4px 12px oklch(0.7 0.15 165 / 18%)',
-                }}
                 aria-label={t('editorRun')}
               >
-                <AnimatePresence mode="wait" initial={false}>
-                  {isRunning ? (
-                    <motion.span
-                      key="running"
-                      initial={{ opacity: 0, scale: 0.5 }}
-                      animate={{ opacity: 1, scale: 1 }}
-                      exit={{ opacity: 0, scale: 0.5 }}
-                    >
-                      <Loader2 className="size-3.5 animate-spin" />
-                    </motion.span>
-                  ) : (
-                    <motion.span
-                      key="play"
-                      initial={{ opacity: 0, scale: 0.5 }}
-                      animate={{ opacity: 1, scale: 1 }}
-                      exit={{ opacity: 0, scale: 0.5 }}
-                    >
-                      <Play className="size-3.5" fill="currentColor" />
-                    </motion.span>
-                  )}
-                </AnimatePresence>
+                {isRunning ? (
+                  <Loader2 className="size-3.5 animate-spin" strokeWidth={1.75} />
+                ) : (
+                  <Play className="size-3" fill="currentColor" strokeWidth={1.75} />
+                )}
                 <span className="hidden @[360px]:inline">{t('editorRun')}</span>
-              </motion.button>
+              </button>
             </TooltipTrigger>
             <TooltipContent side="bottom">
               {t('editorRun')} · Ctrl+Enter
@@ -744,7 +720,7 @@ export function EditorPanel() {
       {openTabs.length > 0 && (
         <div
           role="tablist"
-          className="shrink-0 flex items-stretch overflow-x-auto border-b border-border/60 bg-muted/20"
+          className="shrink-0 flex items-stretch overflow-x-auto border-b border-border bg-transparent"
         >
           {openTabs.map((tabId) => {
             const node = fsNodes[tabId];
@@ -769,9 +745,9 @@ export function EditorPanel() {
                 }}
                 className={cn(
                   'group flex items-center gap-1.5 h-7 pl-2.5 pr-1 shrink-0 cursor-pointer select-none',
-                  'border-r border-border/40 text-[11px] font-mono transition-colors',
+                  'border-r border-border text-[11px] font-mono transition-colors',
                   isActive
-                    ? 'bg-background text-foreground shadow-[inset_0_2px_0_0_var(--primary)]'
+                    ? 'bg-card text-foreground shadow-[inset_0_1px_0_0_var(--primary)]'
                     : 'text-muted-foreground hover:bg-accent/40 hover:text-foreground',
                 )}
               >
@@ -796,7 +772,7 @@ export function EditorPanel() {
       {/* Editor area — 永远保持可输入。
           之前当「未打开文件且内容为空」时会用空状态替换整个编辑器，
           用户按 Ctrl+A + Delete 清空后编辑器直接消失、无法继续输入。 */}
-      <div ref={editorContainerRef} className="relative flex-1 min-h-0 flex overflow-hidden">
+      <div ref={editorContainerRef} className="relative flex-1 min-h-0 flex overflow-hidden bg-[var(--editor-bg)]">
         <CodeEditor
           value={editorContent}
           onChange={setEditorContent}
@@ -817,7 +793,7 @@ export function EditorPanel() {
         {inputMode === 'simple' && previewLatex && (
           <div
             aria-hidden
-            className="pointer-events-none absolute bottom-2 right-3 z-10 max-w-[62%] overflow-hidden rounded-md border border-border/60 bg-background/85 px-2.5 py-1 shadow-sm backdrop-blur-sm"
+            className="pointer-events-none absolute bottom-2 right-3 z-10 max-w-[62%] overflow-hidden rounded border border-border bg-card px-2.5 py-1"
           >
             <div className="flex items-center gap-2">
               <span className="shrink-0 text-[10px] font-medium uppercase tracking-wide text-muted-foreground/70">

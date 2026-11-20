@@ -389,15 +389,15 @@ export function FunctionInputPanel() {
   }, [demosPlots, variables, demosExtraVars]);
 
   return (
-    <div className="flex h-full flex-col bg-background/40">
+    <div className="flex h-full flex-col bg-background">
       {/* 头部 */}
-      <div className="shrink-0 border-b border-border/60 px-3 py-2.5">
+      <div className="shrink-0 border-b border-border px-3 py-2.5">
         <div className="flex items-start gap-2">
-          <div className="mt-0.5 grid size-8 shrink-0 place-items-center rounded-xl border border-primary/20 bg-primary/10">
-            <FunctionSquare className="size-4 text-primary" />
+          <div className="mt-0.5 grid size-7 shrink-0 place-items-center rounded-md border border-border text-muted-foreground">
+            <FunctionSquare className="size-3.5" strokeWidth={1.75} />
           </div>
           <div className="min-w-0 flex-1">
-            <h2 className="text-[13px] font-semibold tracking-tight text-foreground">
+            <h2 className="text-[12.5px] font-medium tracking-tight text-foreground">
               函数输入器
             </h2>
             <p className="mt-0.5 text-[10.5px] leading-relaxed text-muted-foreground">
@@ -408,9 +408,9 @@ export function FunctionInputPanel() {
             <DropdownMenuTrigger asChild>
               <button
                 type="button"
-                className="inline-flex h-7 shrink-0 items-center gap-1 rounded-lg border border-border/60 bg-background/60 px-2 text-[10.5px] text-muted-foreground transition-colors hover:bg-accent/60 hover:text-foreground"
+                className="inline-flex h-6 shrink-0 items-center gap-1 rounded border border-border px-2 text-[10.5px] text-muted-foreground transition-colors hover:bg-accent/60 hover:text-foreground"
               >
-                <Sparkles className="size-3" />
+                <Sparkles className="size-3" strokeWidth={1.75} />
                 <span className="hidden sm:inline">示例</span>
                 <ChevronDown className="size-3 opacity-60" />
               </button>
@@ -434,20 +434,20 @@ export function FunctionInputPanel() {
           <button
             type="button"
             onClick={() => setInputView('code')}
-            className="inline-flex h-7 shrink-0 items-center gap-1 rounded-lg border border-border/60 px-2 text-[10.5px] text-muted-foreground hover:bg-accent/60 hover:text-foreground"
+            className="inline-flex h-6 shrink-0 items-center gap-1 rounded border border-border px-2 text-[10.5px] text-muted-foreground hover:bg-accent/60 hover:text-foreground"
           >
-            <FileCode2 className="size-3" />
+            <FileCode2 className="size-3" strokeWidth={1.75} />
             代码
           </button>
           <button
             type="button"
             onClick={clearAll}
             disabled={demosPlots.length === 0 && !demosExpr}
-            className="grid size-7 shrink-0 place-items-center rounded-lg text-muted-foreground transition-colors hover:bg-destructive/10 hover:text-destructive disabled:opacity-40"
+            className="grid size-6 shrink-0 place-items-center rounded text-muted-foreground transition-colors hover:bg-destructive/10 hover:text-destructive disabled:opacity-40"
             aria-label="清空函数"
             title="清空所有函数"
           >
-            <Trash2 className="size-3.5" />
+            <Trash2 className="size-3.5" strokeWidth={1.75} />
           </button>
         </div>
       </div>
@@ -455,11 +455,11 @@ export function FunctionInputPanel() {
       {/* 函数列表 */}
       <div className="min-h-0 flex-1 overflow-y-auto px-2.5 py-2">
         {demosPlots.length === 0 && !demosExpr && (
-          <div className="mb-2 flex flex-col items-center justify-center gap-2 rounded-xl border border-dashed border-border/60 bg-muted/10 px-4 py-7 text-center">
-            <div className="grid size-11 place-items-center rounded-2xl border border-primary/20 bg-primary/8">
-              <FunctionSquare className="size-5 text-primary/70" />
+          <div className="mb-2 flex flex-col items-center justify-center gap-2 rounded-lg border border-dashed border-border bg-transparent px-4 py-7 text-center">
+            <div className="grid size-9 place-items-center rounded-md border border-border bg-card">
+              <FunctionSquare className="size-4 text-muted-foreground" strokeWidth={1.75} />
             </div>
-            <p className="text-[12.5px] font-medium text-foreground/80">
+            <p className="text-[12px] font-medium text-foreground/80">
               在左边输入一个函数，右边立即出图
             </p>
             <p className="max-w-[280px] text-[10.5px] leading-relaxed text-muted-foreground">
@@ -471,7 +471,7 @@ export function FunctionInputPanel() {
                   key={item.expr}
                   type="button"
                   onClick={() => applyExample(item.expr)}
-                  className="rounded-full border border-border/60 bg-background/60 px-2 py-1 font-mono text-[10px] text-muted-foreground transition-colors hover:border-primary/40 hover:text-primary"
+                  className="rounded border border-border bg-transparent px-2 py-1 font-mono text-[10px] text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
                 >
                   {item.label}
                 </button>
@@ -487,7 +487,7 @@ export function FunctionInputPanel() {
             return (
               <div
                 key={p.id}
-                className="rounded-xl border border-border/60 bg-card/50 px-2 py-1.5 transition-colors focus-within:border-primary/50"
+                className="rounded border border-border bg-card px-2 py-1.5 transition-colors focus-within:border-ring"
               >
                 <div className="flex items-center gap-1.5">
                   <span
@@ -511,9 +511,9 @@ export function FunctionInputPanel() {
                     type="button"
                     onClick={() => togglePlotVisibility(p.id)}
                     title={p.visible ? '隐藏曲线' : '显示曲线'}
-                    className="grid size-6 shrink-0 place-items-center rounded-md text-muted-foreground hover:bg-accent hover:text-foreground"
+                    className="grid size-6 shrink-0 place-items-center rounded text-muted-foreground hover:bg-accent hover:text-foreground"
                   >
-                    {p.visible ? <Eye className="size-3" /> : <EyeOff className="size-3 opacity-60" />}
+                    {p.visible ? <Eye className="size-3" strokeWidth={1.75} /> : <EyeOff className="size-3 opacity-60" strokeWidth={1.75} />}
                   </button>
                   <button
                     type="button"
@@ -527,21 +527,21 @@ export function FunctionInputPanel() {
                       });
                     }}
                     title="删除此函数"
-                    className="grid size-6 shrink-0 place-items-center rounded-md text-muted-foreground hover:bg-destructive/15 hover:text-destructive"
+                    className="grid size-6 shrink-0 place-items-center rounded text-muted-foreground hover:bg-destructive/15 hover:text-destructive"
                   >
-                    <Trash2 className="size-3" />
+                    <Trash2 className="size-3" strokeWidth={1.75} />
                   </button>
                 </div>
-                {error && <p className="mt-0.5 pl-[18px] text-[9.5px] text-rose-500">{error}</p>}
+                {error && <p className="mt-0.5 pl-[18px] text-[9.5px] text-destructive">{error}</p>}
               </div>
             );
           })}
 
           {/* 新函数输入行 */}
-          <div className="rounded-xl border border-primary/30 bg-primary/[0.04] px-2 py-1.5 shadow-sm transition-colors focus-within:border-primary/60">
+          <div className="rounded border border-border bg-card px-2 py-1.5 transition-colors focus-within:border-ring">
             <div className="flex items-center gap-1.5">
-              <span className="grid size-3 shrink-0 place-items-center rounded-full bg-primary/15 text-primary">
-                <Plus className="size-2.5" />
+              <span className="grid size-3 shrink-0 place-items-center rounded-full border border-border text-muted-foreground">
+                <Plus className="size-2.5" strokeWidth={1.75} />
               </span>
               <input
                 autoFocus
@@ -557,9 +557,9 @@ export function FunctionInputPanel() {
                 className="h-7 min-w-0 flex-1 bg-transparent font-mono text-[12.5px] text-foreground outline-none placeholder:text-muted-foreground/50"
               />
               {isCommitting ? (
-                <Loader2 className="size-3.5 animate-spin text-primary" />
+                <Loader2 className="size-3.5 animate-spin text-muted-foreground" />
               ) : (
-                <kbd className="hidden shrink-0 rounded border border-border/60 px-1 text-[9px] text-muted-foreground/70 sm:inline">
+                <kbd className="hidden shrink-0 rounded border border-border px-1 text-[9px] text-muted-foreground/70 sm:inline">
                   Enter
                 </kbd>
               )}
@@ -569,21 +569,21 @@ export function FunctionInputPanel() {
 
         {/* 当前输入识别提示 */}
         {analysis.latex && demosExpr.trim() && (
-          <div className="mt-2 rounded-xl border border-border/60 bg-muted/20 px-2.5 py-1.5">
+          <div className="mt-2 rounded border border-border bg-card px-2.5 py-1.5">
             <div className="flex items-center gap-1.5 text-[9.5px] text-muted-foreground">
               <span
                 className={cn(
-                  'rounded px-1.5 py-0.5 font-medium',
+                  'rounded-[3px] border px-1.5 py-0.5 font-medium',
                   analysis.plotType
-                    ? 'bg-primary/10 text-primary'
-                    : 'bg-rose-500/10 text-rose-500',
+                    ? 'border-border bg-muted/40 text-muted-foreground'
+                    : 'border-destructive/30 bg-destructive/10 text-destructive',
                 )}
               >
                 {analysis.plotType ? coordLabel(analysis.plotType) : analysis.error ?? '…'}
               </span>
               {analysis.params.length > 0 && (
                 <span className="ml-auto truncate">
-                  参数 <span className="font-mono text-primary">{analysis.params.join(', ')}</span>
+                  参数 <span className="font-mono text-foreground">{analysis.params.join(', ')}</span>
                 </span>
               )}
             </div>
@@ -594,15 +594,15 @@ export function FunctionInputPanel() {
 
       {/* 参数区 */}
       {demosPlots.length > 0 && (
-        <div className="shrink-0 border-t border-border/60 px-2.5 py-1.5">
+        <div className="shrink-0 border-t border-border px-2.5 py-1.5">
           <button
             type="button"
             onClick={() => setVarsOpen((v) => !v)}
-            className="flex w-full items-center gap-1.5 rounded-md px-1 py-0.5 text-[10px] font-medium text-muted-foreground hover:text-foreground"
+            className="flex w-full items-center gap-1.5 rounded px-1 py-0.5 text-[10px] font-medium text-muted-foreground hover:text-foreground"
           >
-            <SlidersHorizontal className="size-3 text-primary" />
+            <SlidersHorizontal className="size-3 text-muted-foreground" strokeWidth={1.75} />
             参数与变量
-            <span className="rounded-full bg-muted px-1.5 py-0.5 text-[9px]">
+            <span className="rounded-[3px] border border-border px-1.5 py-0.5 text-[9px]">
               {demosExtraVars.length + freeParamCount}
             </span>
             <ChevronDown
@@ -623,16 +623,16 @@ export function FunctionInputPanel() {
                   }}
                   placeholder="添加变量"
                   spellCheck={false}
-                  className="h-6 w-24 rounded border border-border/60 bg-background/40 px-1.5 font-mono text-[10.5px] outline-none focus:border-primary/60"
+                  className="h-6 w-24 rounded border border-border bg-transparent px-1.5 font-mono text-[10.5px] outline-none focus:border-ring"
                 />
                 <button
                   type="button"
                   onClick={addVar}
                   disabled={!newVarName.trim()}
-                  className="grid size-6 place-items-center rounded border border-border/60 text-muted-foreground hover:bg-accent hover:text-foreground disabled:opacity-40"
+                  className="grid size-6 place-items-center rounded border border-border text-muted-foreground hover:bg-accent hover:text-foreground disabled:opacity-40"
                   aria-label="添加变量"
                 >
-                  <Plus className="size-3.5" />
+                  <Plus className="size-3.5" strokeWidth={1.75} />
                 </button>
               </div>
               {demosExtraVars.length > 0 && (
@@ -640,7 +640,7 @@ export function FunctionInputPanel() {
                   {demosExtraVars.map((name) => (
                     <span
                       key={name}
-                      className="inline-flex items-center gap-1 rounded-full bg-primary/10 px-1.5 py-0.5 font-mono text-[10px] italic text-primary"
+                      className="inline-flex items-center gap-1 rounded-[3px] border border-border bg-muted/40 px-1.5 py-0.5 font-mono text-[10px] italic text-foreground"
                     >
                       {name}
                       <button
@@ -649,7 +649,7 @@ export function FunctionInputPanel() {
                         className="grid size-3 place-items-center rounded-full hover:bg-destructive/20 hover:text-destructive"
                         aria-label={`移除变量 ${name}`}
                       >
-                        <X className="size-2.5" />
+                        <X className="size-2.5" strokeWidth={1.75} />
                       </button>
                     </span>
                   ))}

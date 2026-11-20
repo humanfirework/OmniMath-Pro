@@ -9,7 +9,6 @@
  */
 
 import { useEffect, useMemo, useRef, useState, type CSSProperties } from 'react';
-import { motion } from 'framer-motion';
 import {
   DndContext,
   closestCenter,
@@ -279,14 +278,13 @@ export function ActivityBar() {
     return (
       <div
         className={cn(
-          'grid place-items-center size-9 rounded-lg pointer-events-none',
-          'bg-primary/15 text-primary',
-          'shadow-lg shadow-primary/25',
-          'ring-2 ring-primary/50',
-          'opacity-95',
+          'grid place-items-center size-8 rounded-md pointer-events-none',
+          'bg-card text-foreground',
+          'border border-border',
+          'shadow-lg',
         )}
       >
-        <Icon className="size-[18px]" strokeWidth={2} />
+        <Icon className="size-4" strokeWidth={1.75} />
       </div>
     );
   };
@@ -305,31 +303,27 @@ export function ActivityBar() {
       return wrapper(
         <Tooltip delayDuration={200}>
           <TooltipTrigger asChild>
-            <motion.button
+            <button
               type="button"
-              initial={false}
-              animate={{ opacity: 1, x: 0 }}
-              transition={{ duration: 0.18 }}
               onClick={() => handlePanelClick(id as SidePanelTab)}
               aria-label={t(reg.labelKey)}
               className={cn(
-                'relative grid place-items-center size-9 rounded-lg transition-all',
+                'relative grid place-items-center size-8 rounded-md transition-colors',
                 isActive
-                  ? 'text-primary bg-primary/12'
-                  : 'text-muted-foreground hover:text-foreground hover:bg-accent/60',
+                  ? 'bg-accent text-foreground'
+                  : 'text-muted-foreground hover:text-foreground hover:bg-accent/50',
               )}
             >
-              <Icon className="size-[18px]" strokeWidth={2} />
+              <Icon className="size-4" strokeWidth={1.75} />
               {isActive && (
                 <span
                   className={cn(
-                    'absolute top-1/2 -translate-y-1/2 w-[2px] h-5 bg-primary',
+                    'absolute top-1/2 -translate-y-1/2 w-[2px] h-4 bg-primary',
                     isRight ? 'right-0 rounded-l' : 'left-0 rounded-r',
                   )}
-                  style={{ boxShadow: '0 0 8px oklch(0.7 0.15 165 / 70%)' }}
                 />
               )}
-            </motion.button>
+            </button>
           </TooltipTrigger>
           <TooltipContent side={tooltipSide}>{t(reg.labelKey)}</TooltipContent>
         </Tooltip>,
@@ -342,33 +336,27 @@ export function ActivityBar() {
       return wrapper(
         <Tooltip delayDuration={200}>
           <TooltipTrigger asChild>
-            <motion.button
+            <button
               type="button"
-              initial={false}
-              animate={{ opacity: 1, x: 0 }}
-              transition={{ duration: 0.18 }}
               onClick={() => setViewMode(viewMode === id ? 'workbench' : id as ViewMode)}
               aria-label={t(reg.labelKey)}
               className={cn(
-                'relative grid place-items-center size-9 rounded-lg transition-all',
+                'relative grid place-items-center size-8 rounded-md transition-colors',
                 isActive
-                  ? 'text-primary bg-primary/12'
-                  : 'text-muted-foreground hover:text-foreground hover:bg-accent/60',
+                  ? 'bg-accent text-foreground'
+                  : 'text-muted-foreground hover:text-foreground hover:bg-accent/50',
               )}
             >
-              <Icon className="size-[18px]" strokeWidth={2} />
+              <Icon className="size-4" strokeWidth={1.75} />
               {isActive && (
-                <motion.span
-                  layoutId="activity-indicator"
+                <span
                   className={cn(
-                    'absolute top-1/2 -translate-y-1/2 w-[2px] h-5 bg-primary will-change-transform',
+                    'absolute top-1/2 -translate-y-1/2 w-[2px] h-4 bg-primary',
                     isRight ? 'right-0 rounded-l' : 'left-0 rounded-r',
                   )}
-                  style={{ boxShadow: '0 0 8px oklch(0.7 0.15 165 / 70%)' }}
-                  transition={{ type: 'spring', stiffness: 380, damping: 30 }}
                 />
               )}
-            </motion.button>
+            </button>
           </TooltipTrigger>
           <TooltipContent side={tooltipSide}>{t(reg.labelKey)}</TooltipContent>
         </Tooltip>,
@@ -386,13 +374,13 @@ export function ActivityBar() {
               onClick={() => setEditorVisible(!editorVisible)}
               aria-label={t(reg.labelKey)}
               className={cn(
-                'grid place-items-center size-9 rounded-lg transition-colors',
+                'grid place-items-center size-8 rounded-md transition-colors',
                 isActive
-                  ? 'text-primary bg-primary/12'
+                  ? 'bg-accent text-foreground'
                   : 'text-muted-foreground hover:text-foreground hover:bg-accent/60',
               )}
             >
-              <LayoutTemplate className="size-[18px]" />
+              <LayoutTemplate className="size-4" />
             </button>
           </TooltipTrigger>
           <TooltipContent side={tooltipSide}>{t(reg.labelKey)}</TooltipContent>
@@ -411,13 +399,13 @@ export function ActivityBar() {
               onClick={() => setPreviewVisible(!previewVisible)}
               aria-label={t(reg.labelKey)}
               className={cn(
-                'grid place-items-center size-9 rounded-lg transition-colors',
+                'grid place-items-center size-8 rounded-md transition-colors',
                 isActive
-                  ? 'text-primary bg-primary/12'
+                  ? 'bg-accent text-foreground'
                   : 'text-muted-foreground hover:text-foreground hover:bg-accent/60',
               )}
             >
-              <PanelRight className="size-[18px]" />
+              <PanelRight className="size-4" />
             </button>
           </TooltipTrigger>
           <TooltipContent side={tooltipSide}>{t(reg.labelKey)}</TooltipContent>
@@ -434,12 +422,12 @@ export function ActivityBar() {
               type="button"
               onClick={toggleSidePanel}
               aria-label={sidePanelCollapsed ? t('abShowSidebar') : t('abHideSidebar')}
-              className="grid place-items-center size-9 rounded-lg text-muted-foreground hover:text-foreground hover:bg-accent/60 transition-colors"
+              className="grid place-items-center size-8 rounded-md text-muted-foreground hover:text-foreground hover:bg-accent/60 transition-colors"
             >
               {sidePanelCollapsed ? (
-                <PanelLeftOpen className="size-[18px]" />
+                <PanelLeftOpen className="size-4" />
               ) : (
-                <PanelLeftClose className="size-[18px]" />
+                <PanelLeftClose className="size-4" />
               )}
             </button>
           </TooltipTrigger>
@@ -461,13 +449,13 @@ export function ActivityBar() {
                   type="button"
                   aria-label={t(reg.labelKey)}
                   className={cn(
-                    'grid place-items-center size-9 rounded-lg transition-colors',
+                    'grid place-items-center size-8 rounded-md transition-colors',
                     activityBarLocked || activityBarAutoHide
-                      ? 'text-primary bg-primary/12'
+                      ? 'bg-accent text-foreground'
                       : 'text-muted-foreground hover:text-foreground hover:bg-accent/60',
                   )}
                 >
-                  <MoreHorizontal className="size-[18px]" />
+                  <MoreHorizontal className="size-4" />
                 </button>
               </DropdownMenuTrigger>
             </TooltipTrigger>
@@ -523,9 +511,9 @@ export function ActivityBar() {
               type="button"
               onClick={() => setSettingsOpen(true)}
               aria-label={t(reg.labelKey)}
-              className="grid place-items-center size-9 rounded-lg text-muted-foreground hover:text-foreground hover:bg-accent/60 transition-colors"
+              className="grid place-items-center size-8 rounded-md text-muted-foreground hover:text-foreground hover:bg-accent/60 transition-colors"
             >
-              <Settings className="size-[18px]" />
+              <Settings className="size-4" />
             </button>
           </TooltipTrigger>
           <TooltipContent side={tooltipSide}>{t(reg.labelKey)}</TooltipContent>
@@ -699,13 +687,11 @@ export function ActivityBar() {
   // Auto-hide: collapsed trigger strip. Hovering reveals the full bar.
   if (activityBarHidden) {
     return (
-      <motion.aside
-        initial={{ opacity: 0 }}
-        animate={{ opacity: 1 }}
+      <aside
         className={cn(
           'relative shrink-0 z-20 flex flex-col items-center',
-          'w-1.5 hover:w-12 transition-all duration-200 ease-out',
-          'hover:bg-background/80 hover:backdrop-blur-sm hover:border-border',
+          'w-1.5 hover:w-12 transition-[width] duration-200 ease-out',
+          'hover:bg-sidebar hover:border-border',
           isRight ? 'border-l border-transparent hover:border-border' : 'border-r border-transparent hover:border-border',
         )}
         onMouseEnter={() => {
@@ -720,9 +706,9 @@ export function ActivityBar() {
         aria-label={t('abHideTaskbar')}
       >
         <div className="w-full h-full flex flex-col items-center py-2 opacity-0 hover:opacity-100 transition-opacity">
-          <span className="w-[2px] h-8 rounded-full bg-primary/40" />
+          <span className="w-[2px] h-8 rounded-full bg-border" />
         </div>
-      </motion.aside>
+      </aside>
     );
   }
 
@@ -734,8 +720,8 @@ export function ActivityBar() {
     return (
       <aside
         className={cn(
-          'relative w-11 shrink-0 flex flex-col items-center justify-between py-2 gap-1',
-          'glass border-r border-border',
+          'activity-bar relative w-10 shrink-0 flex flex-col items-center justify-between py-2 gap-1',
+          'bg-sidebar border-r border-sidebar-border',
           'select-none',
           isRight && 'border-r-0 border-l border-border',
         )}
@@ -760,9 +746,9 @@ export function ActivityBar() {
                   <button
                     type="button"
                     aria-label={t('abAllTools')}
-                    className="grid place-items-center size-9 rounded-lg text-muted-foreground hover:text-foreground hover:bg-accent/60 transition-colors"
+                    className="grid place-items-center size-8 rounded-md text-muted-foreground hover:text-foreground hover:bg-accent/60 transition-colors"
                   >
-                    <MoreHorizontal className="size-[18px]" />
+                    <MoreHorizontal className="size-4" />
                   </button>
                 </DropdownMenuTrigger>
               </TooltipTrigger>
@@ -832,8 +818,8 @@ export function ActivityBar() {
   return (
     <aside
       className={cn(
-        'relative w-12 shrink-0 flex flex-col items-center justify-between py-2 gap-1',
-        'glass border-r border-border',
+        'activity-bar relative w-12 shrink-0 flex flex-col items-center justify-between py-2 gap-1',
+        'bg-sidebar border-r border-sidebar-border',
         'select-none',
         isRight && 'border-r-0 border-l border-border',
       )}

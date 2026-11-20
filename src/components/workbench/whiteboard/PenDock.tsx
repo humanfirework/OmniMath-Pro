@@ -97,7 +97,7 @@ function DockButton({
       disabled={disabled}
       onClick={onClick}
       className={cn(
-        'grid size-10 place-items-center rounded-xl transition-colors',
+        'grid size-9 place-items-center rounded-md transition-colors',
         active
           ? 'bg-accent text-foreground'
           : 'text-muted-foreground hover:bg-accent/60 hover:text-foreground',
@@ -123,7 +123,7 @@ export function PenDock(props: PenDockProps) {
       className="pointer-events-none absolute inset-x-0 bottom-3 z-30 flex flex-col items-center gap-2 px-2"
     >
       {panelOpen && (
-        <div className="pointer-events-auto w-[min(92vw,360px)] rounded-2xl border border-border/70 bg-background p-3 shadow-2xl">
+        <div className="pointer-events-auto w-[min(92vw,360px)] rounded-lg border border-border bg-popover p-3 shadow-xl">
           <div className="flex items-center justify-between">
             <span className="text-2xs font-medium uppercase tracking-[0.14em] text-muted-foreground">
               笔刷设置
@@ -132,9 +132,9 @@ export function PenDock(props: PenDockProps) {
               type="button"
               aria-label="关闭笔刷设置"
               onClick={() => setPanelOpen(false)}
-              className="grid size-7 place-items-center rounded-lg text-muted-foreground hover:bg-accent/60 hover:text-foreground"
+              className="grid size-7 place-items-center rounded text-muted-foreground hover:bg-accent/60 hover:text-foreground"
             >
-              <X className="size-3.5" />
+              <X className="size-3.5" strokeWidth={1.75} />
             </button>
           </div>
 
@@ -147,9 +147,9 @@ export function PenDock(props: PenDockProps) {
                 aria-label={`颜色 ${c}`}
                 onClick={() => props.onColor(c)}
                 className={cn(
-                  'size-8 rounded-full border transition-transform',
+                  'size-8 rounded-full border transition-colors',
                   props.color === c
-                    ? 'scale-110 border-foreground/40 ring-2 ring-foreground/20'
+                    ? 'border-foreground/40 ring-1 ring-foreground/20'
                     : 'border-border/60',
                 )}
                 style={{ backgroundColor: c }}
@@ -168,7 +168,7 @@ export function PenDock(props: PenDockProps) {
                   title={label}
                   onClick={() => props.onBrush(id)}
                   className={cn(
-                    'grid size-8 place-items-center rounded-lg border transition-colors',
+                    'grid size-8 place-items-center rounded-md border transition-colors',
                     props.tool === 'pen' && props.brush === id
                       ? 'border-foreground/30 bg-accent text-foreground'
                       : 'border-border/60 text-muted-foreground hover:bg-accent/60',
@@ -224,7 +224,7 @@ export function PenDock(props: PenDockProps) {
                       props.tool === 'eraser' ? props.onEraserSize(size) : props.onWidth(size)
                     }
                     className={cn(
-                      'grid size-8 place-items-center rounded-lg border transition-colors',
+                      'grid size-8 place-items-center rounded-md border transition-colors',
                       active
                         ? 'border-foreground/30 bg-accent text-foreground'
                         : 'border-border/60 text-muted-foreground hover:bg-accent/60',
@@ -307,31 +307,31 @@ export function PenDock(props: PenDockProps) {
             <button
               type="button"
               onClick={props.onClear}
-              className="inline-flex h-8 items-center justify-center gap-1.5 rounded-lg border border-border/60 px-2 text-2xs text-muted-foreground hover:bg-accent/60 hover:text-foreground"
+              className="inline-flex h-8 items-center justify-center gap-1.5 rounded-md border border-border px-2 text-2xs text-muted-foreground hover:bg-accent/60 hover:text-foreground"
             >
-              <Trash2 className="size-3.5" />
+              <Trash2 className="size-3.5" strokeWidth={1.75} />
               清空
             </button>
             <button
               type="button"
               onClick={props.onExport}
-              className="inline-flex h-8 items-center justify-center gap-1.5 rounded-lg border border-border/60 px-2 text-2xs text-muted-foreground hover:bg-accent/60 hover:text-foreground"
+              className="inline-flex h-8 items-center justify-center gap-1.5 rounded-md border border-border px-2 text-2xs text-muted-foreground hover:bg-accent/60 hover:text-foreground"
             >
-              <Download className="size-3.5" />
+              <Download className="size-3.5" strokeWidth={1.75} />
               PNG
             </button>
           </div>
         </div>
       )}
 
-      <div className="pointer-events-auto flex items-center gap-0.5 rounded-2xl border border-border/70 bg-background p-1.5 shadow-xl">
+      <div className="pointer-events-auto flex items-center gap-0.5 rounded-lg border border-border bg-popover p-1 shadow-lg">
         <DockButton label="撤销" disabled={!props.canUndo} onClick={props.onUndo}>
           <Undo2 className="size-4" />
         </DockButton>
         <DockButton label="重做" disabled={!props.canRedo} onClick={props.onRedo}>
           <Redo2 className="size-4" />
         </DockButton>
-        <span className="mx-0.5 h-6 w-px bg-border/60" />
+        <span className="mx-0.5 h-6 w-px bg-border" />
         <DockButton label="笔" active={props.tool === 'pen' && !props.shapeTool} onClick={() => applyTool('pen')}>
           <Pencil className="size-4" />
         </DockButton>
@@ -344,13 +344,13 @@ export function PenDock(props: PenDockProps) {
         <DockButton label="选择" active={props.tool === 'select'} onClick={() => applyTool('select')}>
           <MousePointer2 className="size-4" />
         </DockButton>
-        <span className="mx-0.5 h-6 w-px bg-border/60" />
+        <span className="mx-0.5 h-6 w-px bg-border" />
         <button
           type="button"
           aria-label="颜色与笔刷"
           onClick={() => setPanelOpen((v) => !v)}
           className={cn(
-            'grid size-10 place-items-center rounded-xl transition-colors',
+            'grid size-9 place-items-center rounded-md transition-colors',
             panelOpen ? 'bg-accent' : 'hover:bg-accent/60',
           )}
         >

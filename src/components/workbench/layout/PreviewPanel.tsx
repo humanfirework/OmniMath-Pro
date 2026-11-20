@@ -77,7 +77,7 @@ const Plot2DPanel = dynamic(
     ssr: false,
     loading: () => (
       <div className="h-full w-full grid place-items-center">
-        <div className="size-4 animate-spin rounded-full border-2 border-primary/20 border-t-primary" />
+        <div className="size-3.5 animate-spin rounded-full border-[1.5px] border-border border-t-muted-foreground" />
       </div>
     ),
   },
@@ -89,7 +89,7 @@ const Plot3DPanel = dynamic(
   {
     ssr: false,
     loading: () => (
-      <div className="h-full w-full grid place-items-center bg-background/40">
+      <div className="h-full w-full grid place-items-center bg-background">
         <div className="text-[12px] text-muted-foreground animate-pulse">
           {t('preview3DLoading')}
         </div>
@@ -199,9 +199,9 @@ export function PreviewPanel() {
   }, [currentResult]);
 
   return (
-    <div className="flex flex-col h-full bg-card/30">
+    <div className="flex flex-col h-full bg-background">
       {/* Tab bar */}
-      <div ref={tabBarRef} className="shrink-0 h-9 flex items-center justify-between px-1.5 border-b border-border/60 bg-background/40">
+      <div ref={tabBarRef} className="shrink-0 h-8 flex items-center justify-between px-1.5 border-b border-border bg-transparent">
         <div className="flex items-center h-full overflow-x-auto scrollbar-none">
           {visibleTabs.map((tab, idx) => {
             const Icon = tab.icon;
@@ -214,7 +214,7 @@ export function PreviewPanel() {
                 {idx > 0 && tab.group !== visibleTabs[idx - 1].group && (
                   <div
                     aria-hidden
-                    className="w-px h-3.5 bg-border/50 mx-0.5 shrink-0"
+                    className="w-px h-3.5 bg-border mx-0.5 shrink-0"
                   />
                 )}
                 <button
@@ -223,22 +223,17 @@ export function PreviewPanel() {
                   title={compactTabs ? t(tab.labelKey) : undefined}
                   aria-label={compactTabs ? t(tab.labelKey) : undefined}
                   className={cn(
-                    'relative h-full flex items-center gap-1.5 text-[11.5px] font-medium transition-colors shrink-0',
+                    'relative h-full flex items-center gap-1.5 text-[11px] font-medium transition-colors shrink-0',
                     compactTabs ? 'px-2' : 'px-2.5',
                     isActive
-                      ? 'text-primary'
+                      ? 'text-foreground'
                       : 'text-muted-foreground hover:text-foreground',
                   )}
                 >
-                  <Icon className="size-3.5" />
+                  <Icon className="size-3.5" strokeWidth={1.75} />
                   {!compactTabs && <span className="whitespace-nowrap">{t(tab.labelKey)}</span>}
                   {isActive && (
-                    <motion.span
-                      layoutId="preview-tab-indicator"
-                      className="absolute left-1.5 right-1.5 bottom-0 h-[2px] bg-primary rounded-t-full"
-                      style={{ boxShadow: '0 0 8px oklch(0.7 0.15 165 / 60%)' }}
-                      transition={{ type: 'spring', stiffness: 380, damping: 30 }}
-                    />
+                    <span className="absolute left-2.5 right-2.5 bottom-0 h-px bg-foreground/40" />
                   )}
                 </button>
               </Fragment>
@@ -251,13 +246,13 @@ export function PreviewPanel() {
             <DropdownMenuTrigger asChild>
               <button
                 type="button"
-                className="grid place-items-center size-6 rounded-md text-muted-foreground hover:bg-accent hover:text-foreground transition-colors"
+                className="grid place-items-center size-6 rounded text-muted-foreground hover:bg-accent/60 hover:text-foreground transition-colors"
                 aria-label={t('layoutSwitch')}
               >
                 {previewPosition === 'right' ? (
-                  <Columns2 className="size-3.5" />
+                  <Columns2 className="size-3.5" strokeWidth={1.75} />
                 ) : (
-                  <Rows2 className="size-3.5" />
+                  <Rows2 className="size-3.5" strokeWidth={1.75} />
                 )}
               </button>
             </DropdownMenuTrigger>
@@ -319,13 +314,13 @@ export function PreviewPanel() {
                 <button
                   type="button"
                   onClick={handleCopy}
-                  className="grid place-items-center size-6 rounded-md text-muted-foreground hover:bg-accent hover:text-foreground transition-colors"
+                  className="grid place-items-center size-6 rounded text-muted-foreground hover:bg-accent/60 hover:text-foreground transition-colors"
                   aria-label={t('previewCopy')}
                 >
                   {copied ? (
-                    <Check className="size-3.5 text-emerald-500" />
+                    <Check className="size-3.5 text-primary" />
                   ) : (
-                    <Copy className="size-3.5" />
+                    <Copy className="size-3.5" strokeWidth={1.75} />
                   )}
                 </button>
               </TooltipTrigger>
@@ -421,11 +416,11 @@ const FormulaView = memo(function FormulaView({
 
   if (results.length === 0) {
     return (
-      <div className="h-full flex flex-col items-center justify-center text-center px-8 py-12">
-        <div className="grid place-items-center size-14 rounded-2xl bg-primary/8 border border-primary/20 mb-3">
-          <Sparkles className="size-6 text-primary/70" />
+      <div className="h-full flex flex-col items-center justify-center text-center px-8 py-12 bg-[var(--preview-canvas)]">
+        <div className="grid place-items-center size-10 rounded-md border border-border bg-card mb-3">
+          <Sparkles className="size-4 text-muted-foreground" strokeWidth={1.75} />
         </div>
-        <p className="text-[13px] font-medium text-foreground/80 mb-1">
+        <p className="text-[12.5px] font-medium text-foreground/80 mb-1">
           {t('previewEmpty')}
         </p>
         <p className="text-[11.5px] text-muted-foreground max-w-xs">
@@ -444,26 +439,26 @@ const FormulaView = memo(function FormulaView({
   const newestId = results[0]?.id;
 
   return (
-    <ScrollArea className="h-full">
+    <ScrollArea className="h-full bg-[var(--preview-canvas)]">
       <div className="p-4 space-y-4">
         {ordered.map((result) => {
           const isCurrent = result.id === newestId;
           return (
             <div key={result.id} className="space-y-2">
               {/* Input */}
-              <div className="rounded-lg border border-border/60 bg-muted/30 p-3">
+              <div className="rounded border border-border bg-card p-3">
                 <div className="text-[10px] uppercase tracking-wider text-muted-foreground/80 mb-1.5 flex items-center gap-1.5">
-                  <span className="size-1.5 rounded-full bg-amber-500/80" />
+                  <span className="size-1.5 rounded-full bg-muted-foreground/50" />
                   {t('previewInput')}
                 </div>
-                <div className="font-mono text-[12.5px] text-primary/90 break-all">
+                <div className="font-mono text-[12.5px] text-foreground/85 break-all">
                   {result.input}
                 </div>
               </div>
 
               {/* Output */}
               {result.error ? (
-                <div className="rounded-lg border border-destructive/40 bg-destructive/8 p-3">
+                <div className="rounded border border-destructive/30 bg-destructive/5 p-3">
                   <div className="flex items-center gap-1.5 text-[10px] uppercase tracking-wider text-destructive mb-1.5">
                     <AlertCircle className="size-3" />
                     {t('previewError')}
@@ -474,17 +469,17 @@ const FormulaView = memo(function FormulaView({
                 </div>
               ) : (
                 <div className={cn(
-                  'rounded-lg border p-4 grid place-items-center text-center result-output',
+                  'rounded border p-4 grid place-items-center text-center result-output',
                   isCurrent
-                    ? 'border-primary/30 bg-primary/5 glow-card-teal'
-                    : 'border-border/60 bg-card/40',
+                    ? 'border-border bg-[var(--paper)] text-[var(--paper-foreground)]'
+                    : 'border-border/70 bg-card',
                   previewSize === 'large' ? 'min-h-[180px]' : 'min-h-[100px]',
                 )}>
                   <div className="w-full">
                     <div className="text-[10px] uppercase tracking-wider text-muted-foreground/80 mb-2 flex items-center justify-center gap-1.5">
                       <span className={cn(
                         'size-1.5 rounded-full',
-                        isCurrent ? 'bg-emerald-500/80' : 'bg-muted-foreground/60',
+                        isCurrent ? 'bg-primary/70' : 'bg-muted-foreground/40',
                       )} />
                       {t('previewResult')}
                     </div>
@@ -505,7 +500,7 @@ const FormulaView = memo(function FormulaView({
                     )}
                     {/* Type badge + export */}
                     <div className="mt-3 flex items-center justify-center gap-2 text-[10px] text-muted-foreground">
-                      <span className="inline-flex items-center px-1.5 py-0.5 rounded border border-border/60 bg-muted/40 font-mono uppercase tracking-wide">
+                      <span className="inline-flex items-center px-1.5 py-0.5 rounded-[3px] border border-border bg-muted/40 font-mono uppercase tracking-wide">
                         {result.type}
                       </span>
                       {result.isMatrix && result.matrix && (
@@ -517,20 +512,20 @@ const FormulaView = memo(function FormulaView({
                         <button
                           type="button"
                           onClick={() => handleAIExplain(result)}
-                          className="inline-flex items-center gap-1 rounded-md px-1.5 py-0.5 text-[10.5px] font-medium text-primary hover:bg-primary/10 transition-colors"
+                          className="inline-flex items-center gap-1 rounded px-1.5 py-0.5 text-[10.5px] font-medium text-muted-foreground hover:bg-accent hover:text-foreground transition-colors"
                           aria-label="AI 解释结果"
                         >
-                          <Sparkles className="size-3" />
+                          <Sparkles className="size-3" strokeWidth={1.75} />
                           AI 解释
                         </button>
                         <DropdownMenu>
                           <DropdownMenuTrigger asChild>
                             <button
                               type="button"
-                              className="inline-flex items-center gap-1 rounded-md px-1.5 py-0.5 text-[10.5px] font-medium text-muted-foreground hover:text-foreground hover:bg-accent transition-colors"
+                              className="inline-flex items-center gap-1 rounded px-1.5 py-0.5 text-[10.5px] font-medium text-muted-foreground hover:text-foreground hover:bg-accent transition-colors"
                               aria-label={t('exportResult')}
                             >
-                              <Download className="size-3" />
+                              <Download className="size-3" strokeWidth={1.75} />
                               {t('exportResult')}
                             </button>
                           </DropdownMenuTrigger>
@@ -543,14 +538,14 @@ const FormulaView = memo(function FormulaView({
                               onClick={() => handleExportResult(result, 'latex')}
                               className="gap-2 cursor-pointer"
                             >
-                              <FileText className="size-3.5 text-primary" />
+                              <FileText className="size-3.5 text-muted-foreground" strokeWidth={1.75} />
                               <span className="text-xs">{t('exportResultLatex')}</span>
                             </DropdownMenuItem>
                             <DropdownMenuItem
                               onClick={() => handleExportResult(result, 'md')}
                               className="gap-2 cursor-pointer"
                             >
-                              <FileCode className="size-3.5 text-primary" />
+                              <FileCode className="size-3.5 text-muted-foreground" strokeWidth={1.75} />
                               <span className="text-xs">{t('exportResultMarkdown')}</span>
                             </DropdownMenuItem>
                           </DropdownMenuContent>
@@ -585,17 +580,14 @@ const LogView = memo(function LogView({
     );
   }
   return (
-    <ScrollArea className="h-full">
+    <ScrollArea className="h-full bg-[var(--preview-canvas)]">
       <div className="p-3 space-y-2">
         {/* reverse → show in the order the user wrote the lines (top = first) */}
         {[...results].reverse().map((r, i) => (
-          <motion.div
+          <div
             key={r.id}
-            initial={{ opacity: 0, y: -4 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.16, delay: Math.min(i * 0.015, 0.18) }}
             onClick={() => onPick(r.input)}
-            className="rounded-md border border-border/60 bg-card/60 hover:border-primary/40 hover:bg-accent/30 p-2.5 cursor-pointer interactive-card"
+            className="rounded border border-border bg-card hover:bg-accent/30 p-2.5 cursor-pointer transition-colors"
           >
             <div className="flex items-center gap-1.5 text-[11px] text-muted-foreground mb-1">
               <span className="font-mono">[{i + 1}]</span>
@@ -605,10 +597,10 @@ const LogView = memo(function LogView({
               </span>
             </div>
             <div className="flex items-center gap-2">
-              <code className="font-mono text-[12px] text-primary/90 truncate flex-1">
+              <code className="font-mono text-[12px] text-foreground/80 truncate flex-1">
                 {r.input}
               </code>
-              <ArrowRight className="size-3 text-muted-foreground shrink-0" />
+              <ArrowRight className="size-3 text-muted-foreground shrink-0" strokeWidth={1.75} />
               <code
                 className={cn(
                   'font-mono text-[12px] truncate flex-1',
@@ -618,7 +610,7 @@ const LogView = memo(function LogView({
                 {r.error ?? r.output}
               </code>
             </div>
-          </motion.div>
+          </div>
         ))}
       </div>
     </ScrollArea>
@@ -629,11 +621,11 @@ const LogView = memo(function LogView({
 function PipelinePlaceholder() {
   const setViewMode = useWorkbenchStore((s) => s.setViewMode);
   return (
-    <div className="h-full flex flex-col items-center justify-center text-center px-8 py-12">
-      <div className="grid place-items-center size-14 rounded-2xl bg-primary/8 border border-primary/20 mb-3">
-        <Workflow className="size-6 text-primary/70" />
+    <div className="h-full flex flex-col items-center justify-center text-center px-8 py-12 bg-[var(--preview-canvas)]">
+      <div className="grid place-items-center size-10 rounded-md border border-border bg-card mb-3">
+        <Workflow className="size-4 text-muted-foreground" strokeWidth={1.75} />
       </div>
-      <p className="text-[13px] font-medium text-foreground/80 mb-1">
+      <p className="text-[12.5px] font-medium text-foreground/80 mb-1">
         {t('pipelineTitle')}
       </p>
       <p className="text-[11.5px] text-muted-foreground max-w-xs mb-4">
@@ -642,10 +634,10 @@ function PipelinePlaceholder() {
       <Button
         variant="outline"
         size="sm"
-        className="h-7 text-[11.5px] gap-1.5"
+        className="h-7 text-[11px] gap-1.5"
         onClick={() => setViewMode('pipeline')}
       >
-        <Workflow className="size-3.5" />
+        <Workflow className="size-3.5" strokeWidth={1.75} />
         {t('pipelineEnterView')}
       </Button>
     </div>

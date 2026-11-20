@@ -41,8 +41,8 @@ function ActionButton({
       onClick={onClick}
       disabled={disabled}
       className={cn(
-        'grid size-8 place-items-center rounded-lg text-muted-foreground transition-colors',
-        'hover:bg-accent/70 hover:text-foreground disabled:pointer-events-none disabled:opacity-35',
+        'grid size-8 place-items-center rounded-md text-muted-foreground transition-colors',
+        'hover:bg-accent/60 hover:text-foreground disabled:pointer-events-none disabled:opacity-35',
       )}
     >
       {children}
@@ -64,7 +64,7 @@ export function WhiteboardActionBar({
 }: WhiteboardActionBarProps) {
   return (
     <div className="pointer-events-none absolute bottom-3 left-1/2 z-30 -translate-x-1/2">
-      <div className="pointer-events-auto flex items-center gap-0.5 rounded-2xl border border-border/70 bg-background/95 px-1.5 py-1 shadow-xl backdrop-blur">
+      <div className="pointer-events-auto flex items-center gap-0.5 rounded-lg border border-border bg-popover px-1 py-0.5 shadow-lg">
         <ActionButton label="缩小" onClick={onZoomOut}>
           <ZoomOut className="size-4" />
         </ActionButton>
@@ -72,7 +72,7 @@ export function WhiteboardActionBar({
           type="button"
           onClick={onResetZoom}
           title="重置为 100%"
-          className="h-8 min-w-[52px] rounded-lg px-1 text-[11px] font-medium tabular-nums text-muted-foreground hover:bg-accent/70 hover:text-foreground"
+          className="h-8 min-w-[52px] rounded-md px-1 text-[11px] font-medium tabular-nums text-muted-foreground hover:bg-accent/60 hover:text-foreground"
         >
           {zoomPercent}%
         </button>
@@ -80,7 +80,7 @@ export function WhiteboardActionBar({
           <ZoomIn className="size-4" />
         </ActionButton>
 
-        <span className="mx-0.5 h-5 w-px bg-border/70" />
+        <span className="mx-0.5 h-5 w-px bg-border" />
 
         <ActionButton label="撤销" onClick={onUndo} disabled={!canUndo}>
           <Undo2 className="size-4" />
@@ -89,15 +89,15 @@ export function WhiteboardActionBar({
           <Redo2 className="size-4" />
         </ActionButton>
 
-        <span className="mx-0.5 h-5 w-px bg-border/70" />
+        <span className="mx-0.5 h-5 w-px bg-border" />
 
         <button
           type="button"
           onClick={onExport}
           disabled={exportDisabled}
-          className="inline-flex h-8 items-center gap-1.5 rounded-lg px-2.5 text-[11px] font-medium text-primary transition-colors hover:bg-primary/10 disabled:pointer-events-none disabled:opacity-35"
+          className="inline-flex h-8 items-center gap-1.5 rounded-md px-2.5 text-[11px] font-medium text-muted-foreground transition-colors hover:bg-accent/60 hover:text-foreground disabled:pointer-events-none disabled:opacity-35"
         >
-          <Download className="size-3.5" />
+          <Download className="size-3.5" strokeWidth={1.75} />
           导出
         </button>
       </div>

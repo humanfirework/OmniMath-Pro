@@ -2429,8 +2429,8 @@ function NodePipelineInner() {
               exit={{ opacity: 0 }}
               className="pointer-events-none absolute inset-0 z-30 flex items-center justify-center"
             >
-              <div className="flex flex-col items-center gap-3 rounded-xl border border-border/60 bg-background/85 px-6 py-5 shadow-2xl backdrop-blur-md">
-                <Loader2 className="size-6 animate-spin text-primary" />
+              <div className="flex flex-col items-center gap-3 rounded-lg border border-border bg-popover px-6 py-5 shadow-xl">
+                <Loader2 className="size-5 animate-spin text-muted-foreground" />
                 <div className="flex flex-col items-center gap-1">
                   <span className="text-[12.5px] font-medium text-foreground">
                     蓝图运行中…
@@ -2447,7 +2447,7 @@ function NodePipelineInner() {
                 </div>
                 <div className="h-1.5 w-52 overflow-hidden rounded-full bg-muted">
                   <motion.div
-                    className="h-full rounded-full bg-gradient-to-r from-primary to-primary/70"
+                    className="h-full rounded-full bg-primary"
                     initial={{ width: 0 }}
                     animate={{
                       width: nodeProgress
@@ -2766,33 +2766,33 @@ function PipelineToolbar({
 }: ToolbarProps) {
   const [galleryOpen, setGalleryOpen] = useState(false);
   return (
-    <div className="shrink-0 h-11 flex items-center justify-between px-3 gap-3 glass border-b border-border">
+    <div className="shrink-0 h-9 flex items-center justify-between px-3 gap-3 bg-background border-b border-border">
       <div className="flex items-center gap-2 min-w-0">
         <Button
           variant="ghost"
           size="sm"
-          className="h-8 px-2 gap-1.5 text-[12px]"
+          className="h-7 px-2 gap-1.5 text-[11px]"
           onClick={onBack}
         >
-          <ArrowLeft className="size-3.5" />
+          <ArrowLeft className="size-3.5" strokeWidth={1.75} />
           <span className="hidden sm:inline">{t('npBackToWorkbench')}</span>
         </Button>
-        <div className="h-5 w-px bg-border/60" />
+        <div className="h-5 w-px bg-border" />
         <div className="flex items-center gap-1.5 min-w-0">
-          <Workflow className="size-4 text-primary shrink-0" />
-          <span className="text-[13px] font-semibold text-gradient-teal truncate">
+          <Workflow className="size-3.5 text-muted-foreground shrink-0" strokeWidth={1.75} />
+          <span className="text-[12px] font-medium text-foreground truncate">
             {t('pipelineTitle')}
           </span>
         </div>
-        <div className="hidden md:flex items-center gap-2 ml-2 text-[11px] text-muted-foreground">
-          <span className="px-1.5 py-0.5 rounded border border-border/60 bg-muted/40 font-mono">
+        <div className="hidden md:flex items-center gap-2 ml-2 text-[10.5px] text-muted-foreground">
+          <span className="px-1.5 py-0.5 rounded-[3px] border border-border bg-muted/40 font-mono">
             {nodeCount} {t('npNodes')}
           </span>
-          <span className="px-1.5 py-0.5 rounded border border-border/60 bg-muted/40 font-mono">
+          <span className="px-1.5 py-0.5 rounded-[3px] border border-border bg-muted/40 font-mono">
             {edgeCount} {t('npEdges')}
           </span>
           {selectedCount > 0 && (
-            <span className="px-1.5 py-0.5 rounded border border-blue-500/50 bg-blue-500/10 text-blue-500 font-mono">
+            <span className="px-1.5 py-0.5 rounded-[3px] border border-border bg-accent text-foreground font-mono">
               {selectedCount} 选中
             </span>
           )}
