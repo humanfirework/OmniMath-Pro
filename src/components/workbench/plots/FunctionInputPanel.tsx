@@ -63,6 +63,8 @@ interface Analysis {
   params: string[];
   latex: string;
   error?: string;
+  /** 输入仍处于半截状态（如 `x + z =`），不要展示识别错误。 */
+  incomplete?: boolean;
 }
 
 const EMPTY_ANALYSIS: Analysis = { text: '', params: [], latex: '' };
@@ -78,6 +80,8 @@ function coordLabel(plotType?: PlotType): string {
       return '3D 曲面';
     case 'cartesian':
       return '笛卡尔 y = f(x)';
+    case 'implicit2d':
+      return '2D 隐式 F(x, y) = 0';
     default:
       return '未识别';
   }
@@ -163,6 +167,12 @@ export function FunctionInputPanel() {
     const trimmed = demosExpr.trim();
     if (!trimmed) {
       setAnalysis(EMPTY_ANALYSIS);
+      return;
+    }
+    // 半截输入（尾随 = / 运算符 / ( / , / .、单独函数名等）先不解析，
+    // 否则 `x + z =` 会被 mathjs 当成赋值语句并闪出红色语法错误。
+    if (looksIncomplete(trimmed)) {
+      setAnalysis({ text: trimmed, params: [], latex: '', incomplete: true });
       return;
     }
     const timer = setTimeout(async () => {
@@ -272,6 +282,16 @@ export function FunctionInputPanel() {
         setTimeout(async () => {
           const trimmed = text.trim();
           if (!trimmed) return;
+          // 编辑中的半截表达式同样不报错；清掉可能残留的旧错误。
+          if (looksIncomplete(trimmed)) {
+            setRowErrors((prev) => {
+              if (!(id in prev)) return prev;
+              const next = { ...prev };
+              delete next[id];
+              return next;
+            });
+            return;
+          }
           try {
             const res = await evaluateExpressionAsync(trimmed, 'simple');
             if (!res.success || !res.plotType) {
@@ -627,11 +647,19 @@ export function FunctionInputPanel() {
                       {p.surfaceMode === 'implicit' ? '隐式' : '3D'}
                     </span>
                   )}
+                  {p.plotType === 'implicit2d' && (
+                    <span
+                      className="shrink-0 rounded bg-sky-500/10 px-1 py-0.5 text-[8.5px] font-medium text-sky-500"
+                      title="2D 隐式方程 F(x, y) = 0"
+                    >
+                      2D 隐式
+                    </span>
+                  )}
                   <button
                     type="button"
                     onClick={() => togglePlotVisibility(p.id)}
                     title={p.visible ? '隐藏曲线' : '显示曲线'}
-                    className="grid size-6 shrink-0 place-items-center rounded-md text-muted-foreground hover:bg-accent hover:text-foreground"
+                    className="touch-target grid size-6 shrink-0 place-items-center rounded-md text-muted-foreground hover:bg-accent hover:text-foreground"
                   >
                     {p.visible ? <Eye className="size-3" /> : <EyeOff className="size-3 opacity-60" />}
                   </button>
@@ -647,7 +675,7 @@ export function FunctionInputPanel() {
                       });
                     }}
                     title="删除此函数"
-                    className="grid size-6 shrink-0 place-items-center rounded-md text-muted-foreground hover:bg-destructive/15 hover:text-destructive"
+                    className="touch-target grid size-6 shrink-0 place-items-center rounded-md text-muted-foreground hover:bg-destructive/15 hover:text-destructive"
                   >
                     <Trash2 className="size-3" />
                   </button>
@@ -704,7 +732,7 @@ export function FunctionInputPanel() {
         </div>
 
         {/* 当前输入识别提示 */}
-        {analysis.latex && demosExpr.trim() && (
+        {analysis.latex && demosExpr.trim() && !analysis.incomplete && (
           <div className="mt-2 rounded-xl border border-border/60 bg-muted/20 px-2.5 py-1.5">
             <div className="flex items-center gap-1.5 text-[9.5px] text-muted-foreground">
               <span

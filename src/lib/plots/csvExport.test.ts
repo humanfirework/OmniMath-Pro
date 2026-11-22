@@ -4,7 +4,11 @@
  * 覆盖：seriesToCSV 的表头生成、行对齐、缺失/非有限值留空、空输入。
  */
 import { describe, it, expect } from 'vitest';
-import { seriesToCSV, type SeriesData } from './csvExport';
+import {
+  seriesToCSV,
+  finiteSamplesWithoutDuplicates,
+  type SeriesData,
+} from './csvExport';
 
 describe('seriesToCSV', () => {
   it('returns empty string for empty input', () => {
@@ -43,5 +47,52 @@ describe('seriesToCSV', () => {
     const lines = csv.split('\n');
     expect(lines[2]).toBe(','); // NaN / Infinity → 空
     expect(lines[3]).toBe('2,2');
+  });
+});
+
+describe('finiteSamplesWithoutDuplicates', () => {
+  it('drops NaN gap markers from marching-squares samples', () => {
+    const clean = finiteSamplesWithoutDuplicates([
+      { x: 1, y: 1 },
+      { x: 2, y: 2 },
+      { x: Number.NaN, y: Number.NaN },
+      { x: 3, y: 3 },
+    ]);
+    expect(clean).toEqual([
+      { x: 1, y: 1 },
+      { x: 2, y: 2 },
+      { x: 3, y: 3 },
+    ]);
+  });
+
+  it('collapses consecutive duplicate shared endpoints', () => {
+    const clean = finiteSamplesWithoutDuplicates([
+      { x: 0, y: 0 },
+      { x: 1, y: 1 },
+      { x: Number.NaN, y: Number.NaN },
+      { x: 1, y: 1 },
+      { x: 1, y: 1 },
+      { x: 2, y: 2 },
+    ]);
+    expect(clean).toEqual([
+      { x: 0, y: 0 },
+      { x: 1, y: 1 },
+      { x: 2, y: 2 },
+    ]);
+  });
+
+  it('keeps non-adjacent repeated points (closed curves)', () => {
+    const clean = finiteSamplesWithoutDuplicates([
+      { x: 1, y: 0 },
+      { x: 0, y: 1 },
+      { x: -1, y: 0 },
+      { x: 1, y: 0 },
+    ]);
+    expect(clean).toEqual([
+      { x: 1, y: 0 },
+      { x: 0, y: 1 },
+      { x: -1, y: 0 },
+      { x: 1, y: 0 },
+    ]);
   });
 });

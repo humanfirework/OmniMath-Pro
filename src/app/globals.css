@@ -3698,19 +3698,21 @@ svg *::after {
    * 全局动画时长/曲线 token，所有 framer-motion 动画 + CSS transition
    * 都应引用这些变量，保证全应用动画手感一致。
    *
-   *   --motion-fast     150ms   按钮按下、hover 高亮、tab 切换
-   *   --motion-normal   200ms   面板淡入、卡片浮起（默认值）
-   *   --motion-slow     300ms   抽屉滑入、对话框出现
+   *   --motion-fast     120ms   按钮按下、hover 高亮、tab 切换
+   *   --motion-normal   180ms   面板淡入、卡片浮起（默认值）
+   *   --motion-slow     240ms   抽屉滑入、对话框出现
    *
    *   --motion-ease     标准 ease-out，适合大多数出场动画
    *   --motion-spring   带轻微回弹，适合选中态/激活态
    *
+   * 时长保持短促、位移保持克制；需要在系统开启“减少动态效果”时
+   * 自动降级，见文件末尾的 prefers-reduced-motion 区块。
    * 配合 .motion-fast / .motion-normal 工具类，可在不写 framer-motion
    * 的纯 CSS 场景复用同一套 token。
    */
-  --motion-fast: 150ms;
-  --motion-normal: 200ms;
-  --motion-slow: 300ms;
+  --motion-fast: 120ms;
+  --motion-normal: 180ms;
+  --motion-slow: 240ms;
   --motion-ease: cubic-bezier(0.4, 0, 0.2, 1);
   --motion-spring: cubic-bezier(0.34, 1.56, 0.64, 1);
 
@@ -3925,7 +3927,9 @@ svg *::after {
     text-rendering: optimizeLegibility;
     overflow: hidden;  /* App is full-screen */
     /* Smooth theme transition */
-    transition: background-color 0.2s ease, color 0.2s ease;
+    transition:
+      background-color var(--motion-normal) var(--motion-ease),
+      color var(--motion-normal) var(--motion-ease);
   }
 
   h1, h2, h3, h4, h5, h6 {
@@ -3977,7 +3981,7 @@ svg *::after {
   [data-panel-resize-handle-id] {
     position: relative;
     background: transparent;
-    transition: background 0.15s ease;
+    transition: background var(--motion-fast) var(--motion-ease);
   }
 
   [data-panel-resize-handle-id]:hover,
@@ -3988,7 +3992,7 @@ svg *::after {
   /* Legacy compat selectors */
   [data-panel-group-direction="horizontal"] > [data-resize-handle] {
     background: oklch(0 0 0 / 8%);
-    transition: background 0.15s;
+    transition: background var(--motion-fast) var(--motion-ease);
     width: 1px;
   }
 
@@ -3999,7 +4003,7 @@ svg *::after {
 
   [data-panel-group-direction="vertical"] > [data-resize-handle] {
     background: oklch(0 0 0 / 8%);
-    transition: background 0.15s;
+    transition: background var(--motion-fast) var(--motion-ease);
     height: 1px;
   }
 
@@ -4402,9 +4406,9 @@ html:not(.dark) .ai-panel .focus-within\:border-primary\/40:focus-within {
     0 1px 2px oklch(0 0 0 / 6%),
     0 4px 12px oklch(0 0 0 / 8%);
   transition:
-    transform 0.18s cubic-bezier(0.2, 0.8, 0.2, 1),
-    box-shadow 0.18s ease,
-    border-color 0.18s ease;
+    transform var(--motion-normal) var(--motion-ease),
+    box-shadow var(--motion-normal) var(--motion-ease),
+    border-color var(--motion-normal) var(--motion-ease);
 }
 
 .dark .node-card {
@@ -4464,7 +4468,9 @@ html:not(.dark) .ai-panel .focus-within\:border-primary\/40:focus-within {
   stroke-width: 2;
   fill: none;
   opacity: 0.7;
-  transition: opacity 0.15s ease, stroke-width 0.15s ease;
+  transition:
+    opacity var(--motion-fast) var(--motion-ease),
+    stroke-width var(--motion-fast) var(--motion-ease);
 }
 
 .node-connector:hover {
@@ -4491,7 +4497,10 @@ html:not(.dark) .ai-panel .focus-within\:border-primary\/40:focus-within {
   border: 2px solid var(--teal);
   box-sizing: border-box;
   cursor: crosshair;
-  transition: transform 0.15s ease, box-shadow 0.15s ease, background 0.15s ease;
+  transition:
+    transform var(--motion-fast) var(--motion-ease),
+    box-shadow var(--motion-fast) var(--motion-ease),
+    background var(--motion-fast) var(--motion-ease);
 }
 
 .node-port:hover,
@@ -4513,7 +4522,7 @@ html:not(.dark) .ai-panel .focus-within\:border-primary\/40:focus-within {
   to { opacity: 1; transform: translateY(0); }
 }
 .animate-fade-in {
-  animation: fadeIn 0.18s ease-out both;
+  animation: fadeIn var(--motion-normal) var(--motion-ease) both;
 }
 
 @keyframes slideInLeft {
@@ -4521,7 +4530,7 @@ html:not(.dark) .ai-panel .focus-within\:border-primary\/40:focus-within {
   to { opacity: 1; transform: translateX(0); }
 }
 .animate-slide-in-left {
-  animation: slideInLeft 0.22s cubic-bezier(0.2, 0.8, 0.2, 1) both;
+  animation: slideInLeft var(--motion-slow) var(--motion-ease) both;
 }
 
 @keyframes slideInRight {
@@ -4529,7 +4538,7 @@ html:not(.dark) .ai-panel .focus-within\:border-primary\/40:focus-within {
   to { opacity: 1; transform: translateX(0); }
 }
 .animate-slide-in-right {
-  animation: slideInRight 0.22s cubic-bezier(0.2, 0.8, 0.2, 1) both;
+  animation: slideInRight var(--motion-slow) var(--motion-ease) both;
 }
 
 @keyframes slideInUp {
@@ -4537,7 +4546,7 @@ html:not(.dark) .ai-panel .focus-within\:border-primary\/40:focus-within {
   to { opacity: 1; transform: translateY(0); }
 }
 .animate-slide-in-up {
-  animation: slideInUp 0.22s cubic-bezier(0.2, 0.8, 0.2, 1) both;
+  animation: slideInUp var(--motion-slow) var(--motion-ease) both;
 }
 
 @keyframes scaleIn {
@@ -4545,7 +4554,7 @@ html:not(.dark) .ai-panel .focus-within\:border-primary\/40:focus-within {
   to { opacity: 1; transform: scale(1); }
 }
 .animate-scale-in {
-  animation: scaleIn 0.18s cubic-bezier(0.2, 0.8, 0.2, 1) both;
+  animation: scaleIn var(--motion-fast) var(--motion-ease) both;
 }
 
 @keyframes bounceIn {
@@ -4554,7 +4563,7 @@ html:not(.dark) .ai-panel .focus-within\:border-primary\/40:focus-within {
   100% { opacity: 1; transform: scale(1); }
 }
 .animate-bounce-in {
-  animation: bounceIn 0.32s cubic-bezier(0.2, 0.8, 0.2, 1) both;
+  animation: bounceIn var(--motion-slow) var(--motion-ease) both;
 }
 
 @keyframes glowPulse {
@@ -4658,7 +4667,9 @@ html:not(.dark) .ai-panel .focus-within\:border-primary\/40:focus-within {
 
 [cmdk-item] {
   font-family: var(--font-sans);
-  transition: background 0.1s ease, color 0.1s ease;
+  transition:
+    background var(--motion-fast) var(--motion-ease),
+    color var(--motion-fast) var(--motion-ease);
 }
 
 [cmdk-item][data-selected="true"] {
@@ -4694,7 +4705,9 @@ textarea, pre, code, .katex, .select-text {
    ------------------------------------------------------------ */
 [data-state="open"].animate-in,
 [data-state="closed"].animate-out {
-  transition: opacity 0.15s ease, transform 0.15s ease;
+  transition:
+    opacity var(--motion-fast) var(--motion-ease),
+    transform var(--motion-fast) var(--motion-ease);
 }
 
 /* ------------------------------------------------------------
@@ -4747,7 +4760,9 @@ textarea, pre, code, .katex, .select-text {
   background: var(--teal);
   border-radius: 0 2px 2px 0;
   box-shadow: 0 0 8px oklch(0.7 0.15 165 / 60%);
-  transition: opacity 0.15s ease, transform 0.15s ease;
+  transition:
+    opacity var(--motion-fast) var(--motion-ease),
+    transform var(--motion-fast) var(--motion-ease);
 }
 
 /* ------------------------------------------------------------
@@ -4791,9 +4806,9 @@ textarea.editor-input {
    ------------------------------------------------------------ */
 .transition-theme {
   transition:
-    background-color 0.18s ease,
-    border-color 0.18s ease,
-    color 0.18s ease;
+    background-color var(--motion-normal) var(--motion-ease),
+    border-color var(--motion-normal) var(--motion-ease),
+    color var(--motion-normal) var(--motion-ease);
 }
 
 /* 等宽数字工具类 —— 数字纵向对齐（设置面板数值、状态栏、读数等），
@@ -4818,10 +4833,10 @@ input[type="number"] {
 /* Premium focus state for interactive cards */
 .interactive-card {
   transition:
-    transform 0.18s cubic-bezier(0.2, 0.8, 0.2, 1),
-    box-shadow 0.18s ease,
-    border-color 0.18s ease,
-    background-color 0.18s ease;
+    transform var(--motion-normal) var(--motion-ease),
+    box-shadow var(--motion-normal) var(--motion-ease),
+    border-color var(--motion-normal) var(--motion-ease),
+    background-color var(--motion-normal) var(--motion-ease);
 }
 
 .interactive-card:hover {
@@ -4938,15 +4953,99 @@ input[type="number"] {
   animation: collapsibleUp var(--motion-normal) ease-out;
 }
 
-/* ── prefers-reduced-motion：尊重用户系统偏好，禁用无限动画 ─────────── */
+/* ── prefers-reduced-motion：尊重系统“减少动态效果”偏好 ─────────────
+ * 1. 所有动画/过渡缩短到接近瞬时（一次性播放）；
+ * 2. 位移/弹性入场统一降级为淡入，最终 opacity: 1，不会留下不可见内容；
+ * 3. 背景网格、光晕、微光、漂浮、渐变等装饰性无限动画直接停止；
+ * 4. 加载 spinner 属于功能性反馈，保留但放慢，仍可表达“正在处理”。
+ */
 @media (prefers-reduced-motion: reduce) {
   *,
   *::before,
   *::after {
     animation-duration: 0.01ms !important;
+    animation-delay: 0ms !important;
     animation-iteration-count: 1 !important;
     transition-duration: 0.01ms !important;
     scroll-behavior: auto !important;
+  }
+
+  .animate-fade-in,
+  .animate-slide-in-left,
+  .animate-slide-in-right,
+  .animate-slide-in-up,
+  .animate-scale-in,
+  .animate-bounce-in,
+  .view-enter {
+    animation-name: fadeIn !important;
+    animation-duration: var(--motion-fast) !important;
+  }
+
+  .grid-bg,
+  .grid-bg-dots,
+  .pipeline-canvas,
+  .animate-glow-pulse,
+  .animate-shimmer,
+  .animate-float,
+  .animate-gradient,
+  .animate-pulse-subtle,
+  .node-connector.animated {
+    animation: none !important;
+  }
+
+  .animate-pulse-ring::before {
+    animation: none !important;
+    opacity: 0 !important;
+  }
+
+  /* 功能性加载反馈：保留旋转但显著放慢。 */
+  .animate-spin,
+  .animate-spin-slow {
+    animation-duration: 2.4s !important;
+    animation-iteration-count: infinite !important;
+  }
+}
+
+/* ── 页面隐藏时暂停装饰性无限动画 ────────────────────────────────
+ * Workbench 的 useVisibilityPause 会在 document.hidden 时给 <html>
+ * 加上 .animations-paused；只暂停纯装饰动画，不影响 spinner / 进度条
+ * 等需要继续表达状态的功能性动画。
+ */
+html.animations-paused .grid-bg,
+html.animations-paused .grid-bg-dots,
+html.animations-paused .pipeline-canvas,
+html.animations-paused .animate-glow-pulse,
+html.animations-paused .animate-shimmer,
+html.animations-paused .animate-float,
+html.animations-paused .animate-gradient,
+html.animations-paused .animate-pulse-subtle,
+html.animations-paused .node-connector.animated {
+  animation-play-state: paused !important;
+}
+
+html.animations-paused .animate-pulse-ring::before {
+  animation-play-state: paused !important;
+}
+
+/* ── 移动端触控目标扩展 ─────────────────────────────────────────
+ * 小图标按钮视觉尺寸保持不变，通过透明伪元素把可点击区域扩展到
+ * 至少 40×40px。仅在窄屏 / 粗指针设备生效，桌面鼠标操作不受影响。
+ */
+@media (max-width: 767px), (pointer: coarse) {
+  .touch-target {
+    position: relative;
+    touch-action: manipulation;
+  }
+
+  .touch-target::after {
+    content: "";
+    position: absolute;
+    left: 50%;
+    top: 50%;
+    width: max(40px, 100%);
+    height: max(40px, 100%);
+    transform: translate(-50%, -50%);
+    border-radius: inherit;
   }
 }
 
@@ -5007,7 +5106,9 @@ html[data-font-preset="system"] {
   background: var(--background, #ffffff);
   border: 2px solid var(--primary, #2dd4bf);
   box-shadow: 0 1px 3px rgba(0, 0, 0, 0.25);
-  transition: transform 0.1s ease, box-shadow 0.1s ease;
+  transition:
+    transform var(--motion-fast) var(--motion-ease),
+    box-shadow var(--motion-fast) var(--motion-ease);
   margin-top: -4px; /* 居中到 8px 轨道 */
 }
 .desmos-range::-webkit-slider-thumb:hover {
@@ -5025,7 +5126,9 @@ html[data-font-preset="system"] {
   background: var(--background, #ffffff);
   border: 2px solid var(--primary, #2dd4bf);
   box-shadow: 0 1px 3px rgba(0, 0, 0, 0.25);
-  transition: transform 0.1s ease, box-shadow 0.1s ease;
+  transition:
+    transform var(--motion-fast) var(--motion-ease),
+    box-shadow var(--motion-fast) var(--motion-ease);
 }
 .desmos-range::-moz-range-thumb:hover {
   transform: scale(1.18);

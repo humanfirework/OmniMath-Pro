@@ -18,7 +18,7 @@ export interface CalculationResult {
   isMatrix?: boolean;
   matrix?: number[][];
   plotExpression?: string;
-  plotType?: 'cartesian' | 'polar' | 'parametric' | 'surface3d';
+  plotType?: 'cartesian' | 'polar' | 'parametric' | 'implicit2d' | 'surface3d';
   surfaceMode?: SurfaceMode;
   plotRange?: [number, number];
   steps?: string[];
@@ -30,7 +30,7 @@ export interface PlotConfig {
   xRange: [number, number];
   yRange: [number, number];
   color: string;
-  plotType: 'cartesian' | 'polar' | 'parametric' | 'surface3d';
+  plotType: 'cartesian' | 'polar' | 'parametric' | 'implicit2d' | 'surface3d';
   /** 3D 曲面采样方式：显式 `z = f(x, y)` 或隐式 `F(x, y, z) = 0`。 */
   surfaceMode?: SurfaceMode;
   visible: boolean;
@@ -229,7 +229,8 @@ function sanitizePlot(p: unknown): PlotConfig | null {
     yRange: [yRange[0], yRange[1]] as [number, number],
     color: typeof o.color === 'string' ? o.color : '#2dd4bf',
     plotType: (o.plotType === 'cartesian' || o.plotType === 'polar' ||
-      o.plotType === 'parametric' || o.plotType === 'surface3d')
+      o.plotType === 'parametric' || o.plotType === 'implicit2d' ||
+      o.plotType === 'surface3d')
       ? o.plotType : 'cartesian',
     surfaceMode: o.surfaceMode === 'implicit' || o.surfaceMode === 'explicit'
       ? o.surfaceMode

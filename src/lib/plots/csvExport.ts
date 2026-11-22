@@ -14,6 +14,24 @@ export interface SeriesData {
 }
 
 /**
+ * 清洗隐式曲线样本：去掉 NaN / Infinity 断点，并折叠相邻重复点
+ * （marching squares 的相邻线段共享端点）。非隐式曲线按 x 升序、天然
+ * 无重复，可原样导出。
+ */
+export function finiteSamplesWithoutDuplicates(
+  samples: readonly { x: number; y: number }[],
+): { x: number; y: number }[] {
+  const out: { x: number; y: number }[] = [];
+  for (const s of samples) {
+    if (!Number.isFinite(s.x) || !Number.isFinite(s.y)) continue;
+    const prev = out[out.length - 1];
+    if (prev && prev.x === s.x && prev.y === s.y) continue;
+    out.push(s);
+  }
+  return out;
+}
+
+/**
  * 把多条序列合并为 CSV 文本。
  * - 空输入返回空字符串。
  * - 表头 = 每条序列的 `{name}_x`, `{name}_y`。

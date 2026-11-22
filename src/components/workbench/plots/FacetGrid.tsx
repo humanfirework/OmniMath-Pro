@@ -127,13 +127,14 @@ function FacetPlot({ plot, color, xRange, yRange, theme, spec }: FacetPlotProps)
     void scopeVersion;
     if (!visible) return [];
     if (spec) {
-      return sampleCurve(spec, xRange, 400);
+      // 隐式曲线需要两个轴的视窗；其余模式会忽略 yRange。
+      return sampleCurve(spec, xRange, 400, yRange);
     }
     const plotType2d = (plot.plotType === 'surface3d' ? 'cartesian' : plot.plotType ?? 'cartesian') as
       | 'cartesian' | 'polar' | 'parametric';
     return sampleFunction(plot.expression, xRange, plotType2d, 400);
      
-  }, [plot.expression, plot.plotType, xRange, visible, scopeVersion, spec]);
+  }, [plot.expression, plot.plotType, xRange, yRange, visible, scopeVersion, spec]);
 
   // Coordinate mapping.
   const dataToScreen = useCallback(

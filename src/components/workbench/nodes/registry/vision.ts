@@ -87,6 +87,10 @@ export interface ShapeLabel {
   x: number;
   y: number;
   text: string;
+  /** 解析置信度 0–1（仅蓝图解析节点写入，供结果面板显示徽标/低置信高亮）。 */
+  confidence?: number;
+  /** 标签来源：节点框还是连线（仅蓝图解析节点写入）。 */
+  kind?: 'node' | 'link';
 }
 
 /** shapes 值（shape-classify 输出）。 */
@@ -853,10 +857,13 @@ export const visionNodes = {
         height: input.height,
       };
 
+      // 节点标签带置信度：结果面板在 N1/N2 旁显示百分比，低置信用琥珀色提示。
       const shapeLabels: ShapeLabel[] = graph.nodes.map((n) => ({
         x: n.center.x,
         y: n.center.y,
         text: n.id,
+        confidence: n.confidence,
+        kind: 'node',
       }));
 
       // 只保留被识别为节点/连线的轮廓：去掉同一节点外侧的重复边框环，
@@ -954,7 +961,8 @@ export const visionNodes = {
         let y = l.y;
         if (flipX) x = sourceWidth - 1 - x;
         if (flipY) y = sourceHeight - 1 - y;
-        return { x: x * scale, y: y * scale, text: l.text };
+        // 保留 confidence / kind，结果面板才能继续显示置信度徽标。
+        return { ...l, x: x * scale, y: y * scale };
       });
 
       // 输入已是 BezierPath[]：bezier 模式直接透传（保留引用相等性）；

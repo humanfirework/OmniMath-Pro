@@ -689,6 +689,11 @@ export function classifyGlyphGeometry(group: GlyphGroup): GeometryHint | null {
   const groupH = Math.max(1, group.height);
 
   if (groupW <= 6 && groupH <= 6) {
+    // 极短的一横（连字符 / 减号）比点更宽：先按长宽比区分，
+    // 否则 6×1 的短横会被当成小数点。
+    if (groupW >= Math.max(4, groupH * 2)) {
+      return { char: '-', confidence: 0.8, alternatives: [] };
+    }
     return { char: '.', confidence: 0.9, alternatives: [] };
   }
 
@@ -702,7 +707,7 @@ export function classifyGlyphGeometry(group: GlyphGroup): GeometryHint | null {
     const line = pathLinearity(stroke);
     const reversals = directionReversals(stroke);
 
-    if (aspect >= 2.2 && h <= Math.max(6, w * 0.22) && line.straightness > 0.78) {
+    if (aspect >= 2.0 && h <= Math.max(6, w * 0.3) && line.straightness > 0.72) {
       return { char: '-', confidence: 0.88, alternatives: [] };
     }
     // 括号：细高、向一侧鼓出，而且最鼓的位置在笔画中点附近。
@@ -1054,6 +1059,33 @@ function tokenText(g: RecognizedGlyph): string {
   return g.text ?? g.char;
 }
 
+/**
+ * 小数点 vs 噪点。
+ *
+ * 分类器会把任何极小的点都当作 "."。只有紧挨数字（前或后）的点才可能是
+ * 小数点；孤立的小点通常是笔尖误触，降级为 "?"（后续重建表达式时会被
+ * 忽略），避免 "2+" 被读成 "2+." 这类无效表达式。
+ */
+export function refineDotGlyphs(glyphs: RecognizedGlyph[]): RecognizedGlyph[] {
+  for (let i = 0; i < glyphs.length; i++) {
+    const g = glyphs[i];
+    if (g.text || g.char !== '.' || g.superscript || g.subscript) continue;
+    const prev = glyphs[i - 1];
+    const next = glyphs[i + 1];
+    const prevDigit =
+      !!prev && !prev.superscript && !prev.subscript && DIGITS.has(prev.char);
+    const nextDigit =
+      !!next && !next.superscript && !next.subscript && DIGITS.has(next.char);
+    if (!prevDigit && !nextDigit) {
+      g.char = '?';
+      g.displayChar = '?';
+      g.confidence = Math.min(g.confidence, 0.2);
+      g.reason = 'stray-dot';
+    }
+  }
+  return glyphs;
+}
+
 export function buildRecognizedText(glyphs: RecognizedGlyph[]): string {
   let out = '';
   let prev: RecognizedGlyph | null = null;
@@ -1128,6 +1160,34 @@ const CONFUSABLE_LETTERS: Record<string, string[]> = {
   '8': ['b'],
   '9': ['g', 'q'],
 };
+
+/**
+ * 常见「长得一样」的字形。单字形模板无法区分它们，收集为候选字符供
+ * 用户一键修正；这里只补充候选，不改变分类器给出的结果。
+ */
+const CONFUSABLE_ALTERNATIVES: Record<string, string[]> = {
+  '0': ['o'],
+  o: ['0'],
+  '1': ['l', 'i'],
+  l: ['1', 'i'],
+  i: ['1', 'l'],
+  '2': ['z'],
+  z: ['2'],
+  '5': ['s'],
+  s: ['5'],
+};
+
+/** 合并模板候选与常见混淆字符（去重、最多 4 个）。 */
+export function withConfusableAlternatives(
+  char: string,
+  alternatives: string[] = [],
+): string[] {
+  if (char.length !== 1) return alternatives;
+  const merged = [...alternatives, ...(CONFUSABLE_ALTERNATIVES[char] ?? [])].filter(
+    (c) => c && c !== char,
+  );
+  return [...new Set(merged)].slice(0, 4);
+}
 
 /** Possible letters this glyph could stand for inside a word. */
 function letterCandidates(g: RecognizedGlyph): string[] {
@@ -1679,8 +1739,6 @@ export function recognizeMathInk(strokes: RecognitionStroke[]): MathRecognitionR
         : classifyGlyphBitmap(raster.ink, templates);
 
     let char = cls.char;
-    // Preferred display for multiplication.
-    const displayChar = char === '*' ? '×' : char;
 
     // Superscript / subscript: compare against the last baseline glyph, not
     // just the previous one, so multi-digit scripts (x²³, x₂₃) stay together.
@@ -1706,9 +1764,12 @@ export function recognizeMathInk(strokes: RecognitionStroke[]): MathRecognitionR
 
     const glyph: RecognizedGlyph = {
       char,
-      displayChar: char === '*' ? '×' : displayChar,
+      displayChar: char === '*' ? '×' : char,
       confidence: superscript || subscript ? cls.confidence * 0.9 : cls.confidence,
-      alternatives: cls.alternatives,
+      alternatives:
+        char === '?'
+          ? cls.alternatives
+          : withConfusableAlternatives(char, cls.alternatives),
       reason: hint && hint.confidence >= 0.6 ? (hint.reason ?? 'geometry') : 'template',
       bbox: group.bbox,
       superscript,
@@ -1723,6 +1784,7 @@ export function recognizeMathInk(strokes: RecognitionStroke[]): MathRecognitionR
   // 单字形无法区分的混淆，再进入二维结构重建。
   disambiguateCrossGlyphs(glyphs);
   applyMathWordCorrection(glyphs);
+  refineDotGlyphs(glyphs);
 
   const layoutGlyphs = applyRadicalLayout(buildFractionLayout(glyphs), radicals);
   const rawText = buildRecognizedText(layoutGlyphs);

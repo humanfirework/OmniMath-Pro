@@ -259,14 +259,127 @@ describe('evaluator', () => {
       expect(r.surfaceMode).toBeUndefined();
     });
 
-    it('y = x^2 不会被误判为 3D 隐式方程', () => {
+    it('y = x^2 是 2D 笛卡尔曲线而不是 3D 隐式方程', () => {
       const r = evaluateExpression('y = x^2');
+      expect(r.success).toBe(true);
+      expect(r.plotType).toBe('cartesian');
+      expect(r.plotExpression).toBe('x^2');
+    });
+
+    it('x = 1 是 2D 隐式直线而不是 3D 平面', () => {
+      const r = evaluateExpression('x = 1');
+      expect(r.success).toBe(true);
+      expect(r.plotType).toBe('implicit2d');
+      expect(r.plotExpression).toBe('x = 1');
+    });
+  });
+
+  describe('2D 方程识别与路由（simple 模式）', () => {
+    it('y = x^2 → cartesian，plotExpression 为右端', () => {
+      const r = evaluateExpression('y = x^2', 'simple');
+      expect(r.success).toBe(true);
+      expect(r.type).toBe('plot');
+      expect(r.plotType).toBe('cartesian');
+      expect(r.plotExpression).toBe('x^2');
+      expect(r.plotRange).toEqual([-10, 10]);
+      expect(r.latex).toContain('y =');
+    });
+
+    it('大写 Y = sin(x) 同样识别为 cartesian', () => {
+      const r = evaluateExpression('Y = sin(x)', 'simple');
+      expect(r.success).toBe(true);
+      expect(r.plotType).toBe('cartesian');
+      expect(r.plotExpression).toBe('sin(x)');
+    });
+
+    it('y = sin(x) → cartesian，不当作赋值', () => {
+      const r = evaluateExpression('y = sin(x)', 'simple');
+      expect(r.success).toBe(true);
+      expect(r.type).toBe('plot');
+      expect(r.plotType).toBe('cartesian');
+      expect(r.plotExpression).toBe('sin(x)');
+    });
+
+    it('x^2 + y^2 = 4 → implicit2d，保留完整方程', () => {
+      const r = evaluateExpression('x^2 + y^2 = 4', 'simple');
+      expect(r.success).toBe(true);
+      expect(r.type).toBe('plot');
+      expect(r.plotType).toBe('implicit2d');
+      expect(r.plotExpression).toBe('x^2 + y^2 = 4');
+      expect(r.plotRange).toEqual([-10, 10]);
+      expect(r.surfaceMode).toBeUndefined();
+      expect(r.latex).toContain('=');
+    });
+
+    it('x + y = 1 → implicit2d（不再误判为 3D 平面）', () => {
+      const r = evaluateExpression('x + y = 1', 'simple');
+      expect(r.success).toBe(true);
+      expect(r.plotType).toBe('implicit2d');
+      expect(r.plotExpression).toBe('x + y = 1');
+    });
+
+    it('x = 3 → implicit2d（不是变量赋值）', () => {
+      const r = evaluateExpression('x = 3', 'simple');
+      expect(r.success).toBe(true);
+      expect(r.plotType).toBe('implicit2d');
+      expect(r.plotExpression).toBe('x = 3');
+      expect(r.plotRange).toEqual([-10, 10]);
+    });
+
+    it('x = y^2 → implicit2d', () => {
+      const r = evaluateExpression('x = y^2', 'simple');
+      expect(r.success).toBe(true);
+      expect(r.plotType).toBe('implicit2d');
+      expect(r.plotExpression).toBe('x = y^2');
+    });
+
+    it('z = x^2 - y^2 仍生成显式 3D 曲面', () => {
+      const r = evaluateExpression('z = x^2 - y^2', 'simple');
+      expect(r.success).toBe(true);
+      expect(r.plotType).toBe('surface3d');
+      expect(r.surfaceMode).toBe('explicit');
+      expect(r.plotExpression).toBe('x^2 - y^2');
+    });
+
+    it('x + z = 1 仍生成隐式 3D 曲面', () => {
+      const r = evaluateExpression('x + z = 1', 'simple');
+      expect(r.success).toBe(true);
+      expect(r.plotType).toBe('surface3d');
+      expect(r.surfaceMode).toBe('implicit');
+    });
+
+    it('x^2 + y^2 + z^2 = 4 仍生成隐式 3D 曲面', () => {
+      const r = evaluateExpression('x^2 + y^2 + z^2 = 4', 'simple');
+      expect(r.success).toBe(true);
+      expect(r.plotType).toBe('surface3d');
+      expect(r.surfaceMode).toBe('implicit');
+    });
+
+    it('a = 5 仍是普通赋值', () => {
+      const r = evaluateExpression('a = 5', 'simple');
+      expect(r.success).toBe(true);
+      expect(r.type).toBe('assignment');
       expect(r.plotType).toBeUndefined();
     });
 
-    it('x = 1 仍然是赋值而不是 3D 平面', () => {
-      const r = evaluateExpression('x = 1');
+    it('f(x) = x^2 仍是函数定义', () => {
+      const r = evaluateExpression('f(x) = x^2', 'simple');
+      expect(r.success).toBe(true);
+      expect(r.type).toBe('assignment');
       expect(r.plotType).toBeUndefined();
+    });
+
+    it('r = sin(6*theta) 仍是极坐标', () => {
+      const r = evaluateExpression('r = sin(6*theta)', 'simple');
+      expect(r.success).toBe(true);
+      expect(r.plotType).toBe('polar');
+    });
+
+    it('x = sin( 仍失败（方程校验不通过）', () => {
+      const r = evaluateExpression('x = sin(', 'simple');
+      expect(r.success).toBe(false);
+      expect(r.type).toBe('error');
+      expect(r.error).toContain('Failed to evaluate');
     });
   });
 

@@ -58,6 +58,7 @@ import { PracticeGuide } from '@/components/workbench/PracticeGuide';
 import { ErrorBoundary } from '@/components/ErrorBoundary';
 import { useShortcutsStore, SHORTCUTS_KEY } from '@/lib/store/shortcutsStore';
 import { useGlobalShortcuts, registerShortcutHandler } from '@/lib/hooks/useGlobalShortcuts';
+import { useVisibilityPause } from '@/lib/hooks/useVisibilityPause';
 import { useCloudAutoCheck } from '@/lib/hooks/useCloudAutoCheck';
 import { registerServiceWorker } from '@/lib/pwa/registerServiceWorker';
 import { cn } from '@/lib/utils';
@@ -343,6 +344,8 @@ export function Workbench() {
 
   // 激活全局快捷键监听（在 Workbench 挂载一次）
   useGlobalShortcuts();
+  // 页面隐藏时暂停 CSS 装饰性无限动画，回到前台自动恢复。
+  useVisibilityPause();
   // 可选的启动云端检查：有较新备份时提示合并（不自动覆盖本机）。
   useCloudAutoCheck();
 
@@ -597,7 +600,7 @@ export function Workbench() {
     <motion.div
       initial={{ opacity: 0 }}
       animate={{ opacity: 1 }}
-      transition={{ duration: 0.3 }}
+      transition={{ duration: 0.18 }}
       className="h-screen w-screen flex flex-col overflow-hidden bg-background text-foreground"
     >
       <TitleBar />

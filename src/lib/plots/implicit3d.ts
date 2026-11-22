@@ -144,10 +144,33 @@ export function parse3DEquation(input: string): Parsed3DEquation | null {
 /* ------------------------------------------------------------------ */
 
 /**
- * implicit 采样的分辨率上限。三维网格的节点数是 resolution³，48³ ≈ 11 万，
- * 单次采样约几十毫秒；继续提高收益很小，却会在拖动参数滑块时明显卡顿。
+ * implicit 采样的分辨率区间。三维网格的节点数是 resolution³：
+ *   - 24³ ≈ 1.4 万次求值 —— 交互期快速出图；
+ *   - 34³ ≈ 3.9 万次求值 —— 默认细化档位；
+ *   - 44³ ≈ 8.5 万次求值 —— 上限，再提高收益很小且在拖动滑块时明显卡顿。
+ *
+ * 实测（CI 沙箱 / Node 24，球面方程、编译缓存预热后）：
+ *   24³ ≈ 45ms（中位数）、34³ ≈ 90ms、44³ ≈ 170ms。
+ * 因此交互期使用 24³ 可以稳定控制在 200ms 预算内。
  */
+export const IMPLICIT_MIN_RESOLUTION = 12;
 export const IMPLICIT_MAX_RESOLUTION = 44;
+export const IMPLICIT_DEFAULT_RESOLUTION = 34;
+
+/**
+ * 把 3D 面板共用的分辨率滑块（20..100）映射到隐式网格的 12..44 区间：
+ * 滑块 60（显式曲面的默认档位）对应隐式默认 34，滑块两端分别落到下限 / 上限。
+ */
+export function implicitResolutionFromSlider(sliderResolution: number): number {
+  if (!Number.isFinite(sliderResolution)) return IMPLICIT_DEFAULT_RESOLUTION;
+  const scaled = Math.round(
+    (sliderResolution / 60) * IMPLICIT_DEFAULT_RESOLUTION,
+  );
+  return Math.max(
+    IMPLICIT_MIN_RESOLUTION,
+    Math.min(IMPLICIT_MAX_RESOLUTION, scaled),
+  );
+}
 
 interface Bounds {
   min: number;
@@ -225,7 +248,7 @@ export function sampleImplicitSurface(
   xRange: [number, number],
   yRange: [number, number],
   zRange: [number, number] | undefined,
-  resolution = IMPLICIT_MAX_RESOLUTION,
+  resolution = IMPLICIT_DEFAULT_RESOLUTION,
   color = '#2dd4bf',
 ): Surface3DData {
   assertRange(xRange, 'x');
@@ -244,7 +267,10 @@ export function sampleImplicitSurface(
       ];
   assertRange(zBox, 'z');
 
-  const n = Math.max(12, Math.min(IMPLICIT_MAX_RESOLUTION, Math.floor(resolution)));
+  const n = Math.max(
+    IMPLICIT_MIN_RESOLUTION,
+    Math.min(IMPLICIT_MAX_RESOLUTION, Math.floor(resolution)),
+  );
   const nx = n;
   const ny = n;
   const nz = n;
@@ -507,7 +533,7 @@ export function trySampleImplicitSurface(
   xRange: [number, number],
   yRange: [number, number],
   zRange?: [number, number],
-  resolution = IMPLICIT_MAX_RESOLUTION,
+  resolution = IMPLICIT_DEFAULT_RESOLUTION,
   color = '#2dd4bf',
 ): { data: Surface3DData | null; error: string | null } {
   try {

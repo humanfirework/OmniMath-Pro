@@ -136,6 +136,10 @@ function CurveRow({ plot, spec, onChange, tp }: CurveRowProps) {
   // (mode/expressions/range) stay local via `onChange`.
   const updatePlot = useWorkbenchStore((s) => s.updatePlot);
 
+  // 隐式方程行只读：模式切换（直角/极坐标/参数）会把 `x^2 + y^2 = 4`
+  // 静默当成 y = f(x) 采样，导致曲线消失。方程本身仍可在函数列表编辑。
+  const isImplicit = spec.mode === 'implicit2d' || plot.plotType === 'implicit2d';
+
   const handleModeChange = (mode: Plot2DType) => {
     if (mode === spec.mode) return;
     onChange({
@@ -194,6 +198,22 @@ function CurveRow({ plot, spec, onChange, tp }: CurveRowProps) {
         title={t('plotLineWidth')}
       />
 
+      {/* 隐式行：只读标识 + 完整方程，不提供会把方程改成 y=f(x) 的模式切换 */}
+      {isImplicit ? (
+        <div className="flex min-w-0 flex-1 items-center gap-1.5">
+          <span className="shrink-0 rounded bg-primary/10 px-1.5 py-0.5 text-[10px] font-medium text-primary">
+            隐式方程
+          </span>
+          <span
+            className="min-w-0 flex-1 break-all font-mono text-xs text-foreground/90"
+            title={spec.exprX}
+          >
+            {spec.exprX}
+          </span>
+          <span className="shrink-0 text-[10px] text-muted-foreground">在函数列表中编辑</span>
+        </div>
+      ) : (
+        <>
       {/* Mode toggle */}
       <ToggleGroup
         type="single"
@@ -301,6 +321,8 @@ function CurveRow({ plot, spec, onChange, tp }: CurveRowProps) {
               <Plus className="size-3" /> t上限
             </button>
           )}
+        </>
+      )}
         </>
       )}
     </div>

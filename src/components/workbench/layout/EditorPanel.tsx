@@ -416,8 +416,9 @@ export function EditorPanel() {
             // 这里统一由 buildPlotConfig 处理，2D / 3D 不再混用。
             const newPlot = buildPlotConfig(result, color);
             if (newPlot) addPlot(newPlot);
-            // 收集 2D 绘图供独立面板使用（3D 曲面暂不入独立面板）。
-            if (result.plotType !== 'surface3d') {
+            // 收集 2D 绘图供独立面板使用（3D 曲面与尚未接入采样的
+            // 2D 隐式曲线暂不入独立面板）。
+            if (result.plotType !== 'surface3d' && result.plotType !== 'implicit2d') {
               runPlots.push({
                 expression: result.plotExpression,
                 xRange: result.plotRange ?? DEFAULT_CARTESIAN_RANGE,

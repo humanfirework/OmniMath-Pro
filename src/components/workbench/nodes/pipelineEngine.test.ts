@@ -526,6 +526,54 @@ describe('pipelineEngine', () => {
       expect(byId.get('disp')!.error).toBeUndefined();
     });
 
+    it('逐节点写入 runStatus：success / skipped / error', async () => {
+      const nodes = [
+        makeNode('n1', 'number-input', { value: 2 }),
+        makeNode('n2', 'number-input', { value: 3 }),
+        makeNode('sum', 'arithmetic', { op: '+' }),
+        makeNode('orphan', 'arithmetic', { op: '+' }),
+        makeNode('bad', 'matrix-multiply'),
+        makeNode('m1', 'matrix-input', { cells: [[{ value: '1' }, { value: '2' }]] }),
+      ];
+      const edges = [
+        makeEdge('n1', 'value', 'sum', 'a'),
+        makeEdge('n2', 'value', 'sum', 'b'),
+        makeEdge('m1', 'matrix', 'bad', 'a'),
+        makeEdge('m1', 'matrix', 'bad', 'b'),
+      ];
+      const out = await executePipeline(nodes, edges, emptyCtx);
+      const byId = new Map(out.map((n) => [n.id, n]));
+      expect(byId.get('n1')!.runStatus).toBe('success');
+      expect(byId.get('sum')!.runStatus).toBe('success');
+      // 有必填输入但未连线 → 跳过，而不是错误。
+      expect(byId.get('orphan')!.runStatus).toBe('skipped');
+      // 矩阵维度不匹配 → 抛错。
+      expect(byId.get('bad')!.runStatus).toBe('error');
+    });
+
+    it('onNodeStatus 回报 running → 终态，供画布实时显示', async () => {
+      const statuses: Array<[string, string]> = [];
+      const nodes = [
+        makeNode('n1', 'number-input', { value: 2 }),
+        makeNode('disp', 'display'),
+      ];
+      const edges = [makeEdge('n1', 'value', 'disp', 'value')];
+      await executePipeline(nodes, edges, emptyCtx, {
+        onNodeStatus: (id, status) => statuses.push([id, status]),
+      });
+      expect(statuses).toContainEqual(['n1', 'running']);
+      expect(statuses).toContainEqual(['n1', 'success']);
+      expect(statuses).toContainEqual(['disp', 'running']);
+      expect(statuses).toContainEqual(['disp', 'success']);
+    });
+
+    it('环中的节点 runStatus 为 error', async () => {
+      const nodes = [makeNode('x', 'arithmetic', { op: '+' }), makeNode('y', 'arithmetic', { op: '+' })];
+      const edges = [makeEdge('x', 'result', 'y', 'a'), makeEdge('y', 'result', 'x', 'a')];
+      const out = await executePipeline(nodes, edges, emptyCtx);
+      expect(out.every((n) => n.runStatus === 'error')).toBe(true);
+    });
+
     it('除零产生 NaN 而非错误', async () => {
       const nodes = [
         makeNode('n1', 'number-input', { value: 1 }),

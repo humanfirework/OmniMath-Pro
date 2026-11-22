@@ -82,16 +82,23 @@ export type NodeConfigField =
   | { key: string; label: string; type: 'text'; default?: string; placeholder?: string }
   | { key: string; label: string; type: 'file'; accept: string; hint: string };
 
+/** 单次运行的节点状态（不持久化，只用于画面反馈）。 */
+export type NodeRunStatus = 'running' | 'success' | 'error' | 'skipped';
+
 export interface PipelineNode {
   id: string;
   type: NodeType;
   position: { x: number; y: number };
   config: Record<string, unknown>;
+  /** 用户自定义的节点标题；缺省时使用节点类型的多语言 label。 */
+  label?: string;
   /** Last computed primary output (for display in the node footer). */
   result?: unknown;
   /** Last computed all-outputs map. */
   outputs?: Record<string, unknown>;
   error?: string;
+  /** 最近一次运行的节点状态（由 executePipeline 写入）。 */
+  runStatus?: NodeRunStatus;
   /** 静音：跳过执行，把首个输入透传到输出（Blender 式 Mute）。 */
   muted?: boolean;
   /** 分组：拥有相同 `group.id` 的节点归属同一 Frame（可命名/折叠）。 */
@@ -482,12 +489,15 @@ export async function executePipeline(
   opts?: {
     stopAt?: string;
     onProgress?: (done: number, total: number) => void;
+    /** 逐节点状态回报（供画布实时显示运行/成功/失败/跳过）。 */
+    onNodeStatus?: (nodeId: string, status: NodeRunStatus) => void;
     /** 每次执行节点前检查；返回 true 则立即终止并抛 PipelineCancelledError。 */
     shouldCancel?: () => boolean;
   },
 ): Promise<PipelineNode[]> {
   const byId = new Map<string, PipelineNode>();
-  for (const n of nodes) byId.set(n.id, { ...n });
+  // 清空上一次运行状态，避免「本次未执行」的节点残留旧状态。
+  for (const n of nodes) byId.set(n.id, { ...n, runStatus: undefined });
 
   // Build in-degree map + adjacency (from -> [to, to, ...]).
   const inDeg = new Map<string, number>();
@@ -537,6 +547,8 @@ export async function executePipeline(
     const def = NODE_TYPES[node.type];
     if (!def) {
       node.error = 'Unknown node type';
+      node.runStatus = 'error';
+      opts?.onNodeStatus?.(id, 'error');
       outputs.set(id, {});
       continue;
     }
@@ -557,6 +569,8 @@ export async function executePipeline(
       node.result = null;
       node.outputs = {};
       node.error = undefined;
+      node.runStatus = 'skipped';
+      opts?.onNodeStatus?.(id, 'skipped');
       outputs.set(id, {});
       continue;
     }
@@ -571,6 +585,8 @@ export async function executePipeline(
       node.outputs = out;
       node.result = firstOutId ? out[firstOutId] : undefined;
       node.error = undefined;
+      node.runStatus = 'skipped';
+      opts?.onNodeStatus?.(id, 'skipped');
       continue;
     }
     // Also skip if some inputs are connected but NOT all REQUIRED (non-optional)
@@ -584,15 +600,22 @@ export async function executePipeline(
         node.result = null;
         node.outputs = {};
         node.error = undefined;
+        node.runStatus = 'skipped';
+        opts?.onNodeStatus?.(id, 'skipped');
         outputs.set(id, {});
         continue;
       }
     }
+    // 真正开始执行：先标记 running，再执行节点。
+    node.runStatus = 'running';
+    opts?.onNodeStatus?.(id, 'running');
     try {
       const out = await def.execute(ins, node.config, ctx);
       outputs.set(id, out);
       node.outputs = out;
       node.error = undefined;
+      node.runStatus = 'success';
+      opts?.onNodeStatus?.(id, 'success');
       // Primary result = first output value (or for display, the input).
       const firstOutId = def.outputs[0]?.id;
       node.result = firstOutId ? out[firstOutId] : (out as any).value ?? ins.value;
@@ -604,6 +627,8 @@ export async function executePipeline(
       node.result = null;
       node.outputs = {};
       node.error = (err as Error).message || 'Evaluation failed';
+      node.runStatus = 'error';
+      opts?.onNodeStatus?.(id, 'error');
       outputs.set(id, {});
     }
   }
@@ -615,6 +640,8 @@ export async function executePipeline(
       node.error = 'Cycle detected';
       node.result = null;
       node.outputs = {};
+      node.runStatus = 'error';
+      opts?.onNodeStatus?.(n.id, 'error');
     }
   }
 
@@ -625,6 +652,7 @@ export async function executePipeline(
         n.result = undefined;
         n.outputs = {};
         n.error = undefined;
+        n.runStatus = undefined;
       }
     }
   }

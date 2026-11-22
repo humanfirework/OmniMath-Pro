@@ -13,8 +13,10 @@ import {
   loadUserGlyphSamples,
   distanceTransform,
   groupStrokesIntoGlyphs,
+  refineDotGlyphs,
   skeletonize,
   strokeBBox,
+  withConfusableAlternatives,
   type GlyphGroup,
   type RecognizedGlyph,
   type RecognitionStroke,
@@ -193,6 +195,12 @@ describe('classifyGlyphGeometry', () => {
     expect(classifyGlyphGeometry(asGroup([line(10, 10, 12, 12)]))?.char).toBe('.');
     expect(classifyGlyphGeometry(asGroup([line(0, 20, 20, 0)]))?.char).toBe('/');
   });
+
+  it('recognizes a short hyphen instead of a decimal dot', () => {
+    // 6×1 的短横是连字符，不是小数点；2×2 的小点仍是小数点。
+    expect(classifyGlyphGeometry(asGroup([line(0, 0, 6, 0)]))?.char).toBe('-');
+    expect(classifyGlyphGeometry(asGroup([line(0, 0, 2, 2)]))?.char).toBe('.');
+  });
 });
 
 describe('personal glyph bank', () => {
@@ -281,6 +289,13 @@ describe('fraction layout', () => {
   it('does not turn a normal minus sign into a fraction', () => {
     const glyphs = [at('5', 0, 0, 12, 30), at('-', 20, 14, 32, 16), at('3', 40, 0, 52, 30)];
     expect(buildFractionLayout(glyphs)).toHaveLength(3);
+  });
+
+  it('keeps a slash operator linear rather than folding it into a fraction', () => {
+    const glyphs = [at('1', 0, 0, 12, 30), at('/', 16, 0, 28, 30), at('2', 32, 0, 44, 30)];
+    const layout = buildFractionLayout(glyphs);
+    expect(layout).toHaveLength(3);
+    expect(buildRecognizedText(layout)).toBe('1/2');
   });
 
   it('keeps surrounding terms and inserts multiplication', () => {
@@ -481,6 +496,53 @@ describe('buildRecognizedText', () => {
     expect(
       buildRecognizedDisplay([glyph('x'), glyph('2', true), glyph('1', false, true)]),
     ).toBe('x₁^2');
+  });
+});
+
+describe('decimal point refinement', () => {
+  it('keeps a decimal point between digits', () => {
+    const glyphs = [glyph('2'), glyph('.'), glyph('5')];
+    refineDotGlyphs(glyphs);
+    expect(glyphs[1].char).toBe('.');
+    expect(buildRecognizedText(glyphs)).toBe('2.5');
+  });
+
+  it('keeps a leading/trailing decimal point next to a digit', () => {
+    const leading = [glyph('.'), glyph('5')];
+    refineDotGlyphs(leading);
+    expect(buildRecognizedText(leading)).toBe('.5');
+
+    const trailing = [glyph('2'), glyph('.')];
+    refineDotGlyphs(trailing);
+    expect(buildRecognizedText(trailing)).toBe('2.');
+  });
+
+  it('drops an isolated stray dot instead of producing an invalid tail', () => {
+    const glyphs = [glyph('2'), glyph('+'), glyph('.')];
+    refineDotGlyphs(glyphs);
+    expect(glyphs[2].char).toBe('?');
+    expect(buildRecognizedText(glyphs)).toBe('2+');
+  });
+
+  it('leaves superscript dots alone', () => {
+    const glyphs = [glyph('x'), glyph('.', true)];
+    refineDotGlyphs(glyphs);
+    expect(glyphs[1].char).toBe('.');
+  });
+});
+
+describe('confusable alternatives', () => {
+  it('offers common lookalikes without changing the character', () => {
+    expect(withConfusableAlternatives('1')).toEqual(expect.arrayContaining(['l', 'i']));
+    expect(withConfusableAlternatives('0')).toContain('o');
+    expect(withConfusableAlternatives('5')).toContain('s');
+    expect(withConfusableAlternatives('2')).toContain('z');
+    expect(withConfusableAlternatives('s')).toContain('5');
+  });
+
+  it('merges template candidates, drops the current char and dedupes', () => {
+    expect(withConfusableAlternatives('5', ['6'])).toEqual(['6', 's']);
+    expect(withConfusableAlternatives('2', ['2', 'z'])).toEqual(['z']);
   });
 });
 

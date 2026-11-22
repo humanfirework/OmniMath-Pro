@@ -249,7 +249,7 @@ export function TitleBar() {
     <header
       data-tauri-drag-region
       className={cn(
-        'relative h-10 shrink-0 flex items-center justify-between px-3 gap-4',
+        'relative h-10 shrink-0 flex items-center justify-between px-3 gap-2 sm:gap-4',
         'glass border-b border-border',
         'select-none',
       )}
@@ -316,7 +316,7 @@ export function TitleBar() {
 
         <div className="flex flex-col leading-none min-w-0">
           <div className="flex items-baseline gap-1.5">
-            <span className="text-[15px] font-semibold tracking-tight text-gradient-teal">
+            <span className="truncate text-[15px] font-semibold tracking-tight text-gradient-teal">
               OmniMath Pro
             </span>
             <span className="text-[10px] text-muted-foreground/80 hidden sm:inline">
@@ -508,7 +508,7 @@ export function TitleBar() {
       </nav>
 
       {/* ── Right: actions ────────────────────────────────────────── */}
-      <div className="relative flex items-center gap-1.5">
+      <div className="relative flex shrink-0 items-center gap-1.5">
         {/* Language switcher */}
         <DropdownMenu>
           <DropdownMenuTrigger asChild>

@@ -493,9 +493,11 @@ describe('vision: blueprint-parse', () => {
     expect(graph.summary).toContain('连线 1');
     expect(graph.stats).toMatchObject({ components: 1, isolated: 0, hasCycle: false });
     const contours = out.contours as {
-      shapeLabels: Array<{ text: string }>;
+      shapeLabels: Array<{ text: string; confidence?: number }>;
     };
     expect(contours.shapeLabels.map((l) => l.text)).toEqual(['N1', 'N2']);
+    // 节点标签携带置信度，供结果面板显示百分比与低置信高亮。
+    expect(contours.shapeLabels.every((l) => typeof l.confidence === 'number')).toBe(true);
   });
 
   it('两个互不相连的框 → 摘要标注孤立节点', async () => {

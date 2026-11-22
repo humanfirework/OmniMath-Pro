@@ -33,9 +33,12 @@ import {
 import {
   sampleFunction,
   sampleCurve,
+  sampleImplicit2D,
   findExtrema,
   formatCoord,
   niceNumber,
+  implicitResolutionForCount,
+  implicitInteractiveResolutionForCount,
   PLOT_PADDING as PADDING,
   PLOT_FONT_FAMILY,
   PLOT_MONO_FAMILY,
@@ -120,6 +123,12 @@ const PLOT_COLORS = [
   '#6a1b9a', // purple
   '#00838f', // cyan
 ];
+
+/**
+ * 隐式曲线的采样结果是「无序线段集合」，按 x 单调检测极值/零点会产生
+ * 伪标记，因此隐式模式直接使用这份空结果。
+ */
+const EMPTY_EXTREMA: ReturnType<typeof findExtrema> = { maxima: [], minima: [], zeros: [] };
 
 /**
  * DPR 上限。高 DPI 屏（2x / 3x Retina）会被裁剪到该值，避免画布 backing store
@@ -506,6 +515,43 @@ export function Plot2DCanvas({
     };
   }, []);
 
+  /* ----------------- 交互期隐式降采样 -----------------
+   * 平移 / 滚轮缩放 / 双指缩放期间，视口每次变化都会重新执行隐式曲线的
+   * marching squares 采样。96² 网格在拖动时会造成掉帧，因此交互期间把
+   * 隐式分辨率降到 48–64（按采样预算驱动），交互结束并空闲 ~160ms 后
+   * 恢复全分辨率。笛卡尔 / 极坐标的采样路径完全不受影响。
+   *
+   * 画布重绘本身已由 `scheduleRedraw` 通过 requestAnimationFrame 合帧；
+   * 这里只控制「采样精度」的切换，并对滚轮这类没有 pointerup 的交互用
+   * 定时器做结束防抖。 */
+  const [interacting, setInteracting] = useState(false);
+  const interactionTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  const beginInteraction = useCallback(() => {
+    if (interactionTimerRef.current) {
+      clearTimeout(interactionTimerRef.current);
+      interactionTimerRef.current = null;
+    }
+    setInteracting(true);
+  }, []);
+
+  const endInteraction = useCallback((delay = 160) => {
+    if (interactionTimerRef.current) clearTimeout(interactionTimerRef.current);
+    interactionTimerRef.current = setTimeout(() => {
+      interactionTimerRef.current = null;
+      setInteracting(false);
+    }, delay);
+  }, []);
+
+  useEffect(() => {
+    return () => {
+      if (interactionTimerRef.current) {
+        clearTimeout(interactionTimerRef.current);
+        interactionTimerRef.current = null;
+      }
+    };
+  }, []);
+
   const computed = useMemo<ComputedPlot[]>(() => {
     // scopeVersion is a dependency ONLY (not read inside) — it forces
     // re-sampling when the shared engine scope mutates.
@@ -520,14 +566,35 @@ export function Plot2DCanvas({
     const sampleCount = lowQuality
       ? Math.max(135, Math.floor(baseCount / 3))
       : baseCount;
+    // 交互期隐式降采样：仅对 implicit2d 生效，笛卡尔/极坐标/参数曲线
+    // 仍使用上面的 sampleCount，行为不变。
+    const implicitResolution = interacting
+      ? implicitInteractiveResolutionForCount(baseCount)
+      : undefined;
     const __res = plots.map((p, idx) => {
       // A resolved curve spec (from the panel's curve editor) takes
       // precedence: polar / parametric curves sample over their own
       // parameter range instead of the view window.
       const spec = curveSpecs?.[p.id];
+      const isImplicit = spec?.mode === 'implicit2d' || (!spec && p.plotType === 'implicit2d');
       let samples: PlotSample[];
       if (spec) {
-        samples = sampleCurve(spec, xRange, sampleCount);
+        // 隐式曲线依赖两个轴的视窗；其余模式会忽略 yRange。
+        samples = sampleCurve(
+          spec,
+          xRange,
+          sampleCount,
+          yRange,
+          isImplicit ? implicitResolution : undefined,
+        );
+      } else if (p.plotType === 'implicit2d') {
+        // 防御式兜底：没有 curveSpecs 时直接按完整等式做隐式采样。
+        samples = sampleImplicit2D(
+          p.expression,
+          xRange,
+          yRange,
+          implicitResolution ?? implicitResolutionForCount(baseCount),
+        );
       } else {
         // surface3d plots can't render in 2D — coerce to cartesian so the
         // sampler still produces something (the engine shouldn't normally
@@ -541,7 +608,9 @@ export function Plot2DCanvas({
           sampleCount,
         );
       }
-      const extrema = findExtrema(samples);
+      // 隐式曲线的样本是无序线段集合：按 x 单调的极值/零点检测会产生
+      // 伪标记，直接跳过。
+      const extrema = isImplicit ? EMPTY_EXTREMA : findExtrema(samples);
       return {
         config: { ...p, color: p.color || PLOT_COLORS[idx % PLOT_COLORS.length] },
         samples,
@@ -550,7 +619,7 @@ export function Plot2DCanvas({
       };
     });
     return __res;
-  }, [plots, xRange, canvasSize.w, scopeVersion, animVersion, lowQuality, curveSpecs]);
+  }, [plots, xRange, yRange, canvasSize.w, scopeVersion, animVersion, lowQuality, interacting, curveSpecs]);
 
   /* ----------------------- Coordinate mapping ----------------------- */
 
@@ -1528,14 +1597,17 @@ export function Plot2DCanvas({
           ? vy
           : clampRangeWidth([wy + (vy[0] - wy) * factor, wy + (vy[1] - wy) * factor]);
         viewRef.current = { x: nx, y: ny };
+        // 交互期降低隐式采样分辨率；滚轮没有 pointerup，用防抖收尾。
+        beginInteraction();
         onViewChange?.(nx, ny);
         scheduleRedraw();
+        endInteraction();
       } catch (err) {
         console.error('[Plot2DCanvas] wheel error:', err);
         setDrawError(err instanceof Error ? err.message : '缩放失败');
       }
     },
-    [screenToData, onViewChange, scheduleRedraw],
+    [screenToData, onViewChange, scheduleRedraw, beginInteraction, endInteraction],
   );
 
   // D5 fix: native wheel listener with passive:false so preventDefault works.
@@ -1595,6 +1667,8 @@ export function Plot2DCanvas({
           hoverPendingRef.current = null;
           setHoveredPoints([]);
           setMousePos(null);
+          // 拖动开始 → 隐式曲线切到低分辨率；pointerup 时恢复。
+          beginInteraction();
           onViewChange?.(nx, ny);
           scheduleRedraw();
           return;
@@ -1694,7 +1768,7 @@ export function Plot2DCanvas({
         setDrawError(err instanceof Error ? err.message : '绘制交互失败');
       }
     },
-    [screenToData, dataToScreen, computed, onViewChange, scheduleRedraw, overlays, scheduleHoverUpdate],
+    [screenToData, dataToScreen, computed, onViewChange, scheduleRedraw, overlays, scheduleHoverUpdate, beginInteraction],
   );
 
   const handlePointerUp = useCallback((e: ReactPointerEvent<HTMLCanvasElement>) => {
@@ -1702,8 +1776,20 @@ export function Plot2DCanvas({
       canvasRef.current?.releasePointerCapture(e.pointerId);
       dragRef.current = null;
       if (canvasRef.current) canvasRef.current.style.cursor = 'crosshair';
+      // 拖动结束 → 空闲防抖后恢复隐式全分辨率。
+      endInteraction();
     }
-  }, []);
+  }, [endInteraction]);
+
+  // 指针被系统取消（触控手势接管、窗口失焦等）时也要恢复全分辨率，
+  // 否则 `interacting` 会一直为 true。
+  const handlePointerCancel = useCallback(() => {
+    if (dragRef.current) {
+      dragRef.current = null;
+      if (canvasRef.current) canvasRef.current.style.cursor = 'crosshair';
+      endInteraction();
+    }
+  }, [endInteraction]);
 
   const handlePointerLeave = useCallback(() => {
     hoverRef.current = null;
@@ -1735,6 +1821,7 @@ export function Plot2DCanvas({
           const cy = (t0.clientY + t1.clientY) / 2 - rect.top;
           pinchRef.current = { d, cx, cy };
           dragRef.current = null;
+          beginInteraction();
           touchStateRef.current = {
             ids: [t0.identifier, t1.identifier],
             pts: [
@@ -1747,7 +1834,7 @@ export function Plot2DCanvas({
         console.error('[Plot2DCanvas] touch start error:', err);
       }
     },
-    [],
+    [beginInteraction],
   );
 
   const handleTouchMove = useCallback(
@@ -1770,6 +1857,7 @@ export function Plot2DCanvas({
           const ny = clampRangeWidth([wy + (vy[0] - wy) * factor, wy + (vy[1] - wy) * factor]);
           viewRef.current = { x: nx, y: ny };
           pinchRef.current = { d, cx, cy };
+          beginInteraction();
           onViewChange?.(nx, ny);
           scheduleRedraw();
         }
@@ -1778,15 +1866,17 @@ export function Plot2DCanvas({
         setDrawError(err instanceof Error ? err.message : '触控缩放失败');
       }
     },
-    [screenToData, onViewChange, scheduleRedraw],
+    [screenToData, onViewChange, scheduleRedraw, beginInteraction],
   );
 
   const handleTouchEnd = useCallback((e: React.TouchEvent<HTMLCanvasElement>) => {
     if (e.touches.length < 2) {
       pinchRef.current = null;
       touchStateRef.current = null;
+      // 双指缩放结束 → 空闲后恢复隐式全分辨率。
+      endInteraction();
     }
-  }, []);
+  }, [endInteraction]);
 
   /* ----------------------- Cleanup rAF ------------------------------ */
   useEffect(() => {
@@ -1889,6 +1979,7 @@ export function Plot2DCanvas({
         onPointerDown={handlePointerDown}
         onPointerMove={handlePointerMove}
         onPointerUp={handlePointerUp}
+        onPointerCancel={handlePointerCancel}
         onPointerLeave={handlePointerLeave}
         onDoubleClick={handleDoubleClick}
         onTouchStart={handleTouchStart}

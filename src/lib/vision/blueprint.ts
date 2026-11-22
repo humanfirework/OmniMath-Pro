@@ -242,6 +242,76 @@ export function parseBlueprint(
   return { nodes, links, nodeIndices, linkIndices };
 }
 
+/* ------------------------------------------------------------------ *
+ * 解析置信度分档与摘要（纯函数，供 UI 徽标/低置信高亮复用）
+ * ------------------------------------------------------------------ */
+
+/** ≥ 此值视为高置信（绿色/正常）。 */
+export const BLUEPRINT_CONFIDENCE_HIGH = 0.75;
+/** < 此值视为低置信（琥珀色提示）。 */
+export const BLUEPRINT_CONFIDENCE_LOW = 0.55;
+
+export type BlueprintConfidenceLevel = 'high' | 'medium' | 'low';
+
+/** 把 0–1 的置信度分为 high / medium / low 三档。非有限数按低置信处理。 */
+export function classifyBlueprintConfidence(confidence: number): BlueprintConfidenceLevel {
+  if (!Number.isFinite(confidence)) return 'low';
+  if (confidence >= BLUEPRINT_CONFIDENCE_HIGH) return 'high';
+  if (confidence >= BLUEPRINT_CONFIDENCE_LOW) return 'medium';
+  return 'low';
+}
+
+/** 置信度 → 紧凑百分比文本（如 0.824 → "82%"）；非法值显示占位符。 */
+export function formatBlueprintConfidence(confidence: number): string {
+  if (!Number.isFinite(confidence)) return '—';
+  const clamped = Math.min(1, Math.max(0, confidence));
+  return `${Math.round(clamped * 100)}%`;
+}
+
+/** 节点/连线置信度统计（供节点卡片脚注与低置信计数）。 */
+export interface BlueprintConfidenceSummary {
+  nodeCount: number;
+  linkCount: number;
+  lowConfidenceNodes: number;
+  lowConfidenceLinks: number;
+  /** 平均节点置信度；无节点时为 null。 */
+  averageNodeConfidence: number | null;
+  /** 平均连线置信度；无连线时为 null。 */
+  averageLinkConfidence: number | null;
+}
+
+function averageConfidence(values: number[]): number | null {
+  const valid = values.filter((v) => Number.isFinite(v));
+  if (valid.length === 0) return null;
+  return valid.reduce((sum, v) => sum + v, 0) / valid.length;
+}
+
+/** 只依赖 confidence 字段，便于 UI 直接传入解析节点输出的子集。 */
+export interface BlueprintConfidenceInput {
+  nodes: Array<{ confidence: number }>;
+  links: Array<{ confidence: number }>;
+}
+
+/** 汇总节点/连线的平均置信度与低置信数量，不改变图结构。 */
+export function summarizeBlueprintConfidence(
+  graph: BlueprintConfidenceInput,
+): BlueprintConfidenceSummary {
+  const nodeConfidences = graph.nodes.map((n) => n.confidence);
+  const linkConfidences = graph.links.map((l) => l.confidence);
+  return {
+    nodeCount: graph.nodes.length,
+    linkCount: graph.links.length,
+    lowConfidenceNodes: nodeConfidences.filter(
+      (c) => classifyBlueprintConfidence(c) === 'low',
+    ).length,
+    lowConfidenceLinks: linkConfidences.filter(
+      (c) => classifyBlueprintConfidence(c) === 'low',
+    ).length,
+    averageNodeConfidence: averageConfidence(nodeConfidences),
+    averageLinkConfidence: averageConfidence(linkConfidences),
+  };
+}
+
 /** 蓝图图结构的高层摘要（只做结构规则，不做文字 OCR）。 */
 export interface BlueprintGraphSummary {
   nodeCount: number;

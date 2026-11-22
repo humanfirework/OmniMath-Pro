@@ -767,6 +767,12 @@ export interface TranslationDict {
   pipelineDuplicate: string;
   pipelineAutoLayout: string;
   pipelineExport: string;
+  pipelineRenameHint: string;
+  pipelineRetry: string;
+  pipelineStatusRunning: string;
+  pipelineStatusSuccess: string;
+  pipelineStatusError: string;
+  pipelineStatusSkipped: string;
 
   /* Node-pipeline UI (Task 6) */
   npBackToWorkbench: string;
@@ -1033,6 +1039,7 @@ export interface TranslationDict {
   plot3dSampleFailed: string;
   plot3dSampleFailedHint: string;
   plot3dSurfacesFailed: string;
+  plot3dRefining: string;
   plot3dWorkspaceTitle: string;
   plot3dWorkspaceHintPre: string;
   plot3dWorkspaceHintPost: string;
@@ -1267,6 +1274,9 @@ export interface TranslationDict {
   npBlueprintComponents: string;
   npBlueprintIsolated: string;
   npBlueprintCycle: string;
+  npConfidence: string;
+  npLowConfidence: string;
+  npConfidenceDetails: string;
   npCurveFit: string;
   npPortContours: string;
   npPortCurves: string;
@@ -2098,6 +2108,12 @@ const zhCN: TranslationDict = {
   pipelineDuplicate: "复制",
   pipelineAutoLayout: "自动布局",
   pipelineExport: "导出",
+  pipelineRenameHint: "双击重命名",
+  pipelineRetry: "重试",
+  pipelineStatusRunning: "运行中",
+  pipelineStatusSuccess: "成功",
+  pipelineStatusError: "失败",
+  pipelineStatusSkipped: "已跳过",
 
   /* Node-pipeline UI (Task 6) */
   npBackToWorkbench: "返回工作台",
@@ -2364,6 +2380,7 @@ const zhCN: TranslationDict = {
   plot3dSampleFailed: "3D 曲面采样失败",
   plot3dSampleFailedHint: "请修正上方表达式后重新添加，或检查变量 / 范围设置。",
   plot3dSurfacesFailed: "{n} 个曲面采样失败",
+  plot3dRefining: "正在细化曲面…",
   plot3dWorkspaceTitle: "3D 曲面工作区",
   plot3dWorkspaceHintPre: "输入",
   plot3dWorkspaceHintPost: "表达式或点击下方示例，添加可自由旋转 / 缩放 / 平移的 3D 曲面。",
@@ -2636,6 +2653,9 @@ const zhCN: TranslationDict = {
   npBlueprintComponents: "连通块",
   npBlueprintIsolated: "孤立节点",
   npBlueprintCycle: "闭环",
+  npConfidence: "置信度",
+  npLowConfidence: "低置信",
+  npConfidenceDetails: "解析详情",
   npCurveFit: "图像转曲线",
   npPortContours: "轮廓",
   npPortCurves: "曲线集合",
@@ -3420,6 +3440,12 @@ const en: TranslationDict = {
   pipelineDuplicate: "Duplicate",
   pipelineAutoLayout: "Auto Layout",
   pipelineExport: "Export",
+  pipelineRenameHint: "Double-click to rename",
+  pipelineRetry: "Retry",
+  pipelineStatusRunning: "Running",
+  pipelineStatusSuccess: "Succeeded",
+  pipelineStatusError: "Failed",
+  pipelineStatusSkipped: "Skipped",
 
   /* Node-pipeline UI (Task 6) */
   npBackToWorkbench: "Back to workbench",
@@ -3686,6 +3712,7 @@ const en: TranslationDict = {
   plot3dSampleFailed: "3D surface sampling failed",
   plot3dSampleFailedHint: "Fix the expression above and re-add it, or check variables / range settings.",
   plot3dSurfacesFailed: "{n} surfaces failed to sample",
+  plot3dRefining: "Refining surfaces…",
   plot3dWorkspaceTitle: "3D Surface Workspace",
   plot3dWorkspaceHintPre: "Enter",
   plot3dWorkspaceHintPost: "an expression or click an example below to add a freely rotatable / zoomable / pannable 3D surface.",
@@ -3958,6 +3985,9 @@ const en: TranslationDict = {
   npBlueprintComponents: "Groups",
   npBlueprintIsolated: "Isolated",
   npBlueprintCycle: "Cycle",
+  npConfidence: "Confidence",
+  npLowConfidence: "Low confidence",
+  npConfidenceDetails: "Parse details",
   npCurveFit: "Curve Fit",
   npPortContours: "Contours",
   npPortCurves: "Curves",

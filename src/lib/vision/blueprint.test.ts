@@ -1,8 +1,12 @@
 import { describe, expect, it } from 'vitest';
 import {
+  BLUEPRINT_CONFIDENCE_LOW,
+  classifyBlueprintConfidence,
   contourEndpoints,
+  formatBlueprintConfidence,
   parseBlueprint,
   pointToBBoxDistance,
+  summarizeBlueprintConfidence,
   summarizeBlueprintGraph,
   type BlueprintLinkInfo,
   type BlueprintNodeInfo,
@@ -176,6 +180,57 @@ describe('summarizeBlueprintGraph', () => {
       isolated: 0,
       hasCycle: false,
       leaves: 0,
+    });
+  });
+});
+
+describe('置信度分档与摘要', () => {
+  it('classifyBlueprintConfidence 按阈值分为 high / medium / low', () => {
+    expect(classifyBlueprintConfidence(0.95)).toBe('high');
+    expect(classifyBlueprintConfidence(0.75)).toBe('high');
+    expect(classifyBlueprintConfidence(0.6)).toBe('medium');
+    expect(classifyBlueprintConfidence(0.55)).toBe('medium');
+    expect(classifyBlueprintConfidence(0.2)).toBe('low');
+    expect(classifyBlueprintConfidence(BLUEPRINT_CONFIDENCE_LOW - 0.01)).toBe('low');
+    expect(classifyBlueprintConfidence(Number.NaN)).toBe('low');
+  });
+
+  it('formatBlueprintConfidence 输出紧凑百分比并夹取 0–1', () => {
+    expect(formatBlueprintConfidence(0.824)).toBe('82%');
+    expect(formatBlueprintConfidence(1)).toBe('100%');
+    expect(formatBlueprintConfidence(1.4)).toBe('100%');
+    expect(formatBlueprintConfidence(-0.2)).toBe('0%');
+    expect(formatBlueprintConfidence(Number.NaN)).toBe('—');
+  });
+
+  it('summarizeBlueprintConfidence 统计平均置信度与低置信数量', () => {
+    const s = summarizeBlueprintConfidence({
+      nodes: [
+        { ...node('N1'), confidence: 0.9 },
+        { ...node('N2'), confidence: 0.4 },
+        { ...node('N3'), confidence: 0.7 },
+      ],
+      links: [
+        { ...edge('N1', 'N2'), confidence: 0.3 },
+        { ...edge('N2', 'N3'), confidence: 0.8 },
+      ],
+    });
+    expect(s.nodeCount).toBe(3);
+    expect(s.linkCount).toBe(2);
+    expect(s.lowConfidenceNodes).toBe(1);
+    expect(s.lowConfidenceLinks).toBe(1);
+    expect(s.averageNodeConfidence).toBeCloseTo(2 / 3);
+    expect(s.averageLinkConfidence).toBeCloseTo(0.55);
+  });
+
+  it('空图平均值返回 null', () => {
+    expect(summarizeBlueprintConfidence({ nodes: [], links: [] })).toMatchObject({
+      nodeCount: 0,
+      linkCount: 0,
+      lowConfidenceNodes: 0,
+      lowConfidenceLinks: 0,
+      averageNodeConfidence: null,
+      averageLinkConfidence: null,
     });
   });
 });

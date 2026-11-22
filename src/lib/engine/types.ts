@@ -20,7 +20,12 @@ export type CalcType =
   | 'assignment'; // variable or function was stored
 
 /** The kind of plot the engine produced. Drives which renderer the UI uses. */
-export type PlotType = 'cartesian' | 'polar' | 'parametric' | 'surface3d';
+export type PlotType =
+  | 'cartesian'
+  | 'polar'
+  | 'parametric'
+  | 'implicit2d'
+  | 'surface3d';
 
 /** How a 3D surface expression should be sampled. */
 export type SurfaceMode = 'explicit' | 'implicit';
