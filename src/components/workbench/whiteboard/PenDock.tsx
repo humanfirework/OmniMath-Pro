@@ -336,7 +336,17 @@ export function PenDock(props: PenDockProps) {
         <DockButton label="笔" active={props.tool === 'pen' && !props.shapeTool} onClick={() => applyTool('pen')}>
           <Pencil className="size-4" />
         </DockButton>
-        <DockButton label="橡皮" active={props.tool === 'eraser' && !props.shapeTool} onClick={() => applyTool('eraser')}>
+        <DockButton
+          label="橡皮"
+          active={props.tool === 'eraser' && !props.shapeTool}
+          onClick={() => {
+            // 第一次点按只切换工具并收起面板，保证马上能在画布上擦；
+            // 已处于橡皮状态时再点一次，才展开模式/尺寸设置。
+            const already = props.tool === 'eraser' && !props.shapeTool;
+            applyTool('eraser');
+            setPanelOpen((open) => (already ? !open : false));
+          }}
+        >
           <Eraser className="size-4" />
         </DockButton>
         <DockButton label="套圈" active={props.tool === 'lasso'} onClick={() => applyTool('lasso')}>

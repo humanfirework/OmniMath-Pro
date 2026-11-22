@@ -52,6 +52,9 @@ export function useGlobalShortcuts() {
 
   useEffect(() => {
     const onKeyDown = (e: KeyboardEvent) => {
+      // 输入法组合期间不要拦截按键（中文/日文输入会很常见）。
+      if (e.isComposing) return;
+
       const target = e.target as HTMLElement;
       const inInput =
         target.tagName === 'INPUT' ||
@@ -62,9 +65,12 @@ export function useGlobalShortcuts() {
         const action = actionStr as ShortcutAction;
         if (!matchShortcut(e, def)) continue;
 
-        // 在输入框内时，仅允许特定动作（如 run=Enter）触发
-        // 其他动作（如 Ctrl+B 切换侧边栏）仍可触发，因为它们带修饰键
-        if (inInput && !(action === 'run' || def.mod)) continue;
+        // 输入框内不触发“运行”：编辑器自己处理 Ctrl+Enter，参数输入框
+        // 里按 Enter 只应提交数值，不能顺带执行整个脚本。
+        if (inInput && action === 'run') continue;
+        // 其余无修饰键动作也不应在输入框内触发；带修饰键的全局动作
+        // （命令面板、设置等）保留。
+        if (inInput && !def.mod) continue;
 
         const handler = handlers.get(action);
         if (handler) {

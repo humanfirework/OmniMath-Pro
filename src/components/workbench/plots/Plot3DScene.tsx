@@ -212,8 +212,9 @@ function SurfaceMesh({ data, wireframe, colorMode }: SurfaceMeshProps) {
         flatShading: false,
         metalness: 0,
         roughness: 0.85,
-        transparent: true,
-        opacity: 0.97,
+        // 不透明曲面：避免 0.97 透明度让颜色与背景混合后显得发灰、不清晰。
+        transparent: false,
+        opacity: 1,
       }),
     [],
   );
