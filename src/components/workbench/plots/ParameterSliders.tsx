@@ -135,7 +135,7 @@ export function ParameterSliders({
   const params = useMemo(() => {
     void scopeVersion; // variables 可能随赋值变化，与作用域保持同拍
     const exprs = plots
-      .filter((p) => p.visible && p.plotType !== 'surface3d')
+      .filter((p) => p.visible)
       .map((p) => p.expression);
     const free = extractFreeParameters(exprs, Object.keys(variables));
     if (extraParams && extraParams.length > 0) {
@@ -351,7 +351,7 @@ export function ParameterSliders({
   // 无自由参数时不再占一整块说明区：只留一行轻提示，避免在图上方堆文字。
   // 没有可见曲线时干脆不渲染，空状态本身已有引导。
   if (params.length === 0) {
-    const hasVisiblePlot = plots.some((p) => p.visible && p.plotType !== 'surface3d');
+    const hasVisiblePlot = plots.some((p) => p.visible);
     if (!hasVisiblePlot) return null;
     return (
       <div className="flex h-6 items-center gap-1.5 border-t border-border/60 bg-background/40 px-3 text-[10.5px] text-muted-foreground">

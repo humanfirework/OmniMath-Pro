@@ -831,7 +831,7 @@ export function FunctionInputPanel() {
                 </div>
               )}
               <ParameterSliders
-                plots={plots.filter((p) => p.plotType !== 'surface3d')}
+                plots={plots}
                 extraParams={demosExtraVars}
                 className="!rounded-md !border-t-0"
               />

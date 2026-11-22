@@ -840,8 +840,14 @@ export function WhiteboardCanvas() {
 
   const selectShape = useCallback((next: ShapeId | null) => {
     setShapeTool(next);
-    setTool('pen');
-    inkRef.current?.setStyle({ tool: 'pen', shapeTool: next });
+    // 仅在选择具体形状时切回钢笔；清除形状不能改变当前工具，否则
+    // 橡皮擦/套圈等非钢笔工具会被立即重置。
+    if (next) {
+      setTool('pen');
+      inkRef.current?.setStyle({ tool: 'pen', shapeTool: next });
+    } else {
+      inkRef.current?.setStyle({ shapeTool: null });
+    }
   }, []);
 
   const selectBrush = useCallback((next: InkBrush) => {

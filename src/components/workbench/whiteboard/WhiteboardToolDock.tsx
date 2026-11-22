@@ -114,8 +114,9 @@ export function WhiteboardToolDock(props: WhiteboardToolDockProps) {
   const toggle = (next: Exclude<Panel, null>) => setPanel((p) => (p === next ? null : next));
 
   const applyTool = (tool: InkTool) => {
+    // onTool 会同步清除 shapeTool；额外的 onShapeTool(null) 会把工具重置
+    // 回钢笔，导致橡皮擦/套圈/选择按钮看起来完全无效。
     props.onTool(tool);
-    if (tool !== 'pen') props.onShapeTool(null);
     setPanel(null);
   };
 

@@ -113,8 +113,9 @@ export function PenDock(props: PenDockProps) {
   const [panelOpen, setPanelOpen] = useState(false);
 
   const applyTool = (tool: InkTool) => {
+    // onTool 内部已经会清除 shapeTool；这里不要再调用 onShapeTool(null)，
+    // 否则部分实现会把工具强制切回钢笔，导致橡皮/套圈/选择点了没反应。
     props.onTool(tool);
-    if (tool !== 'pen') props.onShapeTool(null);
   };
 
   return (
