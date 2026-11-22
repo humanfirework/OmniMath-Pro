@@ -139,6 +139,20 @@ function emptyGeometry(): THREE.BufferGeometry {
   return g;
 }
 
+/**
+ * Toggle wireframe on the persistent per-mesh material. `wireframe` is part
+ * of three.js' shader program key, so flip `needsUpdate` when it changes.
+ * Kept outside the component so the material instance itself can stay a
+ * `useMemo` value (the React compiler forbids mutating hook results inline).
+ */
+function applyWireframe(
+  material: THREE.MeshStandardMaterial,
+  wireframe: boolean,
+): void {
+  material.wireframe = wireframe;
+  material.needsUpdate = true;
+}
+
 function SurfaceMesh({ data, wireframe, colorMode }: SurfaceMeshProps) {
   // Build the BufferGeometry attributes. Memoized so we don't recreate
   // Float32Arrays / Uint32Arrays on every render — only when the surface
@@ -186,20 +200,37 @@ function SurfaceMesh({ data, wireframe, colorMode }: SurfaceMeshProps) {
     };
   }, [geometry]);
 
-  return (
-    <mesh geometry={geometry}>
-      <meshStandardMaterial
-        vertexColors
-        side={THREE.DoubleSide}
-        wireframe={wireframe}
-        flatShading={false}
-        metalness={0.0}
-        roughness={0.85}
-        transparent
-        opacity={0.97}
-      />
-    </mesh>
+  // One material per mesh. Declaring <meshStandardMaterial> inline made R3F
+  // create a new material on every geometry replacement (each slider tick),
+  // which forced WebGL to rebuild shader programs. The material is stable and
+  // only `wireframe` is mutated in place.
+  const material = useMemo(
+    () =>
+      new THREE.MeshStandardMaterial({
+        vertexColors: true,
+        side: THREE.DoubleSide,
+        flatShading: false,
+        metalness: 0,
+        roughness: 0.85,
+        transparent: true,
+        opacity: 0.97,
+      }),
+    [],
   );
+
+  useEffect(() => {
+    // wireframe is part of the shader program key — flag a one-time rebuild
+    // only when the toggle actually changes (not on slider ticks).
+    applyWireframe(material, wireframe);
+  }, [material, wireframe]);
+
+  useEffect(() => {
+    return () => {
+      material.dispose();
+    };
+  }, [material]);
+
+  return <mesh geometry={geometry} material={material} />;
 }
 
 /* ------------------------------------------------------------------ */

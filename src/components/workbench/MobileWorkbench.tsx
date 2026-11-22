@@ -83,7 +83,7 @@ export function MobileWorkbench({ initialView }: { initialView?: ViewMode | null
   }, []);
 
   return (
-    <div className="h-[100dvh] w-screen flex flex-col overflow-hidden bg-background text-foreground">
+    <div className="h-[100dvh] w-screen max-w-full flex flex-col overflow-hidden overflow-x-hidden bg-background text-foreground">
       <TitleBar />
 
       <div className="flex-1 min-h-0 relative">
@@ -135,7 +135,7 @@ export function MobileWorkbench({ initialView }: { initialView?: ViewMode | null
             onClick={() => setTab(id)}
             aria-current={tab === id ? 'page' : undefined}
             className={cn(
-              'relative flex-1 flex flex-col items-center justify-center gap-0.5 h-12 text-[10px] transition-colors active:scale-[0.97]',
+              'touch-target relative flex-1 flex flex-col items-center justify-center gap-0.5 h-12 text-[10px] transition-colors active:scale-[0.97]',
               tab === id
                 ? 'text-primary'
                 : 'text-muted-foreground hover:text-foreground',

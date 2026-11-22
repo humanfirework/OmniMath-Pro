@@ -11,6 +11,10 @@
 import type { BezierSegmentData } from '@/lib/plots/curveTypes';
 import type { RunCurve, RunResultImage, RunResultPanel } from '@/lib/store/runResultsStore';
 import { flattenPixels as flattenPixelsToPts, mapPixelPoint } from '@/lib/vision/coords';
+import {
+  BLUEPRINT_CONFIDENCE_LOW,
+  formatBlueprintConfidence,
+} from '@/lib/vision/blueprint';
 
 export interface ResultView {
   xMin: number;
@@ -156,12 +160,19 @@ function drawShapeLabels(
     if (!Number.isFinite(label.x) || !Number.isFinite(label.y)) continue;
     const p = worldToScreen(label.x, label.y, size, view);
     if (p.x < -60 || p.x > size.w + 60 || p.y < -24 || p.y > size.h + 24) continue;
-    const tw = textWidth(ctx, label.text);
+    // 蓝图解析标签附置信度百分比；低于阈值的用琥珀色描边/文字提示，
+    // 不改变常规标签的尺寸与位置，避免视觉噪声。
+    const hasConfidence = typeof label.confidence === 'number' && Number.isFinite(label.confidence);
+    const text = hasConfidence
+      ? `${label.text} ${formatBlueprintConfidence(label.confidence as number)}`
+      : label.text;
+    const low = hasConfidence && (label.confidence as number) < BLUEPRINT_CONFIDENCE_LOW;
+    const tw = textWidth(ctx, text);
     const padX = 6;
     const boxH = 17;
     const x = p.x - tw / 2 - padX;
     const y = p.y - boxH / 2;
-    ctx.fillStyle = 'rgba(15,23,42,0.78)';
+    ctx.fillStyle = low ? 'rgba(69,26,3,0.88)' : 'rgba(15,23,42,0.78)';
     ctx.beginPath();
     if (typeof ctx.roundRect === 'function') {
       ctx.roundRect(x, y, tw + padX * 2, boxH, 6);
@@ -169,11 +180,11 @@ function drawShapeLabels(
       ctx.rect(x, y, tw + padX * 2, boxH);
     }
     ctx.fill();
-    ctx.strokeStyle = 'rgba(148,163,184,0.35)';
-    ctx.lineWidth = 1;
+    ctx.strokeStyle = low ? 'rgba(245,158,11,0.9)' : 'rgba(148,163,184,0.35)';
+    ctx.lineWidth = low ? 1.4 : 1;
     ctx.stroke();
-    ctx.fillStyle = '#e2e8f0';
-    ctx.fillText(label.text, p.x, p.y + 0.5);
+    ctx.fillStyle = low ? '#fde68a' : '#e2e8f0';
+    ctx.fillText(text, p.x, p.y + 0.5);
   }
   ctx.restore();
 }

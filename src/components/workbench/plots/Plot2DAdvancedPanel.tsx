@@ -83,6 +83,24 @@ export interface Plot2DAdvancedPanelProps {
 }
 
 /* ------------------------------------------------------------------ */
+/*  Helpers                                                           */
+/* ------------------------------------------------------------------ */
+
+/**
+ * 交点 / 切线 / 导数都按 y = f(x) 解析表达式，隐式方程（`lhs = rhs`）
+ * 传入这些分析函数会得到无意义的结果或伪交点。这里把隐式行排除在
+ * 高级叠加之外，并在 UI 上给出明确提示。
+ */
+function isAnalyzablePlot(p: PlotConfig): boolean {
+  return p.visible && p.plotType !== 'surface3d' && p.plotType !== 'implicit2d';
+}
+
+function hasVisibleImplicitPlot(plots: PlotConfig[]): boolean {
+  return plots.some((p) => p.visible && p.plotType === 'implicit2d');
+}
+
+
+/* ------------------------------------------------------------------ */
 /*  Component                                                         */
 /* ------------------------------------------------------------------ */
 
@@ -286,7 +304,8 @@ function IntersectTab({
   onOverlaysChange: (o: AdvancedOverlays) => void;
 }) {
   const t = useT();
-  const visiblePlots = useMemo(() => plots.filter((p) => p.visible && p.plotType !== 'surface3d'), [plots]);
+  const visiblePlots = useMemo(() => plots.filter(isAnalyzablePlot), [plots]);
+  const hasImplicit = useMemo(() => hasVisibleImplicitPlot(plots), [plots]);
   const [idx1, setIdx1] = useState(0);
   const [idx2, setIdx2] = useState(1);
   // 默认开启"自动全部交点"：对所有可见曲线两两组合计算交点；
@@ -335,7 +354,12 @@ function IntersectTab({
   }, [results, onOverlaysChange]);
 
   if (visiblePlots.length < 2) {
-    return <p className="py-2 text-[10px] text-muted-foreground">{t('plotAdvNeed2Curves')}</p>;
+    return (
+      <div className="flex flex-col gap-1 py-2">
+        <p className="text-[10px] text-muted-foreground">{t('plotAdvNeed2Curves')}</p>
+        {hasImplicit && <ImplicitOverlayHint />}
+      </div>
+    );
   }
 
   return (
@@ -395,7 +419,19 @@ function IntersectTab({
           </div>
         </ScrollArea>
       )}
+      {hasImplicit && <ImplicitOverlayHint />}
     </div>
+  );
+}
+
+/**
+ * 隐式曲线不支持高级叠加时的统一提示（低调、不阻断其他曲线）。
+ */
+function ImplicitOverlayHint() {
+  return (
+    <p className="text-[10px] leading-4 text-muted-foreground">
+      隐式方程暂不支持交点 / 切线 / 导数叠加（仅支持 y = f(x) 形式的显式曲线）。
+    </p>
   );
 }
 
@@ -418,7 +454,8 @@ function TangentTab({
   onOverlaysChange: (o: AdvancedOverlays) => void;
 }) {
   const t = useT();
-  const visiblePlots = useMemo(() => plots.filter((p) => p.visible && p.plotType !== 'surface3d'), [plots]);
+  const visiblePlots = useMemo(() => plots.filter(isAnalyzablePlot), [plots]);
+  const hasImplicit = useMemo(() => hasVisibleImplicitPlot(plots), [plots]);
   const [idx, setIdx] = useState(0);
   const [x0, setX0] = useState(0);
   const [enabled, setEnabled] = useState(false);
@@ -446,7 +483,12 @@ function TangentTab({
   }, [tangent, onOverlaysChange]);
 
   if (visiblePlots.length === 0) {
-    return <p className="py-2 text-[10px] text-muted-foreground">{t('plotAdvNoCurves')}</p>;
+    return (
+      <div className="flex flex-col gap-1 py-2">
+        <p className="text-[10px] text-muted-foreground">{t('plotAdvNoCurves')}</p>
+        {hasImplicit && <ImplicitOverlayHint />}
+      </div>
+    );
   }
 
   return (
@@ -486,6 +528,7 @@ function TangentTab({
           )}
         </>
       )}
+      {hasImplicit && <ImplicitOverlayHint />}
     </div>
   );
 }
@@ -504,7 +547,8 @@ function DerivativeTab({
   onOverlaysChange: (o: AdvancedOverlays) => void;
 }) {
   const t = useT();
-  const visiblePlots = useMemo(() => plots.filter((p) => p.visible && p.plotType !== 'surface3d'), [plots]);
+  const visiblePlots = useMemo(() => plots.filter(isAnalyzablePlot), [plots]);
+  const hasImplicit = useMemo(() => hasVisibleImplicitPlot(plots), [plots]);
   const [idx, setIdx] = useState(0);
   const [order, setOrder] = useState<1 | 2 | 3>(1);
   const [enabled, setEnabled] = useState(false);
@@ -551,7 +595,12 @@ function DerivativeTab({
   }, [derivSamples, order, onOverlaysChange]);
 
   if (visiblePlots.length === 0) {
-    return <p className="py-2 text-[10px] text-muted-foreground">{t('plotAdvNoCurves')}</p>;
+    return (
+      <div className="flex flex-col gap-1 py-2">
+        <p className="text-[10px] text-muted-foreground">{t('plotAdvNoCurves')}</p>
+        {hasImplicit && <ImplicitOverlayHint />}
+      </div>
+    );
   }
 
   return (
@@ -599,6 +648,7 @@ function DerivativeTab({
           )}
         </>
       )}
+      {hasImplicit && <ImplicitOverlayHint />}
     </div>
   );
 }

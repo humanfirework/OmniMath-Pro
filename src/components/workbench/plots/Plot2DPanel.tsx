@@ -42,9 +42,12 @@ import {
   sampleCurve,
   DEFAULT_POLAR_THETA_RANGE,
   DEFAULT_PARAMETRIC_T_RANGE,
+  DEFAULT_IMPLICIT_Y_RANGE,
   type Curve2DSpec,
 } from '@/lib/plots/plot2d';
 import { coordinatedYRange, smartYRange, type CoordinatedRangeResult } from '@/lib/plots/smartRange';
+import { plotViewSignature } from '@/lib/plots/viewport';
+import { finiteSamplesWithoutDuplicates } from '@/lib/plots/csvExport';
 import { useScopeVersion } from '@/lib/hooks/useScopeVersion';
 import { useSettingsStore } from '@/lib/store/settingsStore';
 import { toast } from 'sonner';
@@ -56,6 +59,17 @@ import { toast } from 'sonner';
  *  periodic functions (sin, cos, tan) look like dense vertical lines. */
 const DEFAULT_X: [number, number] = [-10, 10];
 const DEFAULT_Y: [number, number] = [-10, 10];
+
+/**
+ * 高级叠加的空状态。当可见曲线全部是隐式曲线时使用：交点 / 切线 / 导数
+ * 只对 y = f(x) 有意义，隐式行上残留的旧叠加会画在错误的位置。
+ */
+const EMPTY_OVERLAYS: AdvancedOverlays = {
+  intersections: [],
+  tangent: null,
+  derivativeSamples: [],
+  derivativeOrder: 1,
+};
 
 interface ViewBox {
   x: [number, number];
@@ -69,12 +83,16 @@ interface ViewBox {
  */
 function defaultSpecForPlot(p: {
   expression: string;
-  plotType: 'cartesian' | 'polar' | 'parametric' | 'surface3d';
+  plotType: 'cartesian' | 'polar' | 'parametric' | 'implicit2d' | 'surface3d';
   polarMinExpr?: string;
   polarMaxExpr?: string;
 }): Curve2DSpec {
-  const mode = (p.plotType === 'surface3d' ? 'cartesian' : p.plotType ?? 'cartesian') as
-    | 'cartesian' | 'polar' | 'parametric';
+  // surface3d 不应出现在 2D 面板，兜底为 cartesian；implicit2d 保留完整的
+  // `lhs = rhs` 等式，由隐式采样器（marching squares）解析。
+  const mode: Curve2DSpec['mode'] =
+    p.plotType === 'polar' || p.plotType === 'parametric' || p.plotType === 'implicit2d'
+      ? p.plotType
+      : 'cartesian';
   const spec: Curve2DSpec = {
     mode,
     exprX: p.expression,
@@ -138,7 +156,14 @@ function deriveSmartY(
   }
   const sampled = plots.map((p) => {
     const spec = curveSpecs[p.id] ?? defaultSpecForPlot(p);
-    const samples = sampleCurve(spec, xRange, 300);
+    // 隐式曲线需要两个轴的范围；自适应 Y 派生阶段先按标准 Y 窗口
+    // [-10, 10] 采样，再从其可见点集计算量化范围。
+    const samples = sampleCurve(
+      spec,
+      xRange,
+      300,
+      spec.mode === 'implicit2d' ? DEFAULT_IMPLICIT_Y_RANGE : undefined,
+    );
     return { samples, label: p.expression };
   });
   return coordinatedYRange(sampled, {
@@ -178,10 +203,12 @@ export function Plot2DPanel() {
   const setSlidersCollapsed = useSettingsStore((s) => s.setSlidersCollapsed);
 
   // userView === null means "use the derived default".
-  // We store the plots.length at the time the user last set a view, so when
-  // plots are added/removed we automatically fall back to the derived
-  // default (no ref access during render, no useEffect cascade).
-  const [userView, setUserView] = useState<{ view: ViewBox; plotCount: number } | null>(null);
+  // We store a stable signature of the current curve set (sorted ids + the
+  // latest curve's xRange) alongside the view. When the set changes — even
+  // if the count stays the same (delete one curve, add another) — the
+  // signature no longer matches and the derived default takes over.
+  const [userView, setUserView] = useState<{ view: ViewBox; signature: string } | null>(null);
+  const viewSignature = useMemo(() => plotViewSignature(plots), [plots]);
 
   // Range mode: 'free' (default, quantile-based adaptive w/ outlier
   // clipping) or 'manual' (user-set Y).
@@ -237,10 +264,10 @@ export function Plot2DPanel() {
     return extractFreeParameters(exprs, Object.keys(variables)).length;
   }, [plots, variables, scopeVersion]);
 
-  // If the plot count has changed since the user set their view, drop the
-  // override so the derived default takes over.
+  // If the curve set signature has changed since the user set their view,
+  // drop the override so the derived default takes over.
   const effectiveUserView =
-    userView && userView.plotCount === plots.length ? userView.view : null;
+    userView && userView.signature === viewSignature ? userView.view : null;
 
   // The X range used both as the effective viewport X and as the sampling
   // range for `smartY`. It tracks the user's current X (pan / zoom) so the
@@ -315,7 +342,12 @@ export function Plot2DPanel() {
     return plots.map((p) => {
       const spec = curveSpecs[p.id] ?? defaultSpecForPlot(p);
       if (spec.mode === 'polar') return polarViewRange(spec);
-      const samples = sampleCurve(spec, effectiveX, 300);
+      const samples = sampleCurve(
+        spec,
+        effectiveX,
+        300,
+        spec.mode === 'implicit2d' ? DEFAULT_IMPLICIT_Y_RANGE : undefined,
+      );
       return smartYRange(samples, {
         lowerQuantile: 0.05,
         upperQuantile: 0.95,
@@ -333,16 +365,16 @@ export function Plot2DPanel() {
     setUserView((prev) => {
       const baseX = prev?.view.x ?? defaultView.x;
       const baseY = prev?.view.y ?? defaultView.y;
-      return { view: { x: zoomAroundCenter(baseX, 1 / 1.3), y: zoomAroundCenter(baseY, 1 / 1.3) }, plotCount: plots.length };
+      return { view: { x: zoomAroundCenter(baseX, 1 / 1.3), y: zoomAroundCenter(baseY, 1 / 1.3) }, signature: viewSignature };
     });
-  }, [defaultView, plots.length]);
+  }, [defaultView, viewSignature]);
   const handleZoomOut = useCallback(() => {
     setUserView((prev) => {
       const baseX = prev?.view.x ?? defaultView.x;
       const baseY = prev?.view.y ?? defaultView.y;
-      return { view: { x: zoomAroundCenter(baseX, 1.3), y: zoomAroundCenter(baseY, 1.3) }, plotCount: plots.length };
+      return { view: { x: zoomAroundCenter(baseX, 1.3), y: zoomAroundCenter(baseY, 1.3) }, signature: viewSignature };
     });
-  }, [defaultView, plots.length]);
+  }, [defaultView, viewSignature]);
   const handleReset = useCallback(() => {
     setUserView(null);
     setRangeMode('free');
@@ -356,11 +388,11 @@ export function Plot2DPanel() {
       if (mode === 'manual') {
         setUserView((prev) => ({
           view: prev?.view ?? { x: effectiveX, y: defaultView.y },
-          plotCount: plots.length,
+          signature: viewSignature,
         }));
       }
     },
-    [effectiveX, defaultView, plots.length],
+    [effectiveX, defaultView, viewSignature],
   );
 
   const handleRangeChange = useCallback(
@@ -376,15 +408,15 @@ export function Plot2DPanel() {
           const next: [number, number] = [baseX[0], baseX[1]];
           next[index] = value;
           if (next[1] <= next[0]) next[1] = next[0] + 1;
-          return { view: { x: next, y: baseY }, plotCount: plots.length };
+          return { view: { x: next, y: baseY }, signature: viewSignature };
         }
         const next: [number, number] = [baseY[0], baseY[1]];
         next[index] = value;
         if (next[1] <= next[0]) next[1] = next[0] + 1;
-        return { view: { x: baseX, y: next }, plotCount: plots.length };
+        return { view: { x: baseX, y: next }, signature: viewSignature };
       });
     },
-    [defaultView, plots.length],
+    [defaultView, viewSignature],
   );
 
   /* ----------------------- Insert example --------------------------- */
@@ -404,7 +436,7 @@ export function Plot2DPanel() {
   /* ----------------------- Export handlers -------------------------- */
   const canvasWrapperRef = useRef<HTMLDivElement>(null);
 
-  // CSV 导出用的曲线数据：对每条可见曲线按当前 X 视窗采样。
+  // CSV 导出用的曲线数据：对每条可见曲线按当前视窗采样。
   const exportSeries = useMemo(() => {
     void scopeVersion;
     if (plots.length === 0) return [];
@@ -412,14 +444,23 @@ export function Plot2DPanel() {
       .filter((p) => p.visible)
       .map((p) => {
         const spec = curveSpecs[p.id] ?? defaultSpecForPlot(p);
-        const samples = sampleCurve(spec, effectiveX, 800);
+        const isImplicit = spec.mode === 'implicit2d';
+        const samples = sampleCurve(
+          spec,
+          effectiveX,
+          800,
+          isImplicit ? effectiveY : undefined,
+        );
+        // 隐式采样以「两段点 + NaN 断点」输出；导出时去掉断点行，并折叠
+        // 相邻重复点（相邻线段共享的端点），避免空列 / 重复行。
+        const rows = isImplicit ? finiteSamplesWithoutDuplicates(samples) : samples;
         return {
           name: p.expression || `plot-${p.id}`,
-          x: samples.map((s) => s.x),
-          y: samples.map((s) => s.y),
+          x: rows.map((s) => s.x),
+          y: rows.map((s) => s.y),
         };
       });
-  }, [plots, curveSpecs, effectiveX, scopeVersion]);
+  }, [plots, curveSpecs, effectiveX, effectiveY, scopeVersion]);
 
   const handleExportPNG = useCallback(() => {
     // 打开导出对话框（统一走 Tauri 原生保存对话框 + DPI 选项）
@@ -452,8 +493,8 @@ export function Plot2DPanel() {
 
   /* ----------------------- Canvas callbacks ------------------------- */
   const handleViewChange = useCallback((x: [number, number], y: [number, number]) => {
-    setUserView({ view: { x, y }, plotCount: plots.length });
-  }, [plots.length]);
+    setUserView({ view: { x, y }, signature: viewSignature });
+  }, [viewSignature]);
 
   const handleResetView = useCallback(() => {
     handleReset();
@@ -463,6 +504,16 @@ export function Plot2DPanel() {
   // 极点/极值/零点等标记点默认关闭（学术风格更干净），用户可在
   // 高级面板中手动开启。
   const [showMarkers, setShowMarkers] = useState(false);
+
+  // 高级叠加（交点/切线/导数）只对非隐式曲线有意义。若当前可见曲线全部
+  // 是隐式曲线（或没有可分析曲线），丢弃可能残留的旧叠加，避免在隐式
+  // 曲线上画出误导性的标记。笛卡尔 / 极坐标行为保持不变。
+  const overlaysForCanvas = useMemo<AdvancedOverlays>(() => {
+    const hasAnalyzable = plots.some(
+      (p) => p.visible && p.plotType !== 'implicit2d' && p.plotType !== 'surface3d',
+    );
+    return hasAnalyzable ? overlays : EMPTY_OVERLAYS;
+  }, [plots, overlays]);
 
   /* ----------------------- Memoize props ---------------------------- */
   const canvasProps: Plot2DCanvasProps = useMemo(
@@ -477,11 +528,11 @@ export function Plot2DPanel() {
       showGrid: true,
       showMarkers,
       showLegend,
-      overlays,
+      overlays: overlaysForCanvas,
       curveSpecs,
       curveSets,
     }),
-    [plots, theme, effectiveX, effectiveY, handleViewChange, handleResetView, handleInsertExample, showLegend, showMarkers, overlays, curveSpecs, curveSets],
+    [plots, theme, effectiveX, effectiveY, handleViewChange, handleResetView, handleInsertExample, showLegend, showMarkers, overlaysForCanvas, curveSpecs, curveSets],
   );
 
   /* ----------------------- Render ----------------------------------- */

@@ -12,7 +12,7 @@
  */
 
 import { useLayoutEffect, useMemo, useRef, useState } from 'react';
-import { Check, ChevronDown, RefreshCw, Sigma, Sparkles, X } from 'lucide-react';
+import { Check, ChevronDown, RefreshCw, Sigma, Sparkles, Undo2, X } from 'lucide-react';
 import type { RecognizedGlyph } from '@/lib/mathnotes/recognize';
 import type { InkPoint, InkView } from '@/lib/ink/types';
 import { evaluateMathNote } from '@/lib/mathnotes/expression';
@@ -47,6 +47,9 @@ export interface MathNotePanelProps {
   onClose: () => void;
   /** 点击低置信度字符的备选：直接改写该字形并重新生成表达式。 */
   onCorrectGlyph?: (glyphIndex: number, char: string) => void;
+  /** 撤销上一次字形修正。 */
+  onUndoCorrection?: () => void;
+  canUndoCorrection?: boolean;
   /** 触屏设备底部有 PenDock，识别窗口需要抬高避免遮住笔刷/橡皮。 */
   raised?: boolean;
   /** 识别笔迹的世界坐标（用于把浮卡放到笔迹旁）。 */
@@ -64,6 +67,8 @@ export function MathNotePanel({
   onInsert,
   onClose,
   onCorrectGlyph,
+  onUndoCorrection,
+  canUndoCorrection,
   raised,
   anchor,
   view,
@@ -75,18 +80,28 @@ export function MathNotePanel({
   const cardRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
 
-  // 低置信度字符 + 分类器给出的备选：点一下就能改，不用整行重打。
-  const unsure = useMemo(() => {
+  // 低置信字形 + 分类器备选：展示置信度，点候选即可修正。
+  const lowConfidence = useMemo(() => {
     const glyphs = draft.layoutGlyphs ?? draft.glyphs;
-    const out: Array<{ index: number; char: string; alternatives: string[] }> = [];
+    const out: Array<{
+      index: number;
+      char: string;
+      confidence: number;
+      alternatives: string[];
+    }> = [];
     for (let i = 0; i < glyphs.length; i++) {
       const g = glyphs[i];
       if (g.text || g.superscript || g.subscript) continue;
       const alts = (g.alternatives ?? []).filter((a) => a && a !== g.char).slice(0, 3);
-      if ((g.confidence < 0.72 || g.char === '?') && alts.length > 0) {
-        out.push({ index: i, char: g.char === '?' ? '□' : g.char, alternatives: alts });
+      if (g.confidence < 0.72 || g.char === '?') {
+        out.push({
+          index: i,
+          char: g.char === '?' ? '□' : g.char,
+          confidence: g.confidence,
+          alternatives: alts,
+        });
       }
-      if (out.length >= 5) break;
+      if (out.length >= 6) break;
     }
     return out;
   }, [draft.glyphs, draft.layoutGlyphs]);
@@ -116,7 +131,7 @@ export function MathNotePanel({
     left = Math.max(Math.min(64, maxLeft), Math.min(maxLeft, left));
     const top = Math.max(10, Math.min(ph - ch - 10, sy - 18));
     setPos({ left, top });
-  }, [anchor, view, raised, expanded, draft.text, unsure.length]);
+  }, [anchor, view, raised, expanded, draft.text, lowConfidence.length]);
 
   const insertSymbol = (symbol: string) => {
     const input = inputRef.current;
@@ -255,8 +270,8 @@ export function MathNotePanel({
               <button
                 type="button"
                 onClick={onRetry}
-                aria-label="重试识别"
-                title="重试识别"
+                aria-label="重新识别当前区域"
+                title="重新识别当前区域"
                 className="grid h-7 w-7 shrink-0 place-items-center rounded-lg border border-border/70 text-muted-foreground hover:bg-accent hover:text-foreground"
               >
                 <RefreshCw className="size-3" />
@@ -264,6 +279,82 @@ export function MathNotePanel({
             </div>
           </div>
         </div>
+
+        {(lowConfidence.length > 0 || draft.glyphs.length > 0) && (
+          <div className="space-y-1.5">
+            {lowConfidence.length > 0 && (
+              <div className="rounded-lg border border-amber-500/25 bg-amber-500/5 px-2 py-1.5">
+                <div className="flex items-center gap-1.5">
+                  <span className="text-[9.5px] font-medium text-amber-600 dark:text-amber-400">
+                    低置信字形
+                  </span>
+                  <span className="text-[9px] text-muted-foreground">点候选即可修正</span>
+                </div>
+                <div className="mt-1 flex flex-wrap gap-1">
+                  {lowConfidence.map((u) => (
+                    <span
+                      key={u.index}
+                      title={`置信度 ${Math.round(u.confidence * 100)}%`}
+                      className="inline-flex items-center gap-1 rounded-md border border-amber-500/45 bg-background/80 px-1 py-0.5"
+                    >
+                      <span className="font-mono text-[10.5px] text-foreground/85">{u.char}</span>
+                      <span className="font-mono text-[8.5px] text-amber-600 dark:text-amber-400">
+                        {Math.round(u.confidence * 100)}%
+                      </span>
+                      {u.alternatives.length > 0 ? (
+                        u.alternatives.map((alt) => (
+                          <button
+                            key={alt}
+                            type="button"
+                            onClick={() => onCorrectGlyph?.(u.index, alt)}
+                            disabled={!onCorrectGlyph}
+                            title={`改为 ${alt}（并记住这次写法）`}
+                            className="rounded border border-amber-500/30 bg-background px-1 font-mono text-[10.5px] text-amber-700 transition-colors hover:bg-amber-500/15 disabled:opacity-40 dark:text-amber-300"
+                          >
+                            {alt}
+                          </button>
+                        ))
+                      ) : (
+                        <button
+                          type="button"
+                          onClick={() => inputRef.current?.focus()}
+                          title="没有可用候选，直接修改表达式"
+                          className="rounded px-1 text-[9.5px] text-muted-foreground hover:bg-accent hover:text-foreground"
+                        >
+                          改
+                        </button>
+                      )}
+                    </span>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            <div className="flex flex-wrap items-center gap-1.5">
+              <button
+                type="button"
+                onClick={onRetry}
+                className="inline-flex h-6 items-center gap-1 rounded-md border border-border/70 px-1.5 text-[10px] text-muted-foreground hover:bg-accent hover:text-foreground"
+              >
+                <RefreshCw className="size-3" />
+                重新识别当前区域
+              </button>
+              <button
+                type="button"
+                onClick={onUndoCorrection}
+                disabled={!canUndoCorrection || !onUndoCorrection}
+                title="撤销上一次候选修正"
+                className="inline-flex h-6 items-center gap-1 rounded-md border border-border/70 px-1.5 text-[10px] text-muted-foreground hover:bg-accent hover:text-foreground disabled:opacity-40"
+              >
+                <Undo2 className="size-3" />
+                撤销上一次修改
+              </button>
+              <span className="ml-auto text-[9px] text-muted-foreground">
+                本机离线识别 · 不上传笔迹 · 可手动修正
+              </span>
+            </div>
+          </div>
+        )}
 
         {!evaluation.ok && (
           <div className="rounded-lg border border-rose-500/20 bg-rose-500/5 px-2 py-1.5">
@@ -295,33 +386,6 @@ export function MathNotePanel({
         {/* 展开后才显示计算/图像与 AI，避免一识别就弹一大块 */}
         {expanded && (
           <>
-            {unsure.length > 0 && onCorrectGlyph && (
-              <div className="flex flex-wrap items-center gap-1.5 rounded-lg border border-amber-500/25 bg-amber-500/5 px-2 py-1">
-                <span className="text-[9.5px] font-medium text-amber-600 dark:text-amber-400">
-                  不太确定
-                </span>
-                {unsure.map((u) => (
-                  <span key={u.index} className="inline-flex items-center gap-0.5 text-[10.5px]">
-                    <span className="rounded bg-background/70 px-1 font-mono text-foreground/80">
-                      {u.char}
-                    </span>
-                    <span className="text-muted-foreground">→</span>
-                    {u.alternatives.map((alt) => (
-                      <button
-                        key={alt}
-                        type="button"
-                        onClick={() => onCorrectGlyph(u.index, alt)}
-                        title={`改为 ${alt}（并记住这次写法）`}
-                        className="rounded px-1 font-mono text-primary transition-colors hover:bg-primary/10"
-                      >
-                        {alt}
-                      </button>
-                    ))}
-                  </span>
-                ))}
-              </div>
-            )}
-
             <div className="min-h-[52px] rounded-lg border border-border/50 bg-muted/20 px-2 py-1.5">
               {evaluation.ok && evaluation.kind === 'number' ? (
                 <div className="flex items-center gap-2">

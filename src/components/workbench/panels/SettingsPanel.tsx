@@ -109,8 +109,8 @@ import { toast } from 'sonner';
 type Category = 'appearance' | 'editor' | 'layout' | 'data' | 'backup' | 'export' | 'language' | 'shortcuts' | 'advanced' | 'about';
 
 // 版本号优先取构建期注入的 NEXT_PUBLIC_APP_VERSION（与 package.json 对齐），
-// 缺失时回退到 package.json 中的版本（0.1.6）。
-const APP_VERSION = process.env.NEXT_PUBLIC_APP_VERSION ?? '0.1.6';
+// 缺失时回退到 package.json 中的版本（0.1.7）。
+const APP_VERSION = process.env.NEXT_PUBLIC_APP_VERSION ?? '0.1.7';
 // 关于页相关链接（仓库地址取自 package.json: humanfirework/OmniMath-Pro）。
 const ABOUT_LINKS: { emoji: string; label: string; url: string }[] = [
   { emoji: '📖', label: '官方文档', url: 'https://github.com/humanfirework/OmniMath-Pro#readme' },

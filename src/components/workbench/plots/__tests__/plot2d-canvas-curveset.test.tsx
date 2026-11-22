@@ -1,6 +1,6 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import React from 'react';
-import { render, act, waitFor } from '@testing-library/react';
+import { render, act, fireEvent } from '@testing-library/react';
 import '@testing-library/jest-dom';
 import { Plot2DPanel } from '../Plot2DPanel';
 import { useWorkbenchStore } from '@/lib/store/workbench';
@@ -168,6 +168,58 @@ describe('Plot2DPanel curveSets render (Task 5 + 9)', () => {
     const lineToCalls = ctx.lineTo.mock?.calls?.length || 0;
     const bezierCalls = ctx.bezierCurveTo.mock?.calls?.length || 0;
     expect(moveToCalls + lineToCalls + bezierCalls).toBeGreaterThan(10);
+  });
+
+  it('implicit2d 曲线会绘制到 canvas（PNG 导出源），且手动 Y 范围不崩溃', async () => {
+    act(() => {
+      const s = useWorkbenchStore.getState();
+      s.clearCurveSets();
+      s.clearPlots();
+      s.addPlot({
+        expression: 'x^2 + y^2 = 4',
+        plotType: 'implicit2d',
+        xRange: [-3, 3],
+        yRange: [-3, 3],
+        color: '#1565c0',
+        visible: true,
+      });
+    });
+
+    let container: HTMLElement;
+    await act(async () => {
+      const rendered = render(<Plot2DPanel />);
+      container = rendered.container;
+    });
+    await act(async () => {
+      await vi.runAllTimersAsync();
+    });
+
+    const anyGetContext = HTMLCanvasElement.prototype.getContext as any;
+    const ctx = anyGetContext.mock.results[0]?.value;
+    expect(ctx).toBeDefined();
+    const drawCalls =
+      (ctx.moveTo.mock?.calls?.length || 0) +
+      (ctx.lineTo.mock?.calls?.length || 0);
+    // 隐式曲线由多段 marching-squares 线段组成，必然产生大量 moveTo/lineTo。
+    expect(drawCalls).toBeGreaterThan(10);
+    expect(container!.querySelectorAll('canvas').length).toBeGreaterThanOrEqual(1);
+
+    // 打开高级面板 → 切换到「手动」Y 范围：只有隐式曲线时不能崩溃。
+    const expand = container!.querySelector('[aria-label="展开高级功能"]');
+    expect(expand).not.toBeNull();
+    await act(async () => {
+      fireEvent.click(expand!);
+    });
+    const manual = container!.querySelector('[aria-label="手动"]');
+    expect(manual).not.toBeNull();
+    await act(async () => {
+      fireEvent.click(manual!);
+    });
+    await act(async () => {
+      await vi.runAllTimersAsync();
+    });
+    // 面板仍然存在，说明 manual 分支没有抛错。
+    expect(container!.querySelector('.plot-2d-panel')).not.toBeNull();
   });
 
   it('workbench store.addCurveSet 正确添加 curveSets', () => {

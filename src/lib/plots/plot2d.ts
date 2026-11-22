@@ -16,6 +16,7 @@
  *   - samplePolar(...)      — sample r = f(θ) over an explicit θ range
  *   - sampleParametric(...) — sample x = f(t), y = g(t) over a t range
  *   - sampleCurve(...)      — dispatch on a Curve2DSpec (mode + exprs + range)
+ *   - sampleImplicit2D(...) — marching-squares sampling of `F(x, y) = 0`
  *   - findExtrema(samples)  — local maxima, minima, and zero crossings
  *
  * Evaluation uses the shared configured mathjs instance and merges the
@@ -26,6 +27,11 @@
 import { getEvalScope } from '@/lib/engine/mathInstance';
 import { compileCached } from '@/lib/engine/compileCache';
 import { getDefaultSampleCount } from './plotDefaults';
+import { sampleImplicit2D, DEFAULT_IMPLICIT_Y_RANGE } from './implicit2d';
+
+// Re-export the implicit sampler so callers can import everything from
+// `@/lib/plots/plot2d` (alongside the other 2D sampling entry points).
+export { sampleImplicit2D, DEFAULT_IMPLICIT_Y_RANGE };
 
 // Re-export the smart-range algorithm so callers can import everything
 // from a single module (`@/lib/plots/plot2d`).
@@ -55,13 +61,37 @@ export interface PlotSample {
 }
 
 /** Supported 2D plot modes. */
-export type Plot2DType = 'cartesian' | 'polar' | 'parametric';
+export type Plot2DType = 'cartesian' | 'polar' | 'parametric' | 'implicit2d';
 
 /** Default θ range for polar plots (one full revolution). */
 export const DEFAULT_POLAR_THETA_RANGE: [number, number] = [0, Math.PI * 2];
 
-/** Default t range for parametric plots. */
+/** 默认 t range for parametric plots. */
 export const DEFAULT_PARAMETRIC_T_RANGE: [number, number] = [-10, 10];
+
+/**
+ * 隐式曲线在「静态」状态下的 marching-squares 分辨率：随采样预算
+ * （count）提高。96 / 80 / 64 与历史行为一致。
+ */
+export function implicitResolutionForCount(count: number): number {
+  if (!Number.isFinite(count)) return 80;
+  if (count >= 800) return 96;
+  if (count >= 400) return 80;
+  return 64;
+}
+
+/**
+ * 隐式曲线在平移 / 缩放等交互期间使用的降采样分辨率（48–64）。
+ *
+ * 交互时每个视口变化都会重跑一次 marching squares；96² 网格在拖动参数
+ * 或平移时会造成明显掉帧。这里降到 48–64²，交互结束后再恢复全分辨率。
+ */
+export function implicitInteractiveResolutionForCount(count: number): number {
+  if (!Number.isFinite(count)) return 56;
+  if (count >= 800) return 64;
+  if (count >= 400) return 56;
+  return 48;
+}
 
 /**
  * Default sample count lives in `plotDefaults.ts` (mathjs-free) so the
@@ -497,16 +527,28 @@ export function sampleParametric(
  * - polar      → adaptive parametric sampling (`sampleParametricAdaptive`)
  *                 with r = f(θ) → (r·cos θ, r·sin θ), stable under pan/zoom;
  * - parametric → adaptive parametric sampling (`sampleParametricAdaptive`)
- *                 over x = f(t), y = g(t).
+ *                 over x = f(t), y = g(t);
+ * - implicit2d → marching squares over BOTH view axes
+ *                 (`sampleImplicit2D`), returning disconnected segments
+ *                 separated by NaN gaps.
  *
  * All branches keep their natural order (x ascending for cartesian, t/θ
  * ascending for polar/parametric) so closed / self-intersecting curves
  * render correctly.
+ *
+ * @param yRange Visible Y window — only used by `implicit2d` (implicit
+ *               curves need both axes). Metrics such as smart-Y / facet
+ *               ranges pass the default `[-10, 10]` window.
+ * @param implicitResolution Optional explicit marching-squares resolution.
+ *               Interactive pan/zoom passes a coarse 48–64 grid to keep
+ *               frames cheap; omitted callers keep the count-derived value.
  */
 export function sampleCurve(
   spec: Curve2DSpec,
   xRange: [number, number],
   count = getDefaultSampleCount(),
+  yRange: [number, number] = DEFAULT_IMPLICIT_Y_RANGE,
+  implicitResolution?: number,
 ): PlotSample[] {
   const opts: AdaptiveOptions = {
     // Map the user-facing sample count onto the adaptive budget: the coarse
@@ -515,6 +557,13 @@ export function sampleCurve(
     initSegments: Math.max(16, Math.min(256, Math.round(count / 8))),
     maxPoints: Math.max(1024, Math.min(4000, count * 4)),
   };
+  if (spec.mode === 'implicit2d') {
+    // Marching-squares resolution scales with the quality budget: ~96 cells
+    // per axis at full quality, dropping to 64 during slider-drag lowQuality.
+    const resolution =
+      implicitResolution ?? implicitResolutionForCount(count);
+    return sampleImplicit2D(spec.exprX, xRange, yRange, resolution);
+  }
   if (spec.mode === 'polar') {
     const compiledX = safeCompile(spec.exprX);
     if (!compiledX) return [];

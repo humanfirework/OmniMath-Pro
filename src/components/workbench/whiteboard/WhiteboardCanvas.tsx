@@ -255,6 +255,16 @@ export function WhiteboardCanvas() {
   const mathMode = useSettingsStore((s) => s.whiteboardMathMode);
   const setMathMode = useSettingsStore((s) => s.setWhiteboardMathMode);
   const [mathDraft, setMathDraft] = useState<MathNoteDraft | null>(null);
+  // 字形修正历史：支持「撤销上一次修改」，不影响画布笔迹的撤销栈。
+  const correctionHistoryRef = useRef<
+    Array<{
+      layoutGlyphs?: RecognizedGlyph[];
+      text: string;
+      display: string;
+      confidence: number;
+    }>
+  >([]);
+  const [correctionDepth, setCorrectionDepth] = useState(0);
   const [mathScopeBox, setMathScopeBox] = useState<{
     x0: number;
     y0: number;
@@ -415,6 +425,8 @@ export function WhiteboardCanvas() {
           })),
         };
       }
+      correctionHistoryRef.current = [];
+      setCorrectionDepth(0);
       setMathDraft({
         text: rec.text,
         display: rec.display,
@@ -451,30 +463,62 @@ export function WhiteboardCanvas() {
    * Also stores the user's actual strokes under the corrected character,
    * so the on-device template bank learns this handwriting immediately.
    */
-  const handleCorrectGlyph = useCallback((index: number, char: string) => {
-    setMathDraft((prev) => {
-      if (!prev) return prev;
+  const handleCorrectGlyph = useCallback(
+    (index: number, char: string) => {
+      const prev = mathDraft;
+      if (!prev) return;
       const base = prev.layoutGlyphs ?? prev.glyphs;
       const target = base[index];
-      if (!target) return prev;
+      if (!target) return;
       addUserGlyphSamples([{ ...target, char, displayChar: char, confidence: 1 }]);
       const nextGlyphs: RecognizedGlyph[] = base.map((g, i) =>
         i === index
           ? { ...g, char, displayChar: char, confidence: 1, alternatives: [] }
           : g,
       );
-      return {
+      correctionHistoryRef.current = [
+        ...correctionHistoryRef.current.slice(-19),
+        {
+          layoutGlyphs: base,
+          text: prev.text,
+          display: prev.display,
+          confidence: prev.confidence,
+        },
+      ];
+      setCorrectionDepth(correctionHistoryRef.current.length);
+      setMathDraft({
         ...prev,
         layoutGlyphs: nextGlyphs,
         text: buildRecognizedText(nextGlyphs),
         display: buildRecognizedDisplay(nextGlyphs),
         confidence: Math.max(prev.confidence, 0.85),
-      };
-    });
+      });
+    },
+    [mathDraft],
+  );
+
+  /** 撤销上一次字形修正，回到修正前的表达式与布局。 */
+  const handleUndoCorrection = useCallback(() => {
+    const history = correctionHistoryRef.current;
+    const snapshot = history[history.length - 1];
+    if (!snapshot) return;
+    correctionHistoryRef.current = history.slice(0, -1);
+    setCorrectionDepth(correctionHistoryRef.current.length);
+    setMathDraft((prev) =>
+      prev
+        ? {
+            ...prev,
+            layoutGlyphs: snapshot.layoutGlyphs,
+            text: snapshot.text,
+            display: snapshot.display,
+            confidence: snapshot.confidence,
+          }
+        : prev,
+    );
   }, []);
 
-  const recognizeMathFromInk = useCallback(() => {
-    if (!mathModeRef.current || recognizingRef.current) return;
+  const recognizeMathFromInk = useCallback((force = false) => {
+    if ((!mathModeRef.current && !force) || recognizingRef.current) return;
     const all = strokesRef.current.filter((s) => !s.shape && !s.pixel);
     if (all.length === 0) return;
 
@@ -605,6 +649,8 @@ export function WhiteboardCanvas() {
       }
       setMathDraft(null);
       setMathScopeBox(null);
+      correctionHistoryRef.current = [];
+      setCorrectionDepth(0);
     }
   }, []);
 
@@ -636,6 +682,8 @@ export function WhiteboardCanvas() {
       setMathCards((prev) => [...prev, card]);
       setMathDraft(null);
       setMathScopeBox(null);
+      correctionHistoryRef.current = [];
+      setCorrectionDepth(0);
     },
     [mathDraft],
   );
@@ -650,7 +698,9 @@ export function WhiteboardCanvas() {
 
   const handleMathRetry = useCallback(() => {
     lastMathIndexRef.current = 0;
-    recognizeMathFromInk();
+    // 面板里的「重新识别当前区域」在手动/选区识别时也应可用，
+    // 因此绕过数学模式开关，但仍复用同一条识别管线。
+    recognizeMathFromInk(true);
   }, [recognizeMathFromInk]);
 
   const openManualMath = useCallback(() => {
@@ -665,6 +715,8 @@ export function WhiteboardCanvas() {
       confidence: 1,
     });
     setMathScopeBox(null);
+    correctionHistoryRef.current = [];
+    setCorrectionDepth(0);
   }, [view]);
 
   const handleLatencySample = useCallback((ms: number) => {
@@ -1050,12 +1102,21 @@ export function WhiteboardCanvas() {
               anchor={mathAnchorRef.current}
               view={view}
               onCorrectGlyph={handleCorrectGlyph}
-              onChange={(text) => setMathDraft((prev) => (prev ? { ...prev, text } : prev))}
+              onUndoCorrection={handleUndoCorrection}
+              canUndoCorrection={correctionDepth > 0}
+              onChange={(text) => {
+                // 手动改表达式后，之前的字形修正不再可撤销。
+                correctionHistoryRef.current = [];
+                setCorrectionDepth(0);
+                setMathDraft((prev) => (prev ? { ...prev, text } : prev));
+              }}
               onRetry={handleMathRetry}
               onInsert={handleInsertMath}
               onClose={() => {
                 setMathDraft(null);
                 setMathScopeBox(null);
+                correctionHistoryRef.current = [];
+                setCorrectionDepth(0);
               }}
             />
           )}

@@ -95,7 +95,7 @@ export function PlotToolbar({
                 <Button
                   variant="ghost"
                   size="icon"
-                  className="h-8 w-8 text-muted-foreground hover:text-foreground"
+                  className="touch-target h-8 w-8 text-muted-foreground hover:text-foreground"
                   onClick={onZoomIn}
                   aria-label="放大"
                 >
@@ -109,7 +109,7 @@ export function PlotToolbar({
                 <Button
                   variant="ghost"
                   size="icon"
-                  className="h-8 w-8 text-muted-foreground hover:text-foreground"
+                  className="touch-target h-8 w-8 text-muted-foreground hover:text-foreground"
                   onClick={onZoomOut}
                   aria-label="缩小"
                 >
@@ -123,7 +123,7 @@ export function PlotToolbar({
                 <Button
                   variant="ghost"
                   size="icon"
-                  className="h-8 w-8 text-muted-foreground hover:text-foreground"
+                  className="touch-target h-8 w-8 text-muted-foreground hover:text-foreground"
                   onClick={onReset}
                   aria-label="重置视图"
                 >
@@ -137,7 +137,7 @@ export function PlotToolbar({
           <div className="mx-1 h-5 w-px bg-border/60" />
 
           {/* Range inputs — compact */}
-          <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
+          <div className="flex min-w-0 flex-wrap items-center gap-1.5 text-xs text-muted-foreground">
             <span className="font-mono">x</span>
             <CompactNumberInput
               value={xRange[0]}
@@ -222,7 +222,7 @@ export function PlotToolbar({
                     variant="ghost"
                     size="icon"
                     className={
-                      'h-8 w-8 transition-colors ' +
+                      'touch-target h-8 w-8 transition-colors ' +
                       (showLegend
                         ? 'text-primary hover:bg-primary/10 hover:text-primary'
                         : 'text-muted-foreground hover:text-foreground')
@@ -306,7 +306,7 @@ export function PlotToolbar({
                     <button
                       type="button"
                       onClick={() => onToggleVisibility(p.id)}
-                      className="text-muted-foreground transition-theme hover:text-foreground"
+                      className="touch-target text-muted-foreground transition-theme hover:text-foreground"
                       aria-label={p.visible ? '隐藏' : '显示'}
                     >
                       {p.visible ? <Eye className="h-3 w-3" /> : <EyeOff className="h-3 w-3" />}
@@ -321,7 +321,7 @@ export function PlotToolbar({
                     <button
                       type="button"
                       onClick={() => onRemovePlot(p.id)}
-                      className="text-muted-foreground transition-theme hover:text-rose-400"
+                      className="touch-target text-muted-foreground transition-theme hover:text-rose-400"
                       aria-label="移除"
                     >
                       <X className="h-3 w-3" />

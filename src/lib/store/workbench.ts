@@ -1,5 +1,5 @@
 import { create } from 'zustand';
-import type { InputMode } from '@/lib/engine/types';
+import type { InputMode, SurfaceMode } from '@/lib/engine/types';
 import type { Locale } from '@/lib/i18n';
 import { setLocale as setI18nLocale } from '@/lib/i18n';
 import type { CurveSetData } from '@/lib/plots/curveTypes';
@@ -18,7 +18,8 @@ export interface CalculationResult {
   isMatrix?: boolean;
   matrix?: number[][];
   plotExpression?: string;
-  plotType?: 'cartesian' | 'polar' | 'parametric' | 'surface3d';
+  plotType?: 'cartesian' | 'polar' | 'parametric' | 'implicit2d' | 'surface3d';
+  surfaceMode?: SurfaceMode;
   plotRange?: [number, number];
   steps?: string[];
 }
@@ -29,7 +30,9 @@ export interface PlotConfig {
   xRange: [number, number];
   yRange: [number, number];
   color: string;
-  plotType: 'cartesian' | 'polar' | 'parametric' | 'surface3d';
+  plotType: 'cartesian' | 'polar' | 'parametric' | 'implicit2d' | 'surface3d';
+  /** 3D 曲面采样方式：显式 `z = f(x, y)` 或隐式 `F(x, y, z) = 0`。 */
+  surfaceMode?: SurfaceMode;
   visible: boolean;
   width?: number;
   /** 极坐标 θ 范围的下限/上限覆盖表达式（可含变量，如 `t`、`2*pi`）。
@@ -226,8 +229,15 @@ function sanitizePlot(p: unknown): PlotConfig | null {
     yRange: [yRange[0], yRange[1]] as [number, number],
     color: typeof o.color === 'string' ? o.color : '#2dd4bf',
     plotType: (o.plotType === 'cartesian' || o.plotType === 'polar' ||
-      o.plotType === 'parametric' || o.plotType === 'surface3d')
+      o.plotType === 'parametric' || o.plotType === 'implicit2d' ||
+      o.plotType === 'surface3d')
       ? o.plotType : 'cartesian',
+    surfaceMode: o.surfaceMode === 'implicit' || o.surfaceMode === 'explicit'
+      ? o.surfaceMode
+      // 旧数据没有 surfaceMode：含 `=` 且不是 `z = ...` 的 3D 曲面视为隐式。
+      : o.plotType === 'surface3d' && expr.includes('=') && !/^\s*z\s*=/i.test(expr)
+        ? 'implicit'
+        : undefined,
     visible: typeof o.visible === 'boolean' ? o.visible : true,
     width: typeof o.width === 'number' ? o.width : 2,
     polarMinExpr: typeof o.polarMinExpr === 'string' && o.polarMinExpr.trim() ? o.polarMinExpr : undefined,

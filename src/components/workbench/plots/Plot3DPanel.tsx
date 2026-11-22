@@ -18,13 +18,16 @@
  * `addPlot({ plotType: 'surface3d', ... })`.
  */
 
-import { useCallback, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import dynamic from 'next/dynamic';
 import {
   Box,
   Eye,
   EyeOff,
+  FunctionSquare,
+  Keyboard,
+  Loader2,
   Plus,
   RotateCcw,
   Settings2,
@@ -35,9 +38,27 @@ import {
   Maximize2,
   AlertTriangle,
 } from 'lucide-react';
-import { useWorkbenchStore } from '@/lib/store/workbench';
-import { sampleSurface, trySampleSurface, type Surface3DData } from '@/lib/plots/plot3d';
+import { useWorkbenchStore, type PlotConfig } from '@/lib/store/workbench';
+import { trySampleSurface, type Surface3DData } from '@/lib/plots/plot3d';
+import {
+  defaultImplicitZRange,
+  implicitResolutionFromSlider,
+  parse3DEquation,
+  splitTopLevelEquation,
+  trySampleImplicitSurface,
+} from '@/lib/plots/implicit3d';
+import {
+  SurfaceSamplingGeneration,
+  buildSurfaceCacheKey,
+  normalizeSurfaceResolution,
+  sampleSurfaceCached,
+  type SurfaceSampleRequest,
+  type SurfaceSamplingMode,
+} from '@/lib/plots/surfaceSamplingCache';
 import { useScopeVersion } from '@/lib/hooks/useScopeVersion';
+import { useIsMobile } from '@/hooks/use-mobile';
+import { cn } from '@/lib/utils';
+import { MathKeypad, deleteBackward, insertAtSelection } from './MathKeypad';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -107,10 +128,89 @@ const EXAMPLE_GROUPS = [
       { expr: 'cos(x)*sin(y) + 0.1*x', label: 'cos(x)·sin(y)+0.1x', hintKey: 'plot3dExTiltedWave' as const },
     ],
   },
+  {
+    titleKey: 'plot3dGroupImplicit' as const,
+    items: [
+      { expr: 'x + z = 1', label: 'x + z = 1', hintKey: 'plot3dExPlane' as const },
+      { expr: 'x^2 + y^2 + z^2 = 4', label: 'x² + y² + z² = 4', hintKey: 'plot3dExSphere' as const },
+      { expr: 'z^2 = x^2 + y^2', label: 'z² = x² + y²', hintKey: 'plot3dExCone' as const },
+    ],
+  },
 ];
 
 const DEFAULT_X: [number, number] = [-5, 5];
 const DEFAULT_Y: [number, number] = [-5, 5];
+
+/* ----------------------- Two-phase sampling -------------------------- */
+
+/**
+ * 交互期（参数 / 图元变化）先用的低精度分辨率：
+ *   - 显式曲面 32² = 1024 次求值，通常 < 2ms；
+ *   - 隐式曲面 18³ ≈ 5800 次求值，通常 15–25ms。
+ * 只用于“先看到变化”，最终质量由 180ms 后的细化阶段保证。
+ */
+const QUICK_EXPLICIT_RESOLUTION = 32;
+const QUICK_IMPLICIT_RESOLUTION = 18;
+
+/**
+ * 拖动参数滑块时 scopeVersion 每一步都会变。快速阶段限制到最多约
+ * 11 次/秒（90ms），避免 18³ 采样在拖动期间排队；结构变化（新增 /
+ * 删除图元、改表达式 / 范围 / 模式）不受此限制。
+ */
+const QUICK_THROTTLE_MS = 90;
+
+/** 停止变化后等待多久再开始细化，避免拖动滑块时反复启动高精度采样。 */
+const REFINE_DEBOUNCE_MS = 180;
+
+/** 除分辨率 / scope 外的采样输入（由可见图元决定）。 */
+type SurfaceInput = Omit<SurfaceSampleRequest, 'resolution' | 'scopeVersion'>;
+
+/** 一个曲面当前展示的数据（低精度或细化后的结果）。 */
+interface SampledSurface {
+  plotId: string;
+  expression: string;
+  data: Surface3DData | null;
+  error: string | null;
+}
+
+function quickResolutionFor(mode: SurfaceSamplingMode): number {
+  return mode === 'implicit'
+    ? QUICK_IMPLICIT_RESOLUTION
+    : QUICK_EXPLICIT_RESOLUTION;
+}
+
+/**
+ * 细化阶段的目标分辨率。显式曲面直接跟随滑块的 20..100；
+ * 隐式曲面把同一个滑块映射到 12..44（默认 60 → 34）。
+ */
+function targetResolutionFor(
+  mode: SurfaceSamplingMode,
+  sliderResolution: number,
+): number {
+  return mode === 'implicit'
+    ? implicitResolutionFromSlider(sliderResolution)
+    : normalizeSurfaceResolution('explicit', sliderResolution);
+}
+
+function sampleInput(
+  input: SurfaceInput,
+  resolution: number,
+  scopeVersion: number,
+): SampledSurface {
+  const result = sampleSurfaceCached({ ...input, resolution, scopeVersion });
+  return {
+    plotId: input.plotId,
+    expression: input.expression,
+    data: result.data,
+    error: result.error,
+  };
+}
+
+/** 是否按隐式方程采样：显式标记优先，旧数据按 `=` 推断。 */
+function isImplicitPlot(plot: PlotConfig): boolean {
+  if (plot.surfaceMode) return plot.surfaceMode === 'implicit';
+  return plot.expression.includes('=') && !/^\s*z\s*=/i.test(plot.expression);
+}
 
 /* ----------------------- Component ----------------------------------- */
 
@@ -121,9 +221,18 @@ export function Plot3DPanel() {
   const addPlot = useWorkbenchStore((s) => s.addPlot);
   const removePlot = useWorkbenchStore((s) => s.removePlot);
   const togglePlotVisibility = useWorkbenchStore((s) => s.togglePlotVisibility);
+  // 3D 面板添加的曲面也登记到函数输入器，两处共用同一个列表。
+  const addDemosPlotId = useWorkbenchStore((s) => s.addDemosPlotId);
+  const setInputView = useWorkbenchStore((s) => s.setInputView);
 
   /* --------------------- Local UI state ---------------------------- */
   const [exprInput, setExprInput] = useState('');
+  const isMobile = useIsMobile();
+  // 3D 面板默认不展开键盘，避免挤占画布；需要时点输入框右侧的键盘按钮。
+  const [keypadOpen, setKeypadOpen] = useState(false);
+  const exprInputRef = useRef<HTMLInputElement>(null);
+  const pendingCaretRef = useRef<number | null>(null);
+
   const [xRange, setXRange] = useState<[number, number]>(DEFAULT_X);
   const [yRange, setYRange] = useState<[number, number]>(DEFAULT_Y);
   const [resolution, setResolution] = useState(60);
@@ -148,6 +257,19 @@ export function Plot3DPanel() {
     () => (exprInput.trim() ? inputToLatex(exprInput) : ''),
     [exprInput],
   );
+  // `x + z = 1` 这类隐式方程自带 `z`，预览时不再额外加 `z =` 前缀。
+  const parsedInput = useMemo(
+    () => parse3DEquation(exprInput.trim()),
+    [exprInput],
+  );
+  const previewLatex = useMemo(() => {
+    if (!exprLatex) return '';
+    if (parsedInput) return exprLatex;
+    // 裸表达式默认是 z 的右端；如果用户已经写了 z（例如还没输入等号时的
+    // `z + x`），就不要再补前缀，避免出现 “z = z + x” 这种误导性预览。
+    if (/(^|[^A-Za-z0-9_])z([^A-Za-z0-9_]|$)/i.test(exprInput)) return exprLatex;
+    return `z = ${exprLatex}`;
+  }, [exprLatex, parsedInput, exprInput]);
 
   /* --------------------- Surfaces from store ----------------------- */
   // Filter for 3D-relevant plots only.
@@ -156,38 +278,193 @@ export function Plot3DPanel() {
     [plots],
   );
 
-  // Sample them into Surface3DData. Re-sample only when expression / range /
-  // resolution changes — NOT on every theme / wireframe / etc. toggle.
-  // `scopeVersion` also re-samples when a slider / variable changes so
-  // surfaces like `sin(a*x)*cos(y)` follow the Variables panel live.
-  //
-  // We keep both the sampled `data` and any `error` per plot so that a
-  // sampling failure (compile error, invalid range, etc.) or a "compiles
-  // but produces no geometry" result is surfaced to the user instead of
-  // silently collapsing to an empty canvas (root cause of 3D not showing).
-  const scopeVersion = useScopeVersion();
-  const sampledSurfaces = useMemo(() => {
-    void scopeVersion;
-    const out: Array<{
-      plotId: string;
-      expression: string;
-      data: Surface3DData | null;
-      error: string | null;
-    }> = [];
+  // 可见曲面的采样输入。只依赖 plots：主题、线框 / 坐标轴 / 网格开关、
+  // 控件折叠、标签切换都不会改变这个数组，因此不会触发重新采样。
+  const surfaceInputs = useMemo<SurfaceInput[]>(() => {
+    const out: SurfaceInput[] = [];
     for (let i = 0; i < surface3dPlots.length; i++) {
       const p = surface3dPlots[i];
       if (!p.visible) continue;
-      const { data, error } = trySampleSurface(
-        p.expression,
-        p.xRange,
-        p.yRange,
-        resolution,
-        p.color || PLOT_COLORS[i % PLOT_COLORS.length],
-      );
-      out.push({ plotId: p.id, expression: p.expression, data, error });
+      out.push({
+        plotId: p.id,
+        expression: p.expression,
+        xRange: p.xRange,
+        yRange: p.yRange,
+        surfaceMode: isImplicitPlot(p) ? 'implicit' : 'explicit',
+        color: p.color || PLOT_COLORS[i % PLOT_COLORS.length],
+      });
     }
     return out;
-  }, [surface3dPlots, resolution, scopeVersion]);
+  }, [surface3dPlots]);
+
+  const scopeVersion = useScopeVersion();
+
+  /* ---------------- Phase 1: quick interactive sampling ------------- */
+  // 结构性签名：图元集合 / 表达式 / 定义域 / 模式。任何一项变化都需要
+  // 立即重采样，不能被下面的 scope 节流延迟。
+  const quickStructureSignature = useMemo(
+    () =>
+      surfaceInputs
+        .map(
+          (input) =>
+            `${input.plotId}|${input.surfaceMode}|${input.expression}|${input.xRange[0]},${input.xRange[1]}|${input.yRange[0]},${input.yRange[1]}`,
+        )
+        .join('#'),
+    [surfaceInputs],
+  );
+
+  // 快速阶段使用的 scope 版本。纯参数变化走尾随节流（最多 ~11 次/秒），
+  // 保证拖动时不会让 18³ 采样任务排队；如果结构变化则本轮渲染直接使用
+  // 最新 scope，节流状态在提交后对齐。
+  const [quickSnapshot, setQuickSnapshot] = useState(() => ({
+    scopeVersion,
+    structure: quickStructureSignature,
+  }));
+  const lastQuickSampleAtRef = useRef(0);
+
+  useEffect(() => {
+    if (quickSnapshot.structure === quickStructureSignature) return;
+    lastQuickSampleAtRef.current = performance.now();
+    setQuickSnapshot({
+      scopeVersion,
+      structure: quickStructureSignature,
+    });
+  }, [quickStructureSignature, scopeVersion, quickSnapshot.structure]);
+
+  // 尾随节流：拖动停止后仍会以最后一次 scopeVersion 采样一次。
+  useEffect(() => {
+    if (quickSnapshot.structure !== quickStructureSignature) return;
+    if (quickSnapshot.scopeVersion === scopeVersion) return;
+    const elapsed = performance.now() - lastQuickSampleAtRef.current;
+    const delay = Math.max(0, QUICK_THROTTLE_MS - elapsed);
+    const timer = window.setTimeout(() => {
+      lastQuickSampleAtRef.current = performance.now();
+      setQuickSnapshot({
+        scopeVersion,
+        structure: quickStructureSignature,
+      });
+    }, delay);
+    return () => window.clearTimeout(timer);
+  }, [scopeVersion, quickSnapshot, quickStructureSignature]);
+
+  const effectiveQuickScope =
+    quickSnapshot.structure === quickStructureSignature
+      ? quickSnapshot.scopeVersion
+      : scopeVersion;
+
+  // 同步低精度采样：结果按 (图元, 表达式, 范围, 模式, 分辨率, scope 版本)
+  // 缓存，重复渲染不会重复求值。
+  const quickSurfaces = useMemo<SampledSurface[]>(
+    () =>
+      surfaceInputs.map((input) =>
+        sampleInput(
+          input,
+          quickResolutionFor(input.surfaceMode),
+          effectiveQuickScope,
+        ),
+      ),
+    [surfaceInputs, effectiveQuickScope],
+  );
+
+  /* ---------------- Phase 2: idle refinement ----------------------- */
+  // 细化请求的签名：只要签名没变（主题 / 控件开关 / 标签切换），下面的
+  // effect 就不会重新采样。buildSurfaceCacheKey 已覆盖图元 id、表达式、
+  // 范围、模式与 scope 版本，这里再叠加目标分辨率。
+  const refineSignature = useMemo(
+    () =>
+      surfaceInputs
+        .map((input) =>
+          buildSurfaceCacheKey({
+            ...input,
+            resolution: targetResolutionFor(input.surfaceMode, resolution),
+            scopeVersion,
+          }),
+        )
+        .join('#'),
+    [surfaceInputs, resolution, scopeVersion],
+  );
+
+  const needsRefine = useMemo(
+    () =>
+      surfaceInputs.some(
+        (input) =>
+          targetResolutionFor(input.surfaceMode, resolution) !==
+          quickResolutionFor(input.surfaceMode),
+      ),
+    [surfaceInputs, resolution],
+  );
+
+  // 代际令牌：每次请求细化时领取新 token，旧的异步结果在写回前比对，
+  // 过期结果直接丢弃。
+  const refineTrackerRef = useRef<SurfaceSamplingGeneration | null>(null);
+  if (refineTrackerRef.current === null) {
+    refineTrackerRef.current = new SurfaceSamplingGeneration();
+  }
+  const refineTracker = refineTrackerRef.current;
+
+  const [refinedState, setRefinedState] = useState<{
+    signature: string;
+    surfaces: SampledSurface[];
+  } | null>(null);
+
+  useEffect(() => {
+    if (surfaceInputs.length === 0 || !needsRefine) return;
+
+    const token = refineTracker.next();
+    let disposed = false;
+
+    const timer = window.setTimeout(() => {
+      if (disposed || !refineTracker.isCurrent(token)) return;
+
+      const run = async () => {
+        const next: SampledSurface[] = [];
+        for (let i = 0; i < surfaceInputs.length; i++) {
+          if (disposed || !refineTracker.isCurrent(token)) return;
+          const input = surfaceInputs[i];
+          next.push(
+            sampleInput(
+              input,
+              targetResolutionFor(input.surfaceMode, resolution),
+              scopeVersion,
+            ),
+          );
+          // 多个隐式曲面连续采样时让出一帧，避免合成一条长任务。
+          if (i < surfaceInputs.length - 1) {
+            await new Promise<void>((resolve) => {
+              window.setTimeout(resolve, 0);
+            });
+          }
+        }
+        if (disposed || !refineTracker.isCurrent(token)) return;
+        setRefinedState({ signature: refineSignature, surfaces: next });
+      };
+
+      void run();
+    }, REFINE_DEBOUNCE_MS);
+
+    return () => {
+      disposed = true;
+      window.clearTimeout(timer);
+      // 让本轮尚未完成的 token 失效，避免过期结果覆盖新数据。
+      refineTracker.invalidate();
+    };
+  }, [
+    refineSignature,
+    needsRefine,
+    surfaceInputs,
+    resolution,
+    scopeVersion,
+    refineTracker,
+  ]);
+
+  // 只有签名匹配的细化结果才展示；否则继续用低精度结果，画面不会空白。
+  const refinedSurfaces =
+    refinedState && refinedState.signature === refineSignature
+      ? refinedState.surfaces
+      : null;
+  const sampledSurfaces = refinedSurfaces ?? quickSurfaces;
+  const refining =
+    needsRefine && surfaceInputs.length > 0 && refinedSurfaces === null;
 
   // Valid meshes handed to Plot3DScene. Sampling failures are excluded so
   // the renderer never sees null geometry.
@@ -223,72 +500,121 @@ export function Plot3DPanel() {
   }, [sampledSurfaces, t]);
 
   /* --------------------- Add surface ------------------------------- */
-  const handleAddSurface = useCallback(() => {
-    const expr = exprInput.trim();
-    if (!expr) {
-      toast.error(t('plot3dErrEmpty'));
-      return;
-    }
-    // Quick sanity check before adding — sample at low resolution.
-    const { data: probe, error: probeError } = trySampleSurface(
-      expr,
-      xRange,
-      yRange,
-      8,
-      '#2dd4bf',
-    );
-    if (probeError) {
-      // Surface the concrete error instead of a generic "无法求值".
-      toast.error(tf('plot3dErrEval', { err: probeError }));
-      return;
-    }
-    if (!probe || probe.validTriangleCount === 0) {
-      toast.error(t('plot3dErrEvalVars'));
-      return;
-    }
-    const colorIdx = surface3dPlots.length % PLOT_COLORS.length;
-    addPlot({
-      expression: expr,
-      xRange,
-      yRange,
-      color: PLOT_COLORS[colorIdx],
-      plotType: 'surface3d',
-      visible: true,
-    });
-    setExprInput('');
-    toast.success(t('plot3dAdded'));
-  }, [exprInput, xRange, yRange, surface3dPlots.length, addPlot, t]);
+  // Unified add path for both explicit functions (`x^2 - y^2`) and equations
+  // (`z = …`, `x + z = 1`, `x^2 + y^2 + z^2 = 4`). Implicit equations are
+  // sampled with surface nets; explicit ones keep the height-map path.
+  const addSurface = useCallback(
+    (raw: string, fromExample: boolean) => {
+      const text = raw.trim();
+      if (!text) {
+        toast.error(t('plot3dErrEmpty'));
+        return;
+      }
 
-  const handleAddExample = useCallback(
-    (expr: string) => {
-      const { data: probe, error: probeError } = trySampleSurface(
-        expr,
-        xRange,
-        yRange,
-        8,
-        '#2dd4bf',
-      );
-      if (probeError) {
-        toast.error(tf('plot3dErrExampleEval', { err: probeError }));
+      // 只支持一个等号。`z = z + x = 1` / `x = y = 1` 会被误当成显式曲面
+      // 去求值，这里直接给出可理解的提示。
+      const firstParts = splitTopLevelEquation(text);
+      if (firstParts && splitTopLevelEquation(firstParts.rhs)) {
+        toast.error('一个方程只能有一个等号，例如 x + z = 1');
         return;
       }
-      if (!probe || probe.validTriangleCount === 0) {
-        toast.error(t('plot3dErrExampleEvalVars'));
+
+      const parsed = parse3DEquation(text);
+      const implicit = parsed?.kind === 'implicit';
+      const expression = parsed ? parsed.expression : text;
+      const sampleExpr =
+        parsed?.kind === 'explicit' && parsed.rhs ? parsed.rhs : text;
+
+      // Quick sanity check before adding — sample at low resolution.
+      const probe = implicit
+        ? trySampleImplicitSurface(
+            expression,
+            xRange,
+            yRange,
+            defaultImplicitZRange(xRange, yRange),
+            20,
+            '#2dd4bf',
+          )
+        : trySampleSurface(sampleExpr, xRange, yRange, 8, '#2dd4bf');
+
+      if (probe.error) {
+        // Surface the concrete error instead of a generic "无法求值".
+        toast.error(
+          tf(fromExample ? 'plot3dErrExampleEval' : 'plot3dErrEval', {
+            err: probe.error,
+          }),
+        );
         return;
       }
+      if (!probe.data || probe.data.validTriangleCount === 0) {
+        toast.error(
+          t(fromExample ? 'plot3dErrExampleEvalVars' : 'plot3dErrEvalVars'),
+        );
+        return;
+      }
+
       const colorIdx = surface3dPlots.length % PLOT_COLORS.length;
       addPlot({
-        expression: expr,
+        expression,
         xRange,
         yRange,
         color: PLOT_COLORS[colorIdx],
         plotType: 'surface3d',
+        surfaceMode: implicit ? 'implicit' : 'explicit',
         visible: true,
       });
-      toast.success(t('plot3dExampleAdded'));
+      // 同步登记到函数输入器；否则这里添加的曲面在函数列表里看不到。
+      const latest = useWorkbenchStore.getState().plots;
+      addDemosPlotId(latest[latest.length - 1].id);
+      if (!fromExample) setExprInput('');
+      toast.success(t(fromExample ? 'plot3dExampleAdded' : 'plot3dAdded'));
     },
-    [xRange, yRange, surface3dPlots.length, addPlot, t],
+    [xRange, yRange, surface3dPlots.length, addPlot, addDemosPlotId, t],
   );
+
+  const handleAddSurface = useCallback(
+    () => addSurface(exprInput, false),
+    [addSurface, exprInput],
+  );
+
+  const handleAddExample = useCallback(
+    (expr: string) => addSurface(expr, true),
+    [addSurface],
+  );
+
+  /* --------------------- 内置数学键盘 ------------------------------ */
+  const insertKeypadText = useCallback((text: string) => {
+    const el = exprInputRef.current;
+    if (!el) return;
+    const { next, caret } = insertAtSelection(el, text);
+    setExprInput(next);
+    pendingCaretRef.current = caret;
+  }, []);
+
+  const backspaceKeypad = useCallback(() => {
+    const el = exprInputRef.current;
+    if (!el) return;
+    const { next, caret } = deleteBackward(el);
+    setExprInput(next);
+    pendingCaretRef.current = caret;
+  }, []);
+
+  const clearKeypad = useCallback(() => {
+    setExprInput('');
+    pendingCaretRef.current = 0;
+  }, []);
+
+  // 受控输入更新后恢复光标。
+  useEffect(() => {
+    if (pendingCaretRef.current === null) return;
+    const pos = pendingCaretRef.current;
+    pendingCaretRef.current = null;
+    const el = exprInputRef.current;
+    if (!el) return;
+    el.focus({ preventScroll: true });
+    const p = Math.max(0, Math.min(pos, el.value.length));
+    el.setSelectionRange(p, p);
+  }, [exprInput]);
 
   /* --------------------- Reset camera ------------------------------ */
   const handleResetCamera = useCallback(() => {
@@ -326,8 +652,8 @@ export function Plot3DPanel() {
         {/* ---------- Top bar: function input + add ---------- */}
         <div className="flex flex-col gap-1.5 border-b border-border/60 bg-background/60 px-2 py-1.5">
           <div className="flex flex-wrap items-center gap-1.5">
-            <span className="font-mono text-xs text-muted-foreground">z =</span>
             <Input
+              ref={exprInputRef}
               type="text"
               value={exprInput}
               onChange={(e) => setExprInput(e.target.value)}
@@ -337,10 +663,53 @@ export function Plot3DPanel() {
                   handleAddSurface();
                 }
               }}
+              inputMode={isMobile && keypadOpen ? 'none' : 'text'}
               placeholder={t('plot3dInputPlaceholder')}
-              className="h-8 min-w-0 flex-1 rounded border-border/60 bg-background/40 px-2 font-mono text-xs"
+              className="h-8 min-w-[132px] flex-1 rounded border-border/60 bg-background/40 px-2 font-mono text-xs"
               aria-label={t('plot3dExprInputAria')}
             />
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  className={cn(
+                    'touch-target h-8 w-8',
+                    keypadOpen
+                      ? 'text-primary hover:text-primary'
+                      : 'text-muted-foreground hover:text-foreground',
+                  )}
+                  onClick={() => setKeypadOpen((v) => !v)}
+                  aria-label={keypadOpen ? '收起数学键盘' : '打开数学键盘'}
+                >
+                  <Keyboard className="h-4 w-4" />
+                </Button>
+              </TooltipTrigger>
+              <TooltipContent side="bottom">
+                {keypadOpen ? '收起数学键盘' : '内置数学键盘'}
+              </TooltipContent>
+            </Tooltip>
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  className="touch-target h-8 w-8 text-muted-foreground hover:text-foreground"
+                  onClick={() => {
+                    setInputView('demos');
+                    window.dispatchEvent(
+                      new CustomEvent('omnimath:mobile-tab', { detail: 'editor' }),
+                    );
+                  }}
+                  aria-label="在函数输入器中编辑"
+                >
+                  <FunctionSquare className="h-4 w-4" />
+                </Button>
+              </TooltipTrigger>
+              <TooltipContent side="bottom">
+                在函数输入器中编辑（支持 2D / 3D、参数滑块）
+              </TooltipContent>
+            </Tooltip>
             <Tooltip>
               <TooltipTrigger asChild>
                 <Button
@@ -359,7 +728,7 @@ export function Plot3DPanel() {
                 <Button
                   variant="ghost"
                   size="icon"
-                  className="h-8 w-8 text-muted-foreground hover:text-foreground"
+                  className="touch-target h-8 w-8 text-muted-foreground hover:text-foreground"
                   onClick={() => setShowControls((v) => !v)}
                   aria-label={t('plot3dToggleControlsAria')}
                 >
@@ -379,7 +748,7 @@ export function Plot3DPanel() {
                 <Button
                   variant="ghost"
                   size="icon"
-                  className="h-8 w-8 text-muted-foreground hover:text-foreground"
+                  className="touch-target h-8 w-8 text-muted-foreground hover:text-foreground"
                   onClick={handleResetCamera}
                   aria-label={t('plot3dResetCameraAria')}
                 >
@@ -393,7 +762,7 @@ export function Plot3DPanel() {
                 <Button
                   variant="ghost"
                   size="icon"
-                  className="h-8 w-8 text-muted-foreground hover:text-foreground"
+                  className="touch-target h-8 w-8 text-muted-foreground hover:text-foreground"
                   onClick={exportPNG}
                   aria-label={t('plot3dExportPngAria')}
                 >
@@ -413,9 +782,9 @@ export function Plot3DPanel() {
             <span className="shrink-0 font-mono text-[10px] text-muted-foreground">
               {t('plot3dPreview')}
             </span>
-            {exprLatex ? (
+            {previewLatex ? (
               <FormulaRenderer
-                latex={`z = ${exprLatex}`}
+                latex={previewLatex}
                 displayMode={false}
                 className="min-w-0 flex-1"
               />
@@ -425,6 +794,17 @@ export function Plot3DPanel() {
               </span>
             )}
           </div>
+
+          {/* 内置数学键盘：手机上直接点按输入 ^、√、θ、π 等符号。 */}
+          {keypadOpen && (
+            <MathKeypad
+              className="rounded-md border border-border/40"
+              onInsert={insertKeypadText}
+              onBackspace={backspaceKeypad}
+              onClear={clearKeypad}
+              onEnter={handleAddSurface}
+            />
+          )}
 
           {/* ---------- Collapsible controls panel ---------- */}
           {showControls && (
@@ -631,7 +1011,7 @@ export function Plot3DPanel() {
                       <button
                         type="button"
                         onClick={() => togglePlotVisibility(p.id)}
-                        className="text-muted-foreground transition-theme hover:text-foreground"
+                        className="touch-target text-muted-foreground transition-theme hover:text-foreground"
                         aria-label={p.visible ? t('plot3dHide') : t('plot3dShow')}
                       >
                         {p.visible ? (
@@ -650,7 +1030,7 @@ export function Plot3DPanel() {
                       <button
                         type="button"
                         onClick={() => removePlot(p.id)}
-                        className="text-muted-foreground transition-theme hover:text-rose-400"
+                        className="touch-target text-muted-foreground transition-theme hover:text-rose-400"
                         aria-label={t('plot3dRemoveAria')}
                       >
                         <X className="h-3 w-3" />
@@ -724,6 +1104,20 @@ export function Plot3DPanel() {
               dialog is open to avoid duplicating it there. */}
           {surfaces.length > 0 && surfaceErrors.length > 0 && !expandOpen && (
             <SurfaceErrorOverlay errors={surfaceErrors} />
+          )}
+
+          {/* Refinement indicator (bottom-right) — subtle, does not cover
+              the canvas. Existing (quick) surfaces stay visible while the
+              idle high-resolution pass runs. */}
+          {refining && !expandOpen && (
+            <div
+              className="pointer-events-none absolute bottom-2 right-2 z-10 flex items-center gap-1.5 rounded-md border border-border/40 bg-background/75 px-2 py-1 text-[10px] text-foreground/70 backdrop-blur-sm"
+              role="status"
+              aria-live="polite"
+            >
+              <Loader2 className="h-3 w-3 animate-spin text-primary" />
+              <span>{t('plot3dRefining')}</span>
+            </div>
           )}
 
           {/* Hint overlay (bottom-left) when surfaces exist */}
@@ -803,6 +1197,16 @@ export function Plot3DPanel() {
                 resetSignal={resetSignal}
                 captureRef={captureRef}
               />
+              {refining && (
+                <div
+                  className="pointer-events-none absolute bottom-3 right-3 z-10 flex items-center gap-1.5 rounded-md border border-border/40 bg-background/75 px-2 py-1 text-[10px] text-foreground/70 backdrop-blur-sm"
+                  role="status"
+                  aria-live="polite"
+                >
+                  <Loader2 className="h-3 w-3 animate-spin text-primary" />
+                  <span>{t('plot3dRefining')}</span>
+                </div>
+              )}
             </div>
           </div>
         ),

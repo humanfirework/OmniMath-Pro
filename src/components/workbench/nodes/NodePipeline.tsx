@@ -61,6 +61,8 @@ import {
   Equal,
   Monitor,
   AlertCircle,
+  CheckCircle2,
+  CircleSlash,
   Split,
   Wand2,
   ArrowRightLeft,
@@ -173,7 +175,13 @@ import {
   type PortDataType,
   type NodeConfigField,
   type NodeTypeDef,
+  type NodeRunStatus,
 } from './pipelineEngine';
+import {
+  classifyBlueprintConfidence,
+  formatBlueprintConfidence,
+  summarizeBlueprintConfidence,
+} from '@/lib/vision/blueprint';
 import { runSimulation, isSimulationNode, type SimSeries } from './simulationEngine';
 import { PIPELINE_TEMPLATES, loadTemplate } from './pipelineTemplates';
 import { TemplateGallery } from './TemplateGallery';
@@ -252,8 +260,10 @@ function sampleCubicPts(p0: [number, number], c1: [number, number], c2: [number,
   return o;
 }
 
-/** 节点显示名（取自节点类型注册表的多语言 label）。 */
+/** 节点显示名：优先用户自定义 label，否则取注册表的多语言 label。 */
 function nodeTitle(n: PipelineNode): string {
+  const custom = n.label?.trim();
+  if (custom) return custom;
   const def = NODE_TYPES[n.type];
   return def?.labelKey ? t(def.labelKey) : n.type;
 }
@@ -461,6 +471,7 @@ function loadState(): PersistedState | null {
           type: n.type as NodeType,
           position: { x: n.position.x, y: n.position.y },
           config,
+          ...(typeof n.label === 'string' && n.label.trim() ? { label: n.label.trim() } : {}),
         });
       }
     }
@@ -497,11 +508,12 @@ function saveState(nodes: PipelineNode[], edges: PipelineEdge[]) {
     // Only persist serialisable node fields (position + config). Outputs /
     // results may contain mathjs matrices / complex objects and must not be
     // JSON-stringified — doing so can blow up localStorage or throw.
-    const serialisableNodes = nodes.map(({ id, type, position, config }) => ({
+    const serialisableNodes = nodes.map(({ id, type, position, config, label }) => ({
       id,
       type,
       position,
       config,
+      ...(label ? { label } : {}),
     }));
     localStorage.setItem(
       STORAGE_KEY,
@@ -813,6 +825,18 @@ function NodePipelineInner() {
   // P2-5: 流水线「运行中」状态 + 逐节点进度（供浮层进度条显示）。
   const [pipelineRunning, setPipelineRunning] = useState(false);
   const [runProgress, setRunProgress] = useState<{ done: number; total: number } | null>(null);
+  // 逐节点运行状态（运行中实时更新；结束后与节点上的 runStatus 同步）。
+  const [runStatusMap, setRunStatusMap] = useState<Record<string, NodeRunStatus>>({});
+  const handleNodeStatus = useCallback((nodeId: string, status: NodeRunStatus) => {
+    setRunStatusMap((prev) => (prev[nodeId] === status ? prev : { ...prev, [nodeId]: status }));
+  }, []);
+  const syncRunStatuses = useCallback((executed: PipelineNode[]) => {
+    const next: Record<string, NodeRunStatus> = {};
+    for (const n of executed) {
+      if (n.runStatus) next[n.id] = n.runStatus;
+    }
+    setRunStatusMap(next);
+  }, []);
   const runProgressRef = useRef(runProgress);
   useEffect(() => { runProgressRef.current = runProgress; }, [runProgress]);
   // 用户手动终止：ref 跨渲染保持，供 executePipeline 的 shouldCancel 轮询读取。
@@ -1031,6 +1055,7 @@ function NodePipelineInner() {
     cancelRunRef.current = false;
     setPipelineRunning(true);
     setRunProgress(null);
+    setRunStatusMap({});
     try {
       const ctx = {
         variables: Object.fromEntries(
@@ -1047,6 +1072,16 @@ function NodePipelineInner() {
       if (hasSim) {
         executed = runSimulationPipeline(nodes, edges, simConfig);
         setNodes(executed);
+        syncRunStatuses(
+          executed.map((n) => ({
+            ...n,
+            runStatus: n.error
+              ? 'error'
+              : n.outputs && Object.keys(n.outputs).length > 0
+                ? 'success'
+                : 'skipped',
+          })),
+        );
         setComputeTick((n) => n + 1);
         // 把 scope 时序发送到「独立运行结果面板」（不再切回 2D 绘图）。
         const scopes = executed.filter((n) => n.type === 'sim-scope' && n.outputs?.series);
@@ -1081,12 +1116,14 @@ function NodePipelineInner() {
 
       executed = await executePipeline(nodes, edges, ctx, {
         onProgress: (done, total) => setRunProgress({ done, total }),
+        onNodeStatus: handleNodeStatus,
         shouldCancel: () => cancelRunRef.current,
       });
 
       // 把执行结果写回节点状态，节点卡片的底部结果 / 错误才会刷新。
       // （executePipeline 在克隆的节点上写入 result/outputs，不回写则卡片一直显示「—」。）
       setNodes(executed);
+      syncRunStatuses(executed);
       setComputeTick((n) => n + 1);
 
       // Side-effects: plot / curve / animation 输出统统进入独立运行结果面板，
@@ -1146,8 +1183,21 @@ function NodePipelineInner() {
       setPipelineRunning(false);
       setRunProgress(null);
       setNodeProgress(null);
+      // 取消/异常退出时没有执行结果，把仍处于「运行中」的节点标为已跳过，
+      // 避免卡片一直转圈。
+      setRunStatusMap((prev) => {
+        let changed = false;
+        const next = { ...prev };
+        for (const [id, status] of Object.entries(next)) {
+          if (status === 'running') {
+            next[id] = 'skipped';
+            changed = true;
+          }
+        }
+        return changed ? next : prev;
+      });
     }
-  }, [nodes, edges, variables, simConfig, pushRunResults, addResult, pipelineRunning]);
+  }, [nodes, edges, variables, simConfig, pushRunResults, addResult, pipelineRunning, handleNodeStatus, syncRunStatuses]);
 
   // 稳定的 runPipeline 引用：自动执行已禁用后，各处「主动运行一次」都通过它
   // 触发，避免把 runPipeline 塞进各 useCallback/useEffect 依赖造成依赖抖动。
@@ -1175,6 +1225,7 @@ function NodePipelineInner() {
     }
     setPipelineRunning(true);
     setRunProgress(null);
+    setRunStatusMap({});
     try {
       const ctx = {
         variables: Object.fromEntries(
@@ -1185,8 +1236,10 @@ function NodePipelineInner() {
       const executed = await executePipeline(nodes, edges, ctx, {
         stopAt: selectedId,
         onProgress: (done, total) => setRunProgress({ done, total }),
+        onNodeStatus: handleNodeStatus,
       });
       setNodes(executed);
+      syncRunStatuses(executed);
       setComputeTick((n) => n + 1);
       // 独立运行结果面板（与 2D 绘图彻底解耦）。
       pushRunResults(executed, edges, { plotOutput: false });
@@ -1201,7 +1254,63 @@ function NodePipelineInner() {
       setRunProgress(null);
       setNodeProgress(null);
     }
-  }, [selectedId, nodes, edges, variables, pushRunResults, pipelineRunning]);
+  }, [selectedId, nodes, edges, variables, pushRunResults, pipelineRunning, handleNodeStatus, syncRunStatuses]);
+
+  /* ── 单节点重试：复用 executePipeline（执行到该节点为止） ────── */
+  const retryNode = useCallback(async (nodeId: string) => {
+    if (pipelineRunning) return;
+    if (!nodes.some((n) => n.id === nodeId)) return;
+    cancelRunRef.current = false;
+    setPipelineRunning(true);
+    setRunProgress(null);
+    setRunStatusMap({});
+    try {
+      const ctx = {
+        variables: Object.fromEntries(
+          Object.entries(variables).map(([k, v]) => [k, v.value]),
+        ),
+        onProgress: handleNodeProgress,
+        shouldCancel: () => cancelRunRef.current,
+      };
+      const executed = await executePipeline(nodes, edges, ctx, {
+        stopAt: nodeId,
+        onProgress: (done, total) => setRunProgress({ done, total }),
+        onNodeStatus: handleNodeStatus,
+        shouldCancel: () => cancelRunRef.current,
+      });
+      setNodes(executed);
+      syncRunStatuses(executed);
+      setComputeTick((n) => n + 1);
+      pushRunResults(executed, edges, { plotOutput: false });
+      const target = executed.find((n) => n.id === nodeId);
+      if (target?.error) {
+        toast.error('重试失败', { description: target.error, duration: 4000 });
+      } else {
+        toast.success('已重试该节点', { duration: 2000 });
+      }
+    } catch (err) {
+      if (err instanceof PipelineCancelledError) {
+        toast.info('蓝图已停止', { duration: 2000 });
+      } else {
+        toast.error('重试失败', { description: (err as Error).message, duration: 4000 });
+      }
+    } finally {
+      setPipelineRunning(false);
+      setRunProgress(null);
+      setNodeProgress(null);
+      setRunStatusMap((prev) => {
+        let changed = false;
+        const next = { ...prev };
+        for (const [id, status] of Object.entries(next)) {
+          if (status === 'running') {
+            next[id] = 'skipped';
+            changed = true;
+          }
+        }
+        return changed ? next : prev;
+      });
+    }
+  }, [nodes, edges, variables, pushRunResults, pipelineRunning, handleNodeStatus, syncRunStatuses]);
 
   /* ── Auto-execute ────────────────────────────────────────────── */
   // 按用户要求【完全禁用自动执行】：任何节点/连线/变量变化都不再自动重算整条
@@ -1609,6 +1718,16 @@ function NodePipelineInner() {
     },
     [],
   );
+
+  /* ── 重命名节点（就地编辑标题，持久化在 node.label） ────────── */
+  const renameNodeLabel = useCallback((id: string, label: string | null) => {
+    const trimmed = label?.trim() ?? '';
+    setNodes((prev) =>
+      prev.map((n) =>
+        n.id === id ? { ...n, label: trimmed ? trimmed : undefined } : n,
+      ),
+    );
+  }, []);
 
   /* M1 — AI 调节点参数：接收 configure_node 指令，白名单过滤后写回 config。
      只保留该节点 config 已有的键，避免 AI 引入任意字段。自动执行已禁用，
@@ -2520,6 +2639,9 @@ function NodePipelineInner() {
                   onToggleMute={() => toggleMute(node.id)}
                   onSelect={(e) => selectNode(node.id, e)}
                   onConfigChange={(patch) => updateConfig(node.id, patch)}
+                  onRenameLabel={(label) => renameNodeLabel(node.id, label)}
+                  onRetry={() => { void retryNode(node.id); }}
+                  runStatus={runStatusMap[node.id] ?? node.runStatus}
                   onStartConnection={(portId, e) => startConnection(node.id, portId, e)}
                   onCompleteConnection={(portId, type) => completeConnection(node.id, portId, type)}
                   variables={Object.keys(variables)}
@@ -2998,12 +3120,44 @@ function PipelineToolbar({
 /* ================================================================== *
  * Node card
  * ================================================================== */
+/** 运行状态徽标：图标 + 颜色 + 本地化 tooltip。 */
+const RUN_STATUS_META: Record<
+  NodeRunStatus,
+  { icon: LucideIcon; className: string; labelKey: keyof TranslationDict }
+> = {
+  running: { icon: Loader2, className: 'text-sky-500', labelKey: 'pipelineStatusRunning' },
+  success: { icon: CheckCircle2, className: 'text-emerald-500', labelKey: 'pipelineStatusSuccess' },
+  error: { icon: AlertCircle, className: 'text-destructive', labelKey: 'pipelineStatusError' },
+  skipped: { icon: CircleSlash, className: 'text-muted-foreground/70', labelKey: 'pipelineStatusSkipped' },
+};
+
+function RunStatusBadge({ status }: { status?: NodeRunStatus }) {
+  if (!status) return null;
+  const meta = RUN_STATUS_META[status];
+  const Icon = meta.icon;
+  return (
+    <span
+      className={cn('inline-grid shrink-0 place-items-center', meta.className)}
+      title={t(meta.labelKey)}
+      aria-label={t(meta.labelKey)}
+    >
+      <Icon className={cn('size-3', status === 'running' && 'animate-spin')} strokeWidth={2.4} />
+    </span>
+  );
+}
+
 interface NodeCardProps {
   node: PipelineNode;
   selected: boolean;
   multiSelected: boolean;
   computeTick: number;
   isConnecting: boolean;
+  /** 最近一次运行的节点状态（运行时实时更新）。 */
+  runStatus?: NodeRunStatus;
+  /** 重命名节点标题；传 null 表示恢复默认标题。 */
+  onRenameLabel: (label: string | null) => void;
+  /** 失败节点的重试入口。 */
+  onRetry: () => void;
   /** P2: 当前正在拖线源的端口数据类型（用于输入端口兼容高亮）。 */
   connectingFromType: PortDataType | null;
   /** P3: 该节点是否位于「选中节点」的错误传播链上（用于路径高亮）。 */
@@ -3037,8 +3191,8 @@ function nodeHasTunableParams(def: NodeTypeDef | undefined): boolean {
 }
 
 function NodeCard({
-  node, selected, multiSelected, computeTick, isConnecting, connectingFromType, inErrorChain, snapPortId,
-  onPointerDownHeader, onDelete, onSelect, onToggleMute,
+  node, selected, multiSelected, computeTick, isConnecting, runStatus, connectingFromType, inErrorChain, snapPortId,
+  onPointerDownHeader, onDelete, onSelect, onToggleMute, onRenameLabel, onRetry,
   onConfigChange, onStartConnection, onCompleteConnection,
   variables, onPlotOpen, measureScale,
 }: NodeCardProps) {
@@ -3052,6 +3206,23 @@ function NodeCard({
   // 配置项多的节点（视觉/仿真等）默认折叠，画布先呈现「结构 + 结果」，
   // 需要调参时再展开，避免每张卡片都摊开一整墙控件。
   const [collapsed, setCollapsed] = useState((def?.configSchema?.length ?? 0) > 2);
+
+  // 标题就地编辑：双击标题进入输入框，Enter/失焦保存，Esc 取消。
+  // 保存值写入 node.label；与默认标题相同则清除自定义标题。
+  const [editingTitle, setEditingTitle] = useState(false);
+  const [titleDraft, setTitleDraft] = useState('');
+  const titleCancelRef = useRef(false);
+  const defaultTitle = def?.labelKey ? t(def.labelKey) : node.type;
+  const displayTitle = nodeTitle(node);
+  const commitTitle = () => {
+    if (titleCancelRef.current) {
+      titleCancelRef.current = false;
+      return;
+    }
+    const value = titleDraft.trim();
+    onRenameLabel(value && value !== defaultTitle ? value : null);
+    setEditingTitle(false);
+  };
 
   // Compute-pulse glow: re-trigger on computeTick bump via direct DOM
   // manipulation (avoids setState-in-effect lint error).
@@ -3154,9 +3325,45 @@ function NodeCard({
         style={{ height: NODE_HEADER_H }}
         onPointerDown={onPointerDownHeader}
       >
-        <div className="flex items-center gap-1.5 min-w-0">
+        <div className="flex items-center gap-1.5 min-w-0 flex-1">
           <Icon className={cn('size-3.5 shrink-0', cat.text)} strokeWidth={2.2} />
-          <span className="text-[12px] truncate">{t(def.labelKey)}</span>
+          <RunStatusBadge status={runStatus} />
+          {editingTitle ? (
+            <input
+              autoFocus
+              value={titleDraft}
+              maxLength={60}
+              aria-label={t('pipelineRenameHint')}
+              onChange={(e) => setTitleDraft(e.target.value)}
+              onBlur={commitTitle}
+              onKeyDown={(e) => {
+                e.stopPropagation();
+                if (e.key === 'Enter') {
+                  e.preventDefault();
+                  commitTitle();
+                } else if (e.key === 'Escape') {
+                  e.preventDefault();
+                  titleCancelRef.current = true;
+                  setEditingTitle(false);
+                }
+              }}
+              onPointerDown={(e) => e.stopPropagation()}
+              onClick={(e) => e.stopPropagation()}
+              className="h-5 min-w-0 flex-1 rounded border border-border bg-background px-1 text-[11px] font-normal outline-none focus:ring-1 focus:ring-primary/50"
+            />
+          ) : (
+            <span
+              className="truncate text-[12px]"
+              title={t('pipelineRenameHint')}
+              onDoubleClick={(e) => {
+                e.stopPropagation();
+                setTitleDraft(node.label?.trim() || defaultTitle);
+                setEditingTitle(true);
+              }}
+            >
+              {displayTitle}
+            </span>
+          )}
         </div>
         <div className="flex items-center gap-0.5 shrink-0">
           {/* P2-8 节点静音（Blender 式 Mute）：跳过执行，首输入透传首输出 */}
@@ -3274,7 +3481,7 @@ function NodeCard({
           node.error ? 'bg-destructive/8' : 'bg-primary/5',
         )}
       >
-        <NodeResultFooter node={node} onPlotOpen={onPlotOpen} />
+        <NodeResultFooter node={node} onPlotOpen={onPlotOpen} onRetry={onRetry} />
       </div>
     </motion.div>
   );
@@ -4360,31 +4567,151 @@ function DiagnosticRow({
   );
 }
 
+/* ------------------------------------------------------------------ *
+ * 蓝图解析置信度徽标（紧凑、低置信琥珀色）
+ * ------------------------------------------------------------------ */
+function ConfidenceChip({
+  label,
+  confidence,
+  title,
+}: {
+  label: string;
+  confidence: number;
+  title?: string;
+}) {
+  const level = classifyBlueprintConfidence(confidence);
+  return (
+    <span
+      title={title}
+      className={cn(
+        'inline-flex items-center gap-1 rounded border px-1 py-px font-mono text-[9.5px] leading-none',
+        level === 'low'
+          ? 'border-amber-500/50 bg-amber-500/10 text-amber-600 dark:text-amber-400'
+          : level === 'medium'
+            ? 'border-border bg-muted/60 text-foreground/70'
+            : 'border-emerald-500/40 bg-emerald-500/10 text-emerald-600 dark:text-emerald-400',
+      )}
+    >
+      {label}
+      <span className="opacity-80">{formatBlueprintConfidence(confidence)}</span>
+    </span>
+  );
+}
+
+interface BlueprintGraphOutput {
+  summary?: string;
+  nodes?: Array<{ id: string; confidence: number }>;
+  links?: Array<{ id: string; from: string; to: string; confidence: number }>;
+}
+
 /* ================================================================== *
  * Node result footer — shows computed value
  * ================================================================== */
 function NodeResultFooter({
   node,
   onPlotOpen,
+  onRetry,
 }: {
   node: PipelineNode;
   onPlotOpen?: () => void;
+  onRetry?: () => void;
 }) {
+  // 蓝图解析详情默认折叠，避免卡片被低置信清单撑大。
+  const [confidenceOpen, setConfidenceOpen] = useState(false);
+
   if (node.error) {
     return (
-      <div className="flex items-center gap-1.5 text-[11px] text-destructive w-full">
-        <AlertCircle className="size-3 shrink-0" />
-        <span className="truncate">{node.error}</span>
+      <div className="flex w-full min-w-0 flex-col gap-1">
+        <div className="flex items-start gap-1.5 text-[11px] text-destructive">
+          <AlertCircle className="mt-0.5 size-3 shrink-0" />
+          <span className="line-clamp-2 break-words text-left" title={node.error}>
+            {node.error}
+          </span>
+        </div>
+        {onRetry && (
+          <button
+            type="button"
+            onPointerDown={(e) => e.stopPropagation()}
+            onClick={(e) => { e.stopPropagation(); onRetry(); }}
+            className="inline-flex items-center gap-1 self-start rounded border border-destructive/40 px-1.5 py-0.5 text-[10px] text-destructive transition-colors hover:bg-destructive/10"
+          >
+            <RefreshCw className="size-2.5" />
+            {t('pipelineRetry')}
+          </button>
+        )}
       </div>
     );
   }
-  // Blueprint parse → 节点/连线摘要
+  // Blueprint parse → 节点/连线摘要 + 置信度徽标（可展开逐项查看）
   if (node.type === 'blueprint-parse' && node.outputs?.graph) {
-    const graph = node.outputs.graph as { summary?: string };
+    const graph = node.outputs.graph as BlueprintGraphOutput;
+    const graphNodes = Array.isArray(graph.nodes) ? graph.nodes : [];
+    const graphLinks = Array.isArray(graph.links) ? graph.links : [];
+    const confidenceStats = summarizeBlueprintConfidence({
+      nodes: graphNodes,
+      links: graphLinks,
+    });
+    const nodeAvg = confidenceStats.averageNodeConfidence;
+    const linkAvg = confidenceStats.averageLinkConfidence;
+    const lowCount =
+      confidenceStats.lowConfidenceNodes + confidenceStats.lowConfidenceLinks;
+    const hasDetail = graphNodes.length > 0 || graphLinks.length > 0;
     return (
-      <div className="flex items-center gap-1.5 w-full min-w-0 text-[11px]">
-        <GitBranch className="size-3 shrink-0 text-cyan-500" />
-        <span className="truncate text-foreground/80">{graph.summary || '—'}</span>
+      <div className="w-full min-w-0 text-[11px]">
+        <div className="flex items-center gap-1.5 w-full min-w-0">
+          <GitBranch className="size-3 shrink-0 text-cyan-500" />
+          <span className="truncate text-foreground/80">{graph.summary || '—'}</span>
+          {hasDetail && (
+            <button
+              type="button"
+              title={t('npConfidenceDetails')}
+              aria-label={t('npConfidenceDetails')}
+              onPointerDown={(e) => e.stopPropagation()}
+              onClick={(e) => { e.stopPropagation(); setConfidenceOpen((v) => !v); }}
+              className="ml-auto shrink-0 rounded p-0.5 text-muted-foreground/70 transition-colors hover:bg-accent hover:text-foreground"
+            >
+              <ChevronDown className={cn('size-3 transition-transform', confidenceOpen && 'rotate-180')} />
+            </button>
+          )}
+        </div>
+        {(nodeAvg != null || linkAvg != null || lowCount > 0) && (
+          <div className="mt-1 flex flex-wrap items-center gap-1">
+            {nodeAvg != null && (
+              <ConfidenceChip label={t('npBlueprintNodes')} confidence={nodeAvg} />
+            )}
+            {linkAvg != null && (
+              <ConfidenceChip label={t('npBlueprintLinks')} confidence={linkAvg} />
+            )}
+            {lowCount > 0 && (
+              <span className="rounded border border-amber-500/50 bg-amber-500/10 px-1 py-px text-[9.5px] leading-none text-amber-600 dark:text-amber-400">
+                {t('npLowConfidence')} {lowCount}
+              </span>
+            )}
+          </div>
+        )}
+        {confidenceOpen && hasDetail && (
+          <div className="mt-1 max-h-28 space-y-1 overflow-y-auto pr-0.5">
+            {graphNodes.length > 0 && (
+              <div className="flex flex-wrap gap-1">
+                {graphNodes.map((n) => (
+                  <ConfidenceChip key={n.id} label={n.id} confidence={n.confidence} />
+                ))}
+              </div>
+            )}
+            {graphLinks.length > 0 && (
+              <div className="flex flex-wrap gap-1">
+                {graphLinks.map((l) => (
+                  <ConfidenceChip
+                    key={l.id}
+                    label={l.id}
+                    confidence={l.confidence}
+                    title={`${l.from} → ${l.to}`}
+                  />
+                ))}
+              </div>
+            )}
+          </div>
+        )}
       </div>
     );
   }

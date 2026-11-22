@@ -94,6 +94,8 @@ export function evaluateExpression(
   let normalized: string;
   try {
     normalized = preprocessForMode(normalizeSymbols(input), mode);
+    // `z = z + x = 1` 是手写时常见的重复 z；右侧本身已是完整隐式方程。
+    normalized = stripRedundantZPrefix(normalized);
   } catch (err) {
     return fail(`Failed to parse input: ${(err as Error).message}`);
   }
@@ -108,6 +110,28 @@ export function evaluateExpression(
     const polarEq = /^\s*r\s*=\s*(.+)$/i.exec(normalized);
     if (polarEq && polarEq[1] && /[θϑΘ]|\btheta\b/i.test(polarEq[1])) {
       return handlePlot(polarEq[1], mode, 'polar', /* auto */ true);
+    }
+
+    // ── 3D surface equations: `z = f(x, y)` / implicit `x + z = 1` ──
+    // `z = x^2 - y^2` 不是赋值（右侧含自由的 x/y），`x + z = 1` 也不是合法
+    // 赋值目标；两者都直接生成 3D 曲面。
+    const surfaceEq = detectSurfaceEquation(normalized, mode);
+    if (surfaceEq) return handleSurfaceEquation(surfaceEq, mode);
+
+    // ── 2D standard equation `y = f(x)` ─────────────────────────
+    // 仅 simple 模式（函数输入器 / 简单控制台）：`y = x^2` 是笛卡尔曲线，
+    // 不是变量赋值。`a = 5` / `f(x) = x^2` 仍走赋值语义。
+    if (mode === 'simple') {
+      const yExpr = detectYEqualsFunction(normalized);
+      if (yExpr) return handleCartesianEquation(yExpr, mode);
+    }
+
+    // ── 2D implicit equation `x^2 + y^2 = 4` / `x + y = 1` / `x = 3` ──
+    // 不含自由 z 且不是普通赋值的方程进入 2D 隐式管线；含 z 的已在上面
+    // 由 3D 曲面检测接管。
+    if (mode === 'simple') {
+      const implicitEq = detectImplicit2DEquation(normalized);
+      if (implicitEq) return handleImplicit2DEquation(implicitEq, mode);
     }
 
     // ── Assignment: `a = …`, `M = […]`, `f(x) = …` ───────────────
@@ -194,13 +218,12 @@ function isAssignment(input: string): boolean {
   return /^\s*[a-zA-Z_][a-zA-Z0-9_]*(?:\s*\([^)]*\))?\s*=/.test(input);
 }
 
-/** Does the expression contain `x` as a free (undefined) variable? */
-function hasFreeVariableX(expr: string, scope: Scope): boolean {
+/** Does the expression contain `name` as a free (undefined) variable? */
+function hasFreeVariable(expr: string, name: string, scope: Scope): boolean {
   try {
-    const node = math.parse(expr);
     let found = false;
-    node.traverse((n: any) => {
-      if (n.isSymbolNode && n.name === 'x' && !(n.name in scope)) {
+    math.parse(expr).traverse((n: any) => {
+      if (n.isSymbolNode && n.name === name && !(n.name in scope)) {
         found = true;
       }
     });
@@ -208,6 +231,251 @@ function hasFreeVariableX(expr: string, scope: Scope): boolean {
   } catch {
     return false;
   }
+}
+
+function hasFreeVariableX(expr: string, scope: Scope): boolean {
+  return hasFreeVariable(expr, 'x', scope);
+}
+
+/* ================================================================== *
+ * 3D surface equation detection
+ * ================================================================== *
+ * Two accepted forms:
+ *   z = f(x, y)   → explicit surface (rhs sampled over x/y)
+ *   F(x, y, z) = 0 → implicit surface (surface nets on lhs - rhs)
+ *
+ * Deliberately conservative:
+ *   - `a = …` / `f(x) = …` remain assignments (lhs is a plain identifier or
+ *     function signature);
+ *   - `z = 5` remains an assignment (rhs has no free x/y);
+ *   - `x = 1` remains an assignment (no z, and not both x and y);
+ *   - `y = x^2` remains an assignment (2D input is not hijacked).
+ */
+interface DetectedSurfaceEquation {
+  kind: 'explicit' | 'implicit';
+  lhs: string;
+  rhs: string;
+  /** Expression stored on the plot (explicit: rhs; implicit: full equation). */
+  expression: string;
+}
+
+function detectSurfaceEquation(
+  normalized: string,
+  mode: InputMode = 'simple'
+): DetectedSurfaceEquation | null {
+  const eqIdx = findAssignmentEq(normalized);
+  if (eqIdx === -1) return null;
+  const lhs = normalized.slice(0, eqIdx).trim();
+  const rhs = normalized.slice(eqIdx + 1).trim();
+  if (!lhs || !rhs) return null;
+
+  const scope = getScope();
+
+  // `z = f(x, y)` → explicit surface. `z = 5` stays an assignment.
+  if (/^z$/i.test(lhs)) {
+    if (hasFreeVariable(rhs, 'x', scope) || hasFreeVariable(rhs, 'y', scope)) {
+      return { kind: 'explicit', lhs, rhs, expression: rhs };
+    }
+    return null;
+  }
+
+  // Plain identifier / function definition → ordinary assignment.
+  if (/^[a-zA-Z_][a-zA-Z0-9_]*$/.test(lhs)) return null;
+  if (/^[a-zA-Z_][a-zA-Z0-9_]*\s*\([^)]*\)$/.test(lhs)) return null;
+
+  const hasX =
+    hasFreeVariable(lhs, 'x', scope) || hasFreeVariable(rhs, 'x', scope);
+  const hasY =
+    hasFreeVariable(lhs, 'y', scope) || hasFreeVariable(rhs, 'y', scope);
+  const hasZ =
+    hasFreeVariable(lhs, 'z', scope) || hasFreeVariable(rhs, 'z', scope);
+
+  // Implicit surface needs a free z. In simple mode, purely x/y equations
+  // (e.g. `x + y = 1`) belong to the 2D implicit pipeline instead.
+  // Other input modes keep the legacy "free x and y" fallback so their
+  // semantics do not change.
+  if (!hasZ && !(mode !== 'simple' && hasX && hasY)) return null;
+
+  return {
+    kind: 'implicit',
+    lhs,
+    rhs,
+    expression: `${lhs} = ${rhs}`,
+  };
+}
+
+function handleSurfaceEquation(
+  eq: DetectedSurfaceEquation,
+  mode: InputMode
+): EvalResult {
+  if (eq.kind === 'explicit') {
+    return handlePlot(eq.rhs, mode, 'surface3d', /* auto */ true);
+  }
+
+  return ok({
+    result: eq.expression,
+    latex: `${inputToLatex(eq.lhs, mode)} = ${inputToLatex(eq.rhs, mode)}`,
+    type: 'surface3d' as CalcType,
+    plotExpression: eq.expression,
+    plotRange: [...DEFAULT_CARTESIAN_RANGE],
+    plotType: 'surface3d',
+    surfaceMode: 'implicit',
+  });
+}
+
+/* ================================================================== *
+ * 2D equation detection — `y = f(x)` / implicit `F(x, y) = 0`
+ * ================================================================== *
+ * Only reached in simple mode (function input panel / simple console),
+ * after the 3D detector has had a chance to claim equations containing a
+ * free `z`.
+ *
+ *   y = x^2        → cartesian, plotExpression = `x^2`
+ *   x^2 + y^2 = 4  → implicit2d, plotExpression = full equation
+ *   x + y = 1      → implicit2d
+ *   x = 3          → implicit2d
+ *   a = 5          → still a plain assignment (handled downstream)
+ *   f(x) = x^2     → still a function definition
+ *   z = 5          → still an assignment
+ */
+interface DetectedImplicit2DEquation {
+  lhs: string;
+  rhs: string;
+  /** Canonical full equation stored on the plot (`lhs = rhs`). */
+  expression: string;
+}
+
+/** Find the first `=` at bracket depth 0 that is not part of `==`/`<=`/… */
+function findTopLevelEq(s: string): number {
+  let depth = 0;
+  let inStr: string | null = null;
+  for (let i = 0; i < s.length; i++) {
+    const c = s[i];
+    if (inStr) {
+      if (c === inStr && s[i - 1] !== '\\') inStr = null;
+      continue;
+    }
+    if (c === '"' || c === "'") {
+      inStr = c;
+      continue;
+    }
+    if (c === '(' || c === '[' || c === '{') {
+      depth++;
+      continue;
+    }
+    if (c === ')' || c === ']' || c === '}') {
+      if (depth > 0) depth--;
+      continue;
+    }
+    if (c !== '=' || depth !== 0) continue;
+    const prev = s[i - 1];
+    const next = s[i + 1];
+    if (next === '=') continue;
+    if (prev === '=' || prev === '<' || prev === '>' || prev === '!') continue;
+    return i;
+  }
+  return -1;
+}
+
+/** Structural variable reference (ignores the scope, unlike `hasFreeVariable`). */
+function mentionsVariable(expr: string, name: string): boolean {
+  try {
+    let found = false;
+    math.parse(expr).traverse((n: any) => {
+      if (n.isSymbolNode && n.name === name) found = true;
+    });
+    return found;
+  } catch {
+    return false;
+  }
+}
+
+/** `y = f(x)` where the RHS references a free `x` → cartesian RHS. */
+function detectYEqualsFunction(normalized: string): string | null {
+  const eqIdx = findTopLevelEq(normalized);
+  if (eqIdx === -1) return null;
+  const lhs = normalized.slice(0, eqIdx).trim();
+  const rhs = normalized.slice(eqIdx + 1).trim();
+  if (!/^y$/i.test(lhs) || !rhs) return null;
+
+  const scope = getScope();
+  if (!hasFreeVariable(rhs, 'x', scope)) return null;
+  // `y = y + 1` / `y = z` are not functions of x.
+  if (hasFreeVariable(rhs, 'y', scope) || hasFreeVariable(rhs, 'z', scope)) {
+    return null;
+  }
+  try {
+    math.parse(rhs);
+  } catch {
+    return null;
+  }
+  return rhs;
+}
+
+function detectImplicit2DEquation(
+  normalized: string
+): DetectedImplicit2DEquation | null {
+  const eqIdx = findTopLevelEq(normalized);
+  if (eqIdx === -1) return null;
+  const lhs = normalized.slice(0, eqIdx).trim();
+  const rhs = normalized.slice(eqIdx + 1).trim();
+  if (!lhs || !rhs) return null;
+
+  // `f(x) = …` is a function definition.
+  if (/^[a-zA-Z_][a-zA-Z0-9_]*\s*\([^)]*\)$/.test(lhs)) return null;
+
+  // A bare identifier that is not a plotting coordinate stays an
+  // assignment: `a = 5`, `z = 5`. `x` / `y` are the 2D plane variables.
+  if (/^[a-zA-Z_][a-zA-Z0-9_]*$/.test(lhs) && !/^[xy]$/i.test(lhs)) {
+    return null;
+  }
+
+  // Any reference to `z` means 3D — the surface detector handled it above.
+  if (mentionsVariable(lhs, 'z') || mentionsVariable(rhs, 'z')) return null;
+
+  // Must involve the 2D plane variables.
+  const usesPlaneVar =
+    mentionsVariable(lhs, 'x') ||
+    mentionsVariable(rhs, 'x') ||
+    mentionsVariable(lhs, 'y') ||
+    mentionsVariable(rhs, 'y');
+  if (!usesPlaneVar) return null;
+
+  // Reject malformed input (e.g. `x = sin(`) so the assignment / plain
+  // evaluator can surface the original, more useful error.
+  try {
+    math.parse(`(${lhs}) - (${rhs})`);
+  } catch {
+    return null;
+  }
+
+  return { lhs, rhs, expression: `${lhs} = ${rhs}` };
+}
+
+function handleCartesianEquation(rhs: string, mode: InputMode): EvalResult {
+  const latexExpr = inputToLatex(rhs, mode);
+  return ok({
+    result: `y = ${rhs}`,
+    latex: `y = ${latexExpr}`,
+    type: 'plot',
+    plotExpression: rhs,
+    plotRange: [...DEFAULT_CARTESIAN_RANGE],
+    plotType: 'cartesian',
+  });
+}
+
+function handleImplicit2DEquation(
+  eq: DetectedImplicit2DEquation,
+  mode: InputMode
+): EvalResult {
+  return ok({
+    result: eq.expression,
+    latex: `${inputToLatex(eq.lhs, mode)} = ${inputToLatex(eq.rhs, mode)}`,
+    type: 'plot',
+    plotExpression: eq.expression,
+    plotRange: [...DEFAULT_CARTESIAN_RANGE],
+    plotType: 'implicit2d',
+  });
 }
 
 /** Extract balanced parenthesised arguments from `name(arg1, arg2, …)`. */
@@ -357,6 +625,19 @@ function handleAssignment(
   }
 }
 
+/**
+ * 去掉多余的 `z =` 前缀：仅当右侧本身还含顶层等号且提到 z 时。
+ * `z = z + x = 1` → `z + x = 1`；`z = x^2 - y^2` 保持不变。
+ */
+function stripRedundantZPrefix(s: string): string {
+  const m = /^\s*z\s*=\s*(.+)$/i.exec(s);
+  if (!m) return s;
+  const rest = m[1].trim();
+  if (findAssignmentEq(rest) === -1) return s;
+  if (!/(^|[^A-Za-z0-9_])z([^A-Za-z0-9_]|$)/i.test(rest)) return s;
+  return rest;
+}
+
 /** Find the index of the first `=` that is a real assignment (not `==`,
  *  `<=`, `>=`, `!=`, `===`). Returns -1 if none. */
 function findAssignmentEq(s: string): number {
@@ -423,15 +704,20 @@ function handlePlot(
   const latexExpr = inputToLatex(expr, mode);
   // Explicit `plot(...)` keeps the equation label; auto-plot in simple mode
   // is intentionally minimal so the output doesn't feel like it has a prefix.
+  // 3D auto-plot（来自 `z = f(x, y)`）仍标注 `z =`，否则结果看起来像 2D 曲线。
   const label = auto
-    ? latexExpr
+    ? plotType === 'surface3d'
+      ? `z = ${latexExpr}`
+      : latexExpr
     : plotType === 'polar'
       ? `r = ${latexExpr}`
       : plotType === 'surface3d'
         ? `z = ${latexExpr}`
         : `y = ${latexExpr}`;
   const resultStr = auto
-    ? expr
+    ? plotType === 'surface3d'
+      ? `z = ${expr}`
+      : expr
     : plotType === 'polar'
       ? `r = ${expr}`
       : plotType === 'surface3d'
@@ -446,6 +732,7 @@ function handlePlot(
     plotExpression: expr,
     plotRange: range,
     plotType,
+    surfaceMode: plotType === 'surface3d' ? 'explicit' : undefined,
   });
 }
 

@@ -20,6 +20,7 @@ import {
   EyeOff,
   FileCode2,
   FunctionSquare,
+  Keyboard,
   Loader2,
   Plus,
   SlidersHorizontal,
@@ -39,6 +40,8 @@ import { extractFreeParameters } from '@/lib/engine/variableScanner';
 import { setScopeVar, getScope } from '@/lib/engine/mathInstance';
 import { useScopeVersion } from '@/lib/hooks/useScopeVersion';
 import { FormulaRenderer } from '@/components/workbench/FormulaRenderer';
+import { useIsMobile } from '@/hooks/use-mobile';
+import { MathKeypad, deleteBackward, insertAtSelection } from './MathKeypad';
 import { ParameterSliders } from './ParameterSliders';
 import { cn } from '@/lib/utils';
 
@@ -48,6 +51,8 @@ const EXAMPLES = [
   { label: 'x² - 3x', expr: 'x^2 - 3x' },
   { label: 'r = sin(6θ)', expr: 'r = sin(6*theta)' },
   { label: 'z = x² - y²', expr: 'z = x^2 - y^2' },
+  { label: 'x + z = 1', expr: 'x + z = 1' },
+  { label: 'x² + y² + z² = 4', expr: 'x^2 + y^2 + z^2 = 4' },
 ];
 
 interface Analysis {
@@ -58,6 +63,8 @@ interface Analysis {
   params: string[];
   latex: string;
   error?: string;
+  /** 输入仍处于半截状态（如 `x + z =`），不要展示识别错误。 */
+  incomplete?: boolean;
 }
 
 const EMPTY_ANALYSIS: Analysis = { text: '', params: [], latex: '' };
@@ -73,6 +80,8 @@ function coordLabel(plotType?: PlotType): string {
       return '3D 曲面';
     case 'cartesian':
       return '笛卡尔 y = f(x)';
+    case 'implicit2d':
+      return '2D 隐式 F(x, y) = 0';
     default:
       return '未识别';
   }
@@ -83,6 +92,11 @@ function looksIncomplete(expr: string): boolean {
   const trimmed = expr.trim();
   if (!trimmed) return true;
   if (/^[a-zA-Z]+$/.test(trimmed)) return true;
+  // 含 z 的输入多半是 3D 方程；等号还没打出来时不要自动提交，
+  // 否则 “z + x” 会被当成一条 2D 曲线加进列表。
+  if (/(^|[^A-Za-z0-9_])z([^A-Za-z0-9_]|$)/i.test(trimmed) && !trimmed.includes('=')) {
+    return true;
+  }
   return /[+\-*/^(,=.]$/.test(trimmed);
 }
 
@@ -119,6 +133,30 @@ export function FunctionInputPanel() {
   const typedRef = useRef(false);
   const rowTimersRef = useRef<Map<string, ReturnType<typeof setTimeout>>>(new Map());
 
+  // ── 内置数学键盘 ────────────────────────────────────────────────
+  const isMobile = useIsMobile();
+  const [keypadOpen, setKeypadOpen] = useState(false);
+  /** 当前获得焦点的输入框：'new' 或已有函数行的 id。 */
+  const [activeField, setActiveField] = useState<string>('new');
+  const newInputRef = useRef<HTMLInputElement>(null);
+  const rowInputRefs = useRef<Map<string, HTMLInputElement>>(new Map());
+  /** 键盘插入后需要恢复的光标位置；渲染完成后再设置。 */
+  const pendingCaretRef = useRef<{ field: string; pos: number } | null>(null);
+
+  // 手机默认展开数学键盘；桌面保持安静，需要时再点键盘按钮。
+  useEffect(() => {
+    if (isMobile) setKeypadOpen(true);
+  }, [isMobile]);
+
+  // 桌面习惯：打开面板即可直接输入。手机不自动聚焦，避免系统键盘挡住
+  // 内置键盘。
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    if (!window.matchMedia('(max-width: 767px)').matches) {
+      newInputRef.current?.focus();
+    }
+  }, []);
+
   const demosPlots = useMemo(
     () => plots.filter((p) => demosPlotIds.includes(p.id)),
     [plots, demosPlotIds],
@@ -129,6 +167,12 @@ export function FunctionInputPanel() {
     const trimmed = demosExpr.trim();
     if (!trimmed) {
       setAnalysis(EMPTY_ANALYSIS);
+      return;
+    }
+    // 半截输入（尾随 = / 运算符 / ( / , / .、单独函数名等）先不解析，
+    // 否则 `x + z =` 会被 mathjs 当成赋值语句并闪出红色语法错误。
+    if (looksIncomplete(trimmed)) {
+      setAnalysis({ text: trimmed, params: [], latex: '', incomplete: true });
       return;
     }
     const timer = setTimeout(async () => {
@@ -171,12 +215,15 @@ export function FunctionInputPanel() {
       const res = await evaluateExpressionAsync(trimmed, 'simple');
       if (!res.success || !res.plotType) return;
       const color = PLOT_COLORS[demosPlotIds.length % PLOT_COLORS.length] ?? PLOT_COLORS[0];
+      const domain = res.plotRange ?? [-10, 10];
       addPlot({
         expression: res.plotExpression ?? trimmed,
-        xRange: res.plotRange ?? [-10, 10],
-        yRange: [-50, 50],
+        xRange: domain,
+        // 3D 的 yRange 是第二个自变量的定义域；2D 里是屏幕纵向范围。
+        yRange: res.plotType === 'surface3d' ? domain : [-50, 50],
         color,
         plotType: res.plotType,
+        surfaceMode: res.surfaceMode,
         visible: true,
       });
       const latest = useWorkbenchStore.getState().plots;
@@ -235,6 +282,16 @@ export function FunctionInputPanel() {
         setTimeout(async () => {
           const trimmed = text.trim();
           if (!trimmed) return;
+          // 编辑中的半截表达式同样不报错；清掉可能残留的旧错误。
+          if (looksIncomplete(trimmed)) {
+            setRowErrors((prev) => {
+              if (!(id in prev)) return prev;
+              const next = { ...prev };
+              delete next[id];
+              return next;
+            });
+            return;
+          }
           try {
             const res = await evaluateExpressionAsync(trimmed, 'simple');
             if (!res.success || !res.plotType) {
@@ -253,8 +310,11 @@ export function FunctionInputPanel() {
             updatePlot(id, {
               expression: res.plotExpression ?? trimmed,
               plotType: res.plotType,
+              surfaceMode: res.surfaceMode,
               xRange: res.plotRange ?? [-10, 10],
-              yRange: [-50, 50],
+              yRange: res.plotType === 'surface3d'
+                ? (res.plotRange ?? [-10, 10])
+                : [-50, 50],
             });
             setActivePreviewTab(res.plotType === 'surface3d' ? 'plot3d' : 'plot2d');
           } catch {
@@ -273,6 +333,71 @@ export function FunctionInputPanel() {
       timers.clear();
     };
   }, []);
+
+  /* --------------------- 内置数学键盘 ------------------------------ */
+  const getActiveInput = useCallback((): HTMLInputElement | null => {
+    if (activeField === 'new') return newInputRef.current;
+    return rowInputRefs.current.get(activeField) ?? null;
+  }, [activeField]);
+
+  const writeField = useCallback(
+    (field: string, next: string) => {
+      if (field === 'new') {
+        typedRef.current = true;
+        setDemosExpr(next);
+      } else {
+        updateRow(field, next);
+      }
+    },
+    [setDemosExpr, updateRow],
+  );
+
+  const handleKeypadInsert = useCallback(
+    (text: string) => {
+      const el = getActiveInput();
+      if (!el) return;
+      const { next, caret } = insertAtSelection(el, text);
+      writeField(activeField, next);
+      pendingCaretRef.current = { field: activeField, pos: caret };
+    },
+    [activeField, getActiveInput, writeField],
+  );
+
+  const handleKeypadBackspace = useCallback(() => {
+    const el = getActiveInput();
+    if (!el) return;
+    const { next, caret } = deleteBackward(el);
+    writeField(activeField, next);
+    pendingCaretRef.current = { field: activeField, pos: caret };
+  }, [activeField, getActiveInput, writeField]);
+
+  const handleKeypadClear = useCallback(() => {
+    writeField(activeField, '');
+    pendingCaretRef.current = { field: activeField, pos: 0 };
+  }, [activeField, writeField]);
+
+  const handleKeypadEnter = useCallback(() => {
+    if (activeField === 'new') {
+      void commitDraft();
+      return;
+    }
+    rowInputRefs.current.get(activeField)?.blur();
+  }, [activeField, commitDraft]);
+
+  // 受控输入更新后再恢复光标，否则插入后光标会跳到末尾。
+  useEffect(() => {
+    const pending = pendingCaretRef.current;
+    if (!pending) return;
+    const el =
+      pending.field === 'new'
+        ? newInputRef.current
+        : rowInputRefs.current.get(pending.field) ?? null;
+    if (!el) return;
+    pendingCaretRef.current = null;
+    el.focus({ preventScroll: true });
+    const pos = Math.max(0, Math.min(pending.pos, el.value.length));
+    el.setSelectionRange(pos, pos);
+  }, [demosExpr, rowDrafts]);
 
   const addVar = useCallback(() => {
     const name = newVarName.trim().replace(/\s+/g, '');
@@ -463,7 +588,8 @@ export function FunctionInputPanel() {
               在左边输入一个函数，右边立即出图
             </p>
             <p className="max-w-[280px] text-[10.5px] leading-relaxed text-muted-foreground">
-              例如 sin(x)、x^2 - 3x，或 z = x^2 - y^2。含字母参数会自动生成滑块。
+              例如 sin(x)、x^2 - 3x，或 3D 方程 z = x^2 - y^2、x + z = 1。
+              含字母参数会自动生成滑块。
             </p>
             <div className="mt-1 flex flex-wrap justify-center gap-1.5">
               {EXAMPLES.map((item) => (
@@ -495,23 +621,45 @@ export function FunctionInputPanel() {
                     style={{ backgroundColor: p.color }}
                   />
                   <input
+                    ref={(el) => {
+                      if (el) rowInputRefs.current.set(p.id, el);
+                      else rowInputRefs.current.delete(p.id);
+                    }}
                     value={draft}
                     onChange={(e) => updateRow(p.id, e.target.value)}
+                    onFocus={() => setActiveField(p.id)}
                     onKeyDown={(e) => {
                       if (e.key === 'Enter') {
                         e.preventDefault();
                         (e.target as HTMLInputElement).blur();
                       }
                     }}
+                    inputMode={isMobile && keypadOpen ? 'none' : 'text'}
                     spellCheck={false}
                     aria-label="函数表达式"
                     className="h-7 min-w-0 flex-1 bg-transparent font-mono text-[12.5px] text-foreground outline-none placeholder:text-muted-foreground/50"
                   />
+                  {p.plotType === 'surface3d' && (
+                    <span
+                      className="shrink-0 rounded bg-violet-500/10 px-1 py-0.5 text-[8.5px] font-medium text-violet-500"
+                      title={p.surfaceMode === 'implicit' ? '隐式 3D 方程' : '3D 曲面'}
+                    >
+                      {p.surfaceMode === 'implicit' ? '隐式' : '3D'}
+                    </span>
+                  )}
+                  {p.plotType === 'implicit2d' && (
+                    <span
+                      className="shrink-0 rounded bg-sky-500/10 px-1 py-0.5 text-[8.5px] font-medium text-sky-500"
+                      title="2D 隐式方程 F(x, y) = 0"
+                    >
+                      2D 隐式
+                    </span>
+                  )}
                   <button
                     type="button"
                     onClick={() => togglePlotVisibility(p.id)}
                     title={p.visible ? '隐藏曲线' : '显示曲线'}
-                    className="grid size-6 shrink-0 place-items-center rounded-md text-muted-foreground hover:bg-accent hover:text-foreground"
+                    className="touch-target grid size-6 shrink-0 place-items-center rounded-md text-muted-foreground hover:bg-accent hover:text-foreground"
                   >
                     {p.visible ? <Eye className="size-3" /> : <EyeOff className="size-3 opacity-60" />}
                   </button>
@@ -527,7 +675,7 @@ export function FunctionInputPanel() {
                       });
                     }}
                     title="删除此函数"
-                    className="grid size-6 shrink-0 place-items-center rounded-md text-muted-foreground hover:bg-destructive/15 hover:text-destructive"
+                    className="touch-target grid size-6 shrink-0 place-items-center rounded-md text-muted-foreground hover:bg-destructive/15 hover:text-destructive"
                   >
                     <Trash2 className="size-3" />
                   </button>
@@ -544,16 +692,18 @@ export function FunctionInputPanel() {
                 <Plus className="size-2.5" />
               </span>
               <input
-                autoFocus
+                ref={newInputRef}
                 value={demosExpr}
                 onChange={(e) => {
                   typedRef.current = true;
                   setDemosExpr(e.target.value);
                 }}
+                onFocus={() => setActiveField('new')}
                 onKeyDown={handleKeyDown}
+                inputMode={isMobile && keypadOpen ? 'none' : 'text'}
                 spellCheck={false}
                 aria-label="输入新函数"
-                placeholder="输入函数，例如 sin(x) 或 x^2 - 3x"
+                placeholder="输入函数或 3D 方程，如 sin(x)、x + z = 1"
                 className="h-7 min-w-0 flex-1 bg-transparent font-mono text-[12.5px] text-foreground outline-none placeholder:text-muted-foreground/50"
               />
               {isCommitting ? (
@@ -563,12 +713,26 @@ export function FunctionInputPanel() {
                   Enter
                 </kbd>
               )}
+              <button
+                type="button"
+                onClick={() => setKeypadOpen((v) => !v)}
+                aria-label={keypadOpen ? '收起数学键盘' : '打开数学键盘'}
+                title={keypadOpen ? '收起数学键盘' : '打开数学键盘'}
+                className={cn(
+                  'grid size-6 shrink-0 place-items-center rounded-md transition-colors',
+                  keypadOpen
+                    ? 'bg-primary/15 text-primary'
+                    : 'text-muted-foreground hover:bg-accent hover:text-foreground',
+                )}
+              >
+                <Keyboard className="size-3.5" />
+              </button>
             </div>
           </div>
         </div>
 
         {/* 当前输入识别提示 */}
-        {analysis.latex && demosExpr.trim() && (
+        {analysis.latex && demosExpr.trim() && !analysis.incomplete && (
           <div className="mt-2 rounded-xl border border-border/60 bg-muted/20 px-2.5 py-1.5">
             <div className="flex items-center gap-1.5 text-[9.5px] text-muted-foreground">
               <span
@@ -591,6 +755,17 @@ export function FunctionInputPanel() {
           </div>
         )}
       </div>
+
+      {/* 内置数学键盘：手机端默认展开，点输入行右侧的键盘按钮可收起。 */}
+      {keypadOpen && (
+        <MathKeypad
+          className="shrink-0"
+          onInsert={handleKeypadInsert}
+          onBackspace={handleKeypadBackspace}
+          onClear={handleKeypadClear}
+          onEnter={handleKeypadEnter}
+        />
+      )}
 
       {/* 参数区 */}
       {demosPlots.length > 0 && (

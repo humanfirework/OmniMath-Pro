@@ -2,6 +2,7 @@ import type { Metadata, Viewport } from "next";
 import "katex/dist/katex.min.css";
 import "./globals.css";
 import { Toaster } from "@/components/ui/sonner";
+import { MotionProvider } from "@/components/MotionProvider";
 
 /* OmniMath Pro — 本地字体策略
  *
@@ -89,7 +90,7 @@ export default function RootLayout({
         }} />
       </head>
       <body className="antialiased">
-        {children}
+        <MotionProvider>{children}</MotionProvider>
         <Toaster />
       </body>
     </html>

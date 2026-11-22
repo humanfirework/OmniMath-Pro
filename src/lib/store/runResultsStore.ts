@@ -29,7 +29,14 @@ export interface RunCurve {
   flipX?: boolean;
   visible?: boolean;
   /** 形状标签（世界坐标）：蓝图 shape-classify 透传，绘制在图形中心。 */
-  labels?: Array<{ x: number; y: number; text: string }>;
+  labels?: Array<{
+    x: number;
+    y: number;
+    text: string;
+    /** 解析置信度 0–1（蓝图解析节点写入，用于显示百分比与低置信高亮）。 */
+    confidence?: number;
+    kind?: 'node' | 'link';
+  }>;
 }
 
 /** 逐帧动画（视频/GIF → 姿态 → 曲线动画）。 */

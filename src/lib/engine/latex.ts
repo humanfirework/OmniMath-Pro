@@ -106,6 +106,20 @@ export function inputToLatex(input: string, mode: InputMode = 'simple'): string 
     }
 
     const preprocessed = preprocessForMode(normalized, mode);
+
+    // ── 方程 `lhs = rhs`（如 `x + z = 1`）────────────────────────
+    // math.parse 无法处理顶层等号，需要分别渲染两侧。
+    const equation = splitEquationForLatex(normalized);
+    if (equation) {
+      const lhs = math
+        .parse(preprocessForMode(equation.lhs, mode))
+        .toTex({ implicit: 'hide', parenthesis: 'keep' });
+      const rhs = math
+        .parse(preprocessForMode(equation.rhs, mode))
+        .toTex({ implicit: 'hide', parenthesis: 'keep' });
+      return `${lhs} = ${rhs}`;
+    }
+
     const node = math.parse(preprocessed);
     // `implicit: 'hide'` so `2*x` renders as `2 x` (hand-written form).
     // `parenthesis: 'auto'` keeps parens to a minimum.
@@ -114,6 +128,41 @@ export function inputToLatex(input: string, mode: InputMode = 'simple'): string 
     // Fall back to a verbatim render so the user sees their input.
     return `\\texttt{${escapeLatex(input)}}`;
   }
+}
+
+/**
+ * Split `lhs = rhs` at the first top-level assignment equals sign.
+ * Returns null for comparisons (`==`, `<=`, `>=`, `!=`) or missing sides.
+ */
+function splitEquationForLatex(input: string): { lhs: string; rhs: string } | null {
+  let depth = 0;
+  for (let i = 0; i < input.length; i++) {
+    const c = input[i];
+    if (c === '(' || c === '[' || c === '{') depth++;
+    else if (c === ')' || c === ']' || c === '}') depth = Math.max(0, depth - 1);
+    if (depth !== 0 || c !== '=') continue;
+
+    const prev = input[i - 1];
+    const next = input[i + 1];
+    if (
+      next === '=' ||
+      prev === '=' ||
+      prev === '<' ||
+      prev === '>' ||
+      prev === '!' ||
+      prev === '≤' ||
+      prev === '≥' ||
+      prev === '≠'
+    ) {
+      continue;
+    }
+
+    const lhs = input.slice(0, i).trim();
+    const rhs = input.slice(i + 1).trim();
+    if (!lhs || !rhs) return null;
+    return { lhs, rhs };
+  }
+  return null;
 }
 
 /* ------------------------------------------------------------------ *

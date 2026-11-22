@@ -20,7 +20,15 @@ export type CalcType =
   | 'assignment'; // variable or function was stored
 
 /** The kind of plot the engine produced. Drives which renderer the UI uses. */
-export type PlotType = 'cartesian' | 'polar' | 'parametric' | 'surface3d';
+export type PlotType =
+  | 'cartesian'
+  | 'polar'
+  | 'parametric'
+  | 'implicit2d'
+  | 'surface3d';
+
+/** How a 3D surface expression should be sampled. */
+export type SurfaceMode = 'explicit' | 'implicit';
 
 /** A live scope of variables and user-defined functions, keyed by name. */
 export type Scope = Record<string, any>;
@@ -48,6 +56,8 @@ export interface EvalResult {
   plotRange?: [number, number];
   /** Which renderer to use. */
   plotType?: PlotType;
+  /** For 3D plots: `explicit` (z = f(x, y)) or `implicit` (F(x, y, z) = 0). */
+  surfaceMode?: SurfaceMode;
   /** Optional precomputed sample points (array of [x,y] or [r,θ]). */
   plotData?: any;
   /** ─── Matrix fields ───────────────────────────────────────── */

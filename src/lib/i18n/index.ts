@@ -767,6 +767,12 @@ export interface TranslationDict {
   pipelineDuplicate: string;
   pipelineAutoLayout: string;
   pipelineExport: string;
+  pipelineRenameHint: string;
+  pipelineRetry: string;
+  pipelineStatusRunning: string;
+  pipelineStatusSuccess: string;
+  pipelineStatusError: string;
+  pipelineStatusSkipped: string;
 
   /* Node-pipeline UI (Task 6) */
   npBackToWorkbench: string;
@@ -953,12 +959,16 @@ export interface TranslationDict {
   /* ---------------- 3D plot panel — example groups ---------------- */
   plot3dGroupBasic: string;
   plot3dGroupAdvanced: string;
+  plot3dGroupImplicit: string;
   plot3dExWave: string;
   plot3dExSaddle: string;
   plot3dExParaboloid: string;
   plot3dExGaussian: string;
   plot3dExSombrero: string;
   plot3dExTiltedWave: string;
+  plot3dExPlane: string;
+  plot3dExSphere: string;
+  plot3dExCone: string;
 
   /* ---------------- 3D plot panel — errors & toasts ---------------- */
   plot3dErrNoGeometry: string;
@@ -1029,6 +1039,7 @@ export interface TranslationDict {
   plot3dSampleFailed: string;
   plot3dSampleFailedHint: string;
   plot3dSurfacesFailed: string;
+  plot3dRefining: string;
   plot3dWorkspaceTitle: string;
   plot3dWorkspaceHintPre: string;
   plot3dWorkspaceHintPost: string;
@@ -1263,6 +1274,9 @@ export interface TranslationDict {
   npBlueprintComponents: string;
   npBlueprintIsolated: string;
   npBlueprintCycle: string;
+  npConfidence: string;
+  npLowConfidence: string;
+  npConfidenceDetails: string;
   npCurveFit: string;
   npPortContours: string;
   npPortCurves: string;
@@ -2094,6 +2108,12 @@ const zhCN: TranslationDict = {
   pipelineDuplicate: "复制",
   pipelineAutoLayout: "自动布局",
   pipelineExport: "导出",
+  pipelineRenameHint: "双击重命名",
+  pipelineRetry: "重试",
+  pipelineStatusRunning: "运行中",
+  pipelineStatusSuccess: "成功",
+  pipelineStatusError: "失败",
+  pipelineStatusSkipped: "已跳过",
 
   /* Node-pipeline UI (Task 6) */
   npBackToWorkbench: "返回工作台",
@@ -2280,25 +2300,29 @@ const zhCN: TranslationDict = {
   /* 3D plot panel — example groups */
   plot3dGroupBasic: "基础",
   plot3dGroupAdvanced: "进阶",
+  plot3dGroupImplicit: "隐式方程",
   plot3dExWave: "波纹",
   plot3dExSaddle: "鞍面",
   plot3dExParaboloid: "抛物面",
   plot3dExGaussian: "高斯钟形",
   plot3dExSombrero: "墨西哥帽",
   plot3dExTiltedWave: "倾斜波纹",
+  plot3dExPlane: "平面",
+  plot3dExSphere: "球面",
+  plot3dExCone: "圆锥",
 
   /* 3D plot panel — errors & toasts */
-  plot3dErrNoGeometry: "表达式未生成可绘制的几何（请确认变量为 x 和 y）",
-  plot3dErrEmpty: "请输入 z = f(x, y) 表达式",
+  plot3dErrNoGeometry: "表达式未生成可绘制的几何（显式曲面变量为 x、y；隐式方程需含 x、y、z）",
+  plot3dErrEmpty: "请输入 z = f(x, y) 或隐式方程，例如 x + z = 1",
   plot3dErrEval: "表达式无法求值：{err}",
-  plot3dErrEvalVars: "表达式无法求值，请检查变量是否为 x 和 y",
+  plot3dErrEvalVars: "表达式无法求值，请检查变量是否为 x、y（隐式方程需含 x、y、z）",
   plot3dErrExampleEval: "示例表达式无法求值：{err}",
   plot3dErrExampleEvalVars: "示例表达式无法求值",
   plot3dAdded: "已添加 3D 曲面",
   plot3dExampleAdded: "已添加示例曲面",
 
   /* 3D plot panel — input bar */
-  plot3dInputPlaceholder: "输入 f(x, y)，例如 sin(x)*cos(y)",
+  plot3dInputPlaceholder: "输入 f(x, y) 或隐式方程，如 sin(x)*cos(y)、x + z = 1",
   plot3dExprInputAria: "3D 函数表达式输入",
   plot3dAdd: "添加",
   plot3dAddSurface: "添加曲面 (Enter)",
@@ -2312,7 +2336,7 @@ const zhCN: TranslationDict = {
 
   /* 3D plot panel — preview */
   plot3dPreview: "预览",
-  plot3dPreviewHint: "输入表达式后将显示 LaTeX 预览，例如 z = sin(x)·cos(y)",
+  plot3dPreviewHint: "输入表达式后将显示 LaTeX 预览，例如 z = sin(x)·cos(y) 或 x + z = 1",
 
   /* 3D plot panel — controls */
   plot3dWireframe: "线框",
@@ -2356,10 +2380,11 @@ const zhCN: TranslationDict = {
   plot3dSampleFailed: "3D 曲面采样失败",
   plot3dSampleFailedHint: "请修正上方表达式后重新添加，或检查变量 / 范围设置。",
   plot3dSurfacesFailed: "{n} 个曲面采样失败",
+  plot3dRefining: "正在细化曲面…",
   plot3dWorkspaceTitle: "3D 曲面工作区",
   plot3dWorkspaceHintPre: "输入",
   plot3dWorkspaceHintPost: "表达式或点击下方示例，添加可自由旋转 / 缩放 / 平移的 3D 曲面。",
-  plot3dWorkspaceSupported: "支持 sin / cos / exp / sqrt 等函数，变量必须为 x 和 y。",
+  plot3dWorkspaceSupported: "支持 sin / cos / exp / sqrt 等函数；显式曲面用 x、y，隐式方程用 x、y、z。",
   aiContextToggle: "附带工作台上下文",
   aiContextAttached: "已附加上下文",
   aiContextAttachedHint: "发送时会附带当前文件、绘图与变量信息",
@@ -2628,6 +2653,9 @@ const zhCN: TranslationDict = {
   npBlueprintComponents: "连通块",
   npBlueprintIsolated: "孤立节点",
   npBlueprintCycle: "闭环",
+  npConfidence: "置信度",
+  npLowConfidence: "低置信",
+  npConfidenceDetails: "解析详情",
   npCurveFit: "图像转曲线",
   npPortContours: "轮廓",
   npPortCurves: "曲线集合",
@@ -3412,6 +3440,12 @@ const en: TranslationDict = {
   pipelineDuplicate: "Duplicate",
   pipelineAutoLayout: "Auto Layout",
   pipelineExport: "Export",
+  pipelineRenameHint: "Double-click to rename",
+  pipelineRetry: "Retry",
+  pipelineStatusRunning: "Running",
+  pipelineStatusSuccess: "Succeeded",
+  pipelineStatusError: "Failed",
+  pipelineStatusSkipped: "Skipped",
 
   /* Node-pipeline UI (Task 6) */
   npBackToWorkbench: "Back to workbench",
@@ -3598,25 +3632,29 @@ const en: TranslationDict = {
   /* 3D plot panel — example groups */
   plot3dGroupBasic: "Basic",
   plot3dGroupAdvanced: "Advanced",
+  plot3dGroupImplicit: "Implicit",
   plot3dExWave: "Ripple",
   plot3dExSaddle: "Saddle",
   plot3dExParaboloid: "Paraboloid",
   plot3dExGaussian: "Gaussian bell",
   plot3dExSombrero: "Sombrero",
   plot3dExTiltedWave: "Tilted ripple",
+  plot3dExPlane: "Plane",
+  plot3dExSphere: "Sphere",
+  plot3dExCone: "Cone",
 
   /* 3D plot panel — errors & toasts */
-  plot3dErrNoGeometry: "Expression produced no drawable geometry (confirm variables are x and y)",
-  plot3dErrEmpty: "Please enter a z = f(x, y) expression",
+  plot3dErrNoGeometry: "Expression produced no drawable geometry (explicit surfaces use x, y; implicit equations need x, y, z)",
+  plot3dErrEmpty: "Enter z = f(x, y) or an implicit equation such as x + z = 1",
   plot3dErrEval: "Expression could not be evaluated: {err}",
-  plot3dErrEvalVars: "Expression could not be evaluated; check that variables are x and y",
+  plot3dErrEvalVars: "Expression could not be evaluated; check variables are x, y (implicit equations need x, y, z)",
   plot3dErrExampleEval: "Example expression could not be evaluated: {err}",
   plot3dErrExampleEvalVars: "Example expression could not be evaluated",
   plot3dAdded: "3D surface added",
   plot3dExampleAdded: "Example surface added",
 
   /* 3D plot panel — input bar */
-  plot3dInputPlaceholder: "Enter f(x, y), e.g. sin(x)*cos(y)",
+  plot3dInputPlaceholder: "Enter f(x, y) or an implicit equation, e.g. sin(x)*cos(y), x + z = 1",
   plot3dExprInputAria: "3D function expression input",
   plot3dAdd: "Add",
   plot3dAddSurface: "Add surface (Enter)",
@@ -3630,7 +3668,7 @@ const en: TranslationDict = {
 
   /* 3D plot panel — preview */
   plot3dPreview: "Preview",
-  plot3dPreviewHint: "LaTeX preview appears after typing, e.g. z = sin(x)·cos(y)",
+  plot3dPreviewHint: "LaTeX preview appears after typing, e.g. z = sin(x)·cos(y) or x + z = 1",
 
   /* 3D plot panel — controls */
   plot3dWireframe: "Wireframe",
@@ -3674,10 +3712,11 @@ const en: TranslationDict = {
   plot3dSampleFailed: "3D surface sampling failed",
   plot3dSampleFailedHint: "Fix the expression above and re-add it, or check variables / range settings.",
   plot3dSurfacesFailed: "{n} surfaces failed to sample",
+  plot3dRefining: "Refining surfaces…",
   plot3dWorkspaceTitle: "3D Surface Workspace",
   plot3dWorkspaceHintPre: "Enter",
   plot3dWorkspaceHintPost: "an expression or click an example below to add a freely rotatable / zoomable / pannable 3D surface.",
-  plot3dWorkspaceSupported: "Supports sin / cos / exp / sqrt and more; variables must be x and y.",
+  plot3dWorkspaceSupported: "Supports sin / cos / exp / sqrt and more; explicit surfaces use x, y, implicit equations use x, y, z.",
   aiContextToggle: "Attach workbench context",
   aiContextAttached: "Context attached",
   aiContextAttachedHint: "The current file, plots and variables are sent with each message",
@@ -3946,6 +3985,9 @@ const en: TranslationDict = {
   npBlueprintComponents: "Groups",
   npBlueprintIsolated: "Isolated",
   npBlueprintCycle: "Cycle",
+  npConfidence: "Confidence",
+  npLowConfidence: "Low confidence",
+  npConfidenceDetails: "Parse details",
   npCurveFit: "Curve Fit",
   npPortContours: "Contours",
   npPortCurves: "Curves",
