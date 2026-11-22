@@ -687,6 +687,16 @@ function NumberField({
       value={editing ?? formatParamValue(value)}
       onChange={(e) => setEditing(e.target.value)}
       onBlur={commit}
+      onFocus={(e) => {
+        // 手机上系统键盘会占掉下半屏；聚焦后把参数行滚到可视区域中间，
+        // 避免“参数一直在下面、被键盘挡住调不了”。
+        const el = e.currentTarget;
+        if (window.matchMedia('(max-width: 767px)').matches) {
+          window.setTimeout(() => {
+            el.scrollIntoView({ block: 'center', behavior: 'smooth' });
+          }, 120);
+        }
+      }}
       onKeyDown={(e) => {
         if (e.key === 'Enter') {
           commit();

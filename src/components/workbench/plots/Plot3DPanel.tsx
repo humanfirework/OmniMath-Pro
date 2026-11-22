@@ -1049,7 +1049,12 @@ export function Plot3DPanel() {
         {/* 3D 曲面里的自由参数（如 z = a*sin(x)*cos(y)）直接给滑块，
             与函数输入器共用同一份参数状态，拖动后立即重采样。 */}
         {surface3dPlots.length > 0 && (
-          <div className="max-h-36 shrink-0 overflow-y-auto">
+          <div
+            className="max-h-36 shrink-0 overflow-y-auto"
+            // 调 3D 参数时收起内置键盘，给系统数字键盘留出空间。
+            onPointerDownCapture={() => setKeypadOpen(false)}
+            onFocusCapture={() => setKeypadOpen(false)}
+          >
             <ParameterSliders
               plots={surface3dPlots}
               className="!border-t-0"
