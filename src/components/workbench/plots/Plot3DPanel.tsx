@@ -35,8 +35,13 @@ import {
   Maximize2,
   AlertTriangle,
 } from 'lucide-react';
-import { useWorkbenchStore } from '@/lib/store/workbench';
-import { sampleSurface, trySampleSurface, type Surface3DData } from '@/lib/plots/plot3d';
+import { useWorkbenchStore, type PlotConfig } from '@/lib/store/workbench';
+import { trySampleSurface, type Surface3DData } from '@/lib/plots/plot3d';
+import {
+  defaultImplicitZRange,
+  parse3DEquation,
+  trySampleImplicitSurface,
+} from '@/lib/plots/implicit3d';
 import { useScopeVersion } from '@/lib/hooks/useScopeVersion';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -107,10 +112,24 @@ const EXAMPLE_GROUPS = [
       { expr: 'cos(x)*sin(y) + 0.1*x', label: 'cos(x)·sin(y)+0.1x', hintKey: 'plot3dExTiltedWave' as const },
     ],
   },
+  {
+    titleKey: 'plot3dGroupImplicit' as const,
+    items: [
+      { expr: 'x + z = 1', label: 'x + z = 1', hintKey: 'plot3dExPlane' as const },
+      { expr: 'x^2 + y^2 + z^2 = 4', label: 'x² + y² + z² = 4', hintKey: 'plot3dExSphere' as const },
+      { expr: 'z^2 = x^2 + y^2', label: 'z² = x² + y²', hintKey: 'plot3dExCone' as const },
+    ],
+  },
 ];
 
 const DEFAULT_X: [number, number] = [-5, 5];
 const DEFAULT_Y: [number, number] = [-5, 5];
+
+/** 是否按隐式方程采样：显式标记优先，旧数据按 `=` 推断。 */
+function isImplicitPlot(plot: PlotConfig): boolean {
+  if (plot.surfaceMode) return plot.surfaceMode === 'implicit';
+  return plot.expression.includes('=') && !/^\s*z\s*=/i.test(plot.expression);
+}
 
 /* ----------------------- Component ----------------------------------- */
 
@@ -148,6 +167,15 @@ export function Plot3DPanel() {
     () => (exprInput.trim() ? inputToLatex(exprInput) : ''),
     [exprInput],
   );
+  // `x + z = 1` 这类隐式方程自带 `z`，预览时不再额外加 `z =` 前缀。
+  const parsedInput = useMemo(
+    () => parse3DEquation(exprInput.trim()),
+    [exprInput],
+  );
+  const previewLatex = useMemo(
+    () => (!exprLatex ? '' : parsedInput ? exprLatex : `z = ${exprLatex}`),
+    [exprLatex, parsedInput],
+  );
 
   /* --------------------- Surfaces from store ----------------------- */
   // Filter for 3D-relevant plots only.
@@ -177,13 +205,23 @@ export function Plot3DPanel() {
     for (let i = 0; i < surface3dPlots.length; i++) {
       const p = surface3dPlots[i];
       if (!p.visible) continue;
-      const { data, error } = trySampleSurface(
-        p.expression,
-        p.xRange,
-        p.yRange,
-        resolution,
-        p.color || PLOT_COLORS[i % PLOT_COLORS.length],
-      );
+      const color = p.color || PLOT_COLORS[i % PLOT_COLORS.length];
+      const { data, error } = isImplicitPlot(p)
+        ? trySampleImplicitSurface(
+            p.expression,
+            p.xRange,
+            p.yRange,
+            defaultImplicitZRange(p.xRange, p.yRange),
+            resolution,
+            color,
+          )
+        : trySampleSurface(
+            p.expression,
+            p.xRange,
+            p.yRange,
+            resolution,
+            color,
+          );
       out.push({ plotId: p.id, expression: p.expression, data, error });
     }
     return out;
@@ -223,71 +261,75 @@ export function Plot3DPanel() {
   }, [sampledSurfaces, t]);
 
   /* --------------------- Add surface ------------------------------- */
-  const handleAddSurface = useCallback(() => {
-    const expr = exprInput.trim();
-    if (!expr) {
-      toast.error(t('plot3dErrEmpty'));
-      return;
-    }
-    // Quick sanity check before adding — sample at low resolution.
-    const { data: probe, error: probeError } = trySampleSurface(
-      expr,
-      xRange,
-      yRange,
-      8,
-      '#2dd4bf',
-    );
-    if (probeError) {
-      // Surface the concrete error instead of a generic "无法求值".
-      toast.error(tf('plot3dErrEval', { err: probeError }));
-      return;
-    }
-    if (!probe || probe.validTriangleCount === 0) {
-      toast.error(t('plot3dErrEvalVars'));
-      return;
-    }
-    const colorIdx = surface3dPlots.length % PLOT_COLORS.length;
-    addPlot({
-      expression: expr,
-      xRange,
-      yRange,
-      color: PLOT_COLORS[colorIdx],
-      plotType: 'surface3d',
-      visible: true,
-    });
-    setExprInput('');
-    toast.success(t('plot3dAdded'));
-  }, [exprInput, xRange, yRange, surface3dPlots.length, addPlot, t]);
+  // Unified add path for both explicit functions (`x^2 - y^2`) and equations
+  // (`z = …`, `x + z = 1`, `x^2 + y^2 + z^2 = 4`). Implicit equations are
+  // sampled with surface nets; explicit ones keep the height-map path.
+  const addSurface = useCallback(
+    (raw: string, fromExample: boolean) => {
+      const text = raw.trim();
+      if (!text) {
+        toast.error(t('plot3dErrEmpty'));
+        return;
+      }
 
-  const handleAddExample = useCallback(
-    (expr: string) => {
-      const { data: probe, error: probeError } = trySampleSurface(
-        expr,
-        xRange,
-        yRange,
-        8,
-        '#2dd4bf',
-      );
-      if (probeError) {
-        toast.error(tf('plot3dErrExampleEval', { err: probeError }));
+      const parsed = parse3DEquation(text);
+      const implicit = parsed?.kind === 'implicit';
+      const expression = parsed ? parsed.expression : text;
+      const sampleExpr =
+        parsed?.kind === 'explicit' && parsed.rhs ? parsed.rhs : text;
+
+      // Quick sanity check before adding — sample at low resolution.
+      const probe = implicit
+        ? trySampleImplicitSurface(
+            expression,
+            xRange,
+            yRange,
+            defaultImplicitZRange(xRange, yRange),
+            20,
+            '#2dd4bf',
+          )
+        : trySampleSurface(sampleExpr, xRange, yRange, 8, '#2dd4bf');
+
+      if (probe.error) {
+        // Surface the concrete error instead of a generic "无法求值".
+        toast.error(
+          tf(fromExample ? 'plot3dErrExampleEval' : 'plot3dErrEval', {
+            err: probe.error,
+          }),
+        );
         return;
       }
-      if (!probe || probe.validTriangleCount === 0) {
-        toast.error(t('plot3dErrExampleEvalVars'));
+      if (!probe.data || probe.data.validTriangleCount === 0) {
+        toast.error(
+          t(fromExample ? 'plot3dErrExampleEvalVars' : 'plot3dErrEvalVars'),
+        );
         return;
       }
+
       const colorIdx = surface3dPlots.length % PLOT_COLORS.length;
       addPlot({
-        expression: expr,
+        expression,
         xRange,
         yRange,
         color: PLOT_COLORS[colorIdx],
         plotType: 'surface3d',
+        surfaceMode: implicit ? 'implicit' : 'explicit',
         visible: true,
       });
-      toast.success(t('plot3dExampleAdded'));
+      if (!fromExample) setExprInput('');
+      toast.success(t(fromExample ? 'plot3dExampleAdded' : 'plot3dAdded'));
     },
     [xRange, yRange, surface3dPlots.length, addPlot, t],
+  );
+
+  const handleAddSurface = useCallback(
+    () => addSurface(exprInput, false),
+    [addSurface, exprInput],
+  );
+
+  const handleAddExample = useCallback(
+    (expr: string) => addSurface(expr, true),
+    [addSurface],
   );
 
   /* --------------------- Reset camera ------------------------------ */
@@ -326,7 +368,9 @@ export function Plot3DPanel() {
         {/* ---------- Top bar: function input + add ---------- */}
         <div className="flex flex-col gap-1.5 border-b border-border/60 bg-background/60 px-2 py-1.5">
           <div className="flex flex-wrap items-center gap-1.5">
-            <span className="font-mono text-xs text-muted-foreground">z =</span>
+            {!parsedInput && (
+              <span className="font-mono text-xs text-muted-foreground">z =</span>
+            )}
             <Input
               type="text"
               value={exprInput}
@@ -413,9 +457,9 @@ export function Plot3DPanel() {
             <span className="shrink-0 font-mono text-[10px] text-muted-foreground">
               {t('plot3dPreview')}
             </span>
-            {exprLatex ? (
+            {previewLatex ? (
               <FormulaRenderer
-                latex={`z = ${exprLatex}`}
+                latex={previewLatex}
                 displayMode={false}
                 className="min-w-0 flex-1"
               />

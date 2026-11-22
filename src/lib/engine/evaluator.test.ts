@@ -224,6 +224,50 @@ describe('evaluator', () => {
       expect(r.type).toBe('plot');
       expect(r.plotExpression).toBe('sin(x)');
     });
+
+    it('z = f(x, y) 自动生成显式 3D 曲面', () => {
+      const r = evaluateExpression('z = x^2 - y^2');
+      expect(r.success).toBe(true);
+      expect(r.type).toBe('surface3d');
+      expect(r.plotType).toBe('surface3d');
+      expect(r.surfaceMode).toBe('explicit');
+      expect(r.plotExpression).toBe('x^2 - y^2');
+      expect(r.latex).toContain('z =');
+    });
+
+    it('隐式方程 x + z = 1 自动生成 3D 曲面', () => {
+      const r = evaluateExpression('x + z = 1');
+      expect(r.success).toBe(true);
+      expect(r.type).toBe('surface3d');
+      expect(r.plotType).toBe('surface3d');
+      expect(r.surfaceMode).toBe('implicit');
+      expect(r.plotExpression).toBe('x + z = 1');
+      expect(r.latex).toContain('=');
+    });
+
+    it('隐式球面方程自动生成 3D 曲面', () => {
+      const r = evaluateExpression('x^2 + y^2 + z^2 = 4');
+      expect(r.success).toBe(true);
+      expect(r.plotType).toBe('surface3d');
+      expect(r.surfaceMode).toBe('implicit');
+    });
+
+    it('z = 5 仍然是普通赋值而不是曲面', () => {
+      const r = evaluateExpression('z = 5');
+      expect(r.success).toBe(true);
+      expect(r.plotType).toBeUndefined();
+      expect(r.surfaceMode).toBeUndefined();
+    });
+
+    it('y = x^2 不会被误判为 3D 隐式方程', () => {
+      const r = evaluateExpression('y = x^2');
+      expect(r.plotType).toBeUndefined();
+    });
+
+    it('x = 1 仍然是赋值而不是 3D 平面', () => {
+      const r = evaluateExpression('x = 1');
+      expect(r.plotType).toBeUndefined();
+    });
   });
 
   describe('solve 分发', () => {

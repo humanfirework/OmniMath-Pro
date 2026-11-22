@@ -71,13 +71,14 @@ describe('analyzeSemantics', () => {
     expect(vars).toHaveLength(0);
   });
 
-  it('直角坐标自动绘图的自变量 x 不误报，其余未定义变量仍报', () => {
+  it('绘图自变量 x、y、z 不误报，其余未定义变量仍报', () => {
     const issues = analyzeSemantics('sin(x) * cos(x)\ny = k * x + z\n');
-    // sin(x)*cos(x) 含自由 x → 引擎 auto-plot，x 不误报；
-    // y 已赋值；k、z 未定义且非绘图自变量 → 仍应被报。
+    // sin(x)*cos(x) 含自由 x → 引擎 auto-plot；
+    // y = … 含自由的 x/z → 3D 曲面；x、y、z 都是绘图上下文变量。
+    // k 未定义且非绘图自变量 → 仍应被报。
     const vars = issues.filter((i) => i.kind === 'undefined-variable').map((i) => i.message);
     expect(vars.some((m) => m.includes('k'))).toBe(true);
-    expect(vars.some((m) => m.includes('z'))).toBe(true);
+    expect(vars.some((m) => m.includes('z'))).toBe(false);
     expect(vars.some((m) => m.includes('x'))).toBe(false);
   });
 

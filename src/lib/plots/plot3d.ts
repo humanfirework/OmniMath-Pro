@@ -90,7 +90,7 @@ function hexToRgb(hex: string): [number, number, number] {
  * Map a height ratio `t` ∈ [0, 1] to an RGB triple using a professional
  * color map similar to GeoGebra/Matplotlib — subtle blue-to-yellow gradient.
  */
-function heightColor(t: number): [number, number, number] {
+export function heightColor(t: number): [number, number, number] {
   const clamped = Math.max(0, Math.min(1, t));
   // Professional math software colormap: cool blue → teal → green → yellow
   const stops: Array<[number, [number, number, number]]> = [
@@ -397,7 +397,7 @@ export function trySampleSurface(
  * - booleans → 0 / 1,
  * - anything else → NaN.
  */
-function toNumber(v: unknown): number {
+export function toNumber(v: unknown): number {
   if (typeof v === 'number') return v;
   if (typeof v === 'boolean') return v ? 1 : 0;
   if (v && typeof v === 'object') {

@@ -11,7 +11,7 @@ import type { CalculationResult, PlotConfig } from '@/lib/store/workbench';
 
 export type PlotResultInput = Pick<
   CalculationResult,
-  'plotExpression' | 'plotType' | 'plotRange'
+  'plotExpression' | 'plotType' | 'plotRange' | 'surfaceMode'
 >;
 
 export function buildPlotConfig(
@@ -26,6 +26,7 @@ export function buildPlotConfig(
     yRange: result.plotType === 'surface3d' ? range : [-50, 50],
     color,
     plotType: result.plotType,
+    surfaceMode: result.surfaceMode,
     visible: true,
   };
 }

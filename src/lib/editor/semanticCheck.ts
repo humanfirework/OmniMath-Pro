@@ -47,12 +47,15 @@ const BUILTIN_FUNCTIONS = new Set([...FUNCTIONS, ...KEYWORDS]);
  *  - `x`：直角坐标自动绘图。simple 模式下任何含自由 `x` 的表达式都会走
  *    auto-plot（见 evaluator.hasFreeVariableX），因此 `sin(x)*cos(x)` 里的
  *    `x` 是绘图自变量，而非未定义变量。
+ *  - `y` / `z`：3D 曲面方程的自变量。`z = x^2 - y^2`、`x + z = 1`、
+ *    `x^2 + y^2 + z^2 = 4` 都会由引擎识别为 3D 曲面（explicit / implicit），
+ *    x、y、z 均为绘图上下文变量。
  *  - `theta`（大小写不敏感，含 `θ`）：极坐标自变量。`r = f(θ)` 会被引擎识别为
  *    极坐标绘图（见 evaluator 的 polar 检测），`theta` 由引擎隐式定义。
- * 语义检查器必须与引擎保持一致，否则 `r = 4*sin(6*theta)`、`sin(x)*cos(x)`
- * 会被误报成「未定义变量」。
+ * 语义检查器必须与引擎保持一致，否则 `r = 4*sin(6*theta)`、`sin(x)*cos(x)`、
+ * `x^2 + y^2 + z^2 = 4` 会被误报成「未定义变量」。
  */
-const IMPLICIT_PLOT_VARS = new Set(['x', 'theta']);
+const IMPLICIT_PLOT_VARS = new Set(['x', 'y', 'z', 'theta']);
 
 /**
  * 语义检查的行数上限 —— 与 syntaxCheck 的 MAX_LINES_CHECKED 保持一致，

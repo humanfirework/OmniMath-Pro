@@ -380,6 +380,7 @@ export function EditorPanel() {
             matrix: result.matrix,
             plotExpression: result.plotExpression,
             plotType: result.plotType,
+            surfaceMode: result.surfaceMode,
             plotRange: result.plotRange,
           };
           addResult(calcResult);

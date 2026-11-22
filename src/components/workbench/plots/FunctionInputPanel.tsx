@@ -171,12 +171,15 @@ export function FunctionInputPanel() {
       const res = await evaluateExpressionAsync(trimmed, 'simple');
       if (!res.success || !res.plotType) return;
       const color = PLOT_COLORS[demosPlotIds.length % PLOT_COLORS.length] ?? PLOT_COLORS[0];
+      const domain = res.plotRange ?? [-10, 10];
       addPlot({
         expression: res.plotExpression ?? trimmed,
-        xRange: res.plotRange ?? [-10, 10],
-        yRange: [-50, 50],
+        xRange: domain,
+        // 3D 的 yRange 是第二个自变量的定义域；2D 里是屏幕纵向范围。
+        yRange: res.plotType === 'surface3d' ? domain : [-50, 50],
         color,
         plotType: res.plotType,
+        surfaceMode: res.surfaceMode,
         visible: true,
       });
       const latest = useWorkbenchStore.getState().plots;
@@ -253,8 +256,11 @@ export function FunctionInputPanel() {
             updatePlot(id, {
               expression: res.plotExpression ?? trimmed,
               plotType: res.plotType,
+              surfaceMode: res.surfaceMode,
               xRange: res.plotRange ?? [-10, 10],
-              yRange: [-50, 50],
+              yRange: res.plotType === 'surface3d'
+                ? (res.plotRange ?? [-10, 10])
+                : [-50, 50],
             });
             setActivePreviewTab(res.plotType === 'surface3d' ? 'plot3d' : 'plot2d');
           } catch {
