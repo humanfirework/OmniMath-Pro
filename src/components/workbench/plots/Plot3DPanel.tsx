@@ -18,13 +18,15 @@
  * `addPlot({ plotType: 'surface3d', ... })`.
  */
 
-import { useCallback, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import dynamic from 'next/dynamic';
 import {
   Box,
   Eye,
   EyeOff,
+  FunctionSquare,
+  Keyboard,
   Plus,
   RotateCcw,
   Settings2,
@@ -40,9 +42,13 @@ import { trySampleSurface, type Surface3DData } from '@/lib/plots/plot3d';
 import {
   defaultImplicitZRange,
   parse3DEquation,
+  splitTopLevelEquation,
   trySampleImplicitSurface,
 } from '@/lib/plots/implicit3d';
 import { useScopeVersion } from '@/lib/hooks/useScopeVersion';
+import { useIsMobile } from '@/hooks/use-mobile';
+import { cn } from '@/lib/utils';
+import { MathKeypad, deleteBackward, insertAtSelection } from './MathKeypad';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -140,9 +146,18 @@ export function Plot3DPanel() {
   const addPlot = useWorkbenchStore((s) => s.addPlot);
   const removePlot = useWorkbenchStore((s) => s.removePlot);
   const togglePlotVisibility = useWorkbenchStore((s) => s.togglePlotVisibility);
+  // 3D 面板添加的曲面也登记到函数输入器，两处共用同一个列表。
+  const addDemosPlotId = useWorkbenchStore((s) => s.addDemosPlotId);
+  const setInputView = useWorkbenchStore((s) => s.setInputView);
 
   /* --------------------- Local UI state ---------------------------- */
   const [exprInput, setExprInput] = useState('');
+  const isMobile = useIsMobile();
+  // 3D 面板默认不展开键盘，避免挤占画布；需要时点输入框右侧的键盘按钮。
+  const [keypadOpen, setKeypadOpen] = useState(false);
+  const exprInputRef = useRef<HTMLInputElement>(null);
+  const pendingCaretRef = useRef<number | null>(null);
+
   const [xRange, setXRange] = useState<[number, number]>(DEFAULT_X);
   const [yRange, setYRange] = useState<[number, number]>(DEFAULT_Y);
   const [resolution, setResolution] = useState(60);
@@ -172,10 +187,14 @@ export function Plot3DPanel() {
     () => parse3DEquation(exprInput.trim()),
     [exprInput],
   );
-  const previewLatex = useMemo(
-    () => (!exprLatex ? '' : parsedInput ? exprLatex : `z = ${exprLatex}`),
-    [exprLatex, parsedInput],
-  );
+  const previewLatex = useMemo(() => {
+    if (!exprLatex) return '';
+    if (parsedInput) return exprLatex;
+    // 裸表达式默认是 z 的右端；如果用户已经写了 z（例如还没输入等号时的
+    // `z + x`），就不要再补前缀，避免出现 “z = z + x” 这种误导性预览。
+    if (/(^|[^A-Za-z0-9_])z([^A-Za-z0-9_]|$)/i.test(exprInput)) return exprLatex;
+    return `z = ${exprLatex}`;
+  }, [exprLatex, parsedInput, exprInput]);
 
   /* --------------------- Surfaces from store ----------------------- */
   // Filter for 3D-relevant plots only.
@@ -272,6 +291,14 @@ export function Plot3DPanel() {
         return;
       }
 
+      // 只支持一个等号。`z = z + x = 1` / `x = y = 1` 会被误当成显式曲面
+      // 去求值，这里直接给出可理解的提示。
+      const firstParts = splitTopLevelEquation(text);
+      if (firstParts && splitTopLevelEquation(firstParts.rhs)) {
+        toast.error('一个方程只能有一个等号，例如 x + z = 1');
+        return;
+      }
+
       const parsed = parse3DEquation(text);
       const implicit = parsed?.kind === 'implicit';
       const expression = parsed ? parsed.expression : text;
@@ -316,10 +343,13 @@ export function Plot3DPanel() {
         surfaceMode: implicit ? 'implicit' : 'explicit',
         visible: true,
       });
+      // 同步登记到函数输入器；否则这里添加的曲面在函数列表里看不到。
+      const latest = useWorkbenchStore.getState().plots;
+      addDemosPlotId(latest[latest.length - 1].id);
       if (!fromExample) setExprInput('');
       toast.success(t(fromExample ? 'plot3dExampleAdded' : 'plot3dAdded'));
     },
-    [xRange, yRange, surface3dPlots.length, addPlot, t],
+    [xRange, yRange, surface3dPlots.length, addPlot, addDemosPlotId, t],
   );
 
   const handleAddSurface = useCallback(
@@ -331,6 +361,40 @@ export function Plot3DPanel() {
     (expr: string) => addSurface(expr, true),
     [addSurface],
   );
+
+  /* --------------------- 内置数学键盘 ------------------------------ */
+  const insertKeypadText = useCallback((text: string) => {
+    const el = exprInputRef.current;
+    if (!el) return;
+    const { next, caret } = insertAtSelection(el, text);
+    setExprInput(next);
+    pendingCaretRef.current = caret;
+  }, []);
+
+  const backspaceKeypad = useCallback(() => {
+    const el = exprInputRef.current;
+    if (!el) return;
+    const { next, caret } = deleteBackward(el);
+    setExprInput(next);
+    pendingCaretRef.current = caret;
+  }, []);
+
+  const clearKeypad = useCallback(() => {
+    setExprInput('');
+    pendingCaretRef.current = 0;
+  }, []);
+
+  // 受控输入更新后恢复光标。
+  useEffect(() => {
+    if (pendingCaretRef.current === null) return;
+    const pos = pendingCaretRef.current;
+    pendingCaretRef.current = null;
+    const el = exprInputRef.current;
+    if (!el) return;
+    el.focus({ preventScroll: true });
+    const p = Math.max(0, Math.min(pos, el.value.length));
+    el.setSelectionRange(p, p);
+  }, [exprInput]);
 
   /* --------------------- Reset camera ------------------------------ */
   const handleResetCamera = useCallback(() => {
@@ -368,10 +432,8 @@ export function Plot3DPanel() {
         {/* ---------- Top bar: function input + add ---------- */}
         <div className="flex flex-col gap-1.5 border-b border-border/60 bg-background/60 px-2 py-1.5">
           <div className="flex flex-wrap items-center gap-1.5">
-            {!parsedInput && (
-              <span className="font-mono text-xs text-muted-foreground">z =</span>
-            )}
             <Input
+              ref={exprInputRef}
               type="text"
               value={exprInput}
               onChange={(e) => setExprInput(e.target.value)}
@@ -381,10 +443,53 @@ export function Plot3DPanel() {
                   handleAddSurface();
                 }
               }}
+              inputMode={isMobile && keypadOpen ? 'none' : 'text'}
               placeholder={t('plot3dInputPlaceholder')}
               className="h-8 min-w-0 flex-1 rounded border-border/60 bg-background/40 px-2 font-mono text-xs"
               aria-label={t('plot3dExprInputAria')}
             />
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  className={cn(
+                    'h-8 w-8',
+                    keypadOpen
+                      ? 'text-primary hover:text-primary'
+                      : 'text-muted-foreground hover:text-foreground',
+                  )}
+                  onClick={() => setKeypadOpen((v) => !v)}
+                  aria-label={keypadOpen ? '收起数学键盘' : '打开数学键盘'}
+                >
+                  <Keyboard className="h-4 w-4" />
+                </Button>
+              </TooltipTrigger>
+              <TooltipContent side="bottom">
+                {keypadOpen ? '收起数学键盘' : '内置数学键盘'}
+              </TooltipContent>
+            </Tooltip>
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  className="h-8 w-8 text-muted-foreground hover:text-foreground"
+                  onClick={() => {
+                    setInputView('demos');
+                    window.dispatchEvent(
+                      new CustomEvent('omnimath:mobile-tab', { detail: 'editor' }),
+                    );
+                  }}
+                  aria-label="在函数输入器中编辑"
+                >
+                  <FunctionSquare className="h-4 w-4" />
+                </Button>
+              </TooltipTrigger>
+              <TooltipContent side="bottom">
+                在函数输入器中编辑（支持 2D / 3D、参数滑块）
+              </TooltipContent>
+            </Tooltip>
             <Tooltip>
               <TooltipTrigger asChild>
                 <Button
@@ -469,6 +574,17 @@ export function Plot3DPanel() {
               </span>
             )}
           </div>
+
+          {/* 内置数学键盘：手机上直接点按输入 ^、√、θ、π 等符号。 */}
+          {keypadOpen && (
+            <MathKeypad
+              className="rounded-md border border-border/40"
+              onInsert={insertKeypadText}
+              onBackspace={backspaceKeypad}
+              onClear={clearKeypad}
+              onEnter={handleAddSurface}
+            />
+          )}
 
           {/* ---------- Collapsible controls panel ---------- */}
           {showControls && (

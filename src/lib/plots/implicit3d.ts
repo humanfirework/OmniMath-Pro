@@ -102,6 +102,19 @@ export function containsSurfaceVariable(expr: string): boolean {
 }
 
 /**
+ * 去掉多余的 `z =` 前缀：仅当右侧本身还含顶层等号且提到 z 时。
+ * `z = z + x = 1` → `z + x = 1`；`z = x^2 - y^2` 保持不变。
+ */
+function stripRedundantZPrefix(equation: string): string {
+  const m = /^\s*z\s*=\s*(.+)$/i.exec(equation);
+  if (!m) return equation;
+  const rest = m[1].trim();
+  if (!splitTopLevelEquation(rest)) return equation;
+  if (!/(^|[^A-Za-z0-9_])z([^A-Za-z0-9_]|$)/i.test(rest)) return equation;
+  return rest;
+}
+
+/**
  * 解析用户输入的 3D 方程。
  *
  * - `z = f(x, y)`      → explicit
@@ -109,7 +122,7 @@ export function containsSurfaceVariable(expr: string): boolean {
  * - 不含 `=` 或缺少一侧 → null（调用方按普通函数处理）
  */
 export function parse3DEquation(input: string): Parsed3DEquation | null {
-  const equation = input.trim();
+  const equation = stripRedundantZPrefix(input.trim());
   if (!equation) return null;
   const parts = splitTopLevelEquation(equation);
   if (!parts) return null;
@@ -218,7 +231,7 @@ export function sampleImplicitSurface(
   assertRange(xRange, 'x');
   assertRange(yRange, 'y');
 
-  const parts = splitTopLevelEquation(equation);
+  const parts = splitTopLevelEquation(stripRedundantZPrefix(equation));
   if (!parts) throw new Error('Invalid implicit equation: missing "="');
   const field = `(${parts.lhs}) - (${parts.rhs})`;
   const compiled = compileCached(field);

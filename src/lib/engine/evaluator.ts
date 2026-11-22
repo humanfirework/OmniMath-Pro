@@ -94,6 +94,8 @@ export function evaluateExpression(
   let normalized: string;
   try {
     normalized = preprocessForMode(normalizeSymbols(input), mode);
+    // `z = z + x = 1` 是手写时常见的重复 z；右侧本身已是完整隐式方程。
+    normalized = stripRedundantZPrefix(normalized);
   } catch (err) {
     return fail(`Failed to parse input: ${(err as Error).message}`);
   }
@@ -444,6 +446,19 @@ function handleAssignment(
   } catch (err) {
     return fail(`Failed to evaluate "${rhs}": ${(err as Error).message}`);
   }
+}
+
+/**
+ * 去掉多余的 `z =` 前缀：仅当右侧本身还含顶层等号且提到 z 时。
+ * `z = z + x = 1` → `z + x = 1`；`z = x^2 - y^2` 保持不变。
+ */
+function stripRedundantZPrefix(s: string): string {
+  const m = /^\s*z\s*=\s*(.+)$/i.exec(s);
+  if (!m) return s;
+  const rest = m[1].trim();
+  if (findAssignmentEq(rest) === -1) return s;
+  if (!/(^|[^A-Za-z0-9_])z([^A-Za-z0-9_]|$)/i.test(rest)) return s;
+  return rest;
 }
 
 /** Find the index of the first `=` that is a real assignment (not `==`,
