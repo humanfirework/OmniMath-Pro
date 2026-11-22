@@ -140,6 +140,7 @@ export function FunctionInputPanel() {
   const [activeField, setActiveField] = useState<string>('new');
   const newInputRef = useRef<HTMLInputElement>(null);
   const rowInputRefs = useRef<Map<string, HTMLInputElement>>(new Map());
+  const paramsSectionRef = useRef<HTMLDivElement>(null);
   /** 键盘插入后需要恢复的光标位置；渲染完成后再设置。 */
   const pendingCaretRef = useRef<{ field: string; pos: number } | null>(null);
 
@@ -172,7 +173,13 @@ export function FunctionInputPanel() {
     // 半截输入（尾随 = / 运算符 / ( / , / .、单独函数名等）先不解析，
     // 否则 `x + z =` 会被 mathjs 当成赋值语句并闪出红色语法错误。
     if (looksIncomplete(trimmed)) {
-      setAnalysis({ text: trimmed, params: [], latex: '', incomplete: true });
+      // 半截输入不解析、不报错，但仍然保留 LaTeX 预览，让用户边打边看。
+      setAnalysis({
+        text: trimmed,
+        params: [],
+        latex: inputToLatex(trimmed, 'simple'),
+        incomplete: true,
+      });
       return;
     }
     const timer = setTimeout(async () => {
@@ -506,15 +513,16 @@ export function FunctionInputPanel() {
   }, [scopeVersion]);
 
   const freeParamCount = useMemo(() => {
-    const exprs = demosPlots
-      .filter((p) => p.visible && p.plotType !== 'surface3d')
-      .map((p) => p.expression);
+    // 包含 3D 曲面表达式：`z = a*sin(x)*cos(y)` 的 a 也应计入参数徽标。
+    const exprs = demosPlots.filter((p) => p.visible).map((p) => p.expression);
     const free = extractFreeParameters(exprs, Object.keys(variables));
     return free.filter((n) => !demosExtraVars.includes(n)).length;
   }, [demosPlots, variables, demosExtraVars]);
 
+  const paramBadgeCount = freeParamCount + demosExtraVars.length;
+
   return (
-    <div className="flex h-full flex-col bg-background/40">
+    <div className="flex h-full min-h-0 flex-col bg-background/40">
       {/* 头部 */}
       <div className="shrink-0 border-b border-border/60 px-3 py-2.5">
         <div className="flex items-start gap-2">
@@ -562,8 +570,29 @@ export function FunctionInputPanel() {
             className="inline-flex h-7 shrink-0 items-center gap-1 rounded-lg border border-border/60 px-2 text-[10.5px] text-muted-foreground hover:bg-accent/60 hover:text-foreground"
           >
             <FileCode2 className="size-3" />
-            代码
+            <span className="hidden sm:inline">代码</span>
           </button>
+          {paramBadgeCount > 0 && (
+            <button
+              type="button"
+              onClick={() => {
+                setVarsOpen(true);
+                if (isMobile) setKeypadOpen(false);
+                requestAnimationFrame(() => {
+                  paramsSectionRef.current?.scrollIntoView({
+                    block: 'nearest',
+                    behavior: 'smooth',
+                  });
+                });
+              }}
+              className="touch-target inline-flex h-7 shrink-0 items-center gap-1 rounded-lg border border-primary/30 bg-primary/10 px-2 text-[10.5px] font-medium text-primary hover:bg-primary/15"
+              aria-label={`打开参数滑块（${paramBadgeCount} 个参数）`}
+              title="打开参数滑块"
+            >
+              <SlidersHorizontal className="size-3" />
+              {paramBadgeCount}
+            </button>
+          )}
           <button
             type="button"
             onClick={clearAll}
@@ -731,27 +760,112 @@ export function FunctionInputPanel() {
           </div>
         </div>
 
-        {/* 当前输入识别提示 */}
-        {analysis.latex && demosExpr.trim() && !analysis.incomplete && (
+        {/* 当前输入预览：完整表达式显示识别类型；半截输入只显示公式预览。 */}
+        {analysis.latex && demosExpr.trim() && (
           <div className="mt-2 rounded-xl border border-border/60 bg-muted/20 px-2.5 py-1.5">
-            <div className="flex items-center gap-1.5 text-[9.5px] text-muted-foreground">
-              <span
-                className={cn(
-                  'rounded px-1.5 py-0.5 font-medium',
-                  analysis.plotType
-                    ? 'bg-primary/10 text-primary'
-                    : 'bg-rose-500/10 text-rose-500',
-                )}
-              >
-                {analysis.plotType ? coordLabel(analysis.plotType) : analysis.error ?? '…'}
-              </span>
-              {analysis.params.length > 0 && (
-                <span className="ml-auto truncate">
-                  参数 <span className="font-mono text-primary">{analysis.params.join(', ')}</span>
+            {!analysis.incomplete && (
+              <div className="flex items-center gap-1.5 text-[9.5px] text-muted-foreground">
+                <span
+                  className={cn(
+                    'rounded px-1.5 py-0.5 font-medium',
+                    analysis.plotType
+                      ? 'bg-primary/10 text-primary'
+                      : 'bg-rose-500/10 text-rose-500',
+                  )}
+                >
+                  {analysis.plotType ? coordLabel(analysis.plotType) : analysis.error ?? '…'}
                 </span>
-              )}
-            </div>
-            <FormulaRenderer latex={analysis.latex} displayMode className="mt-1 min-w-0 text-[12px]" />
+                {analysis.params.length > 0 && (
+                  <span className="ml-auto truncate">
+                    参数 <span className="font-mono text-primary">{analysis.params.join(', ')}</span>
+                  </span>
+                )}
+              </div>
+            )}
+            <FormulaRenderer
+              latex={analysis.latex}
+              displayMode
+              className={cn('min-w-0 text-[12px]', !analysis.incomplete && 'mt-1')}
+            />
+          </div>
+        )}
+
+        {/* 参数区放在函数列表内部：紧挨着函数，不再固定钉在面板最底部，
+            手机上也不会被数学键盘/系统键盘挤出可视区域。 */}
+        {demosPlots.length > 0 && (
+          <div
+            ref={paramsSectionRef}
+            className="mt-2 scroll-mb-[40vh] rounded-xl border border-border/60 bg-background/40 px-2.5 py-1.5"
+            onPointerDownCapture={() => setKeypadOpen(false)}
+            onFocusCapture={() => setKeypadOpen(false)}
+          >
+            <button
+              type="button"
+              onClick={() => setVarsOpen((v) => !v)}
+              className="flex w-full items-center gap-1.5 rounded-md px-1 py-0.5 text-[10px] font-medium text-muted-foreground hover:text-foreground"
+            >
+              <SlidersHorizontal className="size-3 text-primary" />
+              参数与变量
+              <span className="rounded-full bg-muted px-1.5 py-0.5 text-[9px]">
+                {paramBadgeCount}
+              </span>
+              <ChevronDown
+                className={cn('ml-auto size-3 transition-transform', !varsOpen && '-rotate-90')}
+              />
+            </button>
+            {varsOpen && (
+              <div className="mt-1 flex max-h-[30vh] flex-col gap-1 overflow-y-auto">
+                <div className="flex items-center justify-end gap-1">
+                  <input
+                    value={newVarName}
+                    onChange={(e) => setNewVarName(e.target.value)}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter') {
+                        e.preventDefault();
+                        addVar();
+                      }
+                    }}
+                    placeholder="添加变量"
+                    spellCheck={false}
+                    className="h-6 w-24 rounded border border-border/60 bg-background/40 px-1.5 font-mono text-[10.5px] outline-none focus:border-primary/60"
+                  />
+                  <button
+                    type="button"
+                    onClick={addVar}
+                    disabled={!newVarName.trim()}
+                    className="grid size-6 place-items-center rounded border border-border/60 text-muted-foreground hover:bg-accent hover:text-foreground disabled:opacity-40"
+                    aria-label="添加变量"
+                  >
+                    <Plus className="size-3.5" />
+                  </button>
+                </div>
+                {demosExtraVars.length > 0 && (
+                  <div className="flex flex-wrap gap-1">
+                    {demosExtraVars.map((name) => (
+                      <span
+                        key={name}
+                        className="inline-flex items-center gap-1 rounded-full bg-primary/10 px-1.5 py-0.5 font-mono text-[10px] italic text-primary"
+                      >
+                        {name}
+                        <button
+                          type="button"
+                          onClick={() => removeVar(name)}
+                          className="grid size-3 place-items-center rounded-full hover:bg-destructive/20 hover:text-destructive"
+                          aria-label={`移除变量 ${name}`}
+                        >
+                          <X className="size-2.5" />
+                        </button>
+                      </span>
+                    ))}
+                  </div>
+                )}
+                <ParameterSliders
+                  plots={plots}
+                  extraParams={demosExtraVars}
+                  className="!rounded-md !border-t-0"
+                />
+              </div>
+            )}
           </div>
         )}
       </div>
@@ -767,78 +881,6 @@ export function FunctionInputPanel() {
         />
       )}
 
-      {/* 参数区 */}
-      {demosPlots.length > 0 && (
-        <div className="shrink-0 border-t border-border/60 px-2.5 py-1.5">
-          <button
-            type="button"
-            onClick={() => setVarsOpen((v) => !v)}
-            className="flex w-full items-center gap-1.5 rounded-md px-1 py-0.5 text-[10px] font-medium text-muted-foreground hover:text-foreground"
-          >
-            <SlidersHorizontal className="size-3 text-primary" />
-            参数与变量
-            <span className="rounded-full bg-muted px-1.5 py-0.5 text-[9px]">
-              {demosExtraVars.length + freeParamCount}
-            </span>
-            <ChevronDown
-              className={cn('ml-auto size-3 transition-transform', !varsOpen && '-rotate-90')}
-            />
-          </button>
-          {varsOpen && (
-            <div className="mt-1 flex max-h-[34vh] flex-col gap-1 overflow-y-auto">
-              <div className="flex items-center justify-end gap-1">
-                <input
-                  value={newVarName}
-                  onChange={(e) => setNewVarName(e.target.value)}
-                  onKeyDown={(e) => {
-                    if (e.key === 'Enter') {
-                      e.preventDefault();
-                      addVar();
-                    }
-                  }}
-                  placeholder="添加变量"
-                  spellCheck={false}
-                  className="h-6 w-24 rounded border border-border/60 bg-background/40 px-1.5 font-mono text-[10.5px] outline-none focus:border-primary/60"
-                />
-                <button
-                  type="button"
-                  onClick={addVar}
-                  disabled={!newVarName.trim()}
-                  className="grid size-6 place-items-center rounded border border-border/60 text-muted-foreground hover:bg-accent hover:text-foreground disabled:opacity-40"
-                  aria-label="添加变量"
-                >
-                  <Plus className="size-3.5" />
-                </button>
-              </div>
-              {demosExtraVars.length > 0 && (
-                <div className="flex flex-wrap gap-1">
-                  {demosExtraVars.map((name) => (
-                    <span
-                      key={name}
-                      className="inline-flex items-center gap-1 rounded-full bg-primary/10 px-1.5 py-0.5 font-mono text-[10px] italic text-primary"
-                    >
-                      {name}
-                      <button
-                        type="button"
-                        onClick={() => removeVar(name)}
-                        className="grid size-3 place-items-center rounded-full hover:bg-destructive/20 hover:text-destructive"
-                        aria-label={`移除变量 ${name}`}
-                      >
-                        <X className="size-2.5" />
-                      </button>
-                    </span>
-                  ))}
-                </div>
-              )}
-              <ParameterSliders
-                plots={plots}
-                extraParams={demosExtraVars}
-                className="!rounded-md !border-t-0"
-              />
-            </div>
-          )}
-        </div>
-      )}
     </div>
   );
 }

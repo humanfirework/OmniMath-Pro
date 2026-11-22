@@ -138,13 +138,23 @@ export function PreviewPanel() {
   useLocale();
   const activeTab = useWorkbenchStore((s) => s.activePreviewTab);
   const inputView = useWorkbenchStore((s) => s.inputView);
+  const plots = useWorkbenchStore((s) => s.plots);
   // 函数输入器只关心图：隐藏公式/日志/流水线/AI，并强制渲染 2D 或 3D 绘图。
   // 这里不改写 store 里的 activeTab，切回代码模式时用户原来的标签会恢复。
   const functionMode = inputView === 'demos';
-  const effectiveTab: PreviewTab =
-    functionMode && activeTab !== 'plot2d' && activeTab !== 'plot3d'
-      ? 'plot2d'
-      : activeTab;
+  const has2dPlots = plots.some((p) => p.visible && p.plotType !== 'surface3d');
+  const has3dPlots = plots.some((p) => p.visible && p.plotType === 'surface3d');
+  // 刷新后如果保存的标签与当前图元不匹配（例如只有 3D 曲面但停在 2D），
+  // 自动落到有内容的标签，避免用户看到空白预览。
+  const preferredFunctionTab: PreviewTab =
+    activeTab === 'plot3d'
+      ? has3dPlots || !has2dPlots
+        ? 'plot3d'
+        : 'plot2d'
+      : has2dPlots || !has3dPlots
+        ? 'plot2d'
+        : 'plot3d';
+  const effectiveTab: PreviewTab = functionMode ? preferredFunctionTab : activeTab;
   const visibleTabs = functionMode
     ? TABS.filter((tab) => tab.id === 'plot2d' || tab.id === 'plot3d')
     : TABS;
