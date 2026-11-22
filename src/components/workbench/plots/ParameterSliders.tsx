@@ -39,11 +39,24 @@ import { useScopeVersion } from '@/lib/hooks/useScopeVersion';
 /* ------------------------------------------------------------------ */
 
 /** 默认滑块配置：以初值 v 为中心取 [v-10, v+10]（v=0 时即 [-10, 10]），
- *  步长 (max-min)/200。 */
+ *  步长 (max-min)/2000（旧存档的 /200 会在读取时自动升级）。 */
 function makeDefaultConfig(center = 1): PlotParamConfig {
   const min = center - 10;
   const max = center + 10;
-  return { value: center, min, max, step: (max - min) / 200 };
+  // 更细的默认步长：既能用滑块微调，也允许数值框输入 1.75 这类两位小数，
+  // 避免输入 1.75 后滑块因 step=0.1 显示成 1.8 的不一致。
+  return { value: center, min, max, step: (max - min) / 2000 };
+}
+
+/** 旧版本默认步长是范围 / 200；加载存档时升级为更细的 / 2000。 */
+function normalizeStoredStep(cfg: PlotParamConfig): PlotParamConfig {
+  const span = cfg.max - cfg.min;
+  if (!(span > 0) || !(cfg.step > 0)) return cfg;
+  const legacy = span / 200;
+  if (Math.abs(cfg.step - legacy) <= legacy * 1e-6) {
+    return { ...cfg, step: span / 2000 };
+  }
+  return cfg;
 }
 
 /** 数值显示格式：整数原样，其余最多 6 位有效数字。 */
@@ -135,7 +148,7 @@ export function ParameterSliders({
   const params = useMemo(() => {
     void scopeVersion; // variables 可能随赋值变化，与作用域保持同拍
     const exprs = plots
-      .filter((p) => p.visible && p.plotType !== 'surface3d')
+      .filter((p) => p.visible)
       .map((p) => p.expression);
     const free = extractFreeParameters(exprs, Object.keys(variables));
     if (extraParams && extraParams.length > 0) {
@@ -164,7 +177,7 @@ export function ParameterSliders({
     for (const name of params) {
       const stored = plotParams[name];
       if (stored) {
-        map[name] = stored;
+        map[name] = normalizeStoredStep(stored);
       } else {
         const cur = scope[name];
         map[name] = makeDefaultConfig(typeof cur === 'number' ? cur : 1);
@@ -351,7 +364,7 @@ export function ParameterSliders({
   // 无自由参数时不再占一整块说明区：只留一行轻提示，避免在图上方堆文字。
   // 没有可见曲线时干脆不渲染，空状态本身已有引导。
   if (params.length === 0) {
-    const hasVisiblePlot = plots.some((p) => p.visible && p.plotType !== 'surface3d');
+    const hasVisiblePlot = plots.some((p) => p.visible);
     if (!hasVisiblePlot) return null;
     return (
       <div className="flex h-6 items-center gap-1.5 border-t border-border/60 bg-background/40 px-3 text-[10.5px] text-muted-foreground">

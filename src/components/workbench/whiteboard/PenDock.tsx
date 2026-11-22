@@ -113,8 +113,9 @@ export function PenDock(props: PenDockProps) {
   const [panelOpen, setPanelOpen] = useState(false);
 
   const applyTool = (tool: InkTool) => {
+    // onTool 内部已经会清除 shapeTool；这里不要再调用 onShapeTool(null)，
+    // 否则部分实现会把工具强制切回钢笔，导致橡皮/套圈/选择点了没反应。
     props.onTool(tool);
-    if (tool !== 'pen') props.onShapeTool(null);
   };
 
   return (
@@ -335,7 +336,17 @@ export function PenDock(props: PenDockProps) {
         <DockButton label="笔" active={props.tool === 'pen' && !props.shapeTool} onClick={() => applyTool('pen')}>
           <Pencil className="size-4" />
         </DockButton>
-        <DockButton label="橡皮" active={props.tool === 'eraser' && !props.shapeTool} onClick={() => applyTool('eraser')}>
+        <DockButton
+          label="橡皮"
+          active={props.tool === 'eraser' && !props.shapeTool}
+          onClick={() => {
+            // 第一次点按只切换工具并收起面板，保证马上能在画布上擦；
+            // 已处于橡皮状态时再点一次，才展开模式/尺寸设置。
+            const already = props.tool === 'eraser' && !props.shapeTool;
+            applyTool('eraser');
+            setPanelOpen((open) => (already ? !open : false));
+          }}
+        >
           <Eraser className="size-4" />
         </DockButton>
         <DockButton label="套圈" active={props.tool === 'lasso'} onClick={() => applyTool('lasso')}>

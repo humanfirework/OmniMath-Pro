@@ -329,8 +329,9 @@ export function WhiteboardCanvas() {
     }
   }, []);
 
-  // 落盘放到用户停笔之后：1200ms 防抖 + requestIdleCallback。大画布每写一笔
-  // 就同步 JSON.stringify 会明显卡顿，这里只在真正空闲时才序列化。
+  // 落盘放到用户停笔之后：800ms 防抖 + requestIdleCallback。大画布每写一笔
+  // 就同步 JSON.stringify 会明显卡顿；但也不能等太久，否则用户刷新/切走时
+  // 看起来像“刚写的丢了”。pagehide 仍会强制 flush。
   useEffect(() => {
     let idleHandle: number | null = null;
     const w = window as typeof window & {
@@ -342,11 +343,11 @@ export function WhiteboardCanvas() {
         idleHandle = w.requestIdleCallback(() => {
           idleHandle = null;
           persistBoard();
-        }, { timeout: 2500 });
+        }, { timeout: 1500 });
       } else {
         persistBoard();
       }
-    }, 1200);
+    }, 800);
     return () => {
       clearTimeout(timer);
       if (idleHandle !== null) w.cancelIdleCallback?.(idleHandle);
@@ -840,8 +841,14 @@ export function WhiteboardCanvas() {
 
   const selectShape = useCallback((next: ShapeId | null) => {
     setShapeTool(next);
-    setTool('pen');
-    inkRef.current?.setStyle({ tool: 'pen', shapeTool: next });
+    // 仅在选择具体形状时切回钢笔；清除形状不能改变当前工具，否则
+    // 橡皮擦/套圈等非钢笔工具会被立即重置。
+    if (next) {
+      setTool('pen');
+      inkRef.current?.setStyle({ tool: 'pen', shapeTool: next });
+    } else {
+      inkRef.current?.setStyle({ shapeTool: null });
+    }
   }, []);
 
   const selectBrush = useCallback((next: InkBrush) => {

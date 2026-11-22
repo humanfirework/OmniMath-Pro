@@ -59,6 +59,7 @@ import { useScopeVersion } from '@/lib/hooks/useScopeVersion';
 import { useIsMobile } from '@/hooks/use-mobile';
 import { cn } from '@/lib/utils';
 import { MathKeypad, deleteBackward, insertAtSelection } from './MathKeypad';
+import { ParameterSliders } from './ParameterSliders';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -235,7 +236,8 @@ export function Plot3DPanel() {
 
   const [xRange, setXRange] = useState<[number, number]>(DEFAULT_X);
   const [yRange, setYRange] = useState<[number, number]>(DEFAULT_Y);
-  const [resolution, setResolution] = useState(60);
+  // 默认 80：曲面细分数比 60 明显更清晰，空闲细化阶段仍能保持可接受耗时。
+  const [resolution, setResolution] = useState(80);
   const [wireframe, setWireframe] = useState(false);
   const [showAxes, setShowAxes] = useState(true);
   const [showGrid, setShowGrid] = useState(true);
@@ -1043,6 +1045,17 @@ export function Plot3DPanel() {
             </div>
           )}
         </div>
+
+        {/* 3D 曲面里的自由参数（如 z = a*sin(x)*cos(y)）直接给滑块，
+            与函数输入器共用同一份参数状态，拖动后立即重采样。 */}
+        {surface3dPlots.length > 0 && (
+          <div className="max-h-36 shrink-0 overflow-y-auto">
+            <ParameterSliders
+              plots={surface3dPlots}
+              className="!border-t-0"
+            />
+          </div>
+        )}
 
         {/* ---------- 3D Canvas (or empty state) ---------- */}
         {/* min-h-[200px]: guarantee the WebGL canvas never collapses to a
